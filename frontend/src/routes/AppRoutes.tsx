@@ -2,6 +2,7 @@ import NotFound from "pages/NotFound";
 import { Route, Routes } from "react-router-dom"
 
 const AppRoutes: React.FC = () => {
+    console.log("running")
     return (
         <Routes>
             {/* Add your protected routes here */}
@@ -11,5 +12,6 @@ const AppRoutes: React.FC = () => {
         </Routes>
     )
 }
+
 
 export default AppRoutes;
