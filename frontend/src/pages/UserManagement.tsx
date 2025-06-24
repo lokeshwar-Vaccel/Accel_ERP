@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import { 
   Users, Plus, Search, Edit, Trash2, MoreHorizontal, 
-  Filter, Download, UserPlus 
+  Filter, Download, UserPlus, X, ChevronDown 
 } from 'lucide-react';
 import { setBreadcrumbs } from 'redux/auth/navigationSlice';
 import { apiClient } from '../utils/api';
-import { User } from '../types';
+import { User, UserRole } from '../types';
 
 // Define the user interface for this component
 interface UserDisplay {
@@ -19,6 +19,16 @@ interface UserDisplay {
   lastLogin: string;
 }
 
+interface UserFormData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password?: string;
+  role: UserRole;
+  phone?: string;
+  moduleAccess: string[];
+}
+
 export const UserManagement: React.FC = () => {
   const dispatch = useDispatch();
   const [users, setUsers] = useState<UserDisplay[]>([]);
@@ -26,7 +36,30 @@ export const UserManagement: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedRole, setSelectedRole] = useState('all');
+  
+  // Modal states
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<UserDisplay | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserDisplay | null>(null);
+  
+  // Form states
+  const [formData, setFormData] = useState<UserFormData>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    password: '',
+    role: UserRole.VIEWER,
+    phone: '',
+    moduleAccess: []
+  });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Custom dropdown states
+  const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const roleDropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch users from API
   const fetchUsers = async () => {
@@ -65,11 +98,197 @@ export const UserManagement: React.FC = () => {
     fetchUsers();
   }, [dispatch]);
 
+  // Handle click outside dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (roleDropdownRef.current && !roleDropdownRef.current.contains(event.target as Node)) {
+        setIsRoleDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  // Role options for dropdown
+  const roleOptions = [
+    { value: UserRole.VIEWER, label: 'Viewer', icon: '👁️', description: 'Read-only access' },
+    { value: UserRole.HR, label: 'HR', icon: '👥', description: 'Human Resources' },
+    { value: UserRole.MANAGER, label: 'Manager', icon: '👔', description: 'Management access' },
+    { value: UserRole.ADMIN, label: 'Admin', icon: '⚡', description: 'Administrative access' },
+    { value: UserRole.SUPER_ADMIN, label: 'Super Admin', icon: '👑', description: 'Full system access' }
+  ];
+
+  // Modal handlers
+  const openAddUserModal = () => {
+    setIsEditing(false);
+    setSelectedUser(null);
+    setFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      password: '',
+      role: UserRole.VIEWER,
+      phone: '',
+      moduleAccess: []
+    });
+    setFormErrors({});
+    setShowUserModal(true);
+  };
+
+  const openEditUserModal = (user: UserDisplay) => {
+    setIsEditing(true);
+    setSelectedUser(user);
+    setFormData({
+      firstName: user.name.split(' ')[0] || '',
+      lastName: user.name.split(' ').slice(1).join(' ') || '',
+      email: user.email,
+      password: '', // Password not required for editing
+      role: user.role as UserRole,
+      phone: '',
+      moduleAccess: []
+    });
+    setFormErrors({});
+    setShowUserModal(true);
+  };
+
+  const closeUserModal = () => {
+    setShowUserModal(false);
+    setSelectedUser(null);
+    setIsRoleDropdownOpen(false);
+    setFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      password: '',
+      role: UserRole.VIEWER,
+      phone: '',
+      moduleAccess: []
+    });
+    setFormErrors({});
+  };
+
+  const openDeleteConfirm = (user: UserDisplay) => {
+    setUserToDelete(user);
+    setShowDeleteConfirm(true);
+  };
+
+  const closeDeleteConfirm = () => {
+    setShowDeleteConfirm(false);
+    setUserToDelete(null);
+  };
+
+  // Form validation
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!formData.firstName.trim()) {
+      errors.firstName = 'First name is required';
+    }
+
+    if (!formData.lastName.trim()) {
+      errors.lastName = 'Last name is required';
+    }
+
+    if (!formData.email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      errors.email = 'Email is invalid';
+    }
+
+    // Password is required only for new users
+    if (!isEditing && (!formData.password || formData.password.trim().length < 6)) {
+      errors.password = 'Password is required (minimum 6 characters)';
+    }
+
+    if (!formData.role) {
+      errors.role = 'Role is required';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // CRUD operations
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (isEditing && selectedUser) {
+        await apiClient.users.update(selectedUser.id, formData);
+      } else {
+        await apiClient.users.create(formData);
+      }
+      
+      await fetchUsers();
+      closeUserModal();
+    } catch (err) {
+      console.error('Error saving user:', err);
+      setError(isEditing ? 'Failed to update user' : 'Failed to create user');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!userToDelete) return;
+
+    setSubmitting(true);
+    try {
+      await apiClient.users.delete(userToDelete.id);
+      await fetchUsers();
+      closeDeleteConfirm();
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      setError('Failed to delete user');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+    
+    // Clear error for this field
+    if (formErrors[name]) {
+      setFormErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
+  };
+
+  const handleRoleSelect = (role: UserRole) => {
+    setFormData(prev => ({
+      ...prev,
+      role
+    }));
+    setIsRoleDropdownOpen(false);
+    
+    // Clear error for role field
+    if (formErrors.role) {
+      setFormErrors(prev => ({
+        ...prev,
+        role: ''
+      }));
+    }
+  };
+
   const filteredUsers = users.filter((user: UserDisplay) => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = selectedRole === 'all' || user.role === selectedRole;
-    return matchesSearch && matchesRole;
+    return matchesSearch;
   });
 
   const getStatusBadge = (status: string) => {
@@ -108,7 +327,10 @@ export const UserManagement: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
           <p className="text-gray-600 mt-1">Manage system users and their permissions</p>
         </div>
-        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors">
+        <button 
+          onClick={openAddUserModal}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
+        >
           <UserPlus className="w-5 h-5" />
           <span>Add User</span>
         </button>
@@ -165,29 +387,17 @@ export const UserManagement: React.FC = () => {
       {/* Filters */}
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
-          <div className="relative">
+          <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
             <input
               type="text"
-              placeholder="Search users..."
+              placeholder="Search users by name or email..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          <select
-            value={selectedRole}
-            onChange={(e) => setSelectedRole(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Roles</option>
-            <option value="super_admin">Super Admin</option>
-            <option value="admin">Admin</option>
-            <option value="manager">Manager</option>
-            <option value="hr">HR</option>
-            <option value="viewer">Viewer</option>
-          </select>
-          <div className="flex space-x-2">
+          <div className="flex space-x-2 ml-auto">
             <button className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
               <Filter className="w-4 h-4 mr-2" />
               Filters
@@ -205,7 +415,15 @@ export const UserManagement: React.FC = () => {
       {/* Error State */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-          <p className="text-red-600">{error}</p>
+          <div className="flex justify-between items-start">
+            <p className="text-red-600">{error}</p>
+            <button 
+              onClick={() => setError(null)}
+              className="text-red-400 hover:text-red-600 ml-2"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
           <button 
             onClick={fetchUsers}
             className="mt-2 text-red-600 hover:text-red-800 font-medium"
@@ -288,10 +506,18 @@ export const UserManagement: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
-                      <button className="text-blue-600 hover:text-blue-900 p-1 rounded">
+                      <button 
+                        onClick={() => openEditUserModal(user)}
+                        className="text-blue-600 hover:text-blue-900 p-1 rounded"
+                        title="Edit User"
+                      >
                         <Edit className="w-4 h-4" />
                       </button>
-                      <button className="text-red-600 hover:text-red-900 p-1 rounded">
+                      <button 
+                        onClick={() => openDeleteConfirm(user)}
+                        className="text-red-600 hover:text-red-900 p-1 rounded"
+                        title="Delete User"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                       <button className="text-gray-600 hover:text-gray-900 p-1 rounded">
@@ -307,6 +533,239 @@ export const UserManagement: React.FC = () => {
         </div>
         )}
       </div>
+
+      {/* User Form Modal */}
+      {showUserModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md m-4">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">
+                {isEditing ? 'Edit User' : 'Add New User'}
+              </h2>
+              <button
+                onClick={closeUserModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    First Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="firstName"
+                    value={formData.firstName}
+                    onChange={handleInputChange}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                      formErrors.firstName ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter first name"
+                  />
+                  {formErrors.firstName && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.firstName}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Last Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="lastName"
+                    value={formData.lastName}
+                    onChange={handleInputChange}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                      formErrors.lastName ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter last name"
+                  />
+                  {formErrors.lastName && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.lastName}</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Email *
+                </label>
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    formErrors.email ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter email address"
+                />
+                {formErrors.email && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
+                )}
+              </div>
+
+              {!isEditing && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Password *
+                  </label>
+                  <input
+                    type="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleInputChange}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                      formErrors.password ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter password (minimum 6 characters)"
+                  />
+                  {formErrors.password && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.password}</p>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Phone
+                </label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter phone number"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Role *
+                </label>
+                <div className="relative" ref={roleDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                    className={`w-full px-3 py-2 text-left border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      formErrors.role ? 'border-red-500' : 'border-gray-300'
+                    } ${isRoleDropdownOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        <span className="text-lg">
+                          {roleOptions.find(option => option.value === formData.role)?.icon}
+                        </span>
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {roleOptions.find(option => option.value === formData.role)?.label}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {roleOptions.find(option => option.value === formData.role)?.description}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${
+                        isRoleDropdownOpen ? 'rotate-180' : ''
+                      }`} />
+                    </div>
+                  </button>
+
+                  {isRoleDropdownOpen && (
+                    <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg">
+                      <div className="py-1">
+                        {roleOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => handleRoleSelect(option.value)}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 focus:bg-gray-50 focus:outline-none transition-colors ${
+                              formData.role === option.value ? 'bg-blue-50 text-blue-700' : 'text-gray-900'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <span className="text-lg">{option.icon}</span>
+                              <div>
+                                <div className="font-medium">{option.label}</div>
+                                <div className="text-xs text-gray-500">{option.description}</div>
+                              </div>
+                              {formData.role === option.value && (
+                                <div className="ml-auto">
+                                  <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+                                </div>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {formErrors.role && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.role}</p>
+                )}
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={closeUserModal}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Saving...' : (isEditing ? 'Update User' : 'Create User')}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && userToDelete && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md m-4">
+            <div className="p-6">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
+                <Trash2 className="w-6 h-6 text-red-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete User
+              </h3>
+              <p className="text-gray-600 text-center mb-6">
+                Are you sure you want to delete <strong>{userToDelete.name}</strong>? 
+                This action cannot be undone.
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={closeDeleteConfirm}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Deleting...' : 'Delete User'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
