@@ -161,6 +161,13 @@ const CommunicationManagement: React.FC = () => {
     fetchAllData();
   }, []);
 
+  // Recalculate stats when messages change
+  useEffect(() => {
+    if (messages.length > 0) {
+      calculateStatsFromMessages();
+    }
+  }, [messages]);
+
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -287,25 +294,31 @@ const CommunicationManagement: React.FC = () => {
         setStats(response.data);
       } else {
         // Calculate from local data
-        const totalMessages = messages.length;
-        const emailsSent = messages.filter(m => m.type === 'email').length;
-        const smsSent = messages.filter(m => m.type === 'sms').length;
-        const whatsappSent = messages.filter(m => m.type === 'whatsapp').length;
-        const sentMessages = messages.filter(m => m.status === 'sent').length;
-        const failedMessages = messages.filter(m => m.status === 'failed').length;
-        
-        setStats({
-          totalMessages,
-          emailsSent,
-          smsSent,
-          whatsappSent,
-          successRate: totalMessages > 0 ? Math.round((sentMessages / totalMessages) * 100) : 0,
-          failedMessages
-        });
+        calculateStatsFromMessages();
       }
     } catch (error) {
       console.error('Error fetching stats:', error);
+      // Calculate fallback stats from local data
+      calculateStatsFromMessages();
     }
+  };
+
+  const calculateStatsFromMessages = () => {
+    const totalMessages = messages.length;
+    const emailsSent = messages.filter(m => m.type === 'email').length;
+    const smsSent = messages.filter(m => m.type === 'sms').length;
+    const whatsappSent = messages.filter(m => m.type === 'whatsapp').length;
+    const sentMessages = messages.filter(m => m.status === 'sent').length;
+    const failedMessages = messages.filter(m => m.status === 'failed').length;
+    
+    setStats({
+      totalMessages,
+      emailsSent,
+      smsSent,
+      whatsappSent,
+      successRate: totalMessages > 0 ? Math.round((sentMessages / totalMessages) * 100) : 0,
+      failedMessages
+    });
   };
 
   const handleComposeMessage = (type: MessageType) => {
@@ -523,29 +536,29 @@ const CommunicationManagement: React.FC = () => {
     return new Date(dateString).toLocaleString('en-IN');
   };
 
-  // Statistics cards
+  // Statistics cards with null checks
   const statsCards = [
     {
       title: 'Total Messages',
-      value: stats.totalMessages.toString(),
+      value: (stats?.totalMessages || 0).toString(),
       icon: <MessageSquare className="w-6 h-6" />,
       color: 'blue'
     },
     {
       title: 'Success Rate',
-      value: `${stats.successRate}%`,
+      value: `${stats?.successRate || 0}%`,
       icon: <CheckCircle className="w-6 h-6" />,
       color: 'green'
     },
     {
       title: 'Emails Sent',
-      value: stats.emailsSent.toString(),
+      value: (stats?.emailsSent || 0).toString(),
       icon: <Mail className="w-6 h-6" />,
       color: 'indigo'
     },
     {
       title: 'SMS Sent',
-      value: stats.smsSent.toString(),
+      value: (stats?.smsSent || 0).toString(),
       icon: <Phone className="w-6 h-6" />,
       color: 'purple'
     }
