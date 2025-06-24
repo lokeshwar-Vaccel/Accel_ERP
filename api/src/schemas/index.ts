@@ -1,0 +1,186 @@
+// User validation schemas
+export * from './userSchemas';
+
+// Customer validation schemas
+export * from './customerSchemas';
+
+// Product validation schemas
+export * from './productSchemas';
+
+// Stock/Inventory validation schemas
+export * from './stockSchemas';
+
+// Service ticket validation schemas
+export * from './serviceSchemas';
+
+// AMC validation schemas
+export * from './amcSchemas';
+
+// Purchase order validation schemas
+export * from './purchaseOrderSchemas';
+
+// Report and analytics validation schemas
+export * from './reportSchemas';
+
+// Common validation utilities
+import Joi from 'joi';
+
+// Common MongoDB ObjectId validation
+export const objectIdSchema = Joi.string().hex().length(24);
+
+// Common pagination schema
+export const paginationSchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(10),
+  sort: Joi.string().default('-createdAt'),
+  search: Joi.string().allow('')
+});
+
+// Common date range schema
+export const dateRangeSchema = Joi.object({
+  from: Joi.date().iso().required(),
+  to: Joi.date().iso().greater(Joi.ref('from')).required()
+});
+
+// File upload schema
+export const fileUploadSchema = Joi.object({
+  filename: Joi.string().max(255).required(),
+  mimetype: Joi.string().valid(
+    'image/jpeg',
+    'image/png', 
+    'image/gif',
+    'application/pdf',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv'
+  ).required(),
+  size: Joi.number().max(10 * 1024 * 1024) // 10MB max
+});
+
+// Address schema (reusable)
+export const addressSchema = Joi.object({
+  street: Joi.string().max(200).required(),
+  city: Joi.string().max(100).required(),
+  state: Joi.string().max(100),
+  zipCode: Joi.string().max(20),
+  country: Joi.string().max(100).required(),
+  coordinates: Joi.object({
+    latitude: Joi.number().min(-90).max(90),
+    longitude: Joi.number().min(-180).max(180)
+  })
+});
+
+// Contact information schema (reusable)
+export const contactInfoSchema = Joi.object({
+  name: Joi.string().max(100).required(),
+  email: Joi.string().email(),
+  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
+  designation: Joi.string().max(100)
+});
+
+// Notification preferences schema
+export const notificationPreferencesSchema = Joi.object({
+  email: Joi.boolean().default(true),
+  sms: Joi.boolean().default(false),
+  whatsapp: Joi.boolean().default(false),
+  push: Joi.boolean().default(true),
+  frequency: Joi.string().valid('immediate', 'hourly', 'daily', 'weekly').default('immediate'),
+  categories: Joi.array().items(
+    Joi.string().valid(
+      'service_updates',
+      'amc_reminders',
+      'inventory_alerts',
+      'system_notifications',
+      'reports'
+    )
+  ).default(['service_updates', 'system_notifications'])
+});
+
+// System configuration schema
+export const systemConfigSchema = Joi.object({
+  general: Joi.object({
+    companyName: Joi.string().max(200).required(),
+    companyAddress: addressSchema,
+    contactInfo: contactInfoSchema,
+    timezone: Joi.string().default('Asia/Kolkata'),
+    currency: Joi.string().length(3).default('INR'),
+    dateFormat: Joi.string().valid('DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD').default('DD/MM/YYYY'),
+    timeFormat: Joi.string().valid('12h', '24h').default('12h')
+  }),
+  sla: Joi.object({
+    defaultResponseTime: Joi.number().integer().min(1).default(24), // hours
+    defaultResolutionTime: Joi.number().integer().min(1).default(72), // hours
+    priorities: Joi.object({
+      low: Joi.object({
+        responseTime: Joi.number().integer().min(1).default(48),
+        resolutionTime: Joi.number().integer().min(1).default(168) // 1 week
+      }),
+      medium: Joi.object({
+        responseTime: Joi.number().integer().min(1).default(24),
+        resolutionTime: Joi.number().integer().min(1).default(72)
+      }),
+      high: Joi.object({
+        responseTime: Joi.number().integer().min(1).default(8),
+        resolutionTime: Joi.number().integer().min(1).default(24)
+      }),
+      critical: Joi.object({
+        responseTime: Joi.number().integer().min(1).default(2),
+        resolutionTime: Joi.number().integer().min(1).default(8)
+      })
+    })
+  }),
+  inventory: Joi.object({
+    enableLowStockAlerts: Joi.boolean().default(true),
+    defaultLowStockThreshold: Joi.number().integer().min(0).default(10),
+    enableSerialTracking: Joi.boolean().default(true),
+    enableBatchTracking: Joi.boolean().default(false),
+    autoGenerateProductCodes: Joi.boolean().default(true)
+  }),
+  notifications: Joi.object({
+    email: Joi.object({
+      enabled: Joi.boolean().default(true),
+      smtpHost: Joi.string(),
+      smtpPort: Joi.number().integer().min(1).max(65535),
+      smtpUser: Joi.string(),
+      smtpPassword: Joi.string(),
+      fromAddress: Joi.string().email(),
+      fromName: Joi.string()
+    }),
+    sms: Joi.object({
+      enabled: Joi.boolean().default(false),
+      provider: Joi.string().valid('twilio', 'aws_sns', 'custom'),
+      apiKey: Joi.string(),
+      apiSecret: Joi.string(),
+      fromNumber: Joi.string()
+    }),
+    whatsapp: Joi.object({
+      enabled: Joi.boolean().default(false),
+      provider: Joi.string().valid('twilio', 'whatsapp_business', 'custom'),
+      apiKey: Joi.string(),
+      phoneNumberId: Joi.string()
+    })
+  })
+});
+
+// API response schemas
+export const successResponseSchema = Joi.object({
+  success: Joi.boolean().valid(true).required(),
+  message: Joi.string(),
+  data: Joi.any(),
+  pagination: Joi.object({
+    page: Joi.number().integer().min(1),
+    limit: Joi.number().integer().min(1),
+    total: Joi.number().integer().min(0),
+    pages: Joi.number().integer().min(0)
+  })
+});
+
+export const errorResponseSchema = Joi.object({
+  success: Joi.boolean().valid(false).required(),
+  message: Joi.string().required(),
+  error: Joi.object({
+    code: Joi.string(),
+    details: Joi.any()
+  }),
+  stack: Joi.string() // Only in development
+}); 

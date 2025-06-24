@@ -1,0 +1,261 @@
+import Joi from 'joi';
+
+// Base purchase order fields
+const basePOFields = {
+  supplier: Joi.string().max(200).trim(),
+  totalAmount: Joi.number().min(0).precision(2),
+  status: Joi.string().valid('draft', 'sent', 'confirmed', 'received', 'cancelled'),
+  orderDate: Joi.date().iso(),
+  expectedDeliveryDate: Joi.date().iso(),
+  actualDeliveryDate: Joi.date().iso(),
+  priority: Joi.string().valid('low', 'medium', 'high', 'urgent'),
+  deliveryLocation: Joi.string().hex().length(24), // Stock location ID
+  paymentTerms: Joi.string().valid('cod', 'net_30', 'net_60', 'advance', 'credit'),
+  shippingMethod: Joi.string().valid('standard', 'express', 'overnight', 'pickup')
+};
+
+// Purchase order item schema
+const poItemSchema = Joi.object({
+  product: Joi.string().hex().length(24).required(),
+  description: Joi.string().max(500), // Additional description if needed
+  quantity: Joi.number().min(1).required(),
+  unitPrice: Joi.number().min(0).precision(2).required(),
+  totalPrice: Joi.number().min(0).precision(2),
+  discount: Joi.object({
+    type: Joi.string().valid('percentage', 'fixed'),
+    value: Joi.number().min(0)
+  }),
+  tax: Joi.object({
+    type: Joi.string().valid('percentage', 'fixed'),
+    value: Joi.number().min(0)
+  }),
+  expectedDeliveryDate: Joi.date().iso(),
+  notes: Joi.string().max(500)
+});
+
+// Create purchase order schema
+export const createPurchaseOrderSchema = Joi.object({
+  supplier: basePOFields.supplier.required(),
+  items: Joi.array().items(poItemSchema).min(1).max(100).required(),
+  expectedDeliveryDate: basePOFields.expectedDeliveryDate,
+  priority: basePOFields.priority.default('medium'),
+  deliveryLocation: basePOFields.deliveryLocation,
+  paymentTerms: basePOFields.paymentTerms.default('net_30'),
+  shippingMethod: basePOFields.shippingMethod.default('standard'),
+  supplierContact: Joi.object({
+    name: Joi.string().max(100),
+    email: Joi.string().email(),
+    phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/)
+  }),
+  deliveryAddress: Joi.object({
+    street: Joi.string().max(200).required(),
+    city: Joi.string().max(100).required(),
+    state: Joi.string().max(100),
+    zipCode: Joi.string().max(20),
+    country: Joi.string().max(100).required(),
+    contactPerson: Joi.string().max(100),
+    phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/)
+  }),
+  internalNotes: Joi.string().max(1000),
+  supplierNotes: Joi.string().max(1000),
+  attachment: Joi.object({
+    filename: Joi.string().max(255),
+    url: Joi.string().uri(),
+    type: Joi.string().valid('quote', 'specification', 'drawing', 'other')
+  })
+});
+
+// Update purchase order schema
+export const updatePurchaseOrderSchema = Joi.object({
+  supplier: basePOFields.supplier,
+  expectedDeliveryDate: basePOFields.expectedDeliveryDate,
+  priority: basePOFields.priority,
+  status: basePOFields.status,
+  deliveryLocation: basePOFields.deliveryLocation,
+  paymentTerms: basePOFields.paymentTerms,
+  shippingMethod: basePOFields.shippingMethod,
+  supplierContact: Joi.object({
+    name: Joi.string().max(100),
+    email: Joi.string().email(),
+    phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/)
+  }),
+  deliveryAddress: Joi.object({
+    street: Joi.string().max(200),
+    city: Joi.string().max(100),
+    state: Joi.string().max(100),
+    zipCode: Joi.string().max(20),
+    country: Joi.string().max(100),
+    contactPerson: Joi.string().max(100),
+    phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/)
+  }),
+  internalNotes: Joi.string().max(1000),
+  supplierNotes: Joi.string().max(1000)
+});
+
+// Add/Update purchase order item schema
+export const updatePOItemSchema = Joi.object({
+  items: Joi.array().items(poItemSchema).min(1).max(100).required()
+});
+
+// Purchase order approval schema
+export const approvePOSchema = Joi.object({
+  approved: Joi.boolean().required(),
+  approvalNotes: Joi.string().max(1000),
+  conditions: Joi.array().items(Joi.string().max(200)) // Approval conditions
+});
+
+// Purchase order delivery schema (for receiving goods)
+export const receivePOSchema = Joi.object({
+  receivedDate: Joi.date().iso().default(() => new Date()),
+  receivedItems: Joi.array().items(
+    Joi.object({
+      product: Joi.string().hex().length(24).required(),
+      orderedQuantity: Joi.number().min(1).required(),
+      receivedQuantity: Joi.number().min(0).required(),
+      rejectedQuantity: Joi.number().min(0).default(0),
+      unitPrice: Joi.number().min(0).precision(2),
+      condition: Joi.string().valid('good', 'damaged', 'defective').default('good'),
+      batchNumbers: Joi.array().items(Joi.string().max(50)),
+      serialNumbers: Joi.array().items(Joi.string().max(100)),
+      expiryDate: Joi.date().iso(),
+      notes: Joi.string().max(500)
+    })
+  ).min(1).required(),
+  deliveryNote: Joi.string().max(100), // Delivery note number
+  invoice: Joi.object({
+    invoiceNumber: Joi.string().max(100),
+    invoiceDate: Joi.date().iso(),
+    invoiceAmount: Joi.number().min(0).precision(2)
+  }),
+  receivedBy: Joi.string().hex().length(24),
+  qualityCheck: Joi.object({
+    performed: Joi.boolean().default(false),
+    checkedBy: Joi.string().hex().length(24),
+    checkDate: Joi.date().iso(),
+    result: Joi.string().valid('passed', 'failed', 'conditional'),
+    notes: Joi.string().max(1000)
+  }),
+  discrepancies: Joi.array().items(
+    Joi.object({
+      type: Joi.string().valid('quantity', 'quality', 'specification', 'packaging', 'other'),
+      description: Joi.string().max(500).required(),
+      severity: Joi.string().valid('minor', 'major', 'critical'),
+      action: Joi.string().valid('accept', 'reject', 'return', 'rework')
+    })
+  ),
+  images: Joi.array().items(
+    Joi.object({
+      url: Joi.string().uri(),
+      description: Joi.string().max(200),
+      type: Joi.string().valid('delivery', 'damage', 'product', 'packaging')
+    })
+  ).max(20)
+});
+
+// Purchase order query schema
+export const purchaseOrderQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(10),
+  sort: Joi.string().default('-createdAt'),
+  search: Joi.string().allow(''),
+  status: basePOFields.status,
+  supplier: Joi.string(),
+  priority: basePOFields.priority,
+  dateFrom: Joi.date().iso(),
+  dateTo: Joi.date().iso().greater(Joi.ref('dateFrom')),
+  deliveryDateFrom: Joi.date().iso(),
+  deliveryDateTo: Joi.date().iso().greater(Joi.ref('deliveryDateFrom')),
+  amountMin: Joi.number().min(0),
+  amountMax: Joi.number().min(Joi.ref('amountMin')),
+  overdue: Joi.boolean(),
+  pendingApproval: Joi.boolean(),
+  deliveryLocation: basePOFields.deliveryLocation
+});
+
+// Purchase order cancellation schema
+export const cancelPOSchema = Joi.object({
+  cancellationReason: Joi.string().valid(
+    'supplier_unavailable',
+    'price_change',
+    'requirement_change',
+    'budget_constraint',
+    'duplicate_order',
+    'other'
+  ).required(),
+  notes: Joi.string().max(1000).required(),
+  notifySupplier: Joi.boolean().default(true),
+  refundRequired: Joi.boolean().default(false),
+  refundAmount: Joi.number().min(0).when('refundRequired', {
+    is: true,
+    then: Joi.required()
+  })
+});
+
+// Purchase order revision schema
+export const revisePOSchema = Joi.object({
+  revisionReason: Joi.string().max(500).required(),
+  changes: Joi.object({
+    items: Joi.array().items(poItemSchema),
+    deliveryDate: basePOFields.expectedDeliveryDate,
+    deliveryAddress: Joi.object({
+      street: Joi.string().max(200),
+      city: Joi.string().max(100),
+      state: Joi.string().max(100),
+      zipCode: Joi.string().max(20),
+      country: Joi.string().max(100)
+    }),
+    paymentTerms: basePOFields.paymentTerms,
+    shippingMethod: basePOFields.shippingMethod
+  }).required(),
+  notifySupplier: Joi.boolean().default(true),
+  requiresApproval: Joi.boolean().default(false)
+});
+
+// Supplier performance rating schema
+export const supplierRatingSchema = Joi.object({
+  purchaseOrderId: Joi.string().hex().length(24).required(),
+  ratings: Joi.object({
+    qualityRating: Joi.number().min(1).max(5).required(),
+    deliveryRating: Joi.number().min(1).max(5).required(),
+    serviceRating: Joi.number().min(1).max(5).required(),
+    priceRating: Joi.number().min(1).max(5).required(),
+    overallRating: Joi.number().min(1).max(5).required()
+  }).required(),
+  feedback: Joi.string().max(1000),
+  wouldRecommend: Joi.boolean(),
+  improvements: Joi.string().max(500)
+});
+
+// Purchase order report schema
+export const purchaseOrderReportSchema = Joi.object({
+  reportType: Joi.string().valid(
+    'purchase_summary',
+    'supplier_performance',
+    'delivery_analysis',
+    'cost_analysis',
+    'overdue_orders'
+  ).required(),
+  dateFrom: Joi.date().iso().required(),
+  dateTo: Joi.date().iso().greater(Joi.ref('dateFrom')).required(),
+  supplier: Joi.string(),
+  status: basePOFields.status,
+  deliveryLocation: basePOFields.deliveryLocation,
+  format: Joi.string().valid('json', 'csv', 'excel', 'pdf').default('json'),
+  includeGraphs: Joi.boolean().default(false)
+});
+
+// Purchase order import schema (CSV/Excel)
+export const purchaseOrderImportSchema = Joi.object({
+  supplier: basePOFields.supplier.required(),
+  productName: Joi.string().required(), // Will be looked up
+  productCode: Joi.string(), // Alternative lookup method
+  quantity: Joi.number().min(1).required(),
+  unitPrice: Joi.number().min(0).precision(2).required(),
+  expectedDeliveryDate: basePOFields.expectedDeliveryDate,
+  priority: basePOFields.priority.default('medium'),
+  paymentTerms: basePOFields.paymentTerms.default('net_30'),
+  notes: Joi.string().max(500)
+});
+
+// Bulk purchase order import schema
+export const bulkPurchaseOrderImportSchema = Joi.array().items(purchaseOrderImportSchema).min(1).max(1000); 

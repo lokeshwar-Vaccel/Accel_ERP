@@ -1,0 +1,317 @@
+import { Request } from 'express';
+import { Document } from 'mongoose';
+
+// User Roles
+export enum UserRole {
+  SUPER_ADMIN = 'super_admin',
+  ADMIN = 'admin',
+  HR = 'hr',
+  MANAGER = 'manager',
+  VIEWER = 'viewer'
+}
+
+// User Status
+export enum UserStatus {
+  ACTIVE = 'active',
+  INACTIVE = 'inactive',
+  SUSPENDED = 'suspended'
+}
+
+// Customer Types
+export enum CustomerType {
+  RETAIL = 'retail',
+  TELECOM = 'telecom'
+}
+
+// Lead Status
+export enum LeadStatus {
+  NEW = 'new',
+  QUALIFIED = 'qualified',
+  CONTACTED = 'contacted',
+  CONVERTED = 'converted',
+  LOST = 'lost'
+}
+
+// Service Ticket Status
+export enum TicketStatus {
+  OPEN = 'open',
+  IN_PROGRESS = 'in_progress',
+  RESOLVED = 'resolved',
+  CLOSED = 'closed',
+  CANCELLED = 'cancelled'
+}
+
+// Service Ticket Priority
+export enum TicketPriority {
+  LOW = 'low',
+  MEDIUM = 'medium',
+  HIGH = 'high',
+  CRITICAL = 'critical'
+}
+
+// AMC Status
+export enum AMCStatus {
+  ACTIVE = 'active',
+  EXPIRED = 'expired',
+  CANCELLED = 'cancelled',
+  PENDING = 'pending'
+}
+
+// Stock Transaction Types
+export enum StockTransactionType {
+  INWARD = 'inward',
+  OUTWARD = 'outward',
+  ADJUSTMENT = 'adjustment',
+  TRANSFER = 'transfer'
+}
+
+// Product Categories
+export enum ProductCategory {
+  GENSET = 'genset',
+  SPARE_PART = 'spare_part',
+  ACCESSORY = 'accessory'
+}
+
+// User Interface
+export interface IUser extends Document {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  role: UserRole;
+  status: UserStatus;
+  phone?: string;
+  address?: string;
+  moduleAccess: string[];
+  createdBy?: string;
+  lastLoginAt?: Date;
+  profileImage?: string;
+  // Virtual properties
+  fullName: string;
+  // Mongoose timestamps
+  createdAt: Date;
+  updatedAt: Date;
+  // Methods
+  comparePassword(candidatePassword: string): Promise<boolean>;
+  generateJWT(): string;
+}
+
+// Customer Interface
+export interface ICustomer extends Document {
+  name: string;
+  email?: string;
+  phone: string;
+  address: string;
+  customerType: CustomerType;
+  leadSource?: string;
+  assignedTo?: string;
+  status: LeadStatus;
+  notes?: string;
+  contactHistory: IContactHistory[];
+  createdBy: string;
+}
+
+// Contact History Interface
+export interface IContactHistory {
+  type: 'call' | 'meeting' | 'email' | 'whatsapp';
+  date: Date;
+  notes: string;
+  followUpDate?: Date;
+  createdBy: string;
+}
+
+// Product Interface
+export interface IProduct extends Document {
+  name: string;
+  description?: string;
+  category: ProductCategory;
+  brand?: string;
+  modelNumber?: string;
+  specifications?: Record<string, any>;
+  price: number;
+  minStockLevel: number;
+  isActive: boolean;
+  createdBy: string;
+}
+
+// Stock Location Interface
+export interface IStockLocation extends Document {
+  name: string;
+  address: string;
+  type: 'main_office' | 'warehouse' | 'service_center';
+  contactPerson?: string;
+  phone?: string;
+  isActive: boolean;
+}
+
+// Stock Interface
+export interface IStock extends Document {
+  product: string;
+  location: string;
+  quantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  lastUpdated: Date;
+}
+
+// Service Ticket Interface
+export interface IServiceTicket extends Document {
+  ticketNumber: string;
+  customer: string;
+  product?: string;
+  serialNumber?: string;
+  description: string;
+  priority: TicketPriority;
+  status: TicketStatus;
+  assignedTo?: string;
+  scheduledDate?: Date;
+  completedDate?: Date;
+  partsUsed: IPartUsed[];
+  serviceReport?: string;
+  customerSignature?: string;
+  slaDeadline?: Date;
+  createdBy: string;
+}
+
+// Parts Used Interface
+export interface IPartUsed {
+  product: string;
+  quantity: number;
+  serialNumbers?: string[];
+}
+
+// AMC Interface
+export interface IAMC extends Document {
+  contractNumber: string;
+  customer: string;
+  products: string[];
+  startDate: Date;
+  endDate: Date;
+  contractValue: number;
+  scheduledVisits: number;
+  completedVisits: number;
+  status: AMCStatus;
+  nextVisitDate?: Date;
+  visitSchedule: IVisitSchedule[];
+  terms?: string;
+  createdBy: string;
+}
+
+// Visit Schedule Interface
+export interface IVisitSchedule {
+  scheduledDate: Date;
+  completedDate?: Date;
+  assignedTo?: string;
+  status: 'pending' | 'completed' | 'cancelled';
+  notes?: string;
+}
+
+// Purchase Order Interface
+export interface IPurchaseOrder extends Document {
+  poNumber: string;
+  supplier: string;
+  items: IPOItem[];
+  totalAmount: number;
+  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  orderDate: Date;
+  expectedDeliveryDate?: Date;
+  actualDeliveryDate?: Date;
+  createdBy: string;
+}
+
+// Purchase Order Item Interface
+export interface IPOItem {
+  product: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+// Stock Transaction Interface
+export interface IStockTransaction extends Document {
+  type: StockTransactionType;
+  product: string;
+  fromLocation?: string;
+  toLocation?: string;
+  quantity: number;
+  reference?: string;
+  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer';
+  notes?: string;
+  createdBy: string;
+}
+
+// Extended Request Interface
+export interface AuthenticatedRequest extends Request {
+  user?: {
+    id: string;
+    email: string;
+    role: UserRole;
+    moduleAccess: string[];
+  };
+}
+
+// API Response Interface
+export interface APIResponse<T = any> {
+  success: boolean;
+  message: string;
+  data?: T;
+  error?: string;
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    pages: number;
+  };
+}
+
+// Query Parameters Interface
+export interface QueryParams {
+  page?: number;
+  limit?: number;
+  sort?: string;
+  filter?: Record<string, any>;
+  search?: string;
+  startDate?: Date;
+  endDate?: Date;
+}
+
+// Email Template Interface
+export interface IEmailTemplate {
+  name: string;
+  subject: string;
+  body: string;
+  variables: string[];
+}
+
+// Notification Interface
+export interface INotification extends Document {
+  title: string;
+  message: string;
+  type: 'info' | 'warning' | 'error' | 'success';
+  recipient: string;
+  isRead: boolean;
+  data?: Record<string, any>;
+  createdAt: Date;
+}
+
+// Dashboard Stats Interface
+export interface IDashboardStats {
+  totalCustomers: number;
+  activeTickets: number;
+  pendingAMCs: number;
+  lowStockItems: number;
+  monthlyRevenue: number;
+  ticketResolutionRate: number;
+  inventoryValue: number;
+}
+
+// Report Filters Interface
+export interface IReportFilters {
+  dateFrom?: Date;
+  dateTo?: Date;
+  customer?: string;
+  product?: string;
+  location?: string;
+  status?: string;
+  assignedTo?: string;
+} 
