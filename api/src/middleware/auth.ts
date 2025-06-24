@@ -1,0 +1,123 @@
+import { Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
+import { User } from '../models/User';
+import { AuthenticatedRequest, UserRole } from '../types';
+import { AppError } from './errorHandler';
+
+// Protect routes - verify JWT token
+export const protect = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    // Get token from header
+    let token: string | undefined;
+    
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    }
+
+    if (!token) {
+      return next(new AppError('Not authorized to access this route', 401));
+    }
+
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+
+    // Check if user still exists
+    const currentUser = await User.findById(decoded.id).select('-password');
+    if (!currentUser) {
+      return next(new AppError('The user belonging to this token no longer exists', 401));
+    }
+
+    // Check if user is active
+    if (currentUser.status !== 'active') {
+      return next(new AppError('Your account has been deactivated. Please contact admin.', 401));
+    }
+
+    // Attach user to request
+    req.user = {
+      id: (currentUser._id as any).toString(),
+      email: currentUser.email,
+      role: currentUser.role,
+      moduleAccess: currentUser.moduleAccess
+    };
+
+    next();
+  } catch (error) {
+    return next(new AppError('Not authorized to access this route', 401));
+  }
+};
+
+// Restrict access based on roles
+export const restrictTo = (...roles: UserRole[]) => {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return next(new AppError('You do not have permission to perform this action', 403));
+    }
+    next();
+  };
+};
+
+// Check module access
+export const checkModuleAccess = (module: string) => {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      return next(new AppError('Not authorized', 401));
+    }
+
+    // Super admin and admin have access to all modules
+    if (req.user.role === UserRole.SUPER_ADMIN || req.user.role === UserRole.ADMIN) {
+      return next();
+    }
+
+    // Check if user has access to the specific module
+    if (!req.user.moduleAccess.includes(module)) {
+      return next(new AppError(`You do not have access to ${module} module`, 403));
+    }
+
+    next();
+  };
+};
+
+// Check permission for specific actions
+export const checkPermission = (action: 'read' | 'write' | 'delete') => {
+  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      return next(new AppError('Not authorized', 401));
+    }
+
+    // Super admin and admin have all permissions
+    if (req.user.role === UserRole.SUPER_ADMIN || req.user.role === UserRole.ADMIN) {
+      return next();
+    }
+
+    // Viewer role can only read
+    if (req.user.role === UserRole.VIEWER && action !== 'read') {
+      return next(new AppError('You only have read-only access', 403));
+    }
+
+    // HR role restrictions
+    if (req.user.role === UserRole.HR) {
+      const hrModules = ['user_management', 'inventory_management', 'finance'];
+      const requestedModule = req.baseUrl.split('/')[3]; // assuming /api/v1/module format
+      
+      if (!hrModules.includes(requestedModule)) {
+        return next(new AppError('You do not have access to this module', 403));
+      }
+    }
+
+    // Manager role restrictions (no admin settings)
+    if (req.user.role === UserRole.MANAGER) {
+      const restrictedModules = ['admin_settings'];
+      const requestedModule = req.baseUrl.split('/')[3];
+      
+      if (restrictedModules.includes(requestedModule)) {
+        return next(new AppError('You do not have access to admin settings', 403));
+      }
+    }
+
+    next();
+  };
+}; 
