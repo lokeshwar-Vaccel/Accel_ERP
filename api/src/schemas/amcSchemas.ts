@@ -1,6 +1,204 @@
 import Joi from 'joi';
 import { AMCStatus } from '../types';
 
+// TypeScript interfaces for validation results
+export interface CreateAMCInput {
+  customer: string;
+  products: string[];
+  startDate: string;
+  endDate: string;
+  contractValue: number;
+  scheduledVisits: number;
+  terms?: string;
+  contractType?: 'comprehensive' | 'breakdown' | 'preventive' | 'labor_only';
+  paymentTerms?: 'annual' | 'semi_annual' | 'quarterly' | 'monthly';
+  renewalOption?: boolean;
+  contactPerson?: string;
+  contactPhone?: string;
+  billingAddress?: string;
+  serviceLocation?: {
+    address: string;
+    coordinates?: {
+      latitude?: number;
+      longitude?: number;
+    };
+    accessInstructions?: string;
+  };
+  inclusions?: {
+    service: string;
+    description?: string;
+    frequency?: string;
+  }[];
+  exclusions?: string[];
+  discount?: {
+    type?: 'percentage' | 'fixed';
+    value?: number;
+    reason?: string;
+  };
+}
+
+export interface UpdateAMCInput {
+  products?: string[];
+  startDate?: string;
+  endDate?: string;
+  contractValue?: number;
+  scheduledVisits?: number;
+  status?: AMCStatus;
+  terms?: string;
+  contractType?: 'comprehensive' | 'breakdown' | 'preventive' | 'labor_only';
+  paymentTerms?: 'annual' | 'semi_annual' | 'quarterly' | 'monthly';
+  renewalOption?: boolean;
+  contactPerson?: string;
+  contactPhone?: string;
+  billingAddress?: string;
+  discount?: {
+    type?: 'percentage' | 'fixed';
+    value?: number;
+    reason?: string;
+  };
+}
+
+export interface CompleteVisitInput {
+  visitId: string;
+  completedDate: string;
+  assignedTo?: string;
+  serviceReport: string;
+  workPerformed?: {
+    task: string;
+    status: 'completed' | 'partial' | 'skipped';
+    notes?: string;
+  }[];
+  partsUsed?: {
+    product: string;
+    quantity: number;
+    covered?: boolean;
+  }[];
+  issues?: {
+    description: string;
+    severity?: 'low' | 'medium' | 'high' | 'critical';
+    resolved?: boolean;
+    followUpRequired?: boolean;
+  }[];
+  customerSignature?: string;
+  customerFeedback?: {
+    rating?: number;
+    comments?: string;
+  };
+  nextVisitRecommendations?: string;
+  workDuration?: number;
+  images?: {
+    url: string;
+    description?: string;
+    type?: 'before' | 'during' | 'after' | 'issue';
+  }[];
+}
+
+export interface ScheduleVisitInput {
+  scheduledDate: string;
+  assignedTo: string;
+  visitType?: 'routine' | 'breakdown' | 'inspection' | 'emergency';
+  estimatedDuration?: number;
+  notes?: string;
+  requiredTools?: string[];
+  customerNotified?: boolean;
+}
+
+export interface RescheduleVisitInput {
+  visitId: string;
+  newScheduledDate: string;
+  rescheduleReason: 'customer_request' | 'technician_unavailable' | 'weather' | 'equipment_unavailable' | 'emergency' | 'other';
+  notes?: string;
+  customerNotified?: boolean;
+}
+
+export interface RenewAMCInput {
+  newStartDate: string;
+  newEndDate: string;
+  newContractValue: number;
+  newScheduledVisits: number;
+  priceAdjustment?: {
+    type?: 'percentage' | 'fixed';
+    value?: number;
+    reason?: string;
+  };
+  updatedTerms?: string;
+  addProducts?: string[];
+  removeProducts?: string[];
+  autoRenewal?: boolean;
+}
+
+export interface AMCQueryInput {
+  page?: number;
+  limit?: number;
+  sort?: string;
+  search?: string;
+  status?: AMCStatus;
+  customer?: string;
+  contractType?: 'comprehensive' | 'breakdown' | 'preventive' | 'labor_only';
+  expiringIn?: number;
+  startDateFrom?: string;
+  startDateTo?: string;
+  endDateFrom?: string;
+  endDateTo?: string;
+  valueMin?: number;
+  valueMax?: number;
+  upcomingVisits?: boolean;
+  overdueVisits?: boolean;
+}
+
+export interface AMCNotificationInput {
+  expiryReminder?: {
+    enabled?: boolean;
+    daysBefore?: number[];
+    recipients: string[];
+  };
+  visitReminder?: {
+    enabled?: boolean;
+    daysBefore?: number[];
+    recipients: string[];
+  };
+  overdueReminder?: {
+    enabled?: boolean;
+    frequency?: 'daily' | 'weekly' | 'monthly';
+    recipients: string[];
+  };
+}
+
+export interface AMCReportInput {
+  reportType: 'contract_summary' | 'revenue_analysis' | 'visit_completion' | 'customer_satisfaction' | 'expiring_contracts';
+  dateFrom: string;
+  dateTo: string;
+  customer?: string;
+  status?: AMCStatus;
+  contractType?: 'comprehensive' | 'breakdown' | 'preventive' | 'labor_only';
+  format?: 'json' | 'csv' | 'excel' | 'pdf';
+  includeGraphs?: boolean;
+}
+
+export interface BulkAMCOperationInput {
+  amcIds: string[];
+  operation: 'activate' | 'suspend' | 'cancel' | 'extend' | 'update_status';
+  parameters?: {
+    extensionDays?: number;
+    newStatus?: AMCStatus;
+  };
+  reason: string;
+  notifyCustomers?: boolean;
+}
+
+export interface AMCImportInput {
+  customerName: string;
+  customerEmail?: string;
+  customerPhone?: string;
+  productNames: string | string[];
+  startDate: string;
+  endDate: string;
+  contractValue: number;
+  scheduledVisits: number;
+  contractType?: 'comprehensive' | 'breakdown' | 'preventive' | 'labor_only';
+  paymentTerms?: 'annual' | 'semi_annual' | 'quarterly' | 'monthly';
+}
+
 // Base AMC fields
 const baseAMCFields = {
   customer: Joi.string().hex().length(24),
@@ -19,7 +217,7 @@ const baseAMCFields = {
 };
 
 // Create AMC schema
-export const createAMCSchema = Joi.object({
+export const createAMCSchema = Joi.object<CreateAMCInput>({
   customer: baseAMCFields.customer.required(),
   products: baseAMCFields.products.min(1).required(),
   startDate: baseAMCFields.startDate.required(),
@@ -57,7 +255,7 @@ export const createAMCSchema = Joi.object({
 });
 
 // Update AMC schema
-export const updateAMCSchema = Joi.object({
+export const updateAMCSchema = Joi.object<UpdateAMCInput>({
   products: baseAMCFields.products.min(1),
   startDate: baseAMCFields.startDate,
   endDate: baseAMCFields.endDate,
@@ -79,7 +277,7 @@ export const updateAMCSchema = Joi.object({
 });
 
 // Visit completion schema
-export const completeVisitSchema = Joi.object({
+export const completeVisitSchema = Joi.object<CompleteVisitInput>({
   visitId: Joi.string().hex().length(24).required(),
   completedDate: Joi.date().iso().required(),
   assignedTo: Joi.string().hex().length(24),
@@ -123,7 +321,7 @@ export const completeVisitSchema = Joi.object({
 });
 
 // Schedule visit schema
-export const scheduleVisitSchema = Joi.object({
+export const scheduleVisitSchema = Joi.object<ScheduleVisitInput>({
   scheduledDate: Joi.date().iso().greater('now').required(),
   assignedTo: Joi.string().hex().length(24).required(),
   visitType: Joi.string().valid('routine', 'breakdown', 'inspection', 'emergency').default('routine'),
@@ -134,7 +332,7 @@ export const scheduleVisitSchema = Joi.object({
 });
 
 // Reschedule visit schema
-export const rescheduleVisitSchema = Joi.object({
+export const rescheduleVisitSchema = Joi.object<RescheduleVisitInput>({
   visitId: Joi.string().hex().length(24).required(),
   newScheduledDate: Joi.date().iso().greater('now').required(),
   rescheduleReason: Joi.string().valid(
@@ -150,7 +348,7 @@ export const rescheduleVisitSchema = Joi.object({
 });
 
 // AMC renewal schema
-export const renewAMCSchema = Joi.object({
+export const renewAMCSchema = Joi.object<RenewAMCInput>({
   newStartDate: baseAMCFields.startDate.required(),
   newEndDate: baseAMCFields.endDate.greater(Joi.ref('newStartDate')).required(),
   newContractValue: baseAMCFields.contractValue.required(),
@@ -167,7 +365,7 @@ export const renewAMCSchema = Joi.object({
 });
 
 // AMC query schema
-export const amcQuerySchema = Joi.object({
+export const amcQuerySchema = Joi.object<AMCQueryInput>({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   sort: Joi.string().default('-createdAt'),
@@ -187,7 +385,7 @@ export const amcQuerySchema = Joi.object({
 });
 
 // AMC notification settings schema
-export const amcNotificationSchema = Joi.object({
+export const amcNotificationSchema = Joi.object<AMCNotificationInput>({
   expiryReminder: Joi.object({
     enabled: Joi.boolean().default(true),
     daysBefore: Joi.array().items(Joi.number().integer().min(1).max(365)).default([30, 15, 7, 1]),
@@ -206,7 +404,7 @@ export const amcNotificationSchema = Joi.object({
 });
 
 // AMC report schema
-export const amcReportSchema = Joi.object({
+export const amcReportSchema = Joi.object<AMCReportInput>({
   reportType: Joi.string().valid(
     'contract_summary',
     'revenue_analysis',
@@ -224,7 +422,7 @@ export const amcReportSchema = Joi.object({
 });
 
 // AMC bulk operations schema
-export const bulkAMCOperationSchema = Joi.object({
+export const bulkAMCOperationSchema = Joi.object<BulkAMCOperationInput>({
   amcIds: Joi.array().items(Joi.string().hex().length(24)).min(1).max(100).required(),
   operation: Joi.string().valid('activate', 'suspend', 'cancel', 'extend', 'update_status').required(),
   parameters: Joi.object().when('operation', {
@@ -241,7 +439,7 @@ export const bulkAMCOperationSchema = Joi.object({
 });
 
 // AMC import schema (CSV/Excel)
-export const amcImportSchema = Joi.object({
+export const amcImportSchema = Joi.object<AMCImportInput>({
   customerName: Joi.string().required(),
   customerEmail: Joi.string().email(),
   customerPhone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),

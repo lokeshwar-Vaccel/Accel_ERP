@@ -1,6 +1,160 @@
 import Joi from 'joi';
 import { TicketStatus, TicketPriority } from '../types';
 
+// TypeScript interfaces for validation results
+export interface CreateServiceTicketInput {
+  customer: string;
+  product?: string;
+  serialNumber?: string;
+  description: string;
+  priority?: TicketPriority;
+  assignedTo?: string;
+  scheduledDate?: string;
+  serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
+  urgencyLevel?: 'low' | 'medium' | 'high' | 'critical';
+  customerNotes?: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  serviceLocation?: {
+    address: string;
+    coordinates?: {
+      latitude?: number;
+      longitude?: number;
+    };
+    accessInstructions?: string;
+  };
+}
+
+export interface UpdateServiceTicketInput {
+  description?: string;
+  priority?: TicketPriority;
+  status?: TicketStatus;
+  assignedTo?: string;
+  scheduledDate?: string;
+  serviceReport?: string;
+  customerSignature?: string;
+  serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
+  urgencyLevel?: 'low' | 'medium' | 'high' | 'critical';
+  resolution?: string;
+  workDuration?: number;
+  customerFeedback?: {
+    rating?: number;
+    comments?: string;
+  };
+}
+
+export interface AddPartsUsedInput {
+  product: string;
+  quantity: number;
+  serialNumbers?: string[];
+  unitPrice?: number;
+  totalPrice?: number;
+  warrantyPeriod?: number;
+  installationNotes?: string;
+}
+
+export interface ServiceTicketQueryInput {
+  page?: number;
+  limit?: number;
+  sort?: string;
+  search?: string;
+  status?: TicketStatus;
+  priority?: TicketPriority;
+  assignedTo?: string;
+  customer?: string;
+  product?: string;
+  serviceType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  overdue?: boolean;
+  slaStatus?: 'met' | 'breached' | 'at_risk';
+}
+
+export interface AssignServiceInput {
+  assignedTo: string;
+  scheduledDate: string;
+  estimatedDuration?: number;
+  priority?: TicketPriority;
+  notes?: string;
+  requiredSkills?: string[];
+  requiredTools?: string[];
+}
+
+export interface CompleteServiceInput {
+  serviceReport: string;
+  resolution: string;
+  workDuration: number;
+  partsUsed?: AddPartsUsedInput[];
+  customerSignature?: string;
+  completedDate?: string;
+  followUpRequired?: boolean;
+  followUpDate?: string;
+  customerPresent?: boolean;
+  workQuality?: 'excellent' | 'good' | 'satisfactory' | 'needs_improvement';
+  images?: {
+    url: string;
+    description?: string;
+    type?: 'before' | 'during' | 'after' | 'issue' | 'resolution';
+  }[];
+}
+
+export interface ServiceFeedbackInput {
+  rating: number;
+  comments?: string;
+  technician_rating?: number;
+  timeliness_rating?: number;
+  quality_rating?: number;
+  wouldRecommend?: boolean;
+  improvementSuggestions?: string;
+}
+
+export interface EscalateServiceInput {
+  escalationReason: 'sla_breach' | 'customer_complaint' | 'technical_difficulty' | 'parts_unavailable' | 'other';
+  escalationLevel: 'level1' | 'level2' | 'level3' | 'management';
+  escalatedTo: string;
+  notes: string;
+  priority?: TicketPriority;
+  urgency?: 'low' | 'medium' | 'high' | 'critical';
+}
+
+export interface RescheduleServiceInput {
+  newScheduledDate: string;
+  rescheduleReason: 'customer_request' | 'technician_unavailable' | 'weather' | 'parts_delay' | 'emergency' | 'other';
+  notes?: string;
+  customerNotified?: boolean;
+  compensationOffered?: boolean;
+}
+
+export interface ServiceReportTemplateInput {
+  name: string;
+  description?: string;
+  serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
+  template: {
+    sections: {
+      title: string;
+      fields: {
+        name: string;
+        type: 'text' | 'number' | 'boolean' | 'date' | 'select' | 'textarea';
+        required?: boolean;
+        options?: string[];
+      }[];
+    }[];
+  };
+  isActive?: boolean;
+}
+
+export interface BulkServiceImportInput {
+  customerName: string;
+  customerPhone?: string;
+  productName?: string;
+  serialNumber?: string;
+  description: string;
+  priority?: TicketPriority;
+  serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
+  scheduledDate?: string;
+  assignedTechnician?: string;
+}
+
 // Base service ticket fields
 const baseServiceTicketFields = {
   customer: Joi.string().hex().length(24),
@@ -20,7 +174,7 @@ const baseServiceTicketFields = {
 };
 
 // Create service ticket schema
-export const createServiceTicketSchema = Joi.object({
+export const createServiceTicketSchema = Joi.object<CreateServiceTicketInput>({
   customer: baseServiceTicketFields.customer.required(),
   product: baseServiceTicketFields.product,
   serialNumber: baseServiceTicketFields.serialNumber,
@@ -44,7 +198,7 @@ export const createServiceTicketSchema = Joi.object({
 });
 
 // Update service ticket schema
-export const updateServiceTicketSchema = Joi.object({
+export const updateServiceTicketSchema = Joi.object<UpdateServiceTicketInput>({
   description: baseServiceTicketFields.description,
   priority: baseServiceTicketFields.priority,
   status: baseServiceTicketFields.status,
@@ -63,7 +217,7 @@ export const updateServiceTicketSchema = Joi.object({
 });
 
 // Parts used schema
-export const addPartsUsedSchema = Joi.object({
+export const addPartsUsedSchema = Joi.object<AddPartsUsedInput>({
   product: Joi.string().hex().length(24).required(),
   quantity: Joi.number().min(1).required(),
   serialNumbers: Joi.array().items(Joi.string().max(100)),
@@ -77,7 +231,7 @@ export const addPartsUsedSchema = Joi.object({
 export const bulkPartsUsedSchema = Joi.array().items(addPartsUsedSchema).min(1).max(50);
 
 // Service ticket query schema
-export const serviceTicketQuerySchema = Joi.object({
+export const serviceTicketQuerySchema = Joi.object<ServiceTicketQueryInput>({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   sort: Joi.string().default('-createdAt'),
@@ -95,7 +249,7 @@ export const serviceTicketQuerySchema = Joi.object({
 });
 
 // Service assignment schema
-export const assignServiceSchema = Joi.object({
+export const assignServiceSchema = Joi.object<AssignServiceInput>({
   assignedTo: baseServiceTicketFields.assignedTo.required(),
   scheduledDate: baseServiceTicketFields.scheduledDate.required(),
   estimatedDuration: Joi.number().min(0.5).max(24), // in hours
@@ -106,7 +260,7 @@ export const assignServiceSchema = Joi.object({
 });
 
 // Service completion schema
-export const completeServiceSchema = Joi.object({
+export const completeServiceSchema = Joi.object<CompleteServiceInput>({
   serviceReport: baseServiceTicketFields.serviceReport.required(),
   resolution: Joi.string().max(2000).required(),
   workDuration: Joi.number().min(0).required(),
@@ -127,7 +281,7 @@ export const completeServiceSchema = Joi.object({
 });
 
 // Service feedback schema
-export const serviceFeedbackSchema = Joi.object({
+export const serviceFeedbackSchema = Joi.object<ServiceFeedbackInput>({
   rating: Joi.number().min(1).max(5).required(),
   comments: Joi.string().max(1000),
   technician_rating: Joi.number().min(1).max(5),
@@ -138,7 +292,7 @@ export const serviceFeedbackSchema = Joi.object({
 });
 
 // Service escalation schema
-export const escalateServiceSchema = Joi.object({
+export const escalateServiceSchema = Joi.object<EscalateServiceInput>({
   escalationReason: Joi.string().valid(
     'sla_breach',
     'customer_complaint',
@@ -154,7 +308,7 @@ export const escalateServiceSchema = Joi.object({
 });
 
 // Service reschedule schema
-export const rescheduleServiceSchema = Joi.object({
+export const rescheduleServiceSchema = Joi.object<RescheduleServiceInput>({
   newScheduledDate: baseServiceTicketFields.scheduledDate.required(),
   rescheduleReason: Joi.string().valid(
     'customer_request',
@@ -170,7 +324,7 @@ export const rescheduleServiceSchema = Joi.object({
 });
 
 // Service report template schema
-export const serviceReportTemplateSchema = Joi.object({
+export const serviceReportTemplateSchema = Joi.object<ServiceReportTemplateInput>({
   name: Joi.string().max(100).required(),
   description: Joi.string().max(500),
   serviceType: baseServiceTicketFields.serviceType,
@@ -194,7 +348,7 @@ export const serviceReportTemplateSchema = Joi.object({
 
 // Bulk service import schema
 export const bulkServiceImportSchema = Joi.array().items(
-  Joi.object({
+  Joi.object<BulkServiceImportInput>({
     customerName: Joi.string().required(),
     customerPhone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
     productName: Joi.string(),

@@ -1,5 +1,215 @@
 import Joi from 'joi';
 
+// TypeScript interfaces for validation results
+export interface POItemInput {
+  product: string;
+  description?: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice?: number;
+  discount?: {
+    type?: 'percentage' | 'fixed';
+    value?: number;
+  };
+  tax?: {
+    type?: 'percentage' | 'fixed';
+    value?: number;
+  };
+  expectedDeliveryDate?: string;
+  notes?: string;
+}
+
+export interface CreatePurchaseOrderInput {
+  supplier: string;
+  items: POItemInput[];
+  expectedDeliveryDate?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  deliveryLocation?: string;
+  paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
+  shippingMethod?: 'standard' | 'express' | 'overnight' | 'pickup';
+  supplierContact?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+  };
+  deliveryAddress?: {
+    street: string;
+    city: string;
+    state?: string;
+    zipCode?: string;
+    country: string;
+    contactPerson?: string;
+    phone?: string;
+  };
+  internalNotes?: string;
+  supplierNotes?: string;
+  attachment?: {
+    filename?: string;
+    url?: string;
+    type?: 'quote' | 'specification' | 'drawing' | 'other';
+  };
+}
+
+export interface UpdatePurchaseOrderInput {
+  supplier?: string;
+  expectedDeliveryDate?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  deliveryLocation?: string;
+  paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
+  shippingMethod?: 'standard' | 'express' | 'overnight' | 'pickup';
+  supplierContact?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+  };
+  deliveryAddress?: {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+    contactPerson?: string;
+    phone?: string;
+  };
+  internalNotes?: string;
+  supplierNotes?: string;
+}
+
+export interface UpdatePOItemInput {
+  items: POItemInput[];
+}
+
+export interface ApprovePOInput {
+  approved: boolean;
+  approvalNotes?: string;
+  conditions?: string[];
+}
+
+export interface ReceivePOInput {
+  receivedDate?: string;
+  receivedItems: {
+    product: string;
+    orderedQuantity: number;
+    receivedQuantity: number;
+    rejectedQuantity?: number;
+    unitPrice?: number;
+    condition?: 'good' | 'damaged' | 'defective';
+    batchNumbers?: string[];
+    serialNumbers?: string[];
+    expiryDate?: string;
+    notes?: string;
+  }[];
+  deliveryNote?: string;
+  invoice?: {
+    invoiceNumber?: string;
+    invoiceDate?: string;
+    invoiceAmount?: number;
+  };
+  receivedBy?: string;
+  qualityCheck?: {
+    performed?: boolean;
+    checkedBy?: string;
+    checkDate?: string;
+    result?: 'passed' | 'failed' | 'conditional';
+    notes?: string;
+  };
+  discrepancies?: {
+    type: 'quantity' | 'quality' | 'specification' | 'packaging' | 'other';
+    description: string;
+    severity?: 'minor' | 'major' | 'critical';
+    action?: 'accept' | 'reject' | 'return' | 'rework';
+  }[];
+  images?: {
+    url: string;
+    description?: string;
+    type?: 'delivery' | 'damage' | 'product' | 'packaging';
+  }[];
+}
+
+export interface PurchaseOrderQueryInput {
+  page?: number;
+  limit?: number;
+  sort?: string;
+  search?: string;
+  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  supplier?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  dateFrom?: string;
+  dateTo?: string;
+  deliveryDateFrom?: string;
+  deliveryDateTo?: string;
+  amountMin?: number;
+  amountMax?: number;
+  overdue?: boolean;
+  pendingApproval?: boolean;
+  deliveryLocation?: string;
+}
+
+export interface CancelPOInput {
+  cancellationReason: 'supplier_unavailable' | 'price_change' | 'requirement_change' | 'budget_constraint' | 'duplicate_order' | 'other';
+  notes: string;
+  notifySupplier?: boolean;
+  refundRequired?: boolean;
+  refundAmount?: number;
+}
+
+export interface RevisePOInput {
+  revisionReason: string;
+  changes: {
+    items?: POItemInput[];
+    deliveryDate?: string;
+    deliveryAddress?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      zipCode?: string;
+      country?: string;
+    };
+    paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
+    shippingMethod?: 'standard' | 'express' | 'overnight' | 'pickup';
+  };
+  notifySupplier?: boolean;
+  requiresApproval?: boolean;
+}
+
+export interface SupplierRatingInput {
+  purchaseOrderId: string;
+  ratings: {
+    qualityRating: number;
+    deliveryRating: number;
+    serviceRating: number;
+    priceRating: number;
+    overallRating: number;
+  };
+  feedback?: string;
+  wouldRecommend?: boolean;
+  improvements?: string;
+}
+
+export interface PurchaseOrderReportInput {
+  reportType: 'purchase_summary' | 'supplier_performance' | 'delivery_analysis' | 'cost_analysis' | 'overdue_orders';
+  dateFrom: string;
+  dateTo: string;
+  supplier?: string;
+  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  deliveryLocation?: string;
+  format?: 'json' | 'csv' | 'excel' | 'pdf';
+  includeGraphs?: boolean;
+}
+
+export interface PurchaseOrderImportInput {
+  supplier: string;
+  productName: string;
+  productCode?: string;
+  quantity: number;
+  unitPrice: number;
+  expectedDeliveryDate?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
+  notes?: string;
+}
+
 // Base purchase order fields
 const basePOFields = {
   supplier: Joi.string().max(200).trim(),
@@ -15,7 +225,7 @@ const basePOFields = {
 };
 
 // Purchase order item schema
-const poItemSchema = Joi.object({
+const poItemSchema = Joi.object<POItemInput>({
   product: Joi.string().hex().length(24).required(),
   description: Joi.string().max(500), // Additional description if needed
   quantity: Joi.number().min(1).required(),
@@ -34,7 +244,7 @@ const poItemSchema = Joi.object({
 });
 
 // Create purchase order schema
-export const createPurchaseOrderSchema = Joi.object({
+export const createPurchaseOrderSchema = Joi.object<CreatePurchaseOrderInput>({
   supplier: basePOFields.supplier.required(),
   items: Joi.array().items(poItemSchema).min(1).max(100).required(),
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
@@ -66,7 +276,7 @@ export const createPurchaseOrderSchema = Joi.object({
 });
 
 // Update purchase order schema
-export const updatePurchaseOrderSchema = Joi.object({
+export const updatePurchaseOrderSchema = Joi.object<UpdatePurchaseOrderInput>({
   supplier: basePOFields.supplier,
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
   priority: basePOFields.priority,
@@ -93,19 +303,19 @@ export const updatePurchaseOrderSchema = Joi.object({
 });
 
 // Add/Update purchase order item schema
-export const updatePOItemSchema = Joi.object({
+export const updatePOItemSchema = Joi.object<UpdatePOItemInput>({
   items: Joi.array().items(poItemSchema).min(1).max(100).required()
 });
 
 // Purchase order approval schema
-export const approvePOSchema = Joi.object({
+export const approvePOSchema = Joi.object<ApprovePOInput>({
   approved: Joi.boolean().required(),
   approvalNotes: Joi.string().max(1000),
   conditions: Joi.array().items(Joi.string().max(200)) // Approval conditions
 });
 
 // Purchase order delivery schema (for receiving goods)
-export const receivePOSchema = Joi.object({
+export const receivePOSchema = Joi.object<ReceivePOInput>({
   receivedDate: Joi.date().iso().default(() => new Date()),
   receivedItems: Joi.array().items(
     Joi.object({
@@ -153,7 +363,7 @@ export const receivePOSchema = Joi.object({
 });
 
 // Purchase order query schema
-export const purchaseOrderQuerySchema = Joi.object({
+export const purchaseOrderQuerySchema = Joi.object<PurchaseOrderQueryInput>({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   sort: Joi.string().default('-createdAt'),
@@ -173,7 +383,7 @@ export const purchaseOrderQuerySchema = Joi.object({
 });
 
 // Purchase order cancellation schema
-export const cancelPOSchema = Joi.object({
+export const cancelPOSchema = Joi.object<CancelPOInput>({
   cancellationReason: Joi.string().valid(
     'supplier_unavailable',
     'price_change',
@@ -192,7 +402,7 @@ export const cancelPOSchema = Joi.object({
 });
 
 // Purchase order revision schema
-export const revisePOSchema = Joi.object({
+export const revisePOSchema = Joi.object<RevisePOInput>({
   revisionReason: Joi.string().max(500).required(),
   changes: Joi.object({
     items: Joi.array().items(poItemSchema),
@@ -212,7 +422,7 @@ export const revisePOSchema = Joi.object({
 });
 
 // Supplier performance rating schema
-export const supplierRatingSchema = Joi.object({
+export const supplierRatingSchema = Joi.object<SupplierRatingInput>({
   purchaseOrderId: Joi.string().hex().length(24).required(),
   ratings: Joi.object({
     qualityRating: Joi.number().min(1).max(5).required(),
@@ -227,7 +437,7 @@ export const supplierRatingSchema = Joi.object({
 });
 
 // Purchase order report schema
-export const purchaseOrderReportSchema = Joi.object({
+export const purchaseOrderReportSchema = Joi.object<PurchaseOrderReportInput>({
   reportType: Joi.string().valid(
     'purchase_summary',
     'supplier_performance',
@@ -245,7 +455,7 @@ export const purchaseOrderReportSchema = Joi.object({
 });
 
 // Purchase order import schema (CSV/Excel)
-export const purchaseOrderImportSchema = Joi.object({
+export const purchaseOrderImportSchema = Joi.object<PurchaseOrderImportInput>({
   supplier: basePOFields.supplier.required(),
   productName: Joi.string().required(), // Will be looked up
   productCode: Joi.string(), // Alternative lookup method

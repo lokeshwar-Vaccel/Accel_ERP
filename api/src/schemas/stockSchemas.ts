@@ -1,6 +1,147 @@
 import Joi from 'joi';
 import { StockTransactionType } from '../types';
 
+// TypeScript interfaces for validation results
+export interface CreateStockLocationInput {
+  name: string;
+  address: string;
+  type: 'main_office' | 'warehouse' | 'service_center';
+  contactPerson?: string;
+  phone?: string;
+  isActive?: boolean;
+  capacity?: number;
+  description?: string;
+}
+
+export interface UpdateStockLocationInput {
+  name?: string;
+  address?: string;
+  type?: 'main_office' | 'warehouse' | 'service_center';
+  contactPerson?: string;
+  phone?: string;
+  isActive?: boolean;
+  capacity?: number;
+  description?: string;
+}
+
+export interface StockAdjustmentInput {
+  product: string;
+  location: string;
+  adjustmentType: 'add' | 'subtract' | 'set';
+  quantity: number;
+  reason: 'damaged' | 'expired' | 'stolen' | 'found' | 'correction' | 'return' | 'other';
+  notes?: string;
+  batchNumber?: string;
+  serialNumbers?: string[];
+}
+
+export interface StockTransferInput {
+  product: string;
+  fromLocation: string;
+  toLocation: string;
+  quantity: number;
+  transferReason?: 'restock' | 'customer_request' | 'maintenance' | 'redistribution' | 'other';
+  notes?: string;
+  expectedDate?: string;
+  serialNumbers?: string[];
+}
+
+export interface BulkStockTransferInput {
+  fromLocation: string;
+  toLocation: string;
+  items: {
+    product: string;
+    quantity: number;
+    serialNumbers?: string[];
+  }[];
+  transferReason?: string;
+  notes?: string;
+  expectedDate?: string;
+}
+
+export interface StockReservationInput {
+  product: string;
+  location: string;
+  quantity: number;
+  reservationType: 'service' | 'sale' | 'transfer' | 'other';
+  referenceId?: string;
+  reservedUntil?: string;
+  notes?: string;
+}
+
+export interface StockReconciliationInput {
+  location: string;
+  reconciliationDate: string;
+  items: {
+    product: string;
+    systemQuantity: number;
+    physicalQuantity: number;
+    discrepancy: number;
+    reason?: string;
+    action?: 'adjust' | 'investigate' | 'ignore';
+  }[];
+  performedBy?: string;
+  notes?: string;
+}
+
+export interface StockQueryInput {
+  page?: number;
+  limit?: number;
+  sort?: string;
+  product?: string;
+  location?: string;
+  category?: string;
+  lowStock?: boolean;
+  outOfStock?: boolean;
+  search?: string;
+}
+
+export interface StockTransactionInput {
+  type: StockTransactionType;
+  product: string;
+  fromLocation?: string;
+  toLocation?: string;
+  quantity: number;
+  reference?: string;
+  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'sale';
+  notes?: string;
+  unitCost?: number;
+  totalCost?: number;
+}
+
+export interface StockValuationInput {
+  location?: string;
+  category?: string;
+  valuationMethod?: 'fifo' | 'lifo' | 'average' | 'current';
+  asOfDate?: string;
+}
+
+export interface StockMovementReportInput {
+  dateFrom: string;
+  dateTo: string;
+  product?: string;
+  location?: string;
+  movementType?: StockTransactionType;
+  format?: 'json' | 'csv' | 'excel';
+}
+
+export interface LowStockAlertInput {
+  location?: string;
+  threshold?: number;
+  includeReserved?: boolean;
+  emailNotification?: boolean;
+}
+
+export interface StockImportInput {
+  product: string;
+  location: string;
+  quantity: number;
+  unitCost?: number;
+  batchNumber?: string;
+  expiryDate?: string;
+  serialNumbers?: string | string[];
+}
+
 // Base stock location fields
 const baseStockLocationFields = {
   name: Joi.string().min(2).max(100).trim(),
@@ -14,7 +155,7 @@ const baseStockLocationFields = {
 };
 
 // Create stock location schema
-export const createStockLocationSchema = Joi.object({
+export const createStockLocationSchema = Joi.object<CreateStockLocationInput>({
   name: baseStockLocationFields.name.required(),
   address: baseStockLocationFields.address.required(),
   type: baseStockLocationFields.type.required(),
@@ -26,7 +167,7 @@ export const createStockLocationSchema = Joi.object({
 });
 
 // Update stock location schema
-export const updateStockLocationSchema = Joi.object({
+export const updateStockLocationSchema = Joi.object<UpdateStockLocationInput>({
   name: baseStockLocationFields.name,
   address: baseStockLocationFields.address,
   type: baseStockLocationFields.type,
@@ -38,7 +179,7 @@ export const updateStockLocationSchema = Joi.object({
 });
 
 // Stock adjustment schema
-export const stockAdjustmentSchema = Joi.object({
+export const stockAdjustmentSchema = Joi.object<StockAdjustmentInput>({
   product: Joi.string().hex().length(24).required(),
   location: Joi.string().hex().length(24).required(),
   adjustmentType: Joi.string().valid('add', 'subtract', 'set').required(),
@@ -58,7 +199,7 @@ export const stockAdjustmentSchema = Joi.object({
 });
 
 // Stock transfer schema
-export const stockTransferSchema = Joi.object({
+export const stockTransferSchema = Joi.object<StockTransferInput>({
   product: Joi.string().hex().length(24).required(),
   fromLocation: Joi.string().hex().length(24).required(),
   toLocation: Joi.string().hex().length(24).required(),
@@ -76,7 +217,7 @@ export const stockTransferSchema = Joi.object({
 });
 
 // Bulk stock transfer schema
-export const bulkStockTransferSchema = Joi.object({
+export const bulkStockTransferSchema = Joi.object<BulkStockTransferInput>({
   fromLocation: Joi.string().hex().length(24).required(),
   toLocation: Joi.string().hex().length(24).required(),
   items: Joi.array().items(
@@ -92,7 +233,7 @@ export const bulkStockTransferSchema = Joi.object({
 });
 
 // Stock reservation schema
-export const stockReservationSchema = Joi.object({
+export const stockReservationSchema = Joi.object<StockReservationInput>({
   product: Joi.string().hex().length(24).required(),
   location: Joi.string().hex().length(24).required(),
   quantity: Joi.number().min(1).required(),
@@ -103,7 +244,7 @@ export const stockReservationSchema = Joi.object({
 });
 
 // Stock reconciliation schema
-export const stockReconciliationSchema = Joi.object({
+export const stockReconciliationSchema = Joi.object<StockReconciliationInput>({
   location: Joi.string().hex().length(24).required(),
   reconciliationDate: Joi.date().iso().required(),
   items: Joi.array().items(
@@ -121,7 +262,7 @@ export const stockReconciliationSchema = Joi.object({
 });
 
 // Stock query schema
-export const stockQuerySchema = Joi.object({
+export const stockQuerySchema = Joi.object<StockQueryInput>({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   sort: Joi.string().default('-lastUpdated'),
@@ -134,7 +275,7 @@ export const stockQuerySchema = Joi.object({
 });
 
 // Stock transaction schema
-export const stockTransactionSchema = Joi.object({
+export const stockTransactionSchema = Joi.object<StockTransactionInput>({
   type: Joi.string().valid(...Object.values(StockTransactionType)).required(),
   product: Joi.string().hex().length(24).required(),
   fromLocation: Joi.string().hex().length(24),
@@ -148,7 +289,7 @@ export const stockTransactionSchema = Joi.object({
 });
 
 // Stock valuation schema
-export const stockValuationSchema = Joi.object({
+export const stockValuationSchema = Joi.object<StockValuationInput>({
   location: Joi.string().hex().length(24),
   category: Joi.string(),
   valuationMethod: Joi.string().valid('fifo', 'lifo', 'average', 'current').default('average'),
@@ -156,7 +297,7 @@ export const stockValuationSchema = Joi.object({
 });
 
 // Stock movement report schema
-export const stockMovementReportSchema = Joi.object({
+export const stockMovementReportSchema = Joi.object<StockMovementReportInput>({
   dateFrom: Joi.date().iso().required(),
   dateTo: Joi.date().iso().greater(Joi.ref('dateFrom')).required(),
   product: Joi.string().hex().length(24),
@@ -166,7 +307,7 @@ export const stockMovementReportSchema = Joi.object({
 });
 
 // Low stock alert schema
-export const lowStockAlertSchema = Joi.object({
+export const lowStockAlertSchema = Joi.object<LowStockAlertInput>({
   location: Joi.string().hex().length(24),
   threshold: Joi.number().min(0).max(100).default(20), // Percentage below min stock level
   includeReserved: Joi.boolean().default(true),
@@ -174,7 +315,7 @@ export const lowStockAlertSchema = Joi.object({
 });
 
 // Stock import schema (CSV/Excel)
-export const stockImportSchema = Joi.object({
+export const stockImportSchema = Joi.object<StockImportInput>({
   product: Joi.string().required(), // Product name or code for lookup
   location: Joi.string().required(), // Location name for lookup
   quantity: Joi.number().min(0).required(),

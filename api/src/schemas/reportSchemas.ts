@@ -1,313 +1,546 @@
 import Joi from 'joi';
 
-// Base report parameters
+// TypeScript interfaces for validation results
+export interface DashboardMetricsInput {
+  dateRange?: 'today' | 'week' | 'month' | 'quarter' | 'year' | 'custom';
+  dateFrom?: string;
+  dateTo?: string;
+  metrics?: ('tickets' | 'revenue' | 'customers' | 'inventory' | 'amc' | 'performance')[];
+  groupBy?: 'day' | 'week' | 'month' | 'quarter';
+  filters?: {
+    location?: string;
+    assignedTo?: string;
+    status?: string;
+    priority?: string;
+    category?: string;
+  };
+}
+
+export interface TicketAnalyticsInput {
+  reportType: 'summary' | 'tat_analysis' | 'sla_compliance' | 'technician_performance' | 'customer_satisfaction';
+  dateFrom: string;
+  dateTo: string;
+  groupBy?: 'day' | 'week' | 'month';
+  filters?: {
+    assignedTo?: string;
+    customer?: string;
+    product?: string;
+    status?: string;
+    priority?: string;
+    serviceType?: string;
+  };
+  format?: 'json' | 'csv' | 'excel' | 'pdf';
+  includeGraphs?: boolean;
+}
+
+export interface InventoryReportInput {
+  reportType: 'stock_levels' | 'movement_analysis' | 'valuation' | 'reorder_alerts' | 'deadstock_analysis';
+  dateFrom?: string;
+  dateTo?: string;
+  filters?: {
+    location?: string;
+    category?: string;
+    product?: string;
+    lowStock?: boolean;
+    outOfStock?: boolean;
+  };
+  valuationMethod?: 'fifo' | 'lifo' | 'average' | 'current';
+  format?: 'json' | 'csv' | 'excel' | 'pdf';
+  includeGraphs?: boolean;
+}
+
+export interface RevenueReportInput {
+  reportType: 'sales_summary' | 'amc_revenue' | 'service_revenue' | 'monthly_trends' | 'customer_wise' | 'product_wise';
+  dateFrom: string;
+  dateTo: string;
+  groupBy?: 'day' | 'week' | 'month' | 'quarter';
+  filters?: {
+    customer?: string;
+    product?: string;
+    location?: string;
+    paymentStatus?: 'paid' | 'pending' | 'overdue';
+    revenueType?: 'service' | 'amc' | 'parts' | 'installation';
+  };
+  format?: 'json' | 'csv' | 'excel' | 'pdf';
+  includeGraphs?: boolean;
+  currency?: string;
+}
+
+export interface CustomerReportInput {
+  reportType: 'customer_summary' | 'lead_analysis' | 'satisfaction_analysis' | 'retention_analysis' | 'communication_history';
+  dateFrom?: string;
+  dateTo?: string;
+  filters?: {
+    customerType?: 'retail' | 'telecom';
+    status?: string;
+    assignedTo?: string;
+    leadSource?: string;
+    region?: string;
+  };
+  format?: 'json' | 'csv' | 'excel' | 'pdf';
+  includeGraphs?: boolean;
+}
+
+export interface PerformanceReportInput {
+  reportType: 'technician_performance' | 'team_productivity' | 'response_time' | 'resolution_rate' | 'efficiency_metrics';
+  dateFrom: string;
+  dateTo: string;
+  filters?: {
+    assignedTo?: string;
+    team?: string;
+    location?: string;
+    serviceType?: string;
+  };
+  metrics?: ('response_time' | 'resolution_time' | 'first_call_resolution' | 'customer_rating' | 'tickets_completed')[];
+  format?: 'json' | 'csv' | 'excel' | 'pdf';
+  includeGraphs?: boolean;
+}
+
+export interface CustomReportInput {
+  name: string;
+  description?: string;
+  reportType: 'tabular' | 'summary' | 'analytical';
+  dataSource: 'tickets' | 'customers' | 'products' | 'stock' | 'amc' | 'purchase_orders' | 'users';
+  fields: {
+    fieldName: string;
+    alias?: string;
+    aggregation?: 'sum' | 'count' | 'avg' | 'min' | 'max' | 'group';
+    sortOrder?: 'asc' | 'desc';
+  }[];
+  filters?: {
+    field: string;
+    operator: 'equals' | 'not_equals' | 'contains' | 'not_contains' | 'greater_than' | 'less_than' | 'between' | 'in' | 'not_in';
+    value: any;
+  }[];
+  dateRange?: {
+    dateField: string;
+    dateFrom?: string;
+    dateTo?: string;
+  };
+  groupBy?: string[];
+  limit?: number;
+  format?: 'json' | 'csv' | 'excel' | 'pdf';
+  isPublic?: boolean;
+  scheduledReports?: {
+    enabled?: boolean;
+    frequency?: 'daily' | 'weekly' | 'monthly' | 'quarterly';
+    dayOfWeek?: number;
+    dayOfMonth?: number;
+    recipients?: string[];
+  };
+}
+
+export interface ScheduledReportInput {
+  reportId: string;
+  name: string;
+  description?: string;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+  schedule: {
+    time?: string;
+    dayOfWeek?: number;
+    dayOfMonth?: number;
+    monthOfYear?: number;
+  };
+  recipients: string[];
+  format: 'json' | 'csv' | 'excel' | 'pdf';
+  parameters?: Record<string, any>;
+  isActive?: boolean;
+  nextRunDate?: string;
+}
+
+export interface ReportExportInput {
+  reportId?: string;
+  reportData?: any;
+  format: 'csv' | 'excel' | 'pdf';
+  filename?: string;
+  options?: {
+    includeHeaders?: boolean;
+    dateFormat?: string;
+    orientation?: 'portrait' | 'landscape';
+    pageSize?: 'A4' | 'A3' | 'letter' | 'legal';
+    includeGraphs?: boolean;
+    watermark?: string;
+  };
+}
+
+export interface ReportTemplateInput {
+  name: string;
+  description?: string;
+  category: 'tickets' | 'inventory' | 'revenue' | 'customers' | 'performance' | 'custom';
+  template: {
+    structure: {
+      title: string;
+      sections: {
+        type: 'table' | 'chart' | 'summary' | 'text';
+        title?: string;
+        query?: string;
+        chartType?: 'line' | 'bar' | 'pie' | 'doughnut' | 'area';
+        columns?: string[];
+      }[];
+    };
+    styling?: {
+      headerColor?: string;
+      fontFamily?: string;
+      fontSize?: number;
+      logoUrl?: string;
+    };
+  };
+  parameters?: {
+    name: string;
+    type: 'string' | 'number' | 'date' | 'boolean' | 'select';
+    required?: boolean;
+    defaultValue?: any;
+    options?: any[];
+  }[];
+  isActive?: boolean;
+}
+
+export interface ReportSharingInput {
+  reportId: string;
+  shareWith: string[];
+  permissions: ('view' | 'edit' | 'delete' | 'share')[];
+  expiresAt?: string;
+  password?: string;
+  publicAccess?: boolean;
+  emailNotification?: boolean;
+}
+
+export interface BulkReportOperationInput {
+  reportIds: string[];
+  operation: 'delete' | 'archive' | 'share' | 'export' | 'schedule';
+  parameters?: {
+    shareWith?: string[];
+    exportFormat?: 'csv' | 'excel' | 'pdf';
+    scheduleFrequency?: 'daily' | 'weekly' | 'monthly';
+  };
+}
+
+// Base report fields
 const baseReportFields = {
   dateFrom: Joi.date().iso(),
   dateTo: Joi.date().iso(),
   format: Joi.string().valid('json', 'csv', 'excel', 'pdf'),
   includeGraphs: Joi.boolean(),
-  groupBy: Joi.string().valid('day', 'week', 'month', 'quarter', 'year'),
-  timezone: Joi.string().default('UTC')
+  groupBy: Joi.string().valid('day', 'week', 'month', 'quarter', 'year')
 };
 
-// Service ticket analytics schema
-export const serviceTicketReportSchema = Joi.object({
+// Dashboard metrics schema
+export const dashboardMetricsSchema = Joi.object<DashboardMetricsInput>({
+  dateRange: Joi.string().valid('today', 'week', 'month', 'quarter', 'year', 'custom').default('month'),
+  dateFrom: baseReportFields.dateFrom.when('dateRange', {
+    is: 'custom',
+    then: Joi.required()
+  }),
+  dateTo: baseReportFields.dateTo.when('dateRange', {
+    is: 'custom',
+    then: Joi.date().iso().required().greater(Joi.ref('dateFrom'))
+  }),
+  metrics: Joi.array().items(
+    Joi.string().valid('tickets', 'revenue', 'customers', 'inventory', 'amc', 'performance')
+  ).default(['tickets', 'revenue', 'customers']),
+  groupBy: baseReportFields.groupBy.default('day'),
+  filters: Joi.object({
+    location: Joi.string().hex().length(24),
+    assignedTo: Joi.string().hex().length(24),
+    status: Joi.string(),
+    priority: Joi.string(),
+    category: Joi.string()
+  })
+});
+
+// Ticket analytics schema
+export const ticketAnalyticsSchema = Joi.object<TicketAnalyticsInput>({
   reportType: Joi.string().valid(
-    'ticket_summary',
-    'tat_analysis', // Turnaround Time Analysis
-    'technician_performance',
+    'summary',
+    'tat_analysis',
     'sla_compliance',
-    'customer_satisfaction',
-    'parts_usage',
-    'resolution_analysis'
+    'technician_performance',
+    'customer_satisfaction'
   ).required(),
   dateFrom: baseReportFields.dateFrom.required(),
   dateTo: baseReportFields.dateTo.greater(Joi.ref('dateFrom')).required(),
-  format: baseReportFields.format.default('json'),
-  includeGraphs: baseReportFields.includeGraphs.default(false),
-  groupBy: baseReportFields.groupBy.default('month'),
+  groupBy: baseReportFields.groupBy,
   filters: Joi.object({
-    status: Joi.alternatives().try(
-      Joi.string(),
-      Joi.array().items(Joi.string())
-    ),
-    priority: Joi.alternatives().try(
-      Joi.string(),
-      Joi.array().items(Joi.string())
-    ),
     assignedTo: Joi.string().hex().length(24),
     customer: Joi.string().hex().length(24),
     product: Joi.string().hex().length(24),
+    status: Joi.string(),
+    priority: Joi.string(),
     serviceType: Joi.string()
   }),
-  metrics: Joi.array().items(
-    Joi.string().valid(
-      'total_tickets',
-      'resolved_tickets',
-      'average_resolution_time',
-      'sla_met_percentage',
-      'customer_rating',
-      'first_call_resolution',
-      'escalation_rate'
-    )
-  ).default(['total_tickets', 'resolved_tickets', 'average_resolution_time'])
+  format: baseReportFields.format.default('json'),
+  includeGraphs: baseReportFields.includeGraphs.default(false)
 });
 
-// Inventory analytics schema
-export const inventoryReportSchema = Joi.object({
+// Inventory report schema
+export const inventoryReportSchema = Joi.object<InventoryReportInput>({
   reportType: Joi.string().valid(
-    'stock_summary',
-    'stock_movement',
-    'low_stock_alert',
-    'valuation_report',
-    'abc_analysis',
-    'turnover_analysis',
-    'dead_stock_analysis'
+    'stock_levels',
+    'movement_analysis',
+    'valuation',
+    'reorder_alerts',
+    'deadstock_analysis'
   ).required(),
-  dateFrom: baseReportFields.dateFrom.required(),
-  dateTo: baseReportFields.dateTo.greater(Joi.ref('dateFrom')).required(),
-  format: baseReportFields.format.default('json'),
-  includeGraphs: baseReportFields.includeGraphs.default(false),
+  dateFrom: baseReportFields.dateFrom,
+  dateTo: baseReportFields.dateTo,
   filters: Joi.object({
     location: Joi.string().hex().length(24),
     category: Joi.string(),
     product: Joi.string().hex().length(24),
-    brand: Joi.string(),
-    lowStockOnly: Joi.boolean(),
-    outOfStockOnly: Joi.boolean()
+    lowStock: Joi.boolean(),
+    outOfStock: Joi.boolean()
   }),
   valuationMethod: Joi.string().valid('fifo', 'lifo', 'average', 'current').default('average'),
-  includeReservedStock: Joi.boolean().default(true)
+  format: baseReportFields.format.default('json'),
+  includeGraphs: baseReportFields.includeGraphs.default(false)
 });
 
-// Revenue analytics schema
-export const revenueReportSchema = Joi.object({
+// Revenue report schema
+export const revenueReportSchema = Joi.object<RevenueReportInput>({
   reportType: Joi.string().valid(
-    'revenue_summary',
-    'service_revenue',
+    'sales_summary',
     'amc_revenue',
-    'parts_revenue',
+    'service_revenue',
     'monthly_trends',
-    'customer_wise_revenue',
-    'product_wise_revenue'
+    'customer_wise',
+    'product_wise'
   ).required(),
   dateFrom: baseReportFields.dateFrom.required(),
   dateTo: baseReportFields.dateTo.greater(Joi.ref('dateFrom')).required(),
-  format: baseReportFields.format.default('json'),
-  includeGraphs: baseReportFields.includeGraphs.default(false),
-  groupBy: baseReportFields.groupBy.default('month'),
+  groupBy: baseReportFields.groupBy,
   filters: Joi.object({
     customer: Joi.string().hex().length(24),
-    serviceType: Joi.string(),
-    revenueSource: Joi.string().valid('service', 'amc', 'parts', 'installation'),
-    minAmount: Joi.number().min(0),
-    maxAmount: Joi.number().min(Joi.ref('minAmount'))
+    product: Joi.string().hex().length(24),
+    location: Joi.string().hex().length(24),
+    paymentStatus: Joi.string().valid('paid', 'pending', 'overdue'),
+    revenueType: Joi.string().valid('service', 'amc', 'parts', 'installation')
   }),
-  currency: Joi.string().length(3).default('INR'),
-  includeTax: Joi.boolean().default(true)
-});
-
-// Customer analytics schema
-export const customerReportSchema = Joi.object({
-  reportType: Joi.string().valid(
-    'customer_summary',
-    'lead_conversion',
-    'customer_acquisition',
-    'customer_retention',
-    'satisfaction_analysis',
-    'contact_frequency',
-    'geographic_distribution'
-  ).required(),
-  dateFrom: baseReportFields.dateFrom.required(),
-  dateTo: baseReportFields.dateTo.greater(Joi.ref('dateFrom')).required(),
   format: baseReportFields.format.default('json'),
   includeGraphs: baseReportFields.includeGraphs.default(false),
-  groupBy: baseReportFields.groupBy.default('month'),
+  currency: Joi.string().length(3).default('INR') // ISO currency code
+});
+
+// Customer report schema
+export const customerReportSchema = Joi.object<CustomerReportInput>({
+  reportType: Joi.string().valid(
+    'customer_summary',
+    'lead_analysis',
+    'satisfaction_analysis',
+    'retention_analysis',
+    'communication_history'
+  ).required(),
+  dateFrom: baseReportFields.dateFrom,
+  dateTo: baseReportFields.dateTo,
   filters: Joi.object({
-    customerType: Joi.string(),
+    customerType: Joi.string().valid('retail', 'telecom'),
     status: Joi.string(),
     assignedTo: Joi.string().hex().length(24),
     leadSource: Joi.string(),
-    location: Joi.string()
-  })
+    region: Joi.string()
+  }),
+  format: baseReportFields.format.default('json'),
+  includeGraphs: baseReportFields.includeGraphs.default(false)
 });
 
-// Performance analytics schema
-export const performanceReportSchema = Joi.object({
+// Performance report schema
+export const performanceReportSchema = Joi.object<PerformanceReportInput>({
   reportType: Joi.string().valid(
     'technician_performance',
-    'team_performance', 
-    'productivity_analysis',
-    'workload_distribution',
-    'skill_analysis',
-    'overtime_analysis'
+    'team_productivity',
+    'response_time',
+    'resolution_rate',
+    'efficiency_metrics'
   ).required(),
   dateFrom: baseReportFields.dateFrom.required(),
   dateTo: baseReportFields.dateTo.greater(Joi.ref('dateFrom')).required(),
-  format: baseReportFields.format.default('json'),
-  includeGraphs: baseReportFields.includeGraphs.default(false),
-  groupBy: baseReportFields.groupBy.default('month'),
   filters: Joi.object({
-    userId: Joi.string().hex().length(24),
-    role: Joi.string(),
-    department: Joi.string(),
-    skillLevel: Joi.string().valid('beginner', 'intermediate', 'advanced', 'expert')
+    assignedTo: Joi.string().hex().length(24),
+    team: Joi.string(),
+    location: Joi.string().hex().length(24),
+    serviceType: Joi.string()
   }),
   metrics: Joi.array().items(
     Joi.string().valid(
-      'tickets_completed',
-      'average_resolution_time',
+      'response_time',
+      'resolution_time',
+      'first_call_resolution',
       'customer_rating',
-      'rework_rate',
-      'utilization_rate',
-      'overtime_hours'
+      'tickets_completed'
     )
-  ).default(['tickets_completed', 'average_resolution_time', 'customer_rating'])
-});
-
-// Financial analytics schema
-export const financialReportSchema = Joi.object({
-  reportType: Joi.string().valid(
-    'profit_loss',
-    'cash_flow',
-    'expense_analysis',
-    'budget_variance',
-    'cost_center_analysis',
-    'payment_analysis'
-  ).required(),
-  dateFrom: baseReportFields.dateFrom.required(),
-  dateTo: baseReportFields.dateTo.greater(Joi.ref('dateFrom')).required(),
+  ),
   format: baseReportFields.format.default('json'),
-  includeGraphs: baseReportFields.includeGraphs.default(false),
-  groupBy: baseReportFields.groupBy.default('month'),
-  filters: Joi.object({
-    costCenter: Joi.string(),
-    expenseCategory: Joi.string(),
-    paymentStatus: Joi.string().valid('pending', 'paid', 'overdue')
-  }),
-  includeProjections: Joi.boolean().default(false),
-  baseCurrency: Joi.string().length(3).default('INR')
+  includeGraphs: baseReportFields.includeGraphs.default(false)
 });
 
 // Custom report schema
-export const customReportSchema = Joi.object({
-  reportName: Joi.string().max(100).required(),
+export const customReportSchema = Joi.object<CustomReportInput>({
+  name: Joi.string().min(2).max(100).required(),
   description: Joi.string().max(500),
+  reportType: Joi.string().valid('tabular', 'summary', 'analytical').required(),
   dataSource: Joi.string().valid(
-    'service_tickets',
+    'tickets',
     'customers',
-    'inventory',
-    'amc_contracts',
-    'purchase_orders',
-    'users',
-    'financial'
-  ).required(),
-  dateFrom: baseReportFields.dateFrom.required(),
-  dateTo: baseReportFields.dateTo.greater(Joi.ref('dateFrom')).required(),
-  format: baseReportFields.format.default('json'),
-  fields: Joi.array().items(Joi.string()).min(1).required(),
-  filters: Joi.object().unknown(true), // Dynamic filters based on data source
-  groupBy: Joi.array().items(Joi.string()),
-  sortBy: Joi.array().items(
-    Joi.object({
-      field: Joi.string().required(),
-      order: Joi.string().valid('asc', 'desc').default('desc')
-    })
-  ),
-  aggregations: Joi.array().items(
-    Joi.object({
-      field: Joi.string().required(),
-      function: Joi.string().valid('sum', 'avg', 'count', 'min', 'max').required(),
-      alias: Joi.string()
-    })
-  ),
-  limit: Joi.number().integer().min(1).max(10000),
-  includeCharts: Joi.boolean().default(false),
-  chartConfig: Joi.when('includeCharts', {
-    is: true,
-    then: Joi.object({
-      type: Joi.string().valid('bar', 'line', 'pie', 'area', 'scatter').required(),
-      xAxis: Joi.string().required(),
-      yAxis: Joi.string().required(),
-      title: Joi.string().max(100)
-    })
-  })
-});
-
-// Dashboard metrics schema
-export const dashboardMetricsSchema = Joi.object({
-  widgets: Joi.array().items(
-    Joi.object({
-      type: Joi.string().valid(
-        'kpi_card',
-        'chart',
-        'table',
-        'gauge',
-        'progress_bar',
-        'list'
-      ).required(),
-      title: Joi.string().max(100).required(),
-      dataSource: Joi.string().required(),
-      config: Joi.object().unknown(true),
-      refreshInterval: Joi.number().integer().min(30).max(3600).default(300), // seconds
-      position: Joi.object({
-        x: Joi.number().integer().min(0),
-        y: Joi.number().integer().min(0),
-        width: Joi.number().integer().min(1).max(12),
-        height: Joi.number().integer().min(1).max(12)
-      })
-    })
-  ).min(1).max(20).required(),
-  layout: Joi.string().valid('grid', 'masonry', 'fixed').default('grid'),
-  autoRefresh: Joi.boolean().default(true),
-  refreshInterval: Joi.number().integer().min(60).max(3600).default(300)
-});
-
-// Report scheduling schema
-export const scheduleReportSchema = Joi.object({
-  reportType: Joi.string().required(),
-  reportConfig: Joi.object().required(), // Configuration for the specific report type
-  schedule: Joi.object({
-    frequency: Joi.string().valid('daily', 'weekly', 'monthly', 'quarterly').required(),
-    time: Joi.string().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/).required(), // HH:MM format
-    dayOfWeek: Joi.number().integer().min(0).max(6).when('frequency', {
-      is: 'weekly',
-      then: Joi.required()
-    }),
-    dayOfMonth: Joi.number().integer().min(1).max(31).when('frequency', {
-      is: 'monthly',
-      then: Joi.required()
-    }),
-    timezone: Joi.string().default('UTC')
-  }).required(),
-  recipients: Joi.array().items(
-    Joi.object({
-      email: Joi.string().email().required(),
-      name: Joi.string().max(100)
-    })
-  ).min(1).required(),
-  isActive: Joi.boolean().default(true),
-  startDate: Joi.date().iso().default(() => new Date()),
-  endDate: Joi.date().iso().greater(Joi.ref('startDate'))
-});
-
-// Export/Download schema
-export const exportDataSchema = Joi.object({
-  dataType: Joi.string().valid(
-    'customers',
-    'service_tickets',
-    'inventory',
-    'amc_contracts',
+    'products',
+    'stock',
+    'amc',
     'purchase_orders',
     'users'
   ).required(),
-  format: Joi.string().valid('csv', 'excel', 'json').required(),
-  filters: Joi.object().unknown(true),
-  fields: Joi.array().items(Joi.string()), // Specific fields to export
+  fields: Joi.array().items(
+    Joi.object({
+      fieldName: Joi.string().required(),
+      alias: Joi.string().max(50),
+      aggregation: Joi.string().valid('sum', 'count', 'avg', 'min', 'max', 'group'),
+      sortOrder: Joi.string().valid('asc', 'desc')
+    })
+  ).min(1).required(),
+  filters: Joi.array().items(
+    Joi.object({
+      field: Joi.string().required(),
+      operator: Joi.string().valid(
+        'equals',
+        'not_equals',
+        'contains',
+        'not_contains',
+        'greater_than',
+        'less_than',
+        'between',
+        'in',
+        'not_in'
+      ).required(),
+      value: Joi.any().required()
+    })
+  ),
   dateRange: Joi.object({
-    from: Joi.date().iso(),
-    to: Joi.date().iso().greater(Joi.ref('from'))
+    dateField: Joi.string().required(),
+    dateFrom: baseReportFields.dateFrom,
+    dateTo: baseReportFields.dateTo
   }),
-  includeRelatedData: Joi.boolean().default(false),
-  compression: Joi.boolean().default(false)
+  groupBy: Joi.array().items(Joi.string()),
+  limit: Joi.number().integer().min(1).max(10000).default(1000),
+  format: baseReportFields.format.default('json'),
+  isPublic: Joi.boolean().default(false),
+  scheduledReports: Joi.object({
+    enabled: Joi.boolean().default(false),
+    frequency: Joi.string().valid('daily', 'weekly', 'monthly', 'quarterly'),
+    dayOfWeek: Joi.number().integer().min(0).max(6), // 0 = Sunday
+    dayOfMonth: Joi.number().integer().min(1).max(31),
+    recipients: Joi.array().items(Joi.string().email())
+  })
+});
+
+// Scheduled report schema
+export const scheduledReportSchema = Joi.object<ScheduledReportInput>({
+  reportId: Joi.string().hex().length(24).required(),
+  name: Joi.string().min(2).max(100).required(),
+  description: Joi.string().max(500),
+  frequency: Joi.string().valid('daily', 'weekly', 'monthly', 'quarterly', 'yearly').required(),
+  schedule: Joi.object({
+    time: Joi.string().pattern(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/), // HH:MM format
+    dayOfWeek: Joi.number().integer().min(0).max(6),
+    dayOfMonth: Joi.number().integer().min(1).max(31),
+    monthOfYear: Joi.number().integer().min(1).max(12)
+  }).required(),
+  recipients: Joi.array().items(Joi.string().email()).min(1).required(),
+  format: Joi.string().valid('json', 'csv', 'excel', 'pdf').required(),
+  parameters: Joi.object().unknown(true),
+  isActive: Joi.boolean().default(true),
+  nextRunDate: Joi.date().iso()
+});
+
+// Report export schema
+export const reportExportSchema = Joi.object<ReportExportInput>({
+  reportId: Joi.string().hex().length(24),
+  reportData: Joi.any().when('reportId', {
+    is: Joi.exist(),
+    otherwise: Joi.required()
+  }),
+  format: Joi.string().valid('csv', 'excel', 'pdf').required(),
+  filename: Joi.string().max(255),
+  options: Joi.object({
+    includeHeaders: Joi.boolean().default(true),
+    dateFormat: Joi.string().default('YYYY-MM-DD'),
+    orientation: Joi.string().valid('portrait', 'landscape').default('portrait'),
+    pageSize: Joi.string().valid('A4', 'A3', 'letter', 'legal').default('A4'),
+    includeGraphs: Joi.boolean().default(false),
+    watermark: Joi.string().max(100)
+  })
+});
+
+// Report template schema
+export const reportTemplateSchema = Joi.object<ReportTemplateInput>({
+  name: Joi.string().min(2).max(100).required(),
+  description: Joi.string().max(500),
+  category: Joi.string().valid('tickets', 'inventory', 'revenue', 'customers', 'performance', 'custom').required(),
+  template: Joi.object({
+    structure: Joi.object({
+      title: Joi.string().required(),
+      sections: Joi.array().items(
+        Joi.object({
+          type: Joi.string().valid('table', 'chart', 'summary', 'text').required(),
+          title: Joi.string(),
+          query: Joi.string(),
+          chartType: Joi.string().valid('line', 'bar', 'pie', 'doughnut', 'area'),
+          columns: Joi.array().items(Joi.string())
+        })
+      ).required()
+    }).required(),
+    styling: Joi.object({
+      headerColor: Joi.string().pattern(/^#([0-9A-F]{3}|[0-9A-F]{6})$/i),
+      fontFamily: Joi.string(),
+      fontSize: Joi.number().min(8).max(24),
+      logoUrl: Joi.string().uri()
+    })
+  }).required(),
+  parameters: Joi.array().items(
+    Joi.object({
+      name: Joi.string().required(),
+      type: Joi.string().valid('string', 'number', 'date', 'boolean', 'select').required(),
+      required: Joi.boolean().default(false),
+      defaultValue: Joi.any(),
+      options: Joi.array()
+    })
+  ),
+  isActive: Joi.boolean().default(true)
+});
+
+// Report sharing schema
+export const reportSharingSchema = Joi.object<ReportSharingInput>({
+  reportId: Joi.string().hex().length(24).required(),
+  shareWith: Joi.array().items(Joi.string().email()).min(1).required(),
+  permissions: Joi.array().items(
+    Joi.string().valid('view', 'edit', 'delete', 'share')
+  ).min(1).required(),
+  expiresAt: Joi.date().iso().greater('now'),
+  password: Joi.string().min(6).max(50),
+  publicAccess: Joi.boolean().default(false),
+  emailNotification: Joi.boolean().default(true)
+});
+
+// Bulk report operations schema
+export const bulkReportOperationSchema = Joi.object<BulkReportOperationInput>({
+  reportIds: Joi.array().items(Joi.string().hex().length(24)).min(1).max(50).required(),
+  operation: Joi.string().valid('delete', 'archive', 'share', 'export', 'schedule').required(),
+  parameters: Joi.object().when('operation', {
+    switch: [
+      {
+        is: 'share',
+        then: Joi.object({
+          shareWith: Joi.array().items(Joi.string().email()).required()
+        })
+      },
+      {
+        is: 'export',
+        then: Joi.object({
+          exportFormat: Joi.string().valid('csv', 'excel', 'pdf').required()
+        })
+      },
+      {
+        is: 'schedule',
+        then: Joi.object({
+          scheduleFrequency: Joi.string().valid('daily', 'weekly', 'monthly').required()
+        })
+      }
+    ]
+  })
 }); 

@@ -2,14 +2,15 @@ import { Router } from 'express';
 import { protect, restrictTo, checkModuleAccess, checkPermission } from '../middleware/auth';
 import { validate } from '../utils/validation';
 import { 
-  serviceTicketReportSchema,
+  ticketAnalyticsSchema,
   inventoryReportSchema,
   revenueReportSchema,
   customerReportSchema,
   performanceReportSchema,
   customReportSchema,
-  scheduleReportSchema,
-  exportDataSchema
+  scheduledReportSchema,
+  reportExportSchema,
+  dashboardMetricsSchema
 } from '../schemas';
 import { UserRole } from '../types';
 
@@ -103,7 +104,7 @@ const getReportHistory = async (req: any, res: any) => {
 };
 
 // Service reports
-router.post('/service-tickets', validate(serviceTicketReportSchema), checkPermission('read'), generateServiceReport);
+router.post('/service-tickets', validate(ticketAnalyticsSchema), checkPermission('read'), generateServiceReport);
 
 // Inventory reports
 router.post('/inventory', validate(inventoryReportSchema), checkPermission('read'), generateInventoryReport);
@@ -123,10 +124,10 @@ router.post('/custom', validate(customReportSchema), checkPermission('read'), ge
 // Report scheduling
 router.route('/schedule')
   .get(checkPermission('read'), getScheduledReports)
-  .post(validate(scheduleReportSchema), checkPermission('write'), scheduleReport);
+  .post(validate(scheduledReportSchema), checkPermission('write'), scheduleReport);
 
 // Data export
-router.post('/export', validate(exportDataSchema), checkPermission('read'), exportData);
+router.post('/export', validate(reportExportSchema), checkPermission('read'), exportData);
 
 // Report history
 router.get('/history', checkPermission('read'), getReportHistory);

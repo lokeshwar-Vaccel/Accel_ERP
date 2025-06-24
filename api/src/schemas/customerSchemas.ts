@@ -1,6 +1,82 @@
 import Joi from 'joi';
 import { CustomerType, LeadStatus } from '../types';
 
+// TypeScript interfaces for validation results
+export interface CreateCustomerInput {
+  name: string;
+  email?: string;
+  phone: string;
+  address: string;
+  customerType: CustomerType;
+  leadSource?: string;
+  assignedTo?: string;
+  status?: LeadStatus;
+  notes?: string;
+}
+
+export interface UpdateCustomerInput {
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  customerType?: CustomerType;
+  leadSource?: string;
+  assignedTo?: string;
+  status?: LeadStatus;
+  notes?: string;
+}
+
+export interface AddContactHistoryInput {
+  type: 'call' | 'meeting' | 'email' | 'whatsapp';
+  date: string;
+  notes: string;
+  followUpDate?: string;
+}
+
+export interface UpdateContactHistoryInput {
+  type?: 'call' | 'meeting' | 'email' | 'whatsapp';
+  date?: string;
+  notes?: string;
+  followUpDate?: string | null;
+}
+
+export interface CustomerQueryInput {
+  page?: number;
+  limit?: number;
+  sort?: string;
+  search?: string;
+  customerType?: CustomerType;
+  status?: LeadStatus;
+  assignedTo?: string;
+  leadSource?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+export interface ConvertLeadInput {
+  status: LeadStatus.CONVERTED;
+  conversionNotes?: string;
+  assignedTo?: string;
+}
+
+export interface ScheduleFollowUpInput {
+  followUpDate: string;
+  followUpType: 'call' | 'meeting' | 'email' | 'whatsapp';
+  notes?: string;
+  assignedTo?: string;
+}
+
+export interface CustomerImportInput {
+  name: string;
+  email?: string;
+  phone: string;
+  address: string;
+  customerType: CustomerType;
+  leadSource?: string;
+  status?: LeadStatus;
+  notes?: string;
+}
+
 // Base customer fields
 const baseCustomerFields = {
   name: Joi.string().min(2).max(100).trim(),
@@ -15,7 +91,7 @@ const baseCustomerFields = {
 };
 
 // Create customer schema
-export const createCustomerSchema = Joi.object({
+export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   name: baseCustomerFields.name.required(),
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone.required(),
@@ -28,7 +104,7 @@ export const createCustomerSchema = Joi.object({
 });
 
 // Update customer schema
-export const updateCustomerSchema = Joi.object({
+export const updateCustomerSchema = Joi.object<UpdateCustomerInput>({
   name: baseCustomerFields.name,
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone,
@@ -41,7 +117,7 @@ export const updateCustomerSchema = Joi.object({
 });
 
 // Contact history schema
-export const addContactHistorySchema = Joi.object({
+export const addContactHistorySchema = Joi.object<AddContactHistoryInput>({
   type: Joi.string().valid('call', 'meeting', 'email', 'whatsapp').required(),
   date: Joi.date().iso().required(),
   notes: Joi.string().max(1000).required(),
@@ -49,7 +125,7 @@ export const addContactHistorySchema = Joi.object({
 });
 
 // Update contact history schema
-export const updateContactHistorySchema = Joi.object({
+export const updateContactHistorySchema = Joi.object<UpdateContactHistoryInput>({
   type: Joi.string().valid('call', 'meeting', 'email', 'whatsapp'),
   date: Joi.date().iso(),
   notes: Joi.string().max(1000),
@@ -60,7 +136,7 @@ export const updateContactHistorySchema = Joi.object({
 export const bulkContactHistorySchema = Joi.array().items(addContactHistorySchema).min(1).max(10);
 
 // Customer search/filter schema
-export const customerQuerySchema = Joi.object({
+export const customerQuerySchema = Joi.object<CustomerQueryInput>({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   sort: Joi.string().default('-createdAt'),
@@ -74,14 +150,14 @@ export const customerQuerySchema = Joi.object({
 });
 
 // Convert lead to customer schema
-export const convertLeadSchema = Joi.object({
+export const convertLeadSchema = Joi.object<ConvertLeadInput>({
   status: Joi.string().valid(LeadStatus.CONVERTED).required(),
   conversionNotes: Joi.string().max(1000),
   assignedTo: baseCustomerFields.assignedTo
 });
 
 // Customer follow-up schema
-export const scheduleFollowUpSchema = Joi.object({
+export const scheduleFollowUpSchema = Joi.object<ScheduleFollowUpInput>({
   followUpDate: Joi.date().iso().greater('now').required(),
   followUpType: Joi.string().valid('call', 'meeting', 'email', 'whatsapp').required(),
   notes: Joi.string().max(500),
@@ -89,7 +165,7 @@ export const scheduleFollowUpSchema = Joi.object({
 });
 
 // Customer import schema (CSV/Excel)
-export const customerImportSchema = Joi.object({
+export const customerImportSchema = Joi.object<CustomerImportInput>({
   name: baseCustomerFields.name.required(),
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone.required(),

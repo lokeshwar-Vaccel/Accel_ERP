@@ -1,13 +1,127 @@
 import Joi from 'joi';
 import { ProductCategory } from '../types';
 
+// TypeScript interfaces for validation results
+export interface CreateProductInput {
+  name: string;
+  description?: string;
+  category: ProductCategory;
+  brand?: string;
+  modelNumber?: string;
+  specifications?: Record<string, any>;
+  price: number;
+  minStockLevel: number;
+  isActive?: boolean;
+  tags?: string[];
+  dimensions?: {
+    length?: number;
+    width?: number;
+    height?: number;
+    weight?: number;
+    unit?: 'cm' | 'inch' | 'mm' | 'kg' | 'lbs';
+  };
+  warranty?: {
+    duration?: number;
+    unit?: 'days' | 'months' | 'years';
+    terms?: string;
+  };
+}
+
+export interface UpdateProductInput {
+  name?: string;
+  description?: string;
+  category?: ProductCategory;
+  brand?: string;
+  modelNumber?: string;
+  specifications?: Record<string, any>;
+  price?: number;
+  minStockLevel?: number;
+  isActive?: boolean;
+  tags?: string[];
+  dimensions?: {
+    length?: number;
+    width?: number;
+    height?: number;
+    weight?: number;
+    unit?: 'cm' | 'inch' | 'mm' | 'kg' | 'lbs';
+  };
+  warranty?: {
+    duration?: number;
+    unit?: 'days' | 'months' | 'years';
+    terms?: string;
+  };
+}
+
+export interface ProductQueryInput {
+  page?: number;
+  limit?: number;
+  sort?: string;
+  search?: string;
+  category?: ProductCategory;
+  brand?: string;
+  priceMin?: number;
+  priceMax?: number;
+  isActive?: boolean;
+  lowStock?: boolean;
+  tags?: string | string[];
+}
+
+export interface BulkPriceUpdateInput {
+  productIds: string[];
+  updateType: 'percentage' | 'fixed_amount' | 'new_price';
+  value: number;
+  reason?: string;
+}
+
+export interface ProductImportInput {
+  name: string;
+  description?: string;
+  category: ProductCategory;
+  brand?: string;
+  modelNumber?: string;
+  price: number;
+  minStockLevel: number;
+  specifications?: Record<string, any> | string;
+}
+
+export interface ProductVariantInput {
+  name: string;
+  sku?: string;
+  attributes: Record<string, any>;
+  price?: number;
+  stock?: number;
+}
+
+export interface AddProductVariantInput {
+  variants: ProductVariantInput[];
+}
+
+export interface ProductComparisonInput {
+  productIds: string[];
+  attributes?: string[];
+}
+
+export interface ProductRatingInput {
+  rating: number;
+  review?: string;
+  reviewer?: string;
+  verified?: boolean;
+}
+
+export interface StockAlertInput {
+  productId: string;
+  alertLevel: number;
+  emailNotification?: boolean;
+  smsNotification?: boolean;
+}
+
 // Base product fields
 const baseProductFields = {
   name: Joi.string().min(2).max(200).trim(),
   description: Joi.string().max(1000).allow(''),
   category: Joi.string().valid(...Object.values(ProductCategory)),
   brand: Joi.string().max(100).trim().allow(''),
-  model: Joi.string().max(100).trim().allow(''),
+  modelNumber: Joi.string().max(100).trim().allow(''),
   specifications: Joi.object().unknown(true), // Allow any key-value pairs
   price: Joi.number().min(0).precision(2),
   minStockLevel: Joi.number().integer().min(0),
@@ -28,12 +142,12 @@ const baseProductFields = {
 };
 
 // Create product schema
-export const createProductSchema = Joi.object({
+export const createProductSchema = Joi.object<CreateProductInput>({
   name: baseProductFields.name.required(),
   description: baseProductFields.description,
   category: baseProductFields.category.required(),
   brand: baseProductFields.brand,
-  model: baseProductFields.model,
+  modelNumber: baseProductFields.modelNumber,
   specifications: baseProductFields.specifications,
   price: baseProductFields.price.required(),
   minStockLevel: baseProductFields.minStockLevel.required(),
@@ -44,12 +158,12 @@ export const createProductSchema = Joi.object({
 });
 
 // Update product schema
-export const updateProductSchema = Joi.object({
+export const updateProductSchema = Joi.object<UpdateProductInput>({
   name: baseProductFields.name,
   description: baseProductFields.description,
   category: baseProductFields.category,
   brand: baseProductFields.brand,
-  model: baseProductFields.model,
+  modelNumber: baseProductFields.modelNumber,
   specifications: baseProductFields.specifications,
   price: baseProductFields.price,
   minStockLevel: baseProductFields.minStockLevel,
@@ -60,7 +174,7 @@ export const updateProductSchema = Joi.object({
 });
 
 // Product search/filter schema
-export const productQuerySchema = Joi.object({
+export const productQuerySchema = Joi.object<ProductQueryInput>({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   sort: Joi.string().default('-createdAt'),
@@ -78,7 +192,7 @@ export const productQuerySchema = Joi.object({
 });
 
 // Bulk price update schema
-export const bulkPriceUpdateSchema = Joi.object({
+export const bulkPriceUpdateSchema = Joi.object<BulkPriceUpdateInput>({
   productIds: Joi.array().items(Joi.string().hex().length(24)).min(1).required(),
   updateType: Joi.string().valid('percentage', 'fixed_amount', 'new_price').required(),
   value: Joi.number().required(),
@@ -86,12 +200,12 @@ export const bulkPriceUpdateSchema = Joi.object({
 });
 
 // Product import schema (CSV/Excel)
-export const productImportSchema = Joi.object({
+export const productImportSchema = Joi.object<ProductImportInput>({
   name: baseProductFields.name.required(),
   description: baseProductFields.description,
   category: baseProductFields.category.required(),
   brand: baseProductFields.brand,
-  model: baseProductFields.model,
+  modelNumber: baseProductFields.modelNumber,
   price: baseProductFields.price.required(),
   minStockLevel: baseProductFields.minStockLevel.required(),
   specifications: Joi.alternatives().try(
@@ -104,7 +218,7 @@ export const productImportSchema = Joi.object({
 export const bulkProductImportSchema = Joi.array().items(productImportSchema).min(1).max(1000);
 
 // Product variant schema (for products with multiple variants)
-export const productVariantSchema = Joi.object({
+export const productVariantSchema = Joi.object<ProductVariantInput>({
   name: Joi.string().max(100).required(),
   sku: Joi.string().max(50),
   attributes: Joi.object().required(), // e.g., { color: 'red', size: 'large' }
@@ -113,18 +227,18 @@ export const productVariantSchema = Joi.object({
 });
 
 // Add product variant schema
-export const addProductVariantSchema = Joi.object({
+export const addProductVariantSchema = Joi.object<AddProductVariantInput>({
   variants: Joi.array().items(productVariantSchema).min(1).max(20).required()
 });
 
 // Product comparison schema
-export const productComparisonSchema = Joi.object({
+export const productComparisonSchema = Joi.object<ProductComparisonInput>({
   productIds: Joi.array().items(Joi.string().hex().length(24)).min(2).max(5).required(),
-  attributes: Joi.array().items(Joi.string()).default(['price', 'specifications', 'brand', 'model'])
+  attributes: Joi.array().items(Joi.string()).default(['price', 'specifications', 'brand', 'modelNumber'])
 });
 
 // Product rating/review schema
-export const productRatingSchema = Joi.object({
+export const productRatingSchema = Joi.object<ProductRatingInput>({
   rating: Joi.number().min(1).max(5).required(),
   review: Joi.string().max(1000),
   reviewer: Joi.string().max(100),
@@ -132,7 +246,7 @@ export const productRatingSchema = Joi.object({
 });
 
 // Product stock alert schema
-export const stockAlertSchema = Joi.object({
+export const stockAlertSchema = Joi.object<StockAlertInput>({
   productId: Joi.string().hex().length(24).required(),
   alertLevel: Joi.number().integer().min(0).required(),
   emailNotification: Joi.boolean().default(true),

@@ -1,6 +1,55 @@
 import Joi from 'joi';
 import { UserRole, UserStatus } from '../types';
 
+// TypeScript interfaces for validation results
+export interface RegisterUserInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  role?: UserRole;
+  phone?: string;
+  address?: string;
+  moduleAccess?: string[];
+}
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+export interface UpdateProfileInput {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  address?: string;
+}
+
+export interface UpdateUserInput {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  address?: string;
+  role?: UserRole;
+  status?: UserStatus;
+  moduleAccess?: string[];
+}
+
+export interface ChangePasswordInput {
+  currentPassword: string;
+  newPassword: string;
+}
+
+export interface UserQueryInput {
+  page?: number;
+  limit?: number;
+  sort?: string;
+  search?: string;
+  role?: UserRole;
+  status?: UserStatus;
+  moduleAccess?: string;
+}
+
 // Base user schema for common fields
 const baseUserFields = {
   firstName: Joi.string().min(2).max(50).trim(),
@@ -11,7 +60,7 @@ const baseUserFields = {
 };
 
 // User registration schema
-export const registerUserSchema = Joi.object({
+export const registerUserSchema = Joi.object<RegisterUserInput>({
   firstName: baseUserFields.firstName.required(),
   lastName: baseUserFields.lastName.required(),
   email: baseUserFields.email.required(),
@@ -34,13 +83,13 @@ export const registerUserSchema = Joi.object({
 });
 
 // User login schema
-export const loginSchema = Joi.object({
+export const loginSchema = Joi.object<LoginInput>({
   email: baseUserFields.email.required(),
   password: Joi.string().required()
 });
 
 // Update user profile schema (for self-update)
-export const updateProfileSchema = Joi.object({
+export const updateProfileSchema = Joi.object<UpdateProfileInput>({
   firstName: baseUserFields.firstName,
   lastName: baseUserFields.lastName,
   phone: baseUserFields.phone,
@@ -48,7 +97,7 @@ export const updateProfileSchema = Joi.object({
 });
 
 // Update user schema (for admin updates)
-export const updateUserSchema = Joi.object({
+export const updateUserSchema = Joi.object<UpdateUserInput>({
   firstName: baseUserFields.firstName,
   lastName: baseUserFields.lastName,
   phone: baseUserFields.phone,
@@ -70,7 +119,7 @@ export const updateUserSchema = Joi.object({
 });
 
 // Change password schema
-export const changePasswordSchema = Joi.object({
+export const changePasswordSchema = Joi.object<ChangePasswordInput>({
   currentPassword: Joi.string().required(),
   newPassword: Joi.string().min(6).max(128).required()
 });
@@ -81,7 +130,7 @@ export const resetPasswordSchema = Joi.object({
 });
 
 // User query parameters schema
-export const userQuerySchema = Joi.object({
+export const userQuerySchema = Joi.object<UserQueryInput>({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   sort: Joi.string().default('-createdAt'),
