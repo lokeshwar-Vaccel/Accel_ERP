@@ -5,6 +5,7 @@ import {
   createUser,
   updateUser,
   deleteUser,
+  restoreUser,
   resetPassword,
   getUserStats
 } from '../controllers/userController';
@@ -52,6 +53,13 @@ router.put('/:id/reset-password',
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN),
   checkPermission('write'),
   resetPassword
+);
+
+// Restore deleted user (Admin only)
+router.put('/:id/restore', 
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN),
+  checkPermission('write'),
+  restoreUser
 );
 
 export default router; 

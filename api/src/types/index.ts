@@ -14,7 +14,8 @@ export enum UserRole {
 export enum UserStatus {
   ACTIVE = 'active',
   INACTIVE = 'inactive',
-  SUSPENDED = 'suspended'
+  SUSPENDED = 'suspended',
+  DELETED = 'deleted'
 }
 
 // Customer Types

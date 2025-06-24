@@ -98,6 +98,11 @@ class ApiClient {
         body: JSON.stringify({ newPassword }),
       }),
     
+    restore: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/users/${id}/restore`, {
+        method: 'PUT',
+      }),
+    
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/users/stats'),
   };

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useDispatch } from 'react-redux';
 import { 
   Users, Plus, Search, Edit, Trash2, MoreHorizontal, 
-  Filter, Download, UserPlus, X, ChevronDown 
+  Filter, Download, UserPlus, X, ChevronDown, RotateCcw 
 } from 'lucide-react';
 import { setBreadcrumbs } from 'redux/auth/navigationSlice';
 import { apiClient } from '../utils/api';
@@ -15,7 +15,7 @@ interface UserDisplay {
   email: string;
   role: string;
   department: string;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'suspended' | 'deleted';
   lastLogin: string;
 }
 
@@ -66,7 +66,8 @@ export const UserManagement: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiClient.users.getAll();
+      // Fetch all users including deleted ones
+      const response = await apiClient.users.getAll({ status: 'all' });
       
       // Map API response to UserDisplay interface
       const usersData = response.data as any; // Type assertion since API client types aren't fully typed
@@ -76,7 +77,7 @@ export const UserManagement: React.FC = () => {
         email: user.email,
         role: user.role,
         department: 'General', // Default since backend doesn't have department
-        status: user.status === 'active' ? 'active' : 'inactive',
+        status: user.status || 'active', // Map all possible statuses
         lastLogin: user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never'
       }));
       
@@ -139,6 +140,12 @@ export const UserManagement: React.FC = () => {
   };
 
   const openEditUserModal = (user: UserDisplay) => {
+    // Prevent editing deleted users
+    if (user.status === 'deleted') {
+      setError('Cannot edit deactivated users. Please restore the user first.');
+      return;
+    }
+    
     setIsEditing(true);
     setSelectedUser(user);
     setFormData({
@@ -246,8 +253,22 @@ export const UserManagement: React.FC = () => {
       await fetchUsers();
       closeDeleteConfirm();
     } catch (err) {
-      console.error('Error deleting user:', err);
-      setError('Failed to delete user');
+      console.error('Error deactivating user:', err);
+      setError('Failed to deactivate user');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRestore = async (user: UserDisplay) => {
+    setSubmitting(true);
+    try {
+      await apiClient.users.restore(user.id);
+      await fetchUsers();
+      setError(null); // Clear any existing errors
+    } catch (err) {
+      console.error('Error restoring user:', err);
+      setError('Failed to restore user');
     } finally {
       setSubmitting(false);
     }
@@ -291,10 +312,21 @@ export const UserManagement: React.FC = () => {
     return matchesSearch;
   });
 
+  // Sort users: active users first, then deleted users at the bottom
+  const sortedUsers = filteredUsers.sort((a, b) => {
+    if (a.status === 'deleted' && b.status !== 'deleted') return 1;
+    if (a.status !== 'deleted' && b.status === 'deleted') return -1;
+    return 0;
+  });
+
   const getStatusBadge = (status: string) => {
-    return status === 'active' 
-      ? 'bg-green-100 text-green-800' 
-      : 'bg-red-100 text-red-800';
+    const statusColors: { [key: string]: string } = {
+      'active': 'bg-green-100 text-green-800',
+      'inactive': 'bg-yellow-100 text-yellow-800',
+      'suspended': 'bg-orange-100 text-orange-800',
+      'deleted': 'bg-gray-100 text-gray-800'
+    };
+    return statusColors[status] || 'bg-gray-100 text-gray-800';
   };
 
   const getRoleBadge = (role: string) => {
@@ -341,8 +373,10 @@ export const UserManagement: React.FC = () => {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Users</p>
-              <p className="text-2xl font-bold text-gray-900">{users.length}</p>
+              <p className="text-sm text-gray-600">Active Users</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {users.filter((u: UserDisplay) => u.status !== 'deleted').length}
+              </p>
             </div>
             <Users className="w-8 h-8 text-blue-600" />
           </div>
@@ -350,7 +384,7 @@ export const UserManagement: React.FC = () => {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Active Users</p>
+              <p className="text-sm text-gray-600">Online</p>
               <p className="text-2xl font-bold text-green-600">
                 {users.filter((u: UserDisplay) => u.status === 'active').length}
               </p>
@@ -363,23 +397,27 @@ export const UserManagement: React.FC = () => {
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Admins</p>
-              <p className="text-2xl font-bold text-purple-600">
-                {users.filter((u: UserDisplay) => u.role.toLowerCase().includes('admin')).length}
+              <p className="text-sm text-gray-600">Deactivated</p>
+              <p className="text-2xl font-bold text-gray-600">
+                {users.filter((u: UserDisplay) => u.status === 'deleted').length}
               </p>
             </div>
-            <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-              <div className="w-4 h-4 bg-purple-500 rounded-sm"></div>
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+              <RotateCcw className="w-4 h-4 text-gray-500" />
             </div>
           </div>
         </div>
         <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">New This Month</p>
-              <p className="text-2xl font-bold text-orange-600">12</p>
+              <p className="text-sm text-gray-600">Admins</p>
+              <p className="text-2xl font-bold text-purple-600">
+                {users.filter((u: UserDisplay) => u.role.toLowerCase().includes('admin') && u.status !== 'deleted').length}
+              </p>
             </div>
-            <Plus className="w-8 h-8 text-orange-600" />
+            <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+              <div className="w-4 h-4 bg-purple-500 rounded-sm"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -466,24 +504,30 @@ export const UserManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredUsers.length === 0 ? (
+              {sortedUsers.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                     No users found
                   </td>
                 </tr>
               ) : (
-                filteredUsers.map((user: UserDisplay) => (
-                <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                sortedUsers.map((user: UserDisplay) => (
+                <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${
+                  user.status === 'deleted' ? 'opacity-60 bg-gray-25' : ''
+                }`}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                        user.status === 'deleted' ? 'bg-gray-300' : 'bg-gray-200'
+                      }`}>
                         <span className="text-sm font-medium text-gray-600">
                           {user.name.split(' ').map(n => n[0]).join('')}
                         </span>
                       </div>
                       <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{user.name}</div>
+                        <div className={`text-sm font-medium ${
+                          user.status === 'deleted' ? 'text-gray-600' : 'text-gray-900'
+                        }`}>{user.name}</div>
                         <div className="text-sm text-gray-500">{user.email}</div>
                       </div>
                     </div>
@@ -506,23 +550,33 @@ export const UserManagement: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
-                      <button 
-                        onClick={() => openEditUserModal(user)}
-                        className="text-blue-600 hover:text-blue-900 p-1 rounded"
-                        title="Edit User"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => openDeleteConfirm(user)}
-                        className="text-red-600 hover:text-red-900 p-1 rounded"
-                        title="Delete User"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                      <button className="text-gray-600 hover:text-gray-900 p-1 rounded">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
+                      {user.status === 'deleted' ? (
+                        <button 
+                          onClick={() => handleRestore(user)}
+                          disabled={submitting}
+                          className="text-green-600 hover:text-green-900 p-2 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
+                          title="Restore User"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <>
+                          <button 
+                            onClick={() => openEditUserModal(user)}
+                            className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                            title="Edit User"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button 
+                            onClick={() => openDeleteConfirm(user)}
+                            className="text-orange-600 hover:text-orange-900 p-2 rounded-lg hover:bg-orange-50 transition-colors"
+                            title="Deactivate User"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -737,15 +791,15 @@ export const UserManagement: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md m-4">
             <div className="p-6">
-              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
-                <Trash2 className="w-6 h-6 text-red-600" />
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-orange-100 rounded-full">
+                <Trash2 className="w-6 h-6 text-orange-600" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
-                Delete User
+                Deactivate User
               </h3>
               <p className="text-gray-600 text-center mb-6">
-                Are you sure you want to delete <strong>{userToDelete.name}</strong>? 
-                This action cannot be undone.
+                Are you sure you want to deactivate <strong>{userToDelete.name}</strong>? 
+                The user will be marked as deleted but can be restored later if needed.
               </p>
               <div className="flex space-x-3">
                 <button
@@ -757,9 +811,9 @@ export const UserManagement: React.FC = () => {
                 <button
                   onClick={handleDelete}
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
                 >
-                  {submitting ? 'Deleting...' : 'Delete User'}
+                  {submitting ? 'Deactivating...' : 'Deactivate User'}
                 </button>
               </div>
             </div>
