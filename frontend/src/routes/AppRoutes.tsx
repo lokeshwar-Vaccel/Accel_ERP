@@ -1,14 +1,18 @@
+import Login from "components/Login";
+import Dashboard from "../pages/dashboard";
 import NotFound from "pages/NotFound";
-import { Route, Routes } from "react-router-dom"
+import { UserManagement } from "pages/UserManagement";
+import { Navigate, Route, Routes } from "react-router-dom"
 
 const AppRoutes: React.FC = () => {
-    console.log("running")
     return (
         <Routes>
-            {/* Add your protected routes here */}
-            <Route path="/dashboard" element={<div>Dashboard Page</div>} />
-            <Route path="/profile" element={<div>Profile Page</div>} />
-            <Route path="*" element={<NotFound />} />
+            {/* <Route path="/" element={"Home page"} /> */}
+            <Route path="/login" element={<Login />} />
+            <Route path="/" element={<Dashboard/>} />
+            <Route path="/user-management" element={<UserManagement/>} />
+            {/* <Route path="*" element={<NotFound />} /> */}
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
     )
 }
