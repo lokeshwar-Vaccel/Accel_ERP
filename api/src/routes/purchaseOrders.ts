@@ -10,6 +10,16 @@ import {
   cancelPOSchema
 } from '../schemas';
 import { UserRole } from '../types';
+import {
+  getPurchaseOrders,
+  getPurchaseOrder,
+  createPurchaseOrder,
+  updatePurchaseOrder,
+  sendPurchaseOrder,
+  receiveItems,
+  cancelPurchaseOrder,
+  getPurchaseOrderStats
+} from '../controllers/purchaseOrderController';
 
 const router = Router();
 
@@ -19,40 +29,7 @@ router.use(protect);
 // Check module access for inventory management
 router.use(checkModuleAccess('inventory_management'));
 
-// Placeholder controller functions
-const getPurchaseOrders = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get purchase orders endpoint',
-    data: [],
-    pagination: { page: 1, limit: 10, total: 0, pages: 0 }
-  });
-};
-
-const getPurchaseOrder = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get purchase order endpoint',
-    data: { id: req.params.id }
-  });
-};
-
-const createPurchaseOrder = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Create purchase order endpoint',
-    data: { ...req.body, id: 'temp-po-id', poNumber: 'PO' + Date.now() }
-  });
-};
-
-const updatePurchaseOrder = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Update purchase order endpoint',
-    data: { id: req.params.id, ...req.body }
-  });
-};
-
+// Placeholder functions
 const deletePurchaseOrder = async (req: any, res: any) => {
   res.json({
     success: true,
@@ -61,51 +38,11 @@ const deletePurchaseOrder = async (req: any, res: any) => {
   });
 };
 
-const approvePurchaseOrder = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Approve purchase order endpoint',
-    data: { poId: req.params.id, ...req.body }
-  });
-};
-
-const receivePurchaseOrder = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Receive purchase order endpoint',
-    data: { poId: req.params.id, ...req.body }
-  });
-};
-
-const cancelPurchaseOrder = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Cancel purchase order endpoint',
-    data: { poId: req.params.id, ...req.body }
-  });
-};
-
 const getPendingApprovals = async (req: any, res: any) => {
   res.json({
     success: true,
     message: 'Get pending approvals endpoint',
     data: []
-  });
-};
-
-const getPOStats = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get PO statistics endpoint',
-    data: {
-      total: 0,
-      draft: 0,
-      sent: 0,
-      confirmed: 0,
-      received: 0,
-      cancelled: 0,
-      overdue: 0
-    }
   });
 };
 
@@ -120,14 +57,13 @@ router.route('/:id')
   .delete(restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), deletePurchaseOrder);
 
 // Purchase order actions
-router.post('/:id/approve', 
-  validate(approvePOSchema), 
+router.post('/:id/send', 
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER), 
   checkPermission('write'), 
-  approvePurchaseOrder
+  sendPurchaseOrder
 );
 
-router.post('/:id/receive', validate(receivePOSchema), checkPermission('write'), receivePurchaseOrder);
+router.post('/:id/receive', validate(receivePOSchema), checkPermission('write'), receiveItems);
 router.post('/:id/cancel', validate(cancelPOSchema), checkPermission('write'), cancelPurchaseOrder);
 
 // Special queries
@@ -137,6 +73,6 @@ router.get('/pending/approvals',
   getPendingApprovals
 );
 
-router.get('/stats/overview', checkPermission('read'), getPOStats);
+router.get('/stats/overview', checkPermission('read'), getPurchaseOrderStats);
 
 export default router; 

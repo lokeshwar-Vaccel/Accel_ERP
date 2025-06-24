@@ -7,6 +7,16 @@ import {
   productQuerySchema 
 } from '../schemas';
 import { UserRole } from '../types';
+import {
+  getProducts,
+  getProduct,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  toggleProductStatus,
+  getProductCategories,
+  searchProducts
+} from '../controllers/productController';
 
 const router = Router();
 
@@ -16,55 +26,9 @@ router.use(protect);
 // Check module access for inventory management
 router.use(checkModuleAccess('inventory_management'));
 
-// Placeholder controller functions
-const getProducts = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get products endpoint',
-    data: [],
-    pagination: { page: 1, limit: 10, total: 0, pages: 0 }
-  });
-};
-
-const getProduct = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get product endpoint',
-    data: { id: req.params.id }
-  });
-};
-
-const createProduct = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Create product endpoint',
-    data: { ...req.body, id: 'temp-id' }
-  });
-};
-
-const updateProduct = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Update product endpoint',
-    data: { id: req.params.id, ...req.body }
-  });
-};
-
-const deleteProduct = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Delete product endpoint',
-    data: { id: req.params.id }
-  });
-};
-
-const getProductStock = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get product stock endpoint',
-    data: { productId: req.params.id, stock: [] }
-  });
-};
+// Special routes (must come before parameterized routes)
+router.get('/categories', checkPermission('read'), getProductCategories);
+router.get('/search', checkPermission('read'), searchProducts);
 
 // Product routes
 router.route('/')
@@ -76,7 +40,10 @@ router.route('/:id')
   .put(validate(updateProductSchema), checkPermission('write'), updateProduct)
   .delete(restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), deleteProduct);
 
-// Product stock information
-router.get('/:id/stock', checkPermission('read'), getProductStock);
+// Product status toggle
+router.put('/:id/activate', 
+  checkPermission('write'), 
+  toggleProductStatus
+);
 
 export default router; 

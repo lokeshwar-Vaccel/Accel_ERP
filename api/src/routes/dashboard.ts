@@ -3,27 +3,19 @@ import { protect, restrictTo, checkModuleAccess, checkPermission } from '../midd
 import { validate } from '../utils/validation';
 import { dashboardMetricsSchema } from '../schemas';
 import { UserRole } from '../types';
+import {
+  getDashboardOverview,
+  getRecentActivities,
+  getMonthlyStats,
+  getPerformanceMetrics
+} from '../controllers/dashboardController';
 
 const router = Router();
 
 // All routes are protected
 router.use(protect);
 
-// Placeholder controller functions
-const getDashboardOverview = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Dashboard overview endpoint',
-    data: {
-      totalCustomers: 0,
-      activeServiceTickets: 0,
-      totalRevenue: 0,
-      lowStockItems: 0,
-      expiringAMCs: 0,
-      pendingPOs: 0
-    }
-  });
-};
+// Keep placeholder functions for features not yet implemented
 
 const getServiceMetrics = async (req: any, res: any) => {
   res.json({
@@ -87,27 +79,7 @@ const getCustomerMetrics = async (req: any, res: any) => {
   });
 };
 
-const getPerformanceMetrics = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Performance metrics endpoint',
-    data: {
-      totalTechnicians: 0,
-      avgTicketsPerTechnician: 0,
-      topPerformers: [],
-      teamUtilization: 0,
-      overtimeHours: 0
-    }
-  });
-};
-
-const getRecentActivities = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Recent activities endpoint',
-    data: []
-  });
-};
+// getPerformanceMetrics and getRecentActivities now imported from controller
 
 const getAlerts = async (req: any, res: any) => {
   res.json({
@@ -189,6 +161,9 @@ router.get('/metrics/performance',
 
 // Recent activities
 router.get('/activities', getRecentActivities);
+
+// Monthly statistics
+router.get('/monthly-stats', getMonthlyStats);
 
 // System alerts
 router.get('/alerts', getAlerts);

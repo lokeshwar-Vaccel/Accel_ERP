@@ -1,7 +1,35 @@
-import mongoose, { Schema } from 'mongoose';
-import { IAMC, IVisitSchedule, AMCStatus } from '../types';
+import mongoose, { Schema, Document } from 'mongoose';
+import { AMCStatus } from '../types';
 
-const visitScheduleSchema = new Schema<IVisitSchedule>({
+// Visit schedule interface
+interface IVisitScheduleSchema {
+  scheduledDate: Date;
+  completedDate?: Date;
+  assignedTo?: mongoose.Types.ObjectId;
+  status: 'pending' | 'completed' | 'cancelled';
+  notes?: string;
+}
+
+// Main AMC interface
+interface IAMCSchema extends Document {
+  contractNumber: string;
+  customer: mongoose.Types.ObjectId;
+  products: mongoose.Types.ObjectId[];
+  startDate: Date;
+  endDate: Date;
+  contractValue: number;
+  scheduledVisits: number;
+  completedVisits: number;
+  status: AMCStatus;
+  nextVisitDate?: Date;
+  visitSchedule: IVisitScheduleSchema[];
+  terms?: string;
+  createdBy: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const visitScheduleSchema = new Schema({
   scheduledDate: {
     type: Date,
     required: [true, 'Scheduled date is required']
@@ -23,9 +51,9 @@ const visitScheduleSchema = new Schema<IVisitSchedule>({
     type: String,
     maxlength: [1000, 'Notes cannot exceed 1000 characters']
   }
-}, { timestamps: true });
+}, { _id: false });
 
-const amcSchema = new Schema<IAMC>({
+const amcSchema = new Schema({
   contractNumber: {
     type: String,
     required: [true, 'Contract number is required'],
@@ -59,7 +87,7 @@ const amcSchema = new Schema<IAMC>({
   scheduledVisits: {
     type: Number,
     required: [true, 'Number of scheduled visits is required'],
-    min: [1, 'At least 1 visit must be scheduled']
+    min: [1, 'Must have at least 1 scheduled visit']
   },
   completedVisits: {
     type: Number,
@@ -70,7 +98,7 @@ const amcSchema = new Schema<IAMC>({
     type: String,
     enum: Object.values(AMCStatus),
     default: AMCStatus.ACTIVE,
-    required: [true, 'AMC status is required']
+    required: [true, 'Status is required']
   },
   nextVisitDate: {
     type: Date
@@ -83,7 +111,7 @@ const amcSchema = new Schema<IAMC>({
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',
-    required: [true, 'AMC creator is required']
+    required: [true, 'Contract creator is required']
   }
 }, {
   timestamps: true,
@@ -95,46 +123,48 @@ const amcSchema = new Schema<IAMC>({
 amcSchema.index({ contractNumber: 1 });
 amcSchema.index({ customer: 1 });
 amcSchema.index({ status: 1 });
-amcSchema.index({ startDate: 1, endDate: 1 });
+amcSchema.index({ startDate: 1 });
+amcSchema.index({ endDate: 1 });
 amcSchema.index({ nextVisitDate: 1 });
 
 // Virtual for remaining visits
-amcSchema.virtual('remainingVisits').get(function() {
+amcSchema.virtual('remainingVisits').get(function(this: IAMCSchema) {
   return Math.max(0, this.scheduledVisits - this.completedVisits);
 });
 
 // Virtual for contract duration
-amcSchema.virtual('contractDuration').get(function() {
+amcSchema.virtual('contractDuration').get(function(this: IAMCSchema) {
   if (this.startDate && this.endDate) {
     const diff = this.endDate.getTime() - this.startDate.getTime();
     return Math.ceil(diff / (1000 * 60 * 60 * 24)); // in days
   }
-  return 0;
+  return null;
 });
 
-// Virtual for days remaining
-amcSchema.virtual('daysRemaining').get(function() {
+// Virtual for days until expiry
+amcSchema.virtual('daysUntilExpiry').get(function(this: IAMCSchema) {
   if (this.endDate) {
     const now = new Date();
     const diff = this.endDate.getTime() - now.getTime();
-    return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+    return Math.ceil(diff / (1000 * 60 * 60 * 24));
   }
-  return 0;
+  return null;
 });
 
 // Virtual for completion percentage
-amcSchema.virtual('completionPercentage').get(function() {
+amcSchema.virtual('completionPercentage').get(function(this: IAMCSchema) {
   if (this.scheduledVisits === 0) return 0;
   return Math.round((this.completedVisits / this.scheduledVisits) * 100);
 });
 
 // Generate unique contract number
-amcSchema.pre('save', async function(next) {
+amcSchema.pre('save', async function(this: IAMCSchema, next) {
   if (this.isNew && !this.contractNumber) {
     const year = new Date().getFullYear();
     
     // Find the last contract number for this year
-    const lastContract = await this.constructor.findOne({
+    const AMCModel = this.constructor as mongoose.Model<IAMCSchema>;
+    const lastContract = await AMCModel.findOne({
       contractNumber: { $regex: `^AMC-${year}` }
     }).sort({ contractNumber: -1 });
     
@@ -149,16 +179,16 @@ amcSchema.pre('save', async function(next) {
   next();
 });
 
-// Validate end date is after start date
-amcSchema.pre('save', function(next) {
+// Validate that end date is after start date
+amcSchema.pre('save', function(this: IAMCSchema, next) {
   if (this.startDate && this.endDate && this.endDate <= this.startDate) {
     throw new Error('End date must be after start date');
   }
   next();
 });
 
-// Auto-generate visit schedule when AMC is created
-amcSchema.pre('save', async function(next) {
+// Generate visit schedule when contract is created
+amcSchema.pre('save', function(this: IAMCSchema, next) {
   if (this.isNew && this.scheduledVisits > 0) {
     const contractDays = Math.ceil((this.endDate.getTime() - this.startDate.getTime()) / (1000 * 60 * 60 * 24));
     const intervalDays = Math.floor(contractDays / this.scheduledVisits);
@@ -170,85 +200,73 @@ amcSchema.pre('save', async function(next) {
       
       this.visitSchedule.push({
         scheduledDate: visitDate,
-        status: 'pending'
-      } as IVisitSchedule);
+        status: 'pending' as const
+      });
     }
     
-    // Set next visit date to first scheduled visit
+    // Set next visit date to first visit
     this.nextVisitDate = this.visitSchedule[0].scheduledDate;
   }
   next();
 });
 
-// Update status based on dates and completion
-amcSchema.pre('save', function(next) {
+// Auto-update status when contract expires
+amcSchema.pre('save', function(this: IAMCSchema, next) {
   const now = new Date();
-  
   if (this.endDate < now && this.status === AMCStatus.ACTIVE) {
     this.status = AMCStatus.EXPIRED;
   }
   
   // Update next visit date
-  const pendingVisit = this.visitSchedule.find(visit => visit.status === 'pending');
-  this.nextVisitDate = pendingVisit ? pendingVisit.scheduledDate : null;
+  const pendingVisit = this.visitSchedule.find((visit: any) => visit.status === 'pending');
+  this.nextVisitDate = pendingVisit ? pendingVisit.scheduledDate : undefined;
   
   next();
 });
 
-// Method to mark visit as completed
-amcSchema.methods.completeVisit = function(visitId: string, completionData: { completedDate: Date; assignedTo?: string; notes?: string }) {
-  const visit = this.visitSchedule.id(visitId);
+// Method to schedule next visit
+amcSchema.methods.scheduleNextVisit = function(this: IAMCSchema, visitDate: Date, assignedTo?: string) {
+  const nextVisit = {
+    scheduledDate: visitDate,
+    assignedTo: assignedTo ? new mongoose.Types.ObjectId(assignedTo) : undefined,
+    status: 'pending' as const
+  };
+  
+  this.visitSchedule.push(nextVisit);
+  this.nextVisitDate = visitDate;
+  
+  return this.save();
+};
+
+// Method to complete a visit
+amcSchema.methods.completeVisit = function(this: IAMCSchema, visitId: string, notes?: string) {
+  const visit = (this.visitSchedule as any).id(visitId);
   if (!visit) {
     throw new Error('Visit not found');
   }
   
-  if (visit.status === 'completed') {
-    throw new Error('Visit is already completed');
-  }
-  
+  visit.completedDate = new Date();
   visit.status = 'completed';
-  visit.completedDate = completionData.completedDate;
-  visit.assignedTo = completionData.assignedTo;
-  visit.notes = completionData.notes;
+  if (notes) visit.notes = notes;
   
   this.completedVisits += 1;
   
-  return this.save();
-};
-
-// Method to reschedule visit
-amcSchema.methods.rescheduleVisit = function(visitId: string, newDate: Date) {
-  const visit = this.visitSchedule.id(visitId);
-  if (!visit) {
-    throw new Error('Visit not found');
-  }
-  
-  if (visit.status === 'completed') {
-    throw new Error('Cannot reschedule completed visit');
-  }
-  
-  visit.scheduledDate = newDate;
+  // Update next visit date
+  const pendingVisit = this.visitSchedule.find((v: any) => v.status === 'pending');
+  this.nextVisitDate = pendingVisit ? pendingVisit.scheduledDate : undefined;
   
   return this.save();
 };
 
-// Static method to get expiring AMCs
-amcSchema.statics.getExpiringAMCs = async function(days: number = 30) {
-  const futureDate = new Date();
-  futureDate.setDate(futureDate.getDate() + days);
+// Static method to get expiring contracts
+amcSchema.statics.getExpiringContracts = async function(days: number = 30) {
+  const expiryDate = new Date();
+  expiryDate.setDate(expiryDate.getDate() + days);
   
   return this.find({
-    endDate: { $lte: futureDate, $gte: new Date() },
+    endDate: { $lte: expiryDate },
     status: AMCStatus.ACTIVE
   }).populate('customer').populate('products');
 };
 
-// Static method to get AMCs with pending visits
-amcSchema.statics.getAMCsWithPendingVisits = async function() {
-  return this.find({
-    status: AMCStatus.ACTIVE,
-    'visitSchedule.status': 'pending'
-  }).populate('customer').populate('products');
-};
-
-export const AMC = mongoose.model<IAMC>('AMC', amcSchema); 
+export const AMC = mongoose.model<IAMCSchema>('AMC', amcSchema); 

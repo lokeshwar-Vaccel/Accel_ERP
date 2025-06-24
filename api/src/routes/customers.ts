@@ -5,9 +5,24 @@ import {
   createCustomerSchema, 
   updateCustomerSchema, 
   customerQuerySchema,
-  addContactHistorySchema 
+  addContactHistorySchema,
+  updateContactHistorySchema,
+  convertLeadSchema,
+  scheduleFollowUpSchema
 } from '../schemas';
 import { UserRole } from '../types';
+import {
+  getCustomers,
+  getCustomer,
+  createCustomer,
+  updateCustomer,
+  deleteCustomer,
+  addContactHistory,
+  updateContactHistory,
+  deleteContactHistory,
+  convertLead,
+  scheduleFollowUp
+} from '../controllers/customerController';
 
 const router = Router();
 
@@ -16,56 +31,6 @@ router.use(protect);
 
 // Check module access for customer management
 router.use(checkModuleAccess('customer_management'));
-
-// Placeholder controller functions
-const getCustomers = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get customers endpoint',
-    data: [],
-    pagination: { page: 1, limit: 10, total: 0, pages: 0 }
-  });
-};
-
-const getCustomer = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get customer endpoint',
-    data: { id: req.params.id }
-  });
-};
-
-const createCustomer = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Create customer endpoint',
-    data: { ...req.body, id: 'temp-id' }
-  });
-};
-
-const updateCustomer = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Update customer endpoint',
-    data: { id: req.params.id, ...req.body }
-  });
-};
-
-const deleteCustomer = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Delete customer endpoint',
-    data: { id: req.params.id }
-  });
-};
-
-const addContactHistory = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Add contact history endpoint',
-    data: { customerId: req.params.id, ...req.body }
-  });
-};
 
 // Customer routes
 router.route('/')
@@ -82,6 +47,31 @@ router.post('/:id/contact-history',
   validate(addContactHistorySchema), 
   checkPermission('write'), 
   addContactHistory
+);
+
+router.put('/:id/contact-history/:contactId',
+  validate(updateContactHistorySchema),
+  checkPermission('write'),
+  updateContactHistory
+);
+
+router.delete('/:id/contact-history/:contactId',
+  checkPermission('delete'),
+  deleteContactHistory
+);
+
+// Lead conversion
+router.put('/:id/convert',
+  validate(convertLeadSchema),
+  checkPermission('write'),
+  convertLead
+);
+
+// Follow-up scheduling
+router.post('/:id/follow-up',
+  validate(scheduleFollowUpSchema),
+  checkPermission('write'),
+  scheduleFollowUp
 );
 
 export default router; 

@@ -9,6 +9,11 @@ import {
   updateStockLocationSchema
 } from '../schemas';
 import { UserRole } from '../types';
+import {
+  getStockLevels as getStock,
+  adjustStock,
+  transferStock
+} from '../controllers/stockController';
 
 const router = Router();
 
@@ -18,16 +23,7 @@ router.use(protect);
 // Check module access for inventory management
 router.use(checkModuleAccess('inventory_management'));
 
-// Placeholder controller functions
-const getStock = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get stock endpoint',
-    data: [],
-    pagination: { page: 1, limit: 10, total: 0, pages: 0 }
-  });
-};
-
+// Placeholder controller functions for stock locations (to be implemented)
 const getStockLocations = async (req: any, res: any) => {
   res.json({
     success: true,
@@ -52,29 +48,8 @@ const updateStockLocation = async (req: any, res: any) => {
   });
 };
 
-const adjustStock = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Stock adjustment endpoint',
-    data: { ...req.body, id: 'temp-adjustment-id' }
-  });
-};
-
-const transferStock = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Stock transfer endpoint',
-    data: { ...req.body, id: 'temp-transfer-id' }
-  });
-};
-
-const getLowStockItems = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get low stock items endpoint',
-    data: []
-  });
-};
+// Use getStock for low stock items too (it supports lowStock=true parameter)
+const getLowStockItems = getStock;
 
 // Stock routes
 router.get('/', validate(stockQuerySchema, 'query'), checkPermission('read'), getStock);

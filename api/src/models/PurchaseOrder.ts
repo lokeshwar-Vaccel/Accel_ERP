@@ -1,7 +1,29 @@
-import mongoose, { Schema } from 'mongoose';
-import { IPurchaseOrder, IPOItem } from '../types';
+import mongoose, { Schema, Document } from 'mongoose';
 
-const poItemSchema = new Schema<IPOItem>({
+// Purchase order item interface
+interface IPOItemSchema {
+  product: mongoose.Types.ObjectId;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+// Main purchase order interface
+interface IPurchaseOrderSchema extends Document {
+  poNumber: string;
+  supplier: string;
+  items: IPOItemSchema[];
+  totalAmount: number;
+  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  orderDate: Date;
+  expectedDeliveryDate?: Date;
+  actualDeliveryDate?: Date;
+  createdBy: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const poItemSchema = new Schema({
   product: {
     type: Schema.Types.ObjectId,
     ref: 'Product',
@@ -24,7 +46,7 @@ const poItemSchema = new Schema<IPOItem>({
   }
 }, { _id: false });
 
-const purchaseOrderSchema = new Schema<IPurchaseOrder>({
+const purchaseOrderSchema = new Schema({
   poNumber: {
     type: String,
     required: [true, 'PO number is required'],
@@ -42,7 +64,7 @@ const purchaseOrderSchema = new Schema<IPurchaseOrder>({
     type: [poItemSchema],
     required: [true, 'At least one item is required'],
     validate: {
-      validator: function(items: IPOItem[]) {
+      validator: function(items: IPOItemSchema[]) {
         return items && items.length > 0;
       },
       message: 'Purchase order must have at least one item'
@@ -89,7 +111,7 @@ purchaseOrderSchema.index({ orderDate: -1 });
 purchaseOrderSchema.index({ expectedDeliveryDate: 1 });
 
 // Virtual for delivery status
-purchaseOrderSchema.virtual('deliveryStatus').get(function() {
+purchaseOrderSchema.virtual('deliveryStatus').get(function(this: IPurchaseOrderSchema) {
   if (this.status === 'received') return 'delivered';
   if (this.status === 'cancelled') return 'cancelled';
   if (!this.expectedDeliveryDate) return 'no_delivery_date';
@@ -104,7 +126,7 @@ purchaseOrderSchema.virtual('deliveryStatus').get(function() {
 });
 
 // Virtual for days until delivery
-purchaseOrderSchema.virtual('daysUntilDelivery').get(function() {
+purchaseOrderSchema.virtual('daysUntilDelivery').get(function(this: IPurchaseOrderSchema) {
   if (!this.expectedDeliveryDate || this.status === 'received' || this.status === 'cancelled') {
     return null;
   }
@@ -117,13 +139,14 @@ purchaseOrderSchema.virtual('daysUntilDelivery').get(function() {
 });
 
 // Generate unique PO number
-purchaseOrderSchema.pre('save', async function(next) {
+purchaseOrderSchema.pre('save', async function(this: IPurchaseOrderSchema, next) {
   if (this.isNew && !this.poNumber) {
     const year = new Date().getFullYear();
     const month = String(new Date().getMonth() + 1).padStart(2, '0');
     
     // Find the last PO number for this month
-    const lastPO = await this.constructor.findOne({
+    const PurchaseOrderModel = this.constructor as mongoose.Model<IPurchaseOrderSchema>;
+    const lastPO = await PurchaseOrderModel.findOne({
       poNumber: { $regex: `^PO-${year}${month}` }
     }).sort({ poNumber: -1 });
     
@@ -139,12 +162,12 @@ purchaseOrderSchema.pre('save', async function(next) {
 });
 
 // Calculate total amount from items
-purchaseOrderSchema.pre('save', function(next) {
+purchaseOrderSchema.pre('save', function(this: IPurchaseOrderSchema, next) {
   if (this.items && this.items.length > 0) {
-    this.totalAmount = this.items.reduce((total, item) => total + item.totalPrice, 0);
+    this.totalAmount = this.items.reduce((total: number, item: IPOItemSchema) => total + item.totalPrice, 0);
     
     // Ensure each item's total price is correct
-    this.items.forEach(item => {
+    this.items.forEach((item: IPOItemSchema) => {
       item.totalPrice = item.quantity * item.unitPrice;
     });
   }
@@ -152,7 +175,7 @@ purchaseOrderSchema.pre('save', function(next) {
 });
 
 // Validate that delivery date is not in the past for new orders
-purchaseOrderSchema.pre('save', function(next) {
+purchaseOrderSchema.pre('save', function(this: IPurchaseOrderSchema, next) {
   if (this.expectedDeliveryDate && this.isNew) {
     const now = new Date();
     if (this.expectedDeliveryDate < now) {
@@ -163,7 +186,7 @@ purchaseOrderSchema.pre('save', function(next) {
 });
 
 // Set actual delivery date when status changes to received
-purchaseOrderSchema.pre('save', function(next) {
+purchaseOrderSchema.pre('save', function(this: IPurchaseOrderSchema, next) {
   if (this.isModified('status') && this.status === 'received' && !this.actualDeliveryDate) {
     this.actualDeliveryDate = new Date();
   }
@@ -171,26 +194,26 @@ purchaseOrderSchema.pre('save', function(next) {
 });
 
 // Method to add item to PO
-purchaseOrderSchema.methods.addItem = function(itemData: Omit<IPOItem, 'totalPrice'>) {
+purchaseOrderSchema.methods.addItem = function(this: IPurchaseOrderSchema, itemData: Omit<IPOItemSchema, 'totalPrice'>) {
   const totalPrice = itemData.quantity * itemData.unitPrice;
   
   this.items.push({
     ...itemData,
     totalPrice
-  } as IPOItem);
+  } as IPOItemSchema);
   
   return this.save();
 };
 
 // Method to remove item from PO
-purchaseOrderSchema.methods.removeItem = function(productId: string) {
-  this.items = this.items.filter(item => item.product.toString() !== productId);
+purchaseOrderSchema.methods.removeItem = function(this: IPurchaseOrderSchema, productId: string) {
+  this.items = this.items.filter((item: IPOItemSchema) => item.product.toString() !== productId);
   return this.save();
 };
 
 // Method to update item quantity
-purchaseOrderSchema.methods.updateItemQuantity = function(productId: string, newQuantity: number) {
-  const item = this.items.find(item => item.product.toString() === productId);
+purchaseOrderSchema.methods.updateItemQuantity = function(this: IPurchaseOrderSchema, productId: string, newQuantity: number) {
+  const item = this.items.find((item: IPOItemSchema) => item.product.toString() === productId);
   if (!item) {
     throw new Error('Item not found in purchase order');
   }
@@ -202,7 +225,7 @@ purchaseOrderSchema.methods.updateItemQuantity = function(productId: string, new
 };
 
 // Method to confirm PO
-purchaseOrderSchema.methods.confirm = function() {
+purchaseOrderSchema.methods.confirm = function(this: IPurchaseOrderSchema) {
   if (this.status !== 'sent') {
     throw new Error('Only sent purchase orders can be confirmed');
   }
@@ -212,7 +235,7 @@ purchaseOrderSchema.methods.confirm = function() {
 };
 
 // Method to receive PO
-purchaseOrderSchema.methods.receive = function() {
+purchaseOrderSchema.methods.receive = function(this: IPurchaseOrderSchema) {
   if (this.status !== 'confirmed') {
     throw new Error('Only confirmed purchase orders can be received');
   }
@@ -238,4 +261,4 @@ purchaseOrderSchema.statics.getPOsByStatus = async function(status: string) {
   return this.find({ status }).populate('items.product').populate('createdBy');
 };
 
-export const PurchaseOrder = mongoose.model<IPurchaseOrder>('PurchaseOrder', purchaseOrderSchema); 
+export const PurchaseOrder = mongoose.model<IPurchaseOrderSchema>('PurchaseOrder', purchaseOrderSchema); 
