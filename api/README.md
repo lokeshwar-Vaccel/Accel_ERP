@@ -37,15 +37,37 @@ A comprehensive Enterprise Resource Planning (ERP) system for Sun Power Services
    - Performance tracking
 
 6. **Reports & Analytics**
-   - Ticket TAT reports
-   - Inventory valuation
-   - Revenue tracking
-   - Performance metrics
+   - Service ticket analytics with SLA compliance
+   - Inventory reports with low stock alerts
+   - Revenue analysis (AMC vs Purchase Orders)
+   - Customer conversion funnel analytics
+   - Performance metrics (individual & team)
+   - Custom report builder with filtering
+   - Automated report scheduling
+   - Export functionality (JSON, CSV, PDF ready)
 
 7. **Admin Settings & Configuration**
-   - Master data management
-   - System configurations
-   - Data import/export capabilities
+   - System settings management (General, Email, SMS, WhatsApp)
+   - Email template management with variables
+   - Business rules configuration (SLA hours, stock thresholds)
+   - Communication provider settings
+   - System monitoring and information
+
+8. **File Management**
+   - Document upload/download with security
+   - Digital signature capture and storage
+   - File categorization and tagging
+   - Multi-format support (images, PDFs, office docs)
+   - Storage statistics and analytics
+   - Related entity linking
+
+9. **Communication System**
+   - Email notifications with templates
+   - SMS messaging integration
+   - WhatsApp Business API support
+   - Bulk messaging capabilities
+   - Message status tracking and delivery confirmations
+   - Communication history and analytics
 
 ### User Roles
 
@@ -62,11 +84,14 @@ A comprehensive Enterprise Resource Planning (ERP) system for Sun Power Services
 - **Framework**: Express.js
 - **Database**: MongoDB with Mongoose ODM
 - **Authentication**: JWT (JSON Web Tokens)
-- **Validation**: Joi
-- **Security**: Helmet, CORS, Rate Limiting
-- **File Upload**: Multer
-- **Email**: Nodemailer
-- **Scheduling**: node-cron
+- **Validation**: Joi with comprehensive schemas
+- **Security**: Helmet, CORS, Rate Limiting, JWT authentication
+- **File Upload**: Multer with file type validation and size limits
+- **Email**: Nodemailer (ready for SMTP configuration)
+- **SMS**: Integration ready (Twilio, MSG91, etc.)
+- **WhatsApp**: Business API integration ready
+- **Scheduling**: node-cron (ready for automated reports and notifications)
+- **Data Export**: Built-in JSON/CSV export capabilities
 
 ## Getting Started
 
@@ -170,6 +195,84 @@ Authorization: Bearer <your-jwt-token>
 - `PUT /stock/:productId/:locationId` - Update stock
 - `POST /stock/transfer` - Transfer stock between locations
 
+#### Service Management
+- `GET /services` - Get all service tickets
+- `POST /services` - Create new service ticket
+- `GET /services/:id` - Get service ticket by ID
+- `PUT /services/:id` - Update service ticket
+- `DELETE /services/:id` - Delete service ticket
+- `POST /services/:id/assign` - Assign technician to ticket
+- `PUT /services/:id/status` - Update ticket status
+- `POST /services/:id/parts` - Add parts usage
+- `POST /services/:id/report` - Submit service report
+
+#### AMC Management
+- `GET /amc` - Get all AMC contracts
+- `POST /amc` - Create new AMC contract
+- `GET /amc/:id` - Get AMC contract by ID
+- `PUT /amc/:id` - Update AMC contract
+- `DELETE /amc/:id` - Delete AMC contract
+- `POST /amc/:id/visit` - Schedule/record visit
+- `GET /amc/:id/visits` - Get contract visit history
+- `PUT /amc/:id/renew` - Renew AMC contract
+
+#### Purchase Orders
+- `GET /purchase-orders` - Get all purchase orders
+- `POST /purchase-orders` - Create new purchase order
+- `GET /purchase-orders/:id` - Get purchase order by ID
+- `PUT /purchase-orders/:id` - Update purchase order
+- `DELETE /purchase-orders/:id` - Delete purchase order
+- `PUT /purchase-orders/:id/status` - Update PO status
+- `POST /purchase-orders/:id/receive` - Record item receipt
+
+#### Reports & Analytics
+- `POST /reports/service-tickets` - Generate service tickets report
+- `POST /reports/inventory` - Generate inventory report
+- `POST /reports/revenue` - Generate revenue report
+- `POST /reports/customers` - Generate customer analytics report
+- `POST /reports/performance` - Generate performance report
+- `POST /reports/custom` - Generate custom report
+- `POST /reports/schedule` - Schedule automated reports
+- `GET /reports/schedule` - Get scheduled reports
+- `POST /reports/export` - Export report data
+- `GET /reports/history` - Get report generation history
+
+#### File Management
+- `POST /files/upload` - Upload single file
+- `POST /files/upload-multiple` - Upload multiple files
+- `POST /files/signature` - Upload digital signature
+- `GET /files/:fileId/download` - Download file
+- `GET /files/:fileId` - Get file metadata
+- `GET /files` - List files with filters
+- `DELETE /files/:fileId` - Delete file
+- `GET /files/stats/overview` - Get file statistics
+
+#### Admin Settings & Configuration
+- `GET /admin/settings` - Get all system settings
+- `GET /admin/settings/:key` - Get specific setting
+- `PUT /admin/settings/:key` - Update system setting
+- `GET /admin/email-templates` - Get email templates
+- `POST /admin/email-templates` - Create email template
+- `PUT /admin/email-templates/:id` - Update email template
+- `DELETE /admin/email-templates/:id` - Delete email template
+- `POST /admin/test-email` - Test email configuration
+- `GET /admin/system-info` - Get system information
+
+#### Communications
+- `POST /communications/email/send` - Send email
+- `POST /communications/sms/send` - Send SMS
+- `POST /communications/whatsapp/send` - Send WhatsApp message
+- `GET /communications/:type/:messageId/status` - Get message status
+- `GET /communications/history` - Get message history
+- `POST /communications/bulk-send` - Send bulk notifications
+- `GET /communications/stats` - Get communication statistics
+
+#### Dashboard
+- `GET /dashboard/overview` - Get dashboard overview statistics
+- `GET /dashboard/recent-activities` - Get recent activities
+- `GET /dashboard/performance-metrics` - Get performance metrics
+- `GET /dashboard/alerts` - Get system alerts
+
 ### Response Format
 
 All API responses follow this structure:
@@ -217,16 +320,44 @@ Error responses include:
 src/
 ├── config/           # Configuration files
 ├── controllers/      # Route controllers
+│   ├── authController.ts
+│   ├── userController.ts
+│   ├── customerController.ts
+│   ├── productController.ts
+│   ├── stockController.ts
+│   ├── serviceController.ts
+│   ├── amcController.ts
+│   ├── purchaseOrderController.ts
+│   ├── dashboardController.ts
+│   ├── reportController.ts        # ✨ NEW
+│   ├── fileController.ts          # ✨ NEW
+│   ├── adminController.ts         # ✨ NEW
+│   └── communicationController.ts # ✨ NEW
 ├── database/         # Database connection
 ├── entities/         # Business entities
 ├── errors/           # Error handling
 ├── middleware/       # Express middleware
 ├── models/           # Mongoose models
 ├── routes/           # API routes
+│   ├── auth.ts
+│   ├── users.ts
+│   ├── customers.ts
+│   ├── products.ts
+│   ├── stock.ts
+│   ├── services.ts
+│   ├── amc.ts
+│   ├── purchaseOrders.ts
+│   ├── dashboard.ts
+│   ├── reports.ts         # ✨ NEW
+│   ├── files.ts           # ✨ NEW
+│   ├── admin.ts           # ✨ NEW
+│   ├── communications.ts  # ✨ NEW
+│   └── index.ts
 ├── schemas/          # Validation schemas
 ├── services/         # Business logic
 ├── types/            # TypeScript types
 ├── utils/            # Utility functions
+├── uploads/          # File storage directory # ✨ NEW
 └── index.ts          # Application entry point
 ```
 
@@ -271,21 +402,69 @@ Required environment variables:
 
 Optional environment variables:
 
+**Email Configuration:**
 - `SMTP_HOST` - Email server host
+- `SMTP_PORT` - Email server port (default: 587)
 - `SMTP_USER` - Email username
 - `SMTP_PASS` - Email password
-- `RATE_LIMIT_WINDOW_MS` - Rate limiting window
-- `RATE_LIMIT_MAX_REQUESTS` - Max requests per window
+- `EMAIL_FROM_NAME` - Sender name for emails
+- `EMAIL_FROM_ADDRESS` - Sender email address
+
+**SMS Configuration:**
+- `SMS_PROVIDER` - SMS provider (twilio, msg91, etc.)
+- `SMS_API_KEY` - SMS service API key
+- `SMS_SENDER_ID` - SMS sender ID
+
+**WhatsApp Configuration:**
+- `WHATSAPP_API_URL` - WhatsApp Business API URL
+- `WHATSAPP_ACCESS_TOKEN` - WhatsApp access token
+- `WHATSAPP_PHONE_NUMBER_ID` - WhatsApp phone number ID
+
+**Security & Performance:**
+- `RATE_LIMIT_WINDOW_MS` - Rate limiting window (default: 15 minutes)
+- `RATE_LIMIT_MAX_REQUESTS` - Max requests per window (default: 100)
+- `FILE_UPLOAD_MAX_SIZE` - Maximum file upload size (default: 10MB)
+- `ALLOWED_FILE_TYPES` - Comma-separated list of allowed MIME types
+
+## Advanced Features
+
+### 📊 **Comprehensive Reporting System**
+- **Real-time Analytics**: Service tickets, inventory, revenue, and performance
+- **Custom Report Builder**: Flexible filtering, grouping, and data visualization
+- **Automated Scheduling**: Set up recurring reports with email delivery
+- **Multiple Export Formats**: JSON, CSV, PDF-ready data structures
+- **SLA Compliance Tracking**: Monitor response times and performance metrics
+
+### 📁 **File Management System**
+- **Secure Upload/Download**: Multi-format support with access controls
+- **Digital Signatures**: Capture and store customer signatures
+- **Document Organization**: Categorization, tagging, and entity linking
+- **Storage Analytics**: Track usage, file types, and storage statistics
+
+### 📱 **Multi-Channel Communication**
+- **Email Notifications**: Template-based with variable substitution
+- **SMS Integration**: Ready for Twilio, MSG91, and other providers
+- **WhatsApp Business**: Automated messaging and notifications
+- **Bulk Operations**: Send notifications to multiple recipients
+- **Delivery Tracking**: Monitor message status and delivery confirmations
+
+### ⚙️ **Advanced Admin Controls**
+- **System Configuration**: Centralized settings management
+- **Email Templates**: Rich template editor with dynamic variables
+- **Business Rules**: Configurable SLA hours, stock thresholds, reminders
+- **System Monitoring**: Real-time system information and health checks
 
 ## Security Features
 
 - **JWT Authentication** - Secure token-based authentication
-- **Role-Based Access Control** - Granular permissions
+- **Role-Based Access Control** - Granular permissions by module
+- **File Security** - Access controls and MIME type validation
 - **Rate Limiting** - Protection against abuse
 - **CORS Configuration** - Cross-origin resource sharing
 - **Helmet Security** - Security headers
 - **Input Validation** - Request validation with Joi
 - **Error Handling** - Secure error responses
+- **Data Sanitization** - SQL injection and XSS protection
 
 ## Contributing
 

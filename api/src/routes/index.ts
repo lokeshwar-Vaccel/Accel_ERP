@@ -9,6 +9,9 @@ import amcRoutes from './amc';
 import purchaseOrderRoutes from './purchaseOrders';
 import reportRoutes from './reports';
 import dashboardRoutes from './dashboard';
+import fileRoutes from './files';
+import adminRoutes from './admin';
+import communicationRoutes from './communications';
 
 const router = Router();
 
@@ -28,7 +31,10 @@ router.get('/', (req, res) => {
       amc: '/amc',
       purchaseOrders: '/purchase-orders',
       reports: '/reports',
-      dashboard: '/dashboard'
+      dashboard: '/dashboard',
+      files: '/files',
+      admin: '/admin',
+      communications: '/communications'
     }
   });
 });
@@ -44,5 +50,8 @@ router.use('/amc', amcRoutes);
 router.use('/purchase-orders', purchaseOrderRoutes);
 router.use('/reports', reportRoutes);
 router.use('/dashboard', dashboardRoutes);
+router.use('/files', fileRoutes);
+router.use('/admin', adminRoutes);
+router.use('/communications', communicationRoutes);
 
 export default router; 
