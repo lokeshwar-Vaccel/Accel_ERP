@@ -288,7 +288,7 @@ const ProductManagement: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="pl-2 pr-6 py-6 space-y-6">
       <PageHeader 
         title="Product Management"
         subtitle="Manage your product catalog and inventory"

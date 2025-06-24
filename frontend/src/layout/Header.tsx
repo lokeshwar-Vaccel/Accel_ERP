@@ -71,27 +71,27 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
   }, []);
 
   return (
-    <header className="h-20 px-6 py-4">
+    <header className="h-12 px-4 py-2">
       <div className="flex items-center justify-between">
         {/* Left: Menu + Breadcrumb */}
         <div className="flex items-center flex-1">
           <button
             onClick={onMenuToggle}
-            className="lg:hidden p-2 hover:bg-gray-700 rounded-xl transition-all duration-200 hover:scale-105 mr-4"
+            className="lg:hidden p-1 hover:bg-gray-700 rounded-md transition-all duration-200 hover:scale-105 mr-2"
           >
-            <Menu className="w-5 h-5 text-white" />
+            <Menu className="w-3.5 h-3.5 text-white" />
           </button>
           
-          {/* Breadcrumb with larger text */}
+          {/* Breadcrumb with smaller text */}
           <nav aria-label="Breadcrumb">
-            <ol className="inline-flex items-center space-x-2 md:space-x-3 rtl:space-x-reverse">
+            <ol className="inline-flex items-center space-x-1 md:space-x-2 rtl:space-x-reverse">
               <li className="inline-flex items-center">
                 <Link
                   to="/"
-                  className="inline-flex items-center text-base font-medium text-gray-300 hover:text-white transition-colors duration-200"
+                  className="inline-flex items-center text-sm font-medium text-gray-300 hover:text-white transition-colors duration-200"
                 >
                   <svg
-                    className="w-4 h-4 mr-2"
+                    className="w-3 h-3 mr-1.5"
                     aria-hidden="true"
                     xmlns="http://www.w3.org/2000/svg"
                     fill="currentColor"
@@ -106,7 +106,7 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
                 <li key={item.path} aria-current={index === paths.length - 1 ? 'page' : undefined}>
                   <div className="flex items-center">
                     <svg
-                      className="rtl:rotate-180 block w-4 h-4 mx-2 text-gray-500"
+                      className="rtl:rotate-180 block w-3 h-3 mx-1.5 text-gray-500"
                       aria-hidden="true"
                       xmlns="http://www.w3.org/2000/svg"
                       fill="none"
@@ -120,13 +120,13 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
                       />
                     </svg>
                     {index === paths.length - 1 ? (
-                      <span className="text-base font-medium text-white">
+                      <span className="text-sm font-medium text-white">
                         {item.name}
                       </span>
                     ) : (
                       <Link
                         to={item.path}
-                        className="text-base font-medium text-gray-300 hover:text-white transition-colors duration-200"
+                        className="text-sm font-medium text-gray-300 hover:text-white transition-colors duration-200"
                       >
                         {item.name}
                       </Link>
@@ -138,45 +138,45 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
           </nav>
         </div>
 
-        {/* Center: Search Bar - Made Wider */}
+        {/* Center: Search Bar - Ultra Compact */}
         <div className="flex-1 flex justify-center">
-          <div className="hidden md:flex items-center space-x-2 bg-gray-700/20 rounded-xl px-3 py-2 border border-white/5 hover:bg-gray-700/30 transition-all duration-300 max-w-2xl w-full">
-            <Search className="w-4 h-4 text-gray-400" />
+          <div className="hidden md:flex items-center space-x-1.5 bg-gray-700/20 rounded-md px-2 py-1 border border-white/5 hover:bg-gray-700/30 transition-all duration-300 max-w-md w-full">
+            <Search className="w-3 h-3 text-gray-400" />
             <input
               type="text"
               placeholder="Search..."
-              className="bg-transparent outline-none text-sm flex-1 placeholder-gray-500 text-white"
+              className="bg-transparent outline-none text-xs flex-1 placeholder-gray-500 text-white"
             />
-            <kbd className="px-1.5 py-0.5 bg-gray-800/50 rounded text-xs text-gray-400 border border-gray-600/30">⌘K</kbd>
+            <kbd className="px-1 py-0.5 bg-gray-800/50 rounded text-xs text-gray-400 border border-gray-600/30">⌘K</kbd>
           </div>
         </div>
 
         {/* Right: User Dropdown + Notifications */}
-        <div className="flex items-center justify-end flex-1 space-x-4">
+        <div className="flex items-center justify-end flex-1 space-x-2">
           {/* User Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setIsUserDropdownOpen(!isUserDropdownOpen)}
-              className="flex items-center space-x-3 p-2 hover:bg-gray-700/50 rounded-xl transition-all duration-300 group"
+              className="flex items-center space-x-1.5 p-1 hover:bg-gray-700/50 rounded-md transition-all duration-300 group"
             >
               <div className="relative">
-                <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
+                <div className="w-6 h-6 bg-gradient-to-br from-blue-400 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
                   <span className="text-white font-semibold text-xs">{getUserInitials()}</span>
                 </div>
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-400 rounded-full border-2 border-slate-900"></div>
+                <div className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-green-400 rounded-full border border-slate-900"></div>
               </div>
               <div className="hidden lg:block text-left">
-                <p className="font-semibold text-white text-sm">{getUserDisplayName()}</p>
+                <p className="font-semibold text-white text-xs">{getUserDisplayName()}</p>
                 <p className="text-xs text-gray-400">{user?.role || 'Admin'}</p>
               </div>
-              <ChevronDown className={`w-4 h-4 text-gray-400 group-hover:text-white transition-all duration-300 ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-3 h-3 text-gray-400 group-hover:text-white transition-all duration-300 ${isUserDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Dropdown Menu */}
             {isUserDropdownOpen && (
-              <div className="absolute right-0 top-full mt-2 w-48 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 py-2">
-                <div className="px-4 py-3 border-b border-white/10">
-                  <p className="font-semibold text-white text-sm">{getUserDisplayName()}</p>
+              <div className="absolute right-0 top-full mt-2 w-44 bg-slate-800 border border-white/10 rounded-lg shadow-xl z-50 py-1.5">
+                <div className="px-3 py-2 border-b border-white/10">
+                  <p className="font-semibold text-white text-xs">{getUserDisplayName()}</p>
                   <p className="text-xs text-gray-400">{user?.email}</p>
                   <p className="text-xs text-gray-500">{user?.role || 'Admin'}</p>
                 </div>
@@ -184,12 +184,12 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
                 <button
                   onClick={handleLogout}
                   disabled={isLoading || isLoggingOut}
-                  className="w-full flex items-center space-x-3 px-4 py-3 text-gray-300 hover:text-white hover:bg-red-500/20 transition-all duration-300 group disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full flex items-center space-x-2 px-3 py-2 text-gray-300 hover:text-white hover:bg-red-500/20 transition-all duration-300 group disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <div className="p-1 rounded-lg bg-red-500/20 group-hover:bg-red-500/30 transition-colors duration-300">
-                    <LogOut className="w-4 h-4" />
+                  <div className="p-0.5 rounded bg-red-500/20 group-hover:bg-red-500/30 transition-colors duration-300">
+                    <LogOut className="w-3 h-3" />
                   </div>
-                  <span className="font-medium text-sm">
+                  <span className="font-medium text-xs">
                     {isLoading || isLoggingOut ? 'Signing out...' : 'Logout'}
                   </span>
                 </button>
@@ -198,9 +198,9 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
            </div>
 
           {/* Notifications */}
-          <button className="relative p-3 hover:bg-gray-700/50 rounded-xl transition-all duration-300 group">
-            <Bell className="w-5 h-5 text-gray-300 group-hover:text-white transition-colors duration-300" />
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-gradient-to-r from-orange-500 to-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold shadow-lg animate-pulse">
+          <button className="relative p-1.5 hover:bg-gray-700/50 rounded-md transition-all duration-300 group">
+            <Bell className="w-3.5 h-3.5 text-gray-300 group-hover:text-white transition-colors duration-300" />
+            <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-gradient-to-r from-orange-500 to-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold shadow-lg animate-pulse">
               3
             </span>
           </button>

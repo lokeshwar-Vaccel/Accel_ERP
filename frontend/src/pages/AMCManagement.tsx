@@ -1082,7 +1082,7 @@ const AMCManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="pl-2 pr-6 py-6 space-y-6">
               {/* Contract Overview */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Customer Information */}

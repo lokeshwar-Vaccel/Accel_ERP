@@ -50,13 +50,13 @@ function Layout({ children }: { children: React.ReactNode }) {
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header
           onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
           pathSegments={getBreadcrumbs(location.pathname)}
         />
 
-        <main className="flex-1 overflow-y-auto m-4">
+        <main className="flex-1 overflow-y-auto p-2">
           <div className="h-full overflow-y-auto rounded-2xl bg-white shadow-lg border border-gray-200 p-2">
             {children}
           </div>
