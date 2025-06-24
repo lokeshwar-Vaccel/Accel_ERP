@@ -28,7 +28,7 @@ const sampleUsers = [
     email: 'admin@sunpowerservices.com',
     password: 'admin123',
     role: UserRole.SUPER_ADMIN,
-    isActive: true,
+    status: 'active',
     moduleAccess: ['user_management', 'customer_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics', 'admin_settings']
   },
   {
@@ -37,7 +37,7 @@ const sampleUsers = [
     email: 'john.manager@sunpowerservices.com',
     password: 'manager123',
     role: UserRole.MANAGER,
-    isActive: true,
+    status: 'active',
     moduleAccess: ['customer_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics']
   },
   {
@@ -46,7 +46,7 @@ const sampleUsers = [
     email: 'sarah.tech@sunpowerservices.com',
     password: 'tech123',
     role: UserRole.VIEWER,
-    isActive: true,
+    status: 'active',
     moduleAccess: ['service_management', 'inventory_management']
   },
   {
@@ -55,7 +55,7 @@ const sampleUsers = [
     email: 'mike.sales@sunpowerservices.com',
     password: 'sales123',
     role: UserRole.VIEWER,
-    isActive: true,
+    status: 'active',
     moduleAccess: ['customer_management', 'amc_management', 'reports_analytics']
   },
   {
@@ -64,7 +64,7 @@ const sampleUsers = [
     email: 'lisa.hr@sunpowerservices.com',
     password: 'hr123',
     role: UserRole.HR,
-    isActive: true,
+    status: 'active',
     moduleAccess: ['user_management', 'inventory_management', 'reports_analytics']
   }
 ];

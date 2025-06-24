@@ -19,7 +19,7 @@ export const getDashboardOverview = async (
 ): Promise<void> => {
   try {
     // Get basic counts
-    const totalUsers = await User.countDocuments({ status: 'active' });
+    const totalUsers = await User.countDocuments();
     const totalCustomers = await Customer.countDocuments();
     const totalProducts = await Product.countDocuments({ isActive: true });
     const totalTickets = await ServiceTicket.countDocuments();
@@ -45,10 +45,9 @@ export const getDashboardOverview = async (
       status: AMCStatus.ACTIVE
     });
 
-    // Get low stock items
-    const lowStockItems = await Stock.countDocuments({
-      $expr: { $lte: ['$availableQuantity', 5] }
-    });
+    // Get low stock items using the proper method that compares with minStockLevel
+    const lowStockItemsArray = await (Stock as any).getLowStockItems();
+    const lowStockItems = lowStockItemsArray.length;
 
     // Get purchase order metrics
     const pendingPOs = await PurchaseOrder.countDocuments({ status: 'draft' });
@@ -90,6 +89,7 @@ export const getDashboardOverview = async (
         openTickets,
         inProgressTickets,
         overdueTickets,
+        pendingTickets: openTickets + inProgressTickets, // Combined pending tickets for frontend
         newLeads,
         qualifiedLeads,
         activeAMCs,
@@ -101,6 +101,7 @@ export const getDashboardOverview = async (
         // Financial metrics
         totalAMCValue: totalAMCValue[0]?.total || 0,
         totalPOValue: totalPOValue[0]?.total || 0,
+        monthlyRevenue: totalAMCValue[0]?.total || 0, // Use AMC value as monthly revenue for now
 
         // Recent activity
         recentTickets,
