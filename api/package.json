@@ -10,7 +10,8 @@
     "test": "jest",
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
-    "setup": "ts-node src/scripts/setup.ts"
+    "setup": "ts-node src/scripts/setup.ts",
+    "seed": "ts-node --transpile-only src/scripts/seed.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

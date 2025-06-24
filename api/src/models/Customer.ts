@@ -1,7 +1,7 @@
-import mongoose, { Schema } from 'mongoose';
+import mongoose, { Schema, Types } from 'mongoose';
 import { ICustomer, IContactHistory, CustomerType, LeadStatus } from '../types';
 
-const contactHistorySchema = new Schema<IContactHistory>({
+const contactHistorySchema = new Schema({
   type: {
     type: String,
     enum: ['call', 'meeting', 'email', 'whatsapp'],
@@ -26,7 +26,7 @@ const contactHistorySchema = new Schema<IContactHistory>({
   }
 }, { timestamps: true });
 
-const customerSchema = new Schema<ICustomer>({
+const customerSchema = new Schema({
   name: {
     type: String,
     required: [true, 'Customer name is required'],
@@ -93,21 +93,21 @@ customerSchema.index({ customerType: 1 });
 customerSchema.index({ assignedTo: 1 });
 
 // Virtual for latest contact
-customerSchema.virtual('latestContact').get(function() {
+customerSchema.virtual('latestContact').get(function(this: any) {
   if (this.contactHistory && this.contactHistory.length > 0) {
-    return this.contactHistory.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
+    return this.contactHistory.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
   }
   return null;
 });
 
 // Method to add contact history
-customerSchema.methods.addContact = function(contactData: Omit<IContactHistory, 'createdBy'> & { createdBy: string }) {
+customerSchema.methods.addContact = function(this: any, contactData: any) {
   this.contactHistory.push(contactData);
   return this.save();
 };
 
 // Pre-save middleware to update follow-up dates
-customerSchema.pre('save', function(next) {
+customerSchema.pre('save', function(this: any, next) {
   if (this.contactHistory && this.contactHistory.length > 0) {
     const latestContact = this.contactHistory[this.contactHistory.length - 1];
     if (latestContact.followUpDate && new Date(latestContact.followUpDate) > new Date()) {

@@ -2,7 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 import { IStock, IStockLocation } from '../types';
 
 // Stock Location Schema
-const stockLocationSchema = new Schema<IStockLocation>({
+const stockLocationSchema = new Schema({
   name: {
     type: String,
     required: [true, 'Location name is required'],
@@ -36,7 +36,7 @@ const stockLocationSchema = new Schema<IStockLocation>({
 });
 
 // Stock Schema
-const stockSchema = new Schema<IStock>({
+const stockSchema = new Schema({
   product: {
     type: Schema.Types.ObjectId,
     ref: 'Product',
@@ -77,7 +77,7 @@ stockSchema.index({ product: 1 });
 stockSchema.index({ location: 1 });
 
 // Pre-save middleware to calculate available quantity
-stockSchema.pre('save', function(next) {
+stockSchema.pre('save', function(this: any, next) {
   this.availableQuantity = this.quantity - this.reservedQuantity;
   this.lastUpdated = new Date();
   
@@ -92,7 +92,7 @@ stockSchema.pre('save', function(next) {
 // Static method to get total stock for a product across all locations
 stockSchema.statics.getTotalStock = async function(productId: string) {
   const stocks = await this.find({ product: productId });
-  return stocks.reduce((total, stock) => ({
+  return stocks.reduce((total: any, stock: any) => ({
     totalQuantity: total.totalQuantity + stock.quantity,
     totalReserved: total.totalReserved + stock.reservedQuantity,
     totalAvailable: total.totalAvailable + stock.availableQuantity
