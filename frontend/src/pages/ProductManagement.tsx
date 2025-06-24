@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Package, DollarSign, TrendingDown, TrendingUp, X } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Package, DollarSign, TrendingDown, TrendingUp, X, ChevronDown } from 'lucide-react';
 import { apiClient } from '../utils/api';
 
 interface Product {
@@ -37,6 +37,10 @@ const ProductManagement: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   
+  // Custom dropdown states
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  
   // Modal states
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -60,6 +64,20 @@ const ProductManagement: React.FC = () => {
 
   useEffect(() => {
     fetchProducts();
+  }, []);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.dropdown-container')) {
+        setShowCategoryDropdown(false);
+        setShowStatusDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   // Modal handlers
@@ -243,6 +261,31 @@ const ProductManagement: React.FC = () => {
 
   const categories = Array.isArray(products) ? [...new Set(products.map(p => p.category))] : [];
 
+  // Category options with labels
+  const categoryOptions = [
+    { value: 'all', label: 'All Categories' },
+    { value: 'genset', label: 'Generator Set' },
+    { value: 'spare_part', label: 'Spare Part' },
+    { value: 'accessory', label: 'Accessory' }
+  ];
+
+  // Status options with labels
+  const statusOptions = [
+    { value: 'all', label: 'All Status' },
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' }
+  ];
+
+  const getCategoryLabel = (value: string) => {
+    const option = categoryOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Categories';
+  };
+
+  const getStatusLabel = (value: string) => {
+    const option = statusOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Status';
+  };
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
@@ -316,26 +359,70 @@ const ProductManagement: React.FC = () => {
               className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          <select
-            value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Categories</option>
-            {categories.map(category => (
-              <option key={category} value={category}>{category}</option>
-            ))}
-          </select>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Status</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-            <option value="discontinued">Discontinued</option>
-          </select>
+          
+          {/* Category Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowCategoryDropdown(!showCategoryDropdown);
+                setShowStatusDropdown(false);
+              }}
+              className="flex items-center justify-between w-full md:w-48 px-4 py-2 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+            >
+              <span className="text-gray-700">{getCategoryLabel(categoryFilter)}</span>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showCategoryDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                {categoryOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setCategoryFilter(option.value);
+                      setShowCategoryDropdown(false);
+                    }}
+                    className={`w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors ${
+                      categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* Status Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowStatusDropdown(!showStatusDropdown);
+                setShowCategoryDropdown(false);
+              }}
+              className="flex items-center justify-between w-full md:w-40 px-4 py-2 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+            >
+              <span className="text-gray-700">{getStatusLabel(statusFilter)}</span>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showStatusDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setStatusFilter(option.value);
+                      setShowStatusDropdown(false);
+                    }}
+                    className={`w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors ${
+                      statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
