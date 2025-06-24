@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   LayoutGrid,
   Users,
@@ -11,6 +11,9 @@ import {
   Zap,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState, AppDispatch } from '../store';
+import { logout, forceLogout } from '../redux/auth/authSlice';
 
 interface SidebarProps {
   currentPanel: string;
@@ -71,6 +74,37 @@ export default function Sidebar({
   onToggle,
 }: SidebarProps) {
   const navigate = useNavigate();
+  const dispatch = useDispatch<AppDispatch>();
+  const { user, isLoading } = useSelector((state: RootState) => state.auth);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    try {
+      // Try the normal logout process first
+      await dispatch(logout()).unwrap();
+    } catch (error) {
+      // If normal logout fails, force logout locally
+      console.warn('Normal logout failed, forcing local logout:', error);
+      dispatch(forceLogout());
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  const getUserInitials = () => {
+    if (user?.firstName && user?.lastName) {
+      return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+    }
+    return user?.email?.[0]?.toUpperCase() || 'A';
+  };
+
+  const getUserDisplayName = () => {
+    if (user?.firstName && user?.lastName) {
+      return `${user.firstName} ${user.lastName}`;
+    }
+    return user?.email || 'Admin User';
+  };
 
   return (
     <>
@@ -179,21 +213,26 @@ export default function Sidebar({
           <div className="flex items-center space-x-4 mb-4 p-3 bg-white/5 rounded-xl backdrop-blur-sm">
             <div className="relative">
               <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
-                <User className="w-6 h-6 text-white" />
+                <span className="text-white font-semibold text-sm">{getUserInitials()}</span>
               </div>
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-slate-900"></div>
             </div>
             <div>
-              <p className="font-semibold text-white">Admin User</p>
-              <p className="text-xs text-gray-400">admin@sunpower.com</p>
+              <p className="font-semibold text-white">{getUserDisplayName()}</p>
             </div>
           </div>
 
-          <button className="w-full flex items-center space-x-3 px-4 py-3 text-gray-300 hover:text-white hover:bg-red-500/20 rounded-xl transition-all duration-300 group">
+          <button 
+            onClick={handleLogout}
+            disabled={isLoading || isLoggingOut}
+            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-300 hover:text-white hover:bg-red-500/20 rounded-xl transition-all duration-300 group disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             <div className="p-1 rounded-lg bg-red-500/20 group-hover:bg-red-500/30 transition-colors duration-300">
               <LogOut className="w-4 h-4" />
             </div>
-            <span className="font-medium">Logout</span>
+            <span className="font-medium">
+              {isLoading || isLoggingOut ? 'Signing out...' : 'Logout'}
+            </span>
           </button>
         </div>
       </div>

@@ -1,21 +1,54 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, Mail, Lock, AlertCircle } from 'lucide-react';
 import { Button } from 'components/ui/Botton';
 import { RootState, AppDispatch } from '../../../store';
-import { login } from 'redux/auth/authSlice';
+import { login, clearError } from '../../../redux/auth/authSlice';
 
 export const LoginForm: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { isLoading, error } = useSelector((state: any) => state.auth);
+  const navigate = useNavigate();
+  const { isLoading, error, isAuthenticated } = useSelector((state: RootState) => state.auth);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  // Redirect to dashboard if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
+
+  // Clear error when component unmounts or when user starts typing
+  useEffect(() => {
+    return () => {
+      dispatch(clearError());
+    };
+  }, [dispatch]);
+
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        dispatch(clearError());
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, dispatch]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    dispatch(login({ email, password }));
+    if (email && password) {
+      dispatch(login({ email, password }));
+    }
+  };
+
+  const handleInputChange = () => {
+    if (error) {
+      dispatch(clearError());
+    }
   };
 
   const demoAccounts = [
@@ -59,7 +92,10 @@ export const LoginForm: React.FC = () => {
                   id="email"
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    handleInputChange();
+                  }}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter your email"
                   required
@@ -77,7 +113,10 @@ export const LoginForm: React.FC = () => {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    handleInputChange();
+                  }}
                   className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter your password"
                   required
@@ -92,8 +131,13 @@ export const LoginForm: React.FC = () => {
               </div>
             </div>
 
-            <Button type="submit" className="w-full" isLoading={isLoading} disabled={!email || !password}>
-              Sign In
+            <Button 
+              type="submit" 
+              className="w-full" 
+              isLoading={isLoading} 
+              disabled={!email || !password || isLoading}
+            >
+              {isLoading ? 'Signing In...' : 'Sign In'}
             </Button>
           </form>
         </div>
@@ -108,8 +152,10 @@ export const LoginForm: React.FC = () => {
                 onClick={() => {
                   setEmail(account.email);
                   setPassword(account.password);
+                  dispatch(clearError());
                 }}
-                className="w-full text-left p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors"
+                className="w-full text-left p-3 bg-white rounded-lg border border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                disabled={isLoading}
               >
                 <div className="font-medium text-gray-900 text-sm">{account.role}</div>
                 <div className="text-gray-600 text-xs">{account.email}</div>

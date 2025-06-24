@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Bell, Search, User } from 'lucide-react';
+import { Menu, Bell, Search } from 'lucide-react';
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -49,16 +49,6 @@ export default function Header({ onMenuToggle, title }: HeaderProps) {
               3
             </span>
           </button>
-
-          {/* User Avatar */}
-          <div className="flex items-center space-x-3 bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl px-4 py-2 shadow-sm border border-gray-200/50 hover:shadow-md transition-all duration-300 cursor-pointer group">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-md group-hover:scale-105 transition-transform duration-300">
-              <User className="w-4 h-4 text-white" />
-            </div>
-            <div className="hidden sm:block">
-              <p className="text-sm font-semibold text-gray-800">Admin</p>
-            </div>
-          </div>
         </div>
       </div>
     </header>
