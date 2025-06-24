@@ -29,8 +29,8 @@ const getPanelTitle = (panel: string) => {
     case 'client-management':
       return <div>Client Management (Coming Soon)</div>;
     case 'user-management':
-    //   return <UserManagement />;
-      return <div>User Dashboard (Coming Soon)</div>;
+      return <UserManagement />;
+    //   return <div>User Dashboard (Coming Soon)</div>;
     case 'inventory':
       return <div>Inventory Dashboard (Coming Soon)</div>;
     case 'service':

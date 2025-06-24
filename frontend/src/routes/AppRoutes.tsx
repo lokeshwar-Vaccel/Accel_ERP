@@ -1,8 +1,8 @@
 import Login from "components/Login";
 import Dashboard from "../pages/dashboard";
 import NotFound from "pages/NotFound";
-import { UserManagement } from "pages/UserManagement";
 import { Navigate, Route, Routes } from "react-router-dom"
+import { UserManagement } from "pages/UserManagement";
 
 const AppRoutes: React.FC = () => {
     return (
