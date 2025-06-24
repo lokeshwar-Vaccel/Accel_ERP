@@ -1,0 +1,26 @@
+import Joi from 'joi';
+export declare const registerSchema: Joi.ObjectSchema<any>;
+export declare const loginSchema: Joi.ObjectSchema<any>;
+export declare const updateProfileSchema: Joi.ObjectSchema<any>;
+export declare const changePasswordSchema: Joi.ObjectSchema<any>;
+export declare const updateUserSchema: Joi.ObjectSchema<any>;
+export declare const createCustomerSchema: Joi.ObjectSchema<any>;
+export declare const updateCustomerSchema: Joi.ObjectSchema<any>;
+export declare const addContactHistorySchema: Joi.ObjectSchema<any>;
+export declare const createProductSchema: Joi.ObjectSchema<any>;
+export declare const updateProductSchema: Joi.ObjectSchema<any>;
+export declare const createStockLocationSchema: Joi.ObjectSchema<any>;
+export declare const updateStockSchema: Joi.ObjectSchema<any>;
+export declare const transferStockSchema: Joi.ObjectSchema<any>;
+export declare const createServiceTicketSchema: Joi.ObjectSchema<any>;
+export declare const updateServiceTicketSchema: Joi.ObjectSchema<any>;
+export declare const addPartsUsedSchema: Joi.ObjectSchema<any>;
+export declare const createAMCSchema: Joi.ObjectSchema<any>;
+export declare const updateAMCSchema: Joi.ObjectSchema<any>;
+export declare const completeVisitSchema: Joi.ObjectSchema<any>;
+export declare const createPurchaseOrderSchema: Joi.ObjectSchema<any>;
+export declare const updatePurchaseOrderSchema: Joi.ObjectSchema<any>;
+export declare const querySchema: Joi.ObjectSchema<any>;
+export declare const validate: (schema: Joi.Schema) => (req: any, res: any, next: any) => any;
+export declare const validateQuery: (schema: Joi.Schema) => (req: any, res: any, next: any) => any;
+//# sourceMappingURL=validation.d.ts.map
