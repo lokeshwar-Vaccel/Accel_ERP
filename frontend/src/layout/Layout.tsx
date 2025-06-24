@@ -2,30 +2,12 @@ import React, { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
-import Breadcrumb from 'components/Breadcrumb';
 
 function Layout({ children }: { children: React.ReactNode }) {
   const [currentPanel, setCurrentPanel] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
-
-  const getPanelTitle = (path: string) => {
-    switch (path) {
-      case '/dashboard': return 'Dashboard';
-      case '/customer-management': return 'Customer Management';
-      case '/user-management': return 'User Management';
-      case '/product-management': return 'Product Management';
-      case '/inventory-management': return 'Inventory Management';
-      case '/service-management': return 'Service Management';
-      case '/amc-management': return 'AMC Management';
-      case '/purchase-order-management': return 'Purchase Order Management';
-      case '/reports-management': return 'Reports & Analytics';
-      case '/file-management': return 'File Management';
-      case '/communication-management': return 'Communications';
-      case '/admin-settings': return 'Admin Settings';
-      default: return 'Dashboard';
-    }
-  };
 
   const getBreadcrumbs = (path: string) => {
     const segments = path.split('/').filter(segment => segment);
@@ -63,16 +45,16 @@ function Layout({ children }: { children: React.ReactNode }) {
         onPanelChange={setCurrentPanel}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
+        isCollapsed={sidebarCollapsed}
+        onCollapseToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header
           onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
-          title={getPanelTitle(location.pathname)}
+          pathSegments={getBreadcrumbs(location.pathname)}
         />
-
-        <Breadcrumb pathSegments={getBreadcrumbs(location.pathname)} />
 
         <main className="flex-1 overflow-y-auto">
           {children}

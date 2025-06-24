@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 interface BreadcrumbProps {
     pathSegments: string[];
@@ -13,7 +13,6 @@ const toTitleCase = (str: string) =>
         .join(' ');
 
 const Breadcrumb: React.FC<BreadcrumbProps> = ({ pathSegments, baseLabel = 'Home' }) => {
-    const navigate = useNavigate();
 
     const paths = pathSegments.map((segment, index) => ({
         name: toTitleCase(segment),
@@ -22,24 +21,15 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({ pathSegments, baseLabel = 'Home
 
     return (
         <nav
-            className="flex items-center px-5 py-2 text-gray-700 border border-gray-200 bg-gray-50 dark:bg-gray-800 dark:border-gray-700"
+            className="flex items-center px-5 py-2 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900"
             aria-label="Breadcrumb"
         >
-            {/* Back Icon Button */}
-            <button
-                onClick={() => navigate(-1)}
-                className="mr-4 p-1 rounded-full bg-white border border-gray-300 shadow-sm hover:bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:hover:bg-gray-600 transition"
-                aria-label="Go Back"
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-arrow-left-icon lucide-arrow-left"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
-            </button>
-
             {/* Breadcrumb Path */}
             <ol className="inline-flex items-center space-x-1 md:space-x-2 rtl:space-x-reverse">
                 <li className="inline-flex items-center">
                     <Link
                         to="/"
-                        className="inline-flex items-center text-sm font-medium text-gray-700 hover:text-blue-600 dark:text-gray-400 dark:hover:text-white"
+                        className="inline-flex items-center text-sm font-medium text-gray-300 hover:text-white transition-colors duration-200"
                     >
                         <svg
                             className="w-3 h-3 me-2.5"
@@ -57,7 +47,7 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({ pathSegments, baseLabel = 'Home
                     <li key={item.path} aria-current={index === paths.length - 1 ? 'page' : undefined}>
                         <div className="flex items-center">
                             <svg
-                                className="rtl:rotate-180 block w-3 h-3 mx-1 text-gray-400"
+                                className="rtl:rotate-180 block w-3 h-3 mx-1 text-gray-500"
                                 aria-hidden="true"
                                 xmlns="http://www.w3.org/2000/svg"
                                 fill="none"
@@ -67,18 +57,17 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({ pathSegments, baseLabel = 'Home
                                     stroke="currentColor"
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
-                                    // strokeWidth="2"
                                     d="m1 9 4-4-4-4"
                                 />
                             </svg>
                             {index === paths.length - 1 ? (
-                                <span className="ms-1 text-sm font-medium text-gray-500 md:ms-2 dark:text-gray-400">
+                                <span className="ms-1 text-sm font-medium text-white md:ms-2">
                                     {item.name}
                                 </span>
                             ) : (
                                 <Link
                                     to={item.path}
-                                    className="ms-1 text-sm font-medium text-gray-700 hover:text-blue-600 md:ms-2 dark:text-gray-400 dark:hover:text-white"
+                                    className="ms-1 text-sm font-medium text-gray-300 hover:text-white md:ms-2 transition-colors duration-200"
                                 >
                                     {item.name}
                                 </Link>

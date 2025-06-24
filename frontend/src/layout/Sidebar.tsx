@@ -1,32 +1,30 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   LayoutGrid,
   Users,
   Package,
   Wrench,
-  Settings,
   X,
-  LogOut,
   User,
-  Zap,
+  Sun,
   ShoppingCart,
   FileText,
   BarChart3,
   Upload,
   MessageSquare,
   Calendar,
-  Cog
+  Cog,
+  ChevronLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useSelector, useDispatch } from 'react-redux';
-import { RootState, AppDispatch } from '../store';
-import { logout, forceLogout } from '../redux/auth/authSlice';
 
 interface SidebarProps {
   currentPanel: string;
   onPanelChange: (panel: string) => void;
   isOpen: boolean;
   onToggle: () => void;
+  isCollapsed: boolean;
+  onCollapseToggle: () => void;
 }
 
 const menuItems = [
@@ -121,39 +119,10 @@ export default function Sidebar({
   onPanelChange,
   isOpen,
   onToggle,
+  isCollapsed,
+  onCollapseToggle,
 }: SidebarProps) {
   const navigate = useNavigate();
-  const dispatch = useDispatch<AppDispatch>();
-  const { user, isLoading } = useSelector((state: RootState) => state.auth);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-
-  const handleLogout = async () => {
-    setIsLoggingOut(true);
-    try {
-      // Try the normal logout process first
-      await dispatch(logout()).unwrap();
-    } catch (error) {
-      // If normal logout fails, force logout locally
-      console.warn('Normal logout failed, forcing local logout:', error);
-      dispatch(forceLogout());
-    } finally {
-      setIsLoggingOut(false);
-    }
-  };
-
-  const getUserInitials = () => {
-    if (user?.firstName && user?.lastName) {
-      return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
-    }
-    return user?.email?.[0]?.toUpperCase() || 'A';
-  };
-
-  const getUserDisplayName = () => {
-    if (user?.firstName && user?.lastName) {
-      return `${user.firstName} ${user.lastName}`;
-    }
-    return user?.email || 'Admin User';
-  };
 
   // Get current path to determine active menu item
   const currentPath = window.location.pathname;
@@ -170,34 +139,62 @@ export default function Sidebar({
         className={`
           bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white
           ${isOpen ? 'block' : 'hidden'} lg:block
-          w-72 flex flex-col border-r border-white/10 h-screen
+          ${isCollapsed ? 'w-24' : 'w-72'} flex flex-col border-r border-white/10 h-screen transition-all duration-300
         `}
       >
-        {/* Removed animated background */}
-
         {/* Header */}
         <div className="relative h-20 p-5 border-b border-white/10">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
+              {/* Clickable Sun Icon */}
               <div className="relative">
-                <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-transform duration-300">
-                  <Zap className="w-7 h-7 text-white" />
+                <button
+                  onClick={onCollapseToggle}
+                  className="relative group hidden lg:block"
+                  title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                >
+                  <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-transform duration-300 cursor-pointer">
+                    <Sun className="w-7 h-7 text-white" />
+                  </div>
+                </button>
+                
+                {/* Non-clickable version for mobile */}
+                <div className="relative lg:hidden">
+                  <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-orange-600 rounded-xl flex items-center justify-center shadow-lg transform hover:scale-105 transition-transform duration-300">
+                    <Sun className="w-7 h-7 text-white" />
+                  </div>
                 </div>
-                <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-slate-900 animate-pulse"></div>
               </div>
-              <div>
-                <h1 className="font-bold text-xl bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                  Sun Power
-                </h1>
-                <p className="text-xs text-gray-400 font-medium">Services ERP</p>
-              </div>
+              {!isCollapsed && (
+                <div>
+                  <h1 className="font-bold text-xl bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
+                    Sun Power
+                  </h1>
+                  <p className="text-xs text-gray-400 font-medium">Services ERP</p>
+                </div>
+              )}
             </div>
-            <button
-              onClick={onToggle}
-              className="lg:hidden p-2 hover:bg-gray-700 rounded-lg transition-all duration-200"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            
+            <div className="flex items-center space-x-2">
+              {/* Collapse Button - Only shown when expanded */}
+              {!isCollapsed && (
+                <button
+                  onClick={onCollapseToggle}
+                  className="hidden lg:flex p-2 hover:bg-gray-700/50 rounded-lg transition-all duration-200"
+                  title="Collapse sidebar"
+                >
+                  <ChevronLeft className="w-4 h-4 text-gray-400 hover:text-white transition-colors duration-200" />
+                </button>
+              )}
+              
+              {/* Mobile Close Button */}
+              <button
+                onClick={onToggle}
+                className="lg:hidden p-2 hover:bg-gray-700 rounded-lg transition-all duration-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -219,11 +216,12 @@ export default function Sidebar({
                       if (window.innerWidth < 1024) onToggle();
                     }}
                     className={`
-                      group relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-300
+                      group relative w-full flex items-center ${isCollapsed ? 'justify-center px-2' : 'space-x-3 px-3'} py-2.5 rounded-xl transition-all duration-300
                       ${isActive
                         ? 'bg-gradient-to-r from-orange-500 to-red-600 shadow-lg text-white'
                         : 'text-gray-300 hover:bg-gray-700 hover:text-white'}
                     `}
+                    title={isCollapsed ? item.name : undefined}
                   >
                     {/* Active Indicator */}
                     {isActive && (
@@ -238,45 +236,16 @@ export default function Sidebar({
                       {item.icon}
                     </div>
 
-                    {/* Label */}
-                    <span className="font-medium text-sm tracking-wide flex-1 text-left">{item.name}</span>
-
-                    {/* Removed hover effect */}
+                    {/* Label - Only show when not collapsed */}
+                    {!isCollapsed && (
+                      <span className="font-medium text-sm tracking-wide flex-1 text-left">{item.name}</span>
+                    )}
                   </button>
                 </li>
               );
             })}
           </ul>
         </nav>
-
-        {/* User Info */}
-        <div className="relative p-6 border-t border-white/10">
-          <div className="flex items-center space-x-4 mb-4 p-3 bg-gray-600/20 rounded-xl">
-            <div className="relative">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
-                <span className="text-white font-semibold text-sm">{getUserInitials()}</span>
-              </div>
-              <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-slate-900"></div>
-            </div>
-            <div>
-              <p className="font-semibold text-white text-sm">{getUserDisplayName()}</p>
-              <p className="text-xs text-gray-400">{user?.role || 'Admin'}</p>
-            </div>
-          </div>
-
-          <button 
-            onClick={handleLogout}
-            disabled={isLoading || isLoggingOut}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-300 hover:text-white hover:bg-red-500/20 rounded-xl transition-all duration-300 group disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <div className="p-1 rounded-lg bg-red-500/20 group-hover:bg-red-500/30 transition-colors duration-300">
-              <LogOut className="w-4 h-4" />
-            </div>
-            <span className="font-medium">
-              {isLoading || isLoggingOut ? 'Signing out...' : 'Logout'}
-            </span>
-          </button>
-        </div>
       </div>
     </>
   );
