@@ -137,13 +137,13 @@ export default function Sidebar({
 
       <div
         className={`
-          bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white
+          text-white
           ${isOpen ? 'block' : 'hidden'} lg:block
-          ${isCollapsed ? 'w-24' : 'w-72'} flex flex-col border-r border-white/10 h-screen transition-all duration-300
+          ${isCollapsed ? 'w-24' : 'w-72'} flex flex-col h-screen transition-all duration-300
         `}
       >
         {/* Header */}
-        <div className="relative h-20 p-5 border-b border-white/10">
+        <div className="relative h-20 p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               {/* Clickable Sun Icon */}

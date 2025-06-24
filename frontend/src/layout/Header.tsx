@@ -71,7 +71,7 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
   }, []);
 
   return (
-    <header className="h-20 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-b border-white/10 px-6 py-4 shadow-sm">
+    <header className="h-20 px-6 py-4">
       <div className="flex items-center justify-between">
         {/* Left: Menu + Breadcrumb */}
         <div className="flex items-center flex-1">

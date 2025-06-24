@@ -26,6 +26,7 @@ import {
   Ban
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
+import PageHeader from '../components/ui/PageHeader';
 
 // Types matching backend structure
 type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
@@ -595,27 +596,26 @@ const PurchaseOrderManagement: React.FC = () => {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Purchase Order Management</h1>
-          <p className="text-gray-600 mt-1">Manage procurement and purchase orders</p>
-        </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={fetchAllData}
-            className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
-          >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
-          <button
-            onClick={handleCreatePO}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            <span>New Purchase Order</span>
-          </button>
-        </div>
+      <PageHeader 
+        title="Purchase Order Management"
+        subtitle="Manage procurement and purchase orders efficiently"
+      />
+      
+      <div className="flex justify-end space-x-3">
+        <button
+          onClick={fetchAllData}
+          className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+        >
+          <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
+        </button>
+        <button
+          onClick={handleCreatePO}
+          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+        >
+          <Plus className="w-5 h-5" />
+          <span>New Purchase Order</span>
+        </button>
       </div>
 
       {/* Stats Cards */}

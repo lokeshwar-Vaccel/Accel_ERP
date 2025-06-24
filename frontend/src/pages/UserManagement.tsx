@@ -7,6 +7,7 @@ import {
 import { setBreadcrumbs } from 'redux/auth/navigationSlice';
 import { apiClient } from '../utils/api';
 import { User, UserRole } from '../types';
+import PageHeader from '../components/ui/PageHeader';
 
 // Define the user interface for this component
 interface UserDisplay {
@@ -354,19 +355,18 @@ export const UserManagement: React.FC = () => {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
-          <p className="text-gray-600 mt-1">Manage system users and their permissions</p>
-        </div>
+      <PageHeader 
+        title="User Management"
+        subtitle="Manage system users and their permissions"
+      >
         <button 
           onClick={openAddUserModal}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
+          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
         >
           <UserPlus className="w-5 h-5" />
           <span>Add User</span>
         </button>
-      </div>
+      </PageHeader>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

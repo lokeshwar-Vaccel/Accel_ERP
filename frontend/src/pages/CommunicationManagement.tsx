@@ -26,6 +26,7 @@ import {
   Zap
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
+import PageHeader from '../components/ui/PageHeader';
 
 // Types for Communication Management - matching backend structure
 type MessageType = 'email' | 'sms' | 'whatsapp';
@@ -567,27 +568,26 @@ const CommunicationManagement: React.FC = () => {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Communication Management</h1>
-          <p className="text-gray-600 mt-1">Send and manage customer communications across multiple channels</p>
-        </div>
-        <div className="flex space-x-3">
-          <button
-            onClick={fetchAllData}
-            className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
-          >
-            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            <span>Refresh</span>
-          </button>
-          <button
-            onClick={() => setShowStatsModal(true)}
-            className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-purple-700 transition-colors"
-          >
-            <BarChart3 className="w-5 h-5" />
-            <span>Analytics</span>
-          </button>
-        </div>
+      <PageHeader 
+        title="Communication Management"
+        subtitle="Send and manage customer communications across multiple channels"
+      />
+      
+      <div className="flex justify-end space-x-3">
+        <button
+          onClick={fetchAllData}
+          className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+        >
+          <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
+        </button>
+        <button
+          onClick={() => setShowStatsModal(true)}
+          className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
+        >
+          <BarChart3 className="w-5 h-5" />
+          <span>Analytics</span>
+        </button>
       </div>
 
       {/* Quick Actions */}

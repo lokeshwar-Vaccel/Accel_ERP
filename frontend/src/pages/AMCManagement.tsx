@@ -20,6 +20,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
+import PageHeader from '../components/ui/PageHeader';
 
 // Types matching backend structure
 type AMCStatus = 'active' | 'expired' | 'cancelled' | 'pending';
@@ -471,29 +472,27 @@ const AMCManagement: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Annual Maintenance Contracts</h1>
-          <p className="text-gray-600 mt-1">Manage AMC contracts, visits, and renewals</p>
-        </div>
+      <PageHeader 
+        title="Annual Maintenance Contracts"
+        subtitle="Manage AMC contracts, visits, and renewals"
+      >
         <div className="flex space-x-3">
           <button
             onClick={() => setShowExpiryModal(true)}
-            className="bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-orange-700 transition-colors"
+            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
           >
             <Bell className="w-5 h-5" />
             <span>Expiry Alerts</span>
           </button>
           <button
             onClick={handleCreateAMC}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
           >
             <Plus className="w-5 h-5" />
             <span>New AMC Contract</span>
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

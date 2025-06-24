@@ -38,7 +38,7 @@ function Layout({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden">
+    <div className="flex h-screen w-screen overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       {/* Sidebar */}
       <Sidebar
         currentPanel={currentPanel}
@@ -56,8 +56,10 @@ function Layout({ children }: { children: React.ReactNode }) {
           pathSegments={getBreadcrumbs(location.pathname)}
         />
 
-        <main className="flex-1 overflow-y-auto">
-          {children}
+        <main className="flex-1 overflow-y-auto m-4">
+          <div className="h-full overflow-y-auto rounded-2xl bg-white shadow-lg border border-gray-200 p-2">
+            {children}
+          </div>
         </main>
       </div>
     </div>

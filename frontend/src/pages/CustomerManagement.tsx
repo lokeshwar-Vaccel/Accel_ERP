@@ -29,6 +29,7 @@ import {
   UserCheck
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
+import PageHeader from '../components/ui/PageHeader';
 
 // Customer types matching backend enums
 type CustomerType = 'retail' | 'telecom';
@@ -486,28 +487,27 @@ const CustomerManagement: React.FC = () => {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Customer Relationship Management</h1>
-          <p className="text-gray-600 mt-1">Manage leads, customers, and track interactions</p>
-        </div>
+      <PageHeader 
+        title="Customer Relationship Management"
+        subtitle="Manage leads, customers, and track interactions"
+      >
         <div className="flex space-x-3">
           <button
             onClick={() => setShowPipelineModal(true)}
-            className="bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-orange-700 transition-colors"
+            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
           >
             <TrendingUp className="w-5 h-5" />
             <span>Sales Pipeline</span>
           </button>
           <button
             onClick={() => setShowAddModal(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
           >
             <Plus className="w-5 h-5" />
             <span>Add Customer</span>
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">

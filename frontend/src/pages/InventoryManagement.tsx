@@ -25,6 +25,7 @@ import { Form } from '../components/ui/Form';
 import { Button } from '../components/ui/Botton';
 import { Stock, Product, StockLocation, TableColumn, FormField } from '../types';
 import { apiClient } from '../utils/api';
+import PageHeader from '../components/ui/PageHeader';
 
 // Types
 interface ProductData {
@@ -570,36 +571,34 @@ const InventoryManagement: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Inventory Management</h1>
-          <p className="text-gray-600 mt-1">Track and manage stock across all locations</p>
-        </div>
+      <PageHeader 
+        title="Inventory Management"
+        subtitle="Track and manage stock across all locations"
+      >
         <div className="flex space-x-3">
           <button 
             onClick={handleCreateLocation}
-            className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-green-700 transition-colors"
+            className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
           >
             <MapPin className="w-5 h-5" />
             <span>Add Location</span>
           </button>
           <button 
             onClick={() => setShowLedgerModal(true)}
-            className="bg-orange-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-orange-700 transition-colors"
+            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
           >
             <Package className="w-5 h-5" />
             <span>Stock Ledger</span>
           </button>
           <button 
             onClick={fetchAllData}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
           >
             <RefreshCw className="w-5 h-5" />
             <span>Refresh</span>
           </button>
         </div>
-      </div>
+      </PageHeader>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
