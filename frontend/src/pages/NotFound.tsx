@@ -4,7 +4,7 @@ import { Link } from 'react-router-dom';
 const NotFound: React.FC = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center px-4">
-      <div className="max-w-md w-full text-center">
+      <div className="max-w-sm w-full text-center">
         {/* 404 Number */}
         <div className="mb-8">
           <h1 className="text-9xl font-bold text-gray-300 select-none">404</h1>

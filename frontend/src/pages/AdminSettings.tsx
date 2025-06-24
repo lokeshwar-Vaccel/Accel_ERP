@@ -223,9 +223,9 @@ const AdminSettings: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center">
+      <div className="p-4 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Loading settings...</p>
         </div>
       </div>
@@ -233,7 +233,7 @@ const AdminSettings: React.FC = () => {
   }
 
   return (
-    <div className="pl-2 pr-6 py-6 space-y-6">
+    <div className="pl-2 pr-6 py-6 space-y-4">
       {/* Header */}
       <PageHeader 
         title="Admin Settings"
@@ -255,7 +255,7 @@ const AdminSettings: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
         {/* Sidebar */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
@@ -281,13 +281,13 @@ const AdminSettings: React.FC = () => {
         {/* Content */}
         <div className="lg:col-span-3">
           <div className="bg-white rounded-xl shadow-sm border border-gray-100">
-            <div className="p-6 border-b border-gray-100">
-              <h2 className="text-xl font-semibold text-gray-900">
+            <div className="p-4 border-b border-gray-100">
+              <h2 className="text-lg font-semibold text-gray-900">
                 {tabs.find(t => t.id === activeTab)?.name} Settings
               </h2>
             </div>
             
-            <div className="p-6">
+            <div className="p-4">
               {getFieldsForCategory(activeTab).length > 0 ? (
                 <>
                   <Form
@@ -315,10 +315,10 @@ const AdminSettings: React.FC = () => {
                   </div>
                 </>
               ) : (
-                <div className="text-center text-gray-500 py-12">
-                  <Database className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                  <h3 className="text-lg font-medium mb-2">No Settings Available</h3>
-                  <p>No configuration options found for this category.</p>
+                <div className="text-center text-gray-500 py-8">
+                  <Database className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <h3 className="text-base font-medium mb-2">No Settings Available</h3>
+                  <p className="text-sm">No configuration options found for this category.</p>
                 </div>
               )}
             </div>

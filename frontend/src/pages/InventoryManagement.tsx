@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Search, 
@@ -106,10 +106,12 @@ const InventoryManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [locationFilter, setLocationFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
   
   // Custom dropdown states
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
 
   // Modal states
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -158,6 +160,7 @@ const InventoryManagement: React.FC = () => {
       if (!target.closest('.dropdown-container')) {
         setShowLocationDropdown(false);
         setShowStatusDropdown(false);
+        setShowCategoryDropdown(false);
       }
     };
 
@@ -430,7 +433,7 @@ const InventoryManagement: React.FC = () => {
       render: (value) => (
         <div>
           <div className="font-medium">{typeof value === 'object' ? value.name : value}</div>
-          <div className="text-sm text-gray-500">{typeof value === 'object' ? value.category : ''}</div>
+          <div className="text-xs text-gray-500">{typeof value === 'object' ? value.category : ''}</div>
         </div>
       )
     },
@@ -569,8 +572,21 @@ const InventoryManagement: React.FC = () => {
     }
   ];
 
+  // Category options with labels
+  const categoryOptions = [
+    { value: 'all', label: 'All Categories' },
+    { value: 'genset', label: 'Generator Set' },
+    { value: 'spare_part', label: 'Spare Part' },
+    { value: 'accessory', label: 'Accessory' }
+  ];
+
+  const getCategoryLabel = (value: string) => {
+    const option = categoryOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Categories';
+  };
+
   return (
-    <div className="pl-2 pr-6 py-6 space-y-6">
+    <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader 
         title="Inventory Management"
         subtitle="Track and manage stock across all locations"
@@ -578,38 +594,38 @@ const InventoryManagement: React.FC = () => {
         <div className="flex space-x-3">
           <button 
             onClick={handleCreateLocation}
-            className="bg-gradient-to-r from-green-600 to-green-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+            className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
-            <MapPin className="w-5 h-5" />
-            <span>Add Location</span>
+            <MapPin className="w-4 h-4" />
+            <span className="text-sm">Add Location</span>
           </button>
           <button 
             onClick={() => setShowLedgerModal(true)}
-            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
-            <Package className="w-5 h-5" />
-            <span>Stock Ledger</span>
+            <Package className="w-4 h-4" />
+            <span className="text-sm">Stock Ledger</span>
           </button>
           <button 
             onClick={fetchAllData}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
-            <RefreshCw className="w-5 h-5" />
-            <span>Refresh</span>
+            <RefreshCw className="w-4 h-4" />
+            <span className="text-sm">Refresh</span>
           </button>
         </div>
       </PageHeader>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">{stat.title}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                <p className="text-xs text-gray-600">{stat.title}</p>
+                <p className="text-xl font-bold text-gray-900">{stat.value}</p>
               </div>
-              <div className={`p-3 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
+              <div className={`p-2 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
                 {stat.icon}
               </div>
             </div>
@@ -618,30 +634,53 @@ const InventoryManagement: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
               placeholder="Search inventory..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          <select
-            value={locationFilter}
-            onChange={(e) => setLocationFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Locations</option>
-            {locations.map(location => (
-              <option key={location._id} value={location._id}>
-                {location.name}
-              </option>
-            ))}
-          </select>
+
+          {/* Category Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
+              className="flex items-center justify-between w-full md:w-40 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getCategoryLabel(categoryFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showCategoryDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {categoryOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setCategoryFilter(option.value);
+                      setShowCategoryDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="mt-4 flex items-center justify-between">
+          <span className="text-xs text-gray-600">
+            Showing {filteredInventory.length} of {inventory.length} items
+          </span>
         </div>
       </div>
 
@@ -651,60 +690,60 @@ const InventoryManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reserved</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Available</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reserved</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Available</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">Loading inventory...</td>
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Loading inventory...</td>
                 </tr>
               ) : filteredInventory.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">No inventory items found</td>
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No inventory items found</td>
                 </tr>
               ) : (
                 filteredInventory.map((item) => {
                   const status = getStockStatus(item);
                   return (
                     <tr key={item._id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{item.product.name}</div>
-                          <div className="text-sm text-gray-500">{item.product.category} • {item.product.brand}</div>
+                          <div className="text-xs font-medium text-gray-900">{item.product.name}</div>
+                          <div className="text-xs text-gray-500">{item.product.category} • {item.product.brand}</div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <div>
-                          <div className="text-sm font-medium text-gray-900">{item.location.name}</div>
-                          <div className="text-sm text-gray-500">{item.location.type}</div>
+                          <div className="text-xs font-medium text-gray-900">{item.location.name}</div>
+                          <div className="text-xs text-gray-500">{item.location.type}</div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900">
                         {item.quantity}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                         {item.reservedQuantity}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
                         {item.availableQuantity || (item.quantity - (item.reservedQuantity || 0))}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(status)}`}>
                           {status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
                         {new Date(item.lastUpdated).toLocaleDateString()}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-2">
                           <button 
                             onClick={() => handleUpdateStock(item)}
@@ -740,8 +779,8 @@ const InventoryManagement: React.FC = () => {
       {/* Add Location Modal */}
       {showLocationModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Add New Location</h2>
               <button
                 onClick={() => setShowLocationModal(false)}
@@ -751,7 +790,7 @@ const InventoryManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitLocation(); }} className="p-6 space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitLocation(); }} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -768,7 +807,7 @@ const InventoryManagement: React.FC = () => {
                     name="name"
                     value={locationFormData.name}
                     onChange={(e) => setLocationFormData({ ...locationFormData, name: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.name ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Enter location name"
@@ -785,7 +824,7 @@ const InventoryManagement: React.FC = () => {
                     name="type"
                     value={locationFormData.type}
                     onChange={(e) => setLocationFormData({ ...locationFormData, type: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.type ? 'border-red-500' : 'border-gray-300'
                     }`}
                   >
@@ -808,7 +847,7 @@ const InventoryManagement: React.FC = () => {
                   value={locationFormData.address}
                   onChange={(e) => setLocationFormData({ ...locationFormData, address: e.target.value })}
                   rows={3}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     formErrors.address ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Enter complete address"
@@ -828,7 +867,7 @@ const InventoryManagement: React.FC = () => {
                     name="contactPerson"
                     value={locationFormData.contactPerson}
                     onChange={(e) => setLocationFormData({ ...locationFormData, contactPerson: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter contact person name"
                   />
                 </div>
@@ -841,7 +880,7 @@ const InventoryManagement: React.FC = () => {
                     name="phone"
                     value={locationFormData.phone}
                     onChange={(e) => setLocationFormData({ ...locationFormData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter phone number"
                   />
                 </div>
@@ -871,8 +910,8 @@ const InventoryManagement: React.FC = () => {
       {/* Stock Adjustment Modal */}
       {showAdjustmentModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Adjust Stock</h2>
               <button
                 onClick={() => setShowAdjustmentModal(false)}
@@ -882,7 +921,7 @@ const InventoryManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitStock(); }} className="p-6 space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitStock(); }} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -898,7 +937,7 @@ const InventoryManagement: React.FC = () => {
                     name="adjustmentType"
                     value={adjustmentFormData.adjustmentType}
                     onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, adjustmentType: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="add">Add Stock</option>
                     <option value="subtract">Remove Stock</option>
@@ -915,7 +954,7 @@ const InventoryManagement: React.FC = () => {
                     value={adjustmentFormData.quantity}
                     onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, quantity: Number(e.target.value) })}
                     min="0"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter quantity"
                   />
                 </div>
@@ -930,7 +969,7 @@ const InventoryManagement: React.FC = () => {
                   name="reason"
                   value={adjustmentFormData.reason}
                   onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, reason: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter reason for adjustment"
                 />
               </div>
@@ -944,7 +983,7 @@ const InventoryManagement: React.FC = () => {
                   value={adjustmentFormData.notes}
                   onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, notes: e.target.value })}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Additional notes (optional)"
                 />
               </div>
@@ -966,164 +1005,164 @@ const InventoryManagement: React.FC = () => {
                 </button>
               </div>
             </form>
-                     </div>
-         </div>
-       )}
+          </div>
+        </div>
+      )}
 
-       {/* Stock History Modal */}
-       {showHistoryModal && selectedItem && (
-         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-             <div className="flex items-center justify-between p-6 border-b border-gray-200">
-               <h2 className="text-xl font-semibold text-gray-900">
-                 Stock History - {selectedItem.product.name} @ {selectedItem.location.name}
-               </h2>
-               <button
-                 onClick={() => setShowHistoryModal(false)}
-                 className="text-gray-400 hover:text-gray-600"
-               >
-                 <X className="w-6 h-6" />
-               </button>
-             </div>
+      {/* Stock History Modal */}
+      {showHistoryModal && selectedItem && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">
+                Stock History - {selectedItem.product.name} @ {selectedItem.location.name}
+              </h2>
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
 
-             <div className="p-6">
-               <div className="bg-gray-50 p-4 rounded-lg mb-6">
-                 <h3 className="text-lg font-medium text-gray-900 mb-2">Current Stock Status</h3>
-                 <div className="grid grid-cols-3 gap-4">
-                   <div className="text-center">
-                     <p className="text-2xl font-bold text-gray-900">{selectedItem.quantity}</p>
-                     <p className="text-sm text-gray-600">Total Stock</p>
-                   </div>
-                   <div className="text-center">
-                     <p className="text-2xl font-bold text-yellow-600">{selectedItem.reservedQuantity}</p>
-                     <p className="text-sm text-gray-600">Reserved</p>
-                   </div>
-                   <div className="text-center">
-                     <p className="text-2xl font-bold text-green-600">
-                       {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))}
-                     </p>
-                     <p className="text-sm text-gray-600">Available</p>
-                   </div>
-                 </div>
-               </div>
+            <div className="p-6">
+              <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Current Stock Status</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <p className="text-xl font-bold text-gray-900">{selectedItem.quantity}</p>
+                    <p className="text-xs text-gray-600">Total Stock</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold text-yellow-600">{selectedItem.reservedQuantity}</p>
+                    <p className="text-xs text-gray-600">Reserved</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xl font-bold text-green-600">
+                      {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))}
+                    </p>
+                    <p className="text-xs text-gray-600">Available</p>
+                  </div>
+                </div>
+              </div>
 
-               <h3 className="text-lg font-medium text-gray-900 mb-4">Transaction History</h3>
-               <div className="overflow-x-auto">
-                 <table className="w-full">
-                   <thead className="bg-gray-50">
-                     <tr>
-                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
-                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
-                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
-                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                     </tr>
-                   </thead>
-                   <tbody className="bg-white divide-y divide-gray-200">
-                     {stockTransactions.length === 0 ? (
-                       <tr>
-                         <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No transactions found</td>
-                       </tr>
-                     ) : (
-                       stockTransactions.map((transaction) => (
-                         <tr key={transaction._id} className="hover:bg-gray-50">
-                           <td className="px-4 py-4 text-sm text-gray-900">
-                             {new Date(transaction.date).toLocaleDateString()}
-                           </td>
-                           <td className="px-4 py-4 text-sm">
-                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                               transaction.type === 'inward' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                             }`}>
-                               {transaction.type === 'inward' ? '↗ Inward' : '↙ Outward'}
-                             </span>
-                           </td>
-                           <td className="px-4 py-4 text-sm font-medium text-gray-900">
-                             {transaction.type === 'inward' ? '+' : '-'}{transaction.quantity}
-                           </td>
-                           <td className="px-4 py-4 text-sm text-gray-600">{transaction.reason}</td>
-                           <td className="px-4 py-4 text-sm text-gray-600">{transaction.reference}</td>
-                           <td className="px-4 py-4 text-sm text-gray-600">{transaction.user}</td>
-                         </tr>
-                       ))
-                     )}
-                   </tbody>
-                 </table>
-               </div>
-             </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Transaction History</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {stockTransactions.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No transactions found</td>
+                      </tr>
+                    ) : (
+                      stockTransactions.map((transaction) => (
+                        <tr key={transaction._id} className="hover:bg-gray-50">
+                          <td className="px-4 py-4 text-xs text-gray-900">
+                            {new Date(transaction.date).toLocaleDateString()}
+                          </td>
+                          <td className="px-4 py-4 text-sm">
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              transaction.type === 'inward' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                              {transaction.type === 'inward' ? '↗ Inward' : '↙ Outward'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-xs font-medium text-gray-900">
+                            {transaction.type === 'inward' ? '+' : '-'}{transaction.quantity}
+                          </td>
+                          <td className="px-4 py-4 text-xs text-gray-600">{transaction.reason}</td>
+                          <td className="px-4 py-4 text-xs text-gray-600">{transaction.reference}</td>
+                          <td className="px-4 py-4 text-xs text-gray-600">{transaction.user}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
 
-             <div className="px-6 py-4 border-t border-gray-200">
-               <button
-                 onClick={() => setShowHistoryModal(false)}
-                 className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-               >
-                 Close
-               </button>
-             </div>
-           </div>
-         </div>
-       )}
+            <div className="px-6 py-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowHistoryModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
-       {/* Stock Ledger Modal */}
-       {showLedgerModal && (
-         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-           <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
-             <div className="flex items-center justify-between p-6 border-b border-gray-200">
-               <h2 className="text-xl font-semibold text-gray-900">Stock Ledger - All Transactions</h2>
-               <button
-                 onClick={() => setShowLedgerModal(false)}
-                 className="text-gray-400 hover:text-gray-600"
-               >
-                 <X className="w-6 h-6" />
-               </button>
-             </div>
+      {/* Stock Ledger Modal */}
+      {showLedgerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Stock Ledger - All Transactions</h2>
+              <button
+                onClick={() => setShowLedgerModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
 
-             <div className="p-6">
-               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                 <h3 className="text-lg font-medium text-yellow-800 mb-2">📋 Stock Ledger Features</h3>
-                 <p className="text-yellow-700 text-sm">
-                   This will show comprehensive Inward/Outward stock movements including:
-                 </p>
-                 <ul className="text-yellow-700 text-sm mt-2 ml-4 list-disc">
-                   <li>Purchase Order receipts (Inward)</li>
-                   <li>Service ticket parts usage (Outward)</li>
-                   <li>Stock adjustments and transfers</li>
-                   <li>Serial number tracking</li>
-                   <li>Stock reconciliation reports</li>
-                 </ul>
-               </div>
+            <div className="p-6">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <h3 className="text-lg font-medium text-yellow-800 mb-2">📋 Stock Ledger Features</h3>
+                <p className="text-yellow-700 text-sm">
+                  This will show comprehensive Inward/Outward stock movements including:
+                </p>
+                <ul className="text-yellow-700 text-sm mt-2 ml-3 list-disc">
+                  <li>Purchase Order receipts (Inward)</li>
+                  <li>Service ticket parts usage (Outward)</li>
+                  <li>Stock adjustments and transfers</li>
+                  <li>Serial number tracking</li>
+                  <li>Stock reconciliation reports</li>
+                </ul>
+              </div>
 
-               <div className="text-center py-12">
-                 <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                 <h3 className="text-lg font-medium text-gray-900 mb-2">Stock Ledger Coming Soon</h3>
-                 <p className="text-gray-600 mb-4">
-                   Comprehensive stock transaction ledger with Purchase Order integration and Serial number tracking
-                 </p>
-                 <div className="flex justify-center space-x-4">
-                   <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                     Purchase Orders
-                   </span>
-                   <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                     Serial Numbers
-                   </span>
-                   <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                     Reconciliation
-                   </span>
-                 </div>
-               </div>
-             </div>
+              <div className="text-center py-12">
+                <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Stock Ledger Coming Soon</h3>
+                <p className="text-gray-600 mb-4">
+                  Comprehensive stock transaction ledger with Purchase Order integration and Serial number tracking
+                </p>
+                <div className="flex justify-center space-x-4">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    Purchase Orders
+                  </span>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                    Serial Numbers
+                  </span>
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    Reconciliation
+                  </span>
+                </div>
+              </div>
+            </div>
 
-             <div className="px-6 py-4 border-t border-gray-200">
-               <button
-                 onClick={() => setShowLedgerModal(false)}
-                 className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-               >
-                 Close
-               </button>
-             </div>
-           </div>
-         </div>
-       )}
+            <div className="px-6 py-4 border-t border-gray-200">
+              <button
+                onClick={() => setShowLedgerModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

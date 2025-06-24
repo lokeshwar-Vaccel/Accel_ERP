@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Search, 
@@ -23,7 +23,8 @@ import {
   MapPin,
   ArrowRight,
   Check,
-  Ban
+  Ban,
+  ChevronDown
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -132,6 +133,10 @@ const PurchaseOrderManagement: React.FC = () => {
   
   // Form errors
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Dropdown state
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -593,41 +598,78 @@ const PurchaseOrderManagement: React.FC = () => {
     }
   ];
 
+  // Status options with labels
+  const statusOptions = [
+    { value: 'all', label: 'All Status' },
+    { value: 'draft', label: 'Draft' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'approved', label: 'Approved' },
+    { value: 'received', label: 'Received' },
+    { value: 'cancelled', label: 'Cancelled' }
+  ];
+
+  const getStatusLabel = (value: string) => {
+    const option = statusOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Status';
+  };
+
+  const getSupplierLabel = (value: string) => {
+    if (value === 'all') return 'All Suppliers';
+    // Return the supplier name if you have supplier data
+    return value || 'All Suppliers';
+  };
+
+  // Click outside handler for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.dropdown-container')) {
+        setShowStatusDropdown(false);
+        setShowSupplierDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 space-y-3">
       {/* Header */}
       <PageHeader 
         title="Purchase Order Management"
         subtitle="Manage procurement and purchase orders efficiently"
-      />
-      
-      <div className="flex justify-end space-x-3">
-        <button
-          onClick={fetchAllData}
-          className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-        >
-          <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
-        </button>
-        <button
-          onClick={handleCreatePO}
-          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-        >
-          <Plus className="w-5 h-5" />
-          <span>New Purchase Order</span>
-        </button>
-      </div>
+      >
+        <div className="flex space-x-3">
+          <button
+            onClick={fetchAllData}
+            className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span className="text-sm">Refresh</span>
+          </button>
+          <button
+            onClick={handleCreatePO}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
+          >
+            <Plus className="w-4 h-4" />
+            <span className="text-sm">New Purchase Order</span>
+          </button>
+        </div>
+      </PageHeader>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">{stat.title}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                <p className="text-xs text-gray-600">{stat.title}</p>
+                <p className="text-xl font-bold text-gray-900">{stat.value}</p>
               </div>
-              <div className={`p-3 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
+              <div className={`p-2 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
                 {stat.icon}
               </div>
             </div>
@@ -636,43 +678,84 @@ const PurchaseOrderManagement: React.FC = () => {
       </div>
 
       {/* Filters and Search */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="relative md:col-span-2">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
               placeholder="Search purchase orders..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as PurchaseOrderStatus | 'all')}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="sent">Sent</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="received">Received</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+          {/* Status Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowStatusDropdown(!showStatusDropdown);
+                setShowSupplierDropdown(false);
+              }}
+              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showStatusDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setStatusFilter(option.value as PurchaseOrderStatus | 'all');
+                      setShowStatusDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <input
-            type="text"
-            placeholder="Filter by supplier..."
-            value={supplierFilter}
-            onChange={(e) => setSupplierFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
+          {/* Supplier Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowSupplierDropdown(!showSupplierDropdown);
+                setShowStatusDropdown(false);
+              }}
+              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getSupplierLabel(supplierFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showSupplierDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showSupplierDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                <button
+                  onClick={() => {
+                    setSupplierFilter('all');
+                    setShowSupplierDropdown(false);
+                  }}
+                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                    supplierFilter === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                  }`}
+                >
+                  All Suppliers
+                </button>
+                {/* Add actual suppliers here when available */}
+              </div>
+            )}
+          </div>
         </div>
         
         <div className="mt-4 flex items-center justify-between">
-          <span className="text-sm text-gray-600">
+          <span className="text-xs text-gray-600">
             Showing {filteredPOs.length} of {purchaseOrders.length} purchase orders
           </span>
         </div>
@@ -684,22 +767,22 @@ const PurchaseOrderManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Purchase Order
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Supplier
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Amount & Items
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Delivery
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -707,19 +790,19 @@ const PurchaseOrderManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">Loading purchase orders...</td>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading purchase orders...</td>
                 </tr>
               ) : filteredPOs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">No purchase orders found</td>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No purchase orders found</td>
                 </tr>
               ) : (
                 filteredPOs.map((po) => (
                   <tr key={po._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-blue-600">{po.poNumber}</div>
-                        <div className="text-sm text-gray-600">
+                        <div className="text-xs text-gray-600">
                           Created: {formatDate(po.orderDate)}
                         </div>
                         <div className="text-xs text-gray-500">
@@ -727,29 +810,29 @@ const PurchaseOrderManagement: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{po.supplier}</div>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs font-medium text-gray-900">{po.supplier}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{formatCurrency(po.totalAmount)}</div>
-                        <div className="text-sm text-gray-600">{po.items.length} item(s)</div>
+                        <div className="text-xs font-medium text-gray-900">{formatCurrency(po.totalAmount)}</div>
+                        <div className="text-xs text-gray-600">{po.items.length} item(s)</div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(po.status)}`}>
                         {po.status.charAt(0).toUpperCase() + po.status.slice(1)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div>
                         {po.expectedDeliveryDate && (
-                          <div className="text-sm text-gray-600">
+                          <div className="text-xs text-gray-600">
                             Expected: {formatDate(po.expectedDeliveryDate)}
                           </div>
                         )}
                         {po.actualDeliveryDate && (
-                          <div className="text-sm text-gray-600">
+                          <div className="text-xs text-gray-600">
                             Delivered: {formatDate(po.actualDeliveryDate)}
                           </div>
                         )}
@@ -760,7 +843,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => openDetailsModal(po)}
@@ -810,7 +893,7 @@ const PurchaseOrderManagement: React.FC = () => {
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Create Purchase Order</h2>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -820,7 +903,7 @@ const PurchaseOrderManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitPO(); }} className="p-6 space-y-6">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitPO(); }} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -836,7 +919,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     type="text"
                     value={formData.supplier}
                     onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.supplier ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Enter supplier name"
@@ -853,7 +936,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     type="date"
                     value={formData.expectedDeliveryDate}
                     onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.expectedDeliveryDate ? 'border-red-500' : 'border-gray-300'
                     }`}
                   />
@@ -885,7 +968,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         <select
                           value={item.product}
                           onChange={(e) => updateItem(index, 'product', e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                             formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
                           }`}
                         >
@@ -906,7 +989,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           type="number"
                           value={item.quantity}
                           onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                             formErrors[`items.${index}.quantity`] ? 'border-red-500' : 'border-gray-300'
                           }`}
                           min="1"
@@ -921,7 +1004,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           type="number"
                           value={item.unitPrice}
                           onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                             formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
                           }`}
                           min="0"
@@ -932,7 +1015,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         )}
                       </div>
                       <div className="col-span-2">
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-xs font-medium text-gray-900">
                           {formatCurrency(item.quantity * item.unitPrice)}
                         </div>
                         {formData.items.length > 1 && (
@@ -982,7 +1065,7 @@ const PurchaseOrderManagement: React.FC = () => {
       {showEditModal && editingPO && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Edit Purchase Order - {editingPO.poNumber}</h2>
               <button
                 onClick={() => setShowEditModal(false)}
@@ -992,7 +1075,7 @@ const PurchaseOrderManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleUpdatePO(); }} className="p-6 space-y-6">
+            <form onSubmit={(e) => { e.preventDefault(); handleUpdatePO(); }} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -1008,7 +1091,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     type="text"
                     value={formData.supplier}
                     onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.supplier ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Enter supplier name"
@@ -1025,7 +1108,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     type="date"
                     value={formData.expectedDeliveryDate}
                     onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.expectedDeliveryDate ? 'border-red-500' : 'border-gray-300'
                     }`}
                   />
@@ -1057,7 +1140,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         <select
                           value={item.product}
                           onChange={(e) => updateItem(index, 'product', e.target.value)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                             formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
                           }`}
                         >
@@ -1078,7 +1161,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           type="number"
                           value={item.quantity}
                           onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                             formErrors[`items.${index}.quantity`] ? 'border-red-500' : 'border-gray-300'
                           }`}
                           min="1"
@@ -1093,7 +1176,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           type="number"
                           value={item.unitPrice}
                           onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                             formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
                           }`}
                           min="0"
@@ -1104,7 +1187,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         )}
                       </div>
                       <div className="col-span-2">
-                        <div className="text-sm font-medium text-gray-900">
+                        <div className="text-xs font-medium text-gray-900">
                           {formatCurrency(item.quantity * item.unitPrice)}
                         </div>
                         {formData.items.length > 1 && (
@@ -1154,7 +1237,7 @@ const PurchaseOrderManagement: React.FC = () => {
       {showDetailsModal && selectedPO && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">Purchase Order Details</h2>
                 <p className="text-gray-600">{selectedPO.poNumber}</p>
@@ -1167,16 +1250,16 @@ const PurchaseOrderManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 space-y-3">
               {/* Header Information */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Basic Information</h3>
                   <div className="space-y-2">
-                    <p><span className="text-sm text-gray-600">PO Number:</span> <span className="font-medium">{selectedPO.poNumber}</span></p>
-                    <p><span className="text-sm text-gray-600">Supplier:</span> <span className="font-medium">{selectedPO.supplier}</span></p>
-                    <p><span className="text-sm text-gray-600">Total Amount:</span> <span className="font-medium">{formatCurrency(selectedPO.totalAmount)}</span></p>
-                    <p><span className="text-sm text-gray-600">Status:</span> 
+                    <p><span className="text-xs text-gray-600">PO Number:</span> <span className="font-medium">{selectedPO.poNumber}</span></p>
+                    <p><span className="text-xs text-gray-600">Supplier:</span> <span className="font-medium">{selectedPO.supplier}</span></p>
+                    <p><span className="text-xs text-gray-600">Total Amount:</span> <span className="font-medium">{formatCurrency(selectedPO.totalAmount)}</span></p>
+                    <p><span className="text-xs text-gray-600">Status:</span> 
                       <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedPO.status)}`}>
                         {selectedPO.status.charAt(0).toUpperCase() + selectedPO.status.slice(1)}
                       </span>
@@ -1187,15 +1270,15 @@ const PurchaseOrderManagement: React.FC = () => {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Dates</h3>
                   <div className="space-y-2">
-                    <p><span className="text-sm text-gray-600">Order Date:</span> <span className="font-medium">{formatDate(selectedPO.orderDate)}</span></p>
+                    <p><span className="text-xs text-gray-600">Order Date:</span> <span className="font-medium">{formatDate(selectedPO.orderDate)}</span></p>
                     {selectedPO.expectedDeliveryDate && (
-                      <p><span className="text-sm text-gray-600">Expected Delivery:</span> <span className="font-medium">{formatDate(selectedPO.expectedDeliveryDate)}</span></p>
+                      <p><span className="text-xs text-gray-600">Expected Delivery:</span> <span className="font-medium">{formatDate(selectedPO.expectedDeliveryDate)}</span></p>
                     )}
                     {selectedPO.actualDeliveryDate && (
-                      <p><span className="text-sm text-gray-600">Actual Delivery:</span> <span className="font-medium">{formatDate(selectedPO.actualDeliveryDate)}</span></p>
+                      <p><span className="text-xs text-gray-600">Actual Delivery:</span> <span className="font-medium">{formatDate(selectedPO.actualDeliveryDate)}</span></p>
                     )}
                     {selectedPO.deliveryStatus && (
-                      <p><span className="text-sm text-gray-600">Delivery Status:</span> 
+                      <p><span className="text-xs text-gray-600">Delivery Status:</span> 
                         <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDeliveryStatusColor(selectedPO.deliveryStatus)}`}>
                           {selectedPO.deliveryStatus.replace('_', ' ')}
                         </span>
@@ -1207,9 +1290,9 @@ const PurchaseOrderManagement: React.FC = () => {
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Created By</h3>
                   <div className="space-y-2">
-                    <p><span className="text-sm text-gray-600">Name:</span> <span className="font-medium">{getCreatedByName(selectedPO.createdBy)}</span></p>
-                    <p><span className="text-sm text-gray-600">Created:</span> <span className="font-medium">{formatDateTime(selectedPO.createdAt)}</span></p>
-                    <p><span className="text-sm text-gray-600">Last Updated:</span> <span className="font-medium">{formatDateTime(selectedPO.updatedAt)}</span></p>
+                    <p><span className="text-xs text-gray-600">Name:</span> <span className="font-medium">{getCreatedByName(selectedPO.createdBy)}</span></p>
+                    <p><span className="text-xs text-gray-600">Created:</span> <span className="font-medium">{formatDateTime(selectedPO.createdAt)}</span></p>
+                    <p><span className="text-xs text-gray-600">Last Updated:</span> <span className="font-medium">{formatDateTime(selectedPO.updatedAt)}</span></p>
                   </div>
                 </div>
               </div>
@@ -1233,24 +1316,24 @@ const PurchaseOrderManagement: React.FC = () => {
                         <tr key={index}>
                           <td className="px-4 py-4 whitespace-nowrap">
                             <div>
-                              <div className="text-sm font-medium text-gray-900">
+                              <div className="text-xs font-medium text-gray-900">
                                 {getProductName(item.product)}
                               </div>
                               {typeof item.product === 'object' && item.product.brand && (
-                                <div className="text-sm text-gray-500">Brand: {item.product.brand}</div>
+                                <div className="text-xs text-gray-500">Brand: {item.product.brand}</div>
                               )}
                             </div>
                           </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                             {typeof item.product === 'object' ? item.product.category : '-'}
                           </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                             {item.quantity}
                           </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                             {formatCurrency(item.unitPrice)}
                           </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                          <td className="px-4 py-4 whitespace-nowrap text-xs font-medium text-gray-900">
                             {formatCurrency(item.totalPrice)}
                           </td>
                         </tr>
@@ -1258,7 +1341,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     </tbody>
                     <tfoot className="bg-gray-50">
                       <tr>
-                        <td colSpan={4} className="px-4 py-3 text-right text-sm font-medium text-gray-900">
+                        <td colSpan={4} className="px-4 py-3 text-right text-xs font-medium text-gray-900">
                           Total Amount:
                         </td>
                         <td className="px-4 py-3 text-sm font-bold text-gray-900">
@@ -1335,7 +1418,7 @@ const PurchaseOrderManagement: React.FC = () => {
       {showReceiveModal && selectedPO && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">Receive Items</h2>
                 <p className="text-gray-600">PO: {selectedPO.poNumber}</p>
@@ -1348,7 +1431,7 @@ const PurchaseOrderManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-6 space-y-6">
+            <div className="p-4 space-y-3">
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex">
                   <Package className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
@@ -1369,7 +1452,7 @@ const PurchaseOrderManagement: React.FC = () => {
                 <select
                   value={receiveData.location}
                   onChange={(e) => setReceiveData({ ...receiveData, location: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="main-warehouse">Main Warehouse</option>
                   <option value="secondary-warehouse">Secondary Warehouse</option>
@@ -1386,19 +1469,19 @@ const PurchaseOrderManagement: React.FC = () => {
                     return (
                       <div key={index} className="grid grid-cols-12 gap-4 items-center p-4 bg-gray-50 rounded-lg">
                         <div className="col-span-6">
-                          <div className="text-sm font-medium text-gray-900">
+                          <div className="text-xs font-medium text-gray-900">
                             {getProductName(item.product)}
                           </div>
                           {typeof item.product === 'object' && item.product.category && (
-                            <div className="text-sm text-gray-500">Category: {item.product.category}</div>
+                            <div className="text-xs text-gray-500">Category: {item.product.category}</div>
                           )}
                         </div>
                         <div className="col-span-2 text-center">
-                          <div className="text-sm text-gray-600">Ordered</div>
+                          <div className="text-xs text-gray-600">Ordered</div>
                           <div className="text-sm font-medium">{item.quantity}</div>
                         </div>
                         <div className="col-span-2">
-                          <label className="block text-sm text-gray-600 mb-1">Received</label>
+                          <label className="block text-xs text-gray-600 mb-1">Received</label>
                           <input
                             type="number"
                             value={receivedItem?.quantityReceived || 0}
@@ -1410,13 +1493,13 @@ const PurchaseOrderManagement: React.FC = () => {
                               };
                               setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
                             }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                             min="0"
                             max={item.quantity}
                           />
                         </div>
                         <div className="col-span-2 text-center">
-                          <div className="text-sm text-gray-600">Unit Price</div>
+                          <div className="text-xs text-gray-600">Unit Price</div>
                           <div className="text-sm font-medium">{formatCurrency(item.unitPrice)}</div>
                         </div>
                       </div>
@@ -1427,7 +1510,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
               {/* Summary */}
               <div className="bg-gray-50 p-4 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-900 mb-2">Receipt Summary</h4>
+                <h4 className="text-xs font-medium text-gray-900 mb-2">Receipt Summary</h4>
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
                     <span className="text-gray-600">Total Items Ordered:</span>

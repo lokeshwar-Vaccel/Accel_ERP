@@ -288,75 +288,75 @@ const ProductManagement: React.FC = () => {
   };
 
   return (
-    <div className="pl-2 pr-6 py-6 space-y-6">
+    <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader 
         title="Product Management"
         subtitle="Manage your product catalog and inventory"
       >
         <button 
           onClick={openAddProductModal}
-          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
         >
-          <Plus className="w-5 h-5" />
-          <span>Add Product</span>
+          <Plus className="w-4 h-4" />
+          <span className="text-sm">Add Product</span>
         </button>
       </PageHeader>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Products</p>
-                              <p className="text-2xl font-bold text-gray-900">{Array.isArray(products) ? products.length : 0}</p>
+              <p className="text-xs text-gray-600">Total Products</p>
+                              <p className="text-xl font-bold text-gray-900">{Array.isArray(products) ? products.length : 0}</p>
             </div>
-            <Package className="w-8 h-8 text-blue-600" />
+            <Package className="w-6 h-6 text-blue-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Active Products</p>
-              <p className="text-2xl font-bold text-green-600">
+              <p className="text-xs text-gray-600">Active Products</p>
+              <p className="text-xl font-bold text-green-600">
                 {Array.isArray(products) ? products.filter(p => p.isActive).length : 0}
               </p>
             </div>
-            <TrendingUp className="w-8 h-8 text-green-600" />
+            <TrendingUp className="w-6 h-6 text-green-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Categories</p>
-              <p className="text-2xl font-bold text-purple-600">{categories.length}</p>
+              <p className="text-xs text-gray-600">Categories</p>
+              <p className="text-xl font-bold text-purple-600">{categories.length}</p>
             </div>
-            <Package className="w-8 h-8 text-purple-600" />
+            <Package className="w-6 h-6 text-purple-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Avg Price</p>
-              <p className="text-2xl font-bold text-orange-600">
+              <p className="text-xs text-gray-600">Avg Price</p>
+              <p className="text-xl font-bold text-orange-600">
                 ₹{Array.isArray(products) && products.length > 0 ? Math.round(products.reduce((acc, p) => acc + (p.price || 0), 0) / products.length).toLocaleString() : 0}
               </p>
             </div>
-            <DollarSign className="w-8 h-8 text-orange-600" />
+            <DollarSign className="w-6 h-6 text-orange-600" />
           </div>
         </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
               placeholder="Search products..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
           
@@ -367,13 +367,13 @@ const ProductManagement: React.FC = () => {
                 setShowCategoryDropdown(!showCategoryDropdown);
                 setShowStatusDropdown(false);
               }}
-              className="flex items-center justify-between w-full md:w-48 px-4 py-2 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              className="flex items-center justify-between w-full md:w-32 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
             >
-              <span className="text-gray-700">{getCategoryLabel(categoryFilter)}</span>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+              <span className="text-gray-700 truncate mr-1">{getCategoryLabel(categoryFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCategoryDropdown ? 'rotate-180' : ''}`} />
             </button>
             {showCategoryDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
                 {categoryOptions.map((option) => (
                   <button
                     key={option.value}
@@ -381,7 +381,7 @@ const ProductManagement: React.FC = () => {
                       setCategoryFilter(option.value);
                       setShowCategoryDropdown(false);
                     }}
-                    className={`w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors ${
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
                       categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
                     }`}
                   >
@@ -399,13 +399,13 @@ const ProductManagement: React.FC = () => {
                 setShowStatusDropdown(!showStatusDropdown);
                 setShowCategoryDropdown(false);
               }}
-              className="flex items-center justify-between w-full md:w-40 px-4 py-2 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              className="flex items-center justify-between w-full md:w-28 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
             >
-              <span className="text-gray-700">{getStatusLabel(statusFilter)}</span>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+              <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
             </button>
             {showStatusDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
                 {statusOptions.map((option) => (
                   <button
                     key={option.value}
@@ -413,7 +413,7 @@ const ProductManagement: React.FC = () => {
                       setStatusFilter(option.value);
                       setShowStatusDropdown(false);
                     }}
-                    className={`w-full px-4 py-2 text-left hover:bg-gray-50 transition-colors ${
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
                       statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
                     }`}
                   >
@@ -432,49 +432,49 @@ const ProductManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">Loading products...</td>
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">Loading products...</td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">No products found</td>
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No products found</td>
                 </tr>
               ) : (
                 filteredProducts.map((product) => (
                   <tr key={product._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{product.name}</div>
-                        <div className="text-sm text-gray-500">Code: {product.productCode || 'N/A'}</div>
+                        <div className="text-xs font-medium text-gray-900">{product.name}</div>
+                        <div className="text-xs text-gray-500">Code: {product.productCode || 'N/A'}</div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{product.category}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{product.brand || 'N/A'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.category}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.brand || 'N/A'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
                       ₹{product.price.toLocaleString()}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {product.minStockLevel}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         product.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                       }`}>
                         {product.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
                       <div className="flex items-center space-x-2">
                         <button 
                           onClick={() => openEditProductModal(product)}
@@ -503,8 +503,8 @@ const ProductManagement: React.FC = () => {
       {/* Product Form Modal */}
       {showProductModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">
                 {isEditing ? 'Edit Product' : 'Add New Product'}
               </h2>
@@ -516,7 +516,7 @@ const ProductManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -533,7 +533,7 @@ const ProductManagement: React.FC = () => {
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.name ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Enter product name"
@@ -550,7 +550,7 @@ const ProductManagement: React.FC = () => {
                     name="category"
                     value={formData.category}
                     onChange={handleInputChange}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.category ? 'border-red-500' : 'border-gray-300'
                     }`}
                   >
@@ -575,7 +575,7 @@ const ProductManagement: React.FC = () => {
                     name="brand"
                     value={formData.brand}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter brand name"
                   />
                 </div>
@@ -588,7 +588,7 @@ const ProductManagement: React.FC = () => {
                     name="modelNumber"
                     value={formData.modelNumber}
                     onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder="Enter model number"
                   />
                 </div>
@@ -603,7 +603,7 @@ const ProductManagement: React.FC = () => {
                   value={formData.description}
                   onChange={handleInputChange}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter product description"
                 />
               </div>
@@ -620,7 +620,7 @@ const ProductManagement: React.FC = () => {
                     onChange={handleInputChange}
                     min="0"
                     step="0.01"
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.price ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="0.00"
@@ -639,7 +639,7 @@ const ProductManagement: React.FC = () => {
                     value={formData.minStockLevel}
                     onChange={handleInputChange}
                     min="0"
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.minStockLevel ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="0"
@@ -674,7 +674,7 @@ const ProductManagement: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && productToDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md m-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm m-4">
             <div className="p-6">
               <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 rounded-full">
                 <Trash2 className="w-6 h-6 text-red-600" />

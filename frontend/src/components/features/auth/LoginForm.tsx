@@ -98,7 +98,7 @@ export const LoginForm: React.FC = () => {
                 Email Address
               </label>
               <div className="relative">
-                <Mail size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                  <Mail size={16} className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
                   id="email"
                   type="email"
@@ -119,7 +119,7 @@ export const LoginForm: React.FC = () => {
                 Password
               </label>
               <div className="relative">
-                <Lock size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                  <Lock size={16} className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}

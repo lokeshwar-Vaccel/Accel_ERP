@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Search, 
@@ -17,7 +17,8 @@ import {
   TrendingUp,
   Building,
   Package,
-  RefreshCw
+  RefreshCw,
+  ChevronDown
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -131,6 +132,10 @@ const AMCManagement: React.FC = () => {
   
   // Form errors
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Dropdown state
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -470,8 +475,44 @@ const AMCManagement: React.FC = () => {
     }
   ];
 
+  // Status options with labels
+  const statusOptions = [
+    { value: 'all', label: 'All Status' },
+    { value: 'active', label: 'Active' },
+    { value: 'expired', label: 'Expired' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'cancelled', label: 'Cancelled' }
+  ];
+
+  const getStatusLabel = (value: string) => {
+    const option = statusOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Status';
+  };
+
+  const getCustomerLabel = (value: string) => {
+    if (value === 'all') return 'All Customers';
+    const customer = customers.find(c => c._id === value);
+    return customer ? customer.name : 'All Customers';
+  };
+
+  // Click outside handler for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.dropdown-container')) {
+        setShowStatusDropdown(false);
+        setShowCustomerDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 space-y-3">
       <PageHeader 
         title="Annual Maintenance Contracts"
         subtitle="Manage AMC contracts, visits, and renewals"
@@ -479,31 +520,31 @@ const AMCManagement: React.FC = () => {
         <div className="flex space-x-3">
           <button
             onClick={() => setShowExpiryModal(true)}
-            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
-            <Bell className="w-5 h-5" />
-            <span>Expiry Alerts</span>
+            <Bell className="w-4 h-4" />
+            <span className="text-sm">Expiry Alerts</span>
           </button>
           <button
             onClick={handleCreateAMC}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
-            <Plus className="w-5 h-5" />
-            <span>New AMC Contract</span>
+            <Plus className="w-4 h-4" />
+            <span className="text-sm">New AMC Contract</span>
           </button>
         </div>
       </PageHeader>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">{stat.title}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                <p className="text-xs text-gray-600">{stat.title}</p>
+                <p className="text-xl font-bold text-gray-900">{stat.value}</p>
               </div>
-              <div className={`p-3 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
+              <div className={`p-2 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
                 {stat.icon}
               </div>
             </div>
@@ -512,51 +553,99 @@ const AMCManagement: React.FC = () => {
       </div>
 
       {/* Filters and Search */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0">
-          <div className="flex items-center space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-              <input
-                type="text"
-                placeholder="Search AMC contracts..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as AMCStatus | 'all')}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Status</option>
-              <option value="active">Active</option>
-              <option value="expired">Expired</option>
-              <option value="cancelled">Cancelled</option>
-              <option value="pending">Pending</option>
-            </select>
-
-            <select
-              value={customerFilter}
-              onChange={(e) => setCustomerFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Customers</option>
-              {customers.map(customer => (
-                <option key={customer._id} value={customer._id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search AMC contracts..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
           </div>
 
-          <div className="flex items-center space-x-2">
-            <span className="text-sm text-gray-600">
-              Showing {filteredAMCs.length} of {amcs.length} contracts
-            </span>
+          {/* Status Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowStatusDropdown(!showStatusDropdown);
+                setShowCustomerDropdown(false);
+              }}
+              className="flex items-center justify-between w-full md:w-32 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showStatusDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setStatusFilter(option.value as AMCStatus | 'all');
+                      setShowStatusDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
+          {/* Customer Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowCustomerDropdown(!showCustomerDropdown);
+                setShowStatusDropdown(false);
+              }}
+              className="flex items-center justify-between w-full md:w-40 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getCustomerLabel(customerFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCustomerDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showCustomerDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                <button
+                  onClick={() => {
+                    setCustomerFilter('all');
+                    setShowCustomerDropdown(false);
+                  }}
+                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                    customerFilter === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                  }`}
+                >
+                  All Customers
+                </button>
+                {customers.map((customer) => (
+                  <button
+                    key={customer._id}
+                    onClick={() => {
+                      setCustomerFilter(customer._id);
+                      setShowCustomerDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      customerFilter === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {customer.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <div className="mt-4 flex items-center justify-between">
+          <span className="text-xs text-gray-600">
+            Showing {filteredAMCs.length} of {amcs.length} contracts
+          </span>
         </div>
       </div>
 
@@ -566,28 +655,28 @@ const AMCManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Contract
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Customer
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Products
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Value & Duration
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Visits
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Next Visit
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -595,33 +684,33 @@ const AMCManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">Loading AMC contracts...</td>
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Loading AMC contracts...</td>
                 </tr>
               ) : filteredAMCs.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">No AMC contracts found</td>
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No AMC contracts found</td>
                 </tr>
               ) : (
                 filteredAMCs.map((amc) => (
                   <tr key={amc._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-blue-600">{amc.contractNumber}</div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-xs text-gray-500">
                           {formatDate(amc.startDate)} - {formatDate(amc.endDate)}
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{getCustomerName(amc.customer)}</div>
+                        <div className="text-xs font-medium text-gray-900">{getCustomerName(amc.customer)}</div>
                         {typeof amc.customer === 'object' && amc.customer.phone && (
-                          <div className="text-sm text-gray-500">{amc.customer.phone}</div>
+                          <div className="text-xs text-gray-500">{amc.customer.phone}</div>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">
                         {Array.isArray(amc.products) ? (
                           <div>
                             <div className="font-medium">{amc.products.length} product(s)</div>
@@ -635,15 +724,15 @@ const AMCManagement: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{formatCurrency(amc.contractValue)}</div>
-                        <div className="text-sm text-gray-500">
+                        <div className="text-xs font-medium text-gray-900">{formatCurrency(amc.contractValue)}</div>
+                        <div className="text-xs text-gray-500">
                           {amc.daysUntilExpiry ? `${amc.daysUntilExpiry} days left` : 'Expired'}
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm">
                         <div className="font-medium text-gray-900">
                           {amc.completedVisits}/{amc.scheduledVisits}
@@ -656,13 +745,13 @@ const AMCManagement: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(amc.status)}`}>
                         {getStatusIcon(amc.status)}
                         <span className="ml-1 capitalize">{amc.status}</span>
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {amc.nextVisitDate ? (
                         <div>
                           <div className="font-medium">{formatDate(amc.nextVisitDate)}</div>
@@ -674,7 +763,7 @@ const AMCManagement: React.FC = () => {
                         <span className="text-gray-400">No upcoming visit</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => openDetailsModal(amc)}
@@ -710,8 +799,8 @@ const AMCManagement: React.FC = () => {
       {/* Add AMC Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Create AMC Contract</h2>
               <button
                 onClick={() => setShowAddModal(false)}
@@ -721,7 +810,7 @@ const AMCManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitAMC(); }} className="p-6 space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitAMC(); }} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -736,7 +825,7 @@ const AMCManagement: React.FC = () => {
                   <select
                     value={amcFormData.customer}
                     onChange={(e) => setAmcFormData({ ...amcFormData, customer: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.customer ? 'border-red-500' : 'border-gray-300'
                     }`}
                   >
@@ -760,7 +849,7 @@ const AMCManagement: React.FC = () => {
                     min="1"
                     value={amcFormData.scheduledVisits}
                     onChange={(e) => setAmcFormData({ ...amcFormData, scheduledVisits: Number(e.target.value) })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.scheduledVisits ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Number of visits"
@@ -782,7 +871,7 @@ const AMCManagement: React.FC = () => {
                     const selectedValues = Array.from(e.target.selectedOptions, option => option.value);
                     setAmcFormData({ ...amcFormData, products: selectedValues });
                   }}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-32 ${
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-32 ${
                     formErrors.products ? 'border-red-500' : 'border-gray-300'
                   }`}
                 >
@@ -807,7 +896,7 @@ const AMCManagement: React.FC = () => {
                     type="date"
                     value={amcFormData.startDate}
                     onChange={(e) => setAmcFormData({ ...amcFormData, startDate: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.startDate ? 'border-red-500' : 'border-gray-300'
                     }`}
                   />
@@ -823,7 +912,7 @@ const AMCManagement: React.FC = () => {
                     type="date"
                     value={amcFormData.endDate}
                     onChange={(e) => setAmcFormData({ ...amcFormData, endDate: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.endDate ? 'border-red-500' : 'border-gray-300'
                     }`}
                   />
@@ -842,7 +931,7 @@ const AMCManagement: React.FC = () => {
                   min="0"
                   value={amcFormData.contractValue}
                   onChange={(e) => setAmcFormData({ ...amcFormData, contractValue: Number(e.target.value) })}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     formErrors.contractValue ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Enter contract value"
@@ -860,7 +949,7 @@ const AMCManagement: React.FC = () => {
                   value={amcFormData.terms}
                   onChange={(e) => setAmcFormData({ ...amcFormData, terms: e.target.value })}
                   rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter contract terms and conditions..."
                 />
               </div>
@@ -889,8 +978,8 @@ const AMCManagement: React.FC = () => {
       {/* Edit AMC Modal */}
       {showEditModal && editingAMC && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Edit AMC Contract</h2>
               <button
                 onClick={() => setShowEditModal(false)}
@@ -900,7 +989,7 @@ const AMCManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleUpdateAMC(); }} className="p-6 space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleUpdateAMC(); }} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -915,7 +1004,7 @@ const AMCManagement: React.FC = () => {
                   <select
                     value={amcFormData.customer}
                     onChange={(e) => setAmcFormData({ ...amcFormData, customer: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.customer ? 'border-red-500' : 'border-gray-300'
                     }`}
                   >
@@ -939,7 +1028,7 @@ const AMCManagement: React.FC = () => {
                     min="1"
                     value={amcFormData.scheduledVisits}
                     onChange={(e) => setAmcFormData({ ...amcFormData, scheduledVisits: Number(e.target.value) })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.scheduledVisits ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Number of visits"
@@ -961,7 +1050,7 @@ const AMCManagement: React.FC = () => {
                     const selectedValues = Array.from(e.target.selectedOptions, option => option.value);
                     setAmcFormData({ ...amcFormData, products: selectedValues });
                   }}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-32 ${
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-32 ${
                     formErrors.products ? 'border-red-500' : 'border-gray-300'
                   }`}
                 >
@@ -986,7 +1075,7 @@ const AMCManagement: React.FC = () => {
                     type="date"
                     value={amcFormData.startDate}
                     onChange={(e) => setAmcFormData({ ...amcFormData, startDate: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.startDate ? 'border-red-500' : 'border-gray-300'
                     }`}
                   />
@@ -1002,7 +1091,7 @@ const AMCManagement: React.FC = () => {
                     type="date"
                     value={amcFormData.endDate}
                     onChange={(e) => setAmcFormData({ ...amcFormData, endDate: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.endDate ? 'border-red-500' : 'border-gray-300'
                     }`}
                   />
@@ -1021,7 +1110,7 @@ const AMCManagement: React.FC = () => {
                   min="0"
                   value={amcFormData.contractValue}
                   onChange={(e) => setAmcFormData({ ...amcFormData, contractValue: Number(e.target.value) })}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     formErrors.contractValue ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Enter contract value"
@@ -1039,7 +1128,7 @@ const AMCManagement: React.FC = () => {
                   value={amcFormData.terms}
                   onChange={(e) => setAmcFormData({ ...amcFormData, terms: e.target.value })}
                   rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter contract terms and conditions..."
                 />
               </div>
@@ -1069,7 +1158,7 @@ const AMCManagement: React.FC = () => {
       {showDetailsModal && selectedAMC && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">{selectedAMC.contractNumber}</h2>
                 <p className="text-gray-600">AMC Contract Details</p>
@@ -1082,9 +1171,9 @@ const AMCManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="pl-2 pr-6 py-6 space-y-6">
+            <div className="pl-2 pr-6 py-6 space-y-4">
               {/* Contract Overview */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Customer Information */}
                 <div className="bg-gray-50 p-6 rounded-lg">
                   <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
@@ -1094,25 +1183,25 @@ const AMCManagement: React.FC = () => {
                   {typeof selectedAMC.customer === 'object' ? (
                     <div className="space-y-2">
                       <div>
-                        <p className="text-sm text-gray-600">Name</p>
+                        <p className="text-xs text-gray-600">Name</p>
                         <p className="font-medium">{selectedAMC.customer.name}</p>
                       </div>
                       {selectedAMC.customer.email && (
                         <div>
-                          <p className="text-sm text-gray-600">Email</p>
+                          <p className="text-xs text-gray-600">Email</p>
                           <p className="font-medium">{selectedAMC.customer.email}</p>
                         </div>
                       )}
                       <div>
-                        <p className="text-sm text-gray-600">Phone</p>
+                        <p className="text-xs text-gray-600">Phone</p>
                         <p className="font-medium">{selectedAMC.customer.phone}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-600">Address</p>
+                        <p className="text-xs text-gray-600">Address</p>
                         <p className="font-medium text-sm">{selectedAMC.customer.address}</p>
                       </div>
                       <div>
-                        <p className="text-sm text-gray-600">Type</p>
+                        <p className="text-xs text-gray-600">Type</p>
                         <span className="inline-block px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full capitalize">
                           {selectedAMC.customer.customerType}
                         </span>
@@ -1131,26 +1220,26 @@ const AMCManagement: React.FC = () => {
                   </h3>
                   <div className="space-y-2">
                     <div>
-                      <p className="text-sm text-gray-600">Status</p>
+                      <p className="text-xs text-gray-600">Status</p>
                       <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedAMC.status)}`}>
                         {getStatusIcon(selectedAMC.status)}
                         <span className="ml-1 capitalize">{selectedAMC.status}</span>
                       </span>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Contract Value</p>
+                      <p className="text-xs text-gray-600">Contract Value</p>
                       <p className="font-medium text-lg">{formatCurrency(selectedAMC.contractValue)}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Duration</p>
+                      <p className="text-xs text-gray-600">Duration</p>
                       <p className="font-medium">{formatDate(selectedAMC.startDate)} - {formatDate(selectedAMC.endDate)}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Days Remaining</p>
+                      <p className="text-xs text-gray-600">Days Remaining</p>
                       <p className="font-medium">{selectedAMC.daysUntilExpiry || 0} days</p>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Created By</p>
+                      <p className="text-xs text-gray-600">Created By</p>
                       <p className="font-medium">{getUserName(selectedAMC.createdBy)}</p>
                     </div>
                   </div>
@@ -1167,7 +1256,7 @@ const AMCManagement: React.FC = () => {
                       <div className="text-3xl font-bold text-blue-600">
                         {selectedAMC.completedVisits}/{selectedAMC.scheduledVisits}
                       </div>
-                      <p className="text-sm text-gray-600">Visits Completed</p>
+                      <p className="text-xs text-gray-600">Visits Completed</p>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div 
@@ -1176,13 +1265,13 @@ const AMCManagement: React.FC = () => {
                       ></div>
                     </div>
                     <div className="text-center">
-                      <p className="text-sm text-gray-600">
+                      <p className="text-xs text-gray-600">
                         {selectedAMC.completionPercentage || Math.round((selectedAMC.completedVisits / selectedAMC.scheduledVisits) * 100)}% Complete
                       </p>
                     </div>
                     {selectedAMC.nextVisitDate && (
                       <div className="text-center">
-                        <p className="text-sm text-gray-600">Next Visit</p>
+                        <p className="text-xs text-gray-600">Next Visit</p>
                         <p className="font-medium">{formatDate(selectedAMC.nextVisitDate)}</p>
                       </div>
                     )}
@@ -1255,13 +1344,13 @@ const AMCManagement: React.FC = () => {
                       ) : (
                         selectedAMC.visitSchedule.map((visit, index) => (
                           <tr key={visit._id || index}>
-                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                               {formatDate(visit.scheduledDate)}
                             </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                               {visit.completedDate ? formatDate(visit.completedDate) : '-'}
                             </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-900">
+                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                               {getUserName(visit.assignedTo) || '-'}
                             </td>
                             <td className="px-4 py-4 whitespace-nowrap">
@@ -1273,7 +1362,7 @@ const AMCManagement: React.FC = () => {
                                 {visit.status}
                               </span>
                             </td>
-                            <td className="px-4 py-4 text-sm text-gray-900">
+                            <td className="px-4 py-4 text-xs text-gray-900">
                               {visit.notes || '-'}
                             </td>
                           </tr>
@@ -1336,7 +1425,7 @@ const AMCManagement: React.FC = () => {
       {showExpiryModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Contract Expiry Alerts</h2>
               <button
                 onClick={() => setShowExpiryModal(false)}
@@ -1367,7 +1456,7 @@ const AMCManagement: React.FC = () => {
                         <div className="flex items-center justify-between">
                           <div>
                             <h4 className="font-medium text-gray-900">{amc.contractNumber}</h4>
-                            <p className="text-sm text-gray-600">{getCustomerName(amc.customer)}</p>
+                            <p className="text-xs text-gray-600">{getCustomerName(amc.customer)}</p>
                             <p className="text-sm text-orange-700">
                               Expires on {formatDate(amc.endDate)} ({amc.daysUntilExpiry} days left)
                             </p>

@@ -283,14 +283,14 @@ const ReportsManagement: React.FC = () => {
   };
 
   const renderOverviewDashboard = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Key Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-xs text-gray-600">Total Revenue</p>
+              <p className="text-xl font-bold text-gray-900">
                 {formatCurrency(revenueAnalytics?.totalRevenue || 0)}
               </p>
               <div className="flex items-center mt-1">
@@ -306,11 +306,11 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Active Tickets</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-xs text-gray-600">Active Tickets</p>
+              <p className="text-xl font-bold text-gray-900">
                 {ticketAnalytics?.totalTickets || 0}
               </p>
               <div className="flex items-center mt-1">
@@ -326,11 +326,11 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">AMC Contracts</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-xs text-gray-600">AMC Contracts</p>
+              <p className="text-xl font-bold text-gray-900">
                 {amcAnalytics?.activeContracts || 0}
               </p>
               <div className="flex items-center mt-1">
@@ -346,11 +346,11 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">SLA Compliance</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-xs text-gray-600">SLA Compliance</p>
+              <p className="text-xl font-bold text-gray-900">
                 {formatPercentage(ticketAnalytics?.slaCompliance || 0)}
               </p>
               <div className="flex items-center mt-1">
@@ -368,9 +368,9 @@ const ReportsManagement: React.FC = () => {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Revenue Trend */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <TrendingUp className="w-5 h-5 mr-2" />
             Revenue Trend
@@ -384,7 +384,7 @@ const ReportsManagement: React.FC = () => {
         </div>
 
         {/* Ticket Status Distribution */}
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
             <PieChart className="w-5 h-5 mr-2" />
             Ticket Status Distribution
@@ -399,18 +399,18 @@ const ReportsManagement: React.FC = () => {
       </div>
 
       {/* Performance Summary */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h4 className="text-md font-semibold text-gray-900 mb-3">Top Performing Engineers</h4>
           <div className="space-y-3">
             {engineerPerformance?.engineerStats.slice(0, 3).map((engineer, index) => (
               <div key={index} className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
                     <span className="text-sm font-medium text-blue-600">{index + 1}</span>
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{engineer.name}</p>
+                    <p className="text-xs font-medium text-gray-900">{engineer.name}</p>
                     <p className="text-xs text-gray-600">{engineer.ticketsCompleted} tickets</p>
                   </div>
                 </div>
@@ -423,12 +423,12 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h4 className="text-md font-semibold text-gray-900 mb-3">Revenue by Client Type</h4>
           <div className="space-y-4">
             <div>
               <div className="flex justify-between items-center mb-1">
-                <span className="text-sm text-gray-600">Retail Clients</span>
+                <span className="text-xs text-gray-600">Retail Clients</span>
                 <span className="text-sm font-medium">
                   {formatCurrency(revenueAnalytics?.retailRevenue || 0)}
                 </span>
@@ -442,7 +442,7 @@ const ReportsManagement: React.FC = () => {
             </div>
             <div>
               <div className="flex justify-between items-center mb-1">
-                <span className="text-sm text-gray-600">Telecom Clients</span>
+                <span className="text-xs text-gray-600">Telecom Clients</span>
                 <span className="text-sm font-medium">
                   {formatCurrency(revenueAnalytics?.telecomRevenue || 0)}
                 </span>
@@ -457,31 +457,31 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h4 className="text-md font-semibold text-gray-900 mb-3">AMC Status Summary</h4>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Active Contracts</span>
+              <span className="text-xs text-gray-600">Active Contracts</span>
               <span className="text-sm font-medium text-green-600">
                 {amcAnalytics?.activeContracts || 0}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Expiring Soon</span>
+              <span className="text-xs text-gray-600">Expiring Soon</span>
               <span className="text-sm font-medium text-orange-600">
                 {amcAnalytics?.expiringContracts || 0}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Overdue</span>
+              <span className="text-xs text-gray-600">Overdue</span>
               <span className="text-sm font-medium text-red-600">
                 {amcAnalytics?.overdueContracts || 0}
               </span>
             </div>
             <div className="pt-2 border-t border-gray-200">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-900">Total Value</span>
-                <span className="text-sm font-medium text-gray-900">
+                <span className="text-xs font-medium text-gray-900">Total Value</span>
+                <span className="text-xs font-medium text-gray-900">
                   {formatCurrency(amcAnalytics?.contractValue || 0)}
                 </span>
               </div>
@@ -493,65 +493,65 @@ const ReportsManagement: React.FC = () => {
   );
 
   const renderTicketAnalytics = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* TAT Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Average TAT</p>
-              <p className="text-2xl font-bold text-gray-900">{ticketAnalytics?.avgTAT || 0} days</p>
+              <p className="text-xs text-gray-600">Average TAT</p>
+              <p className="text-xl font-bold text-gray-900">{ticketAnalytics?.avgTAT || 0} days</p>
             </div>
-            <Clock className="w-8 h-8 text-blue-600" />
+            <Clock className="w-6 h-6 text-blue-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">SLA Compliance</p>
-              <p className="text-2xl font-bold text-green-600">
+              <p className="text-xs text-gray-600">SLA Compliance</p>
+              <p className="text-xl font-bold text-green-600">
                 {formatPercentage(ticketAnalytics?.slaCompliance || 0)}
               </p>
             </div>
-            <CheckCircle className="w-8 h-8 text-green-600" />
+            <CheckCircle className="w-6 h-6 text-green-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Tickets</p>
-              <p className="text-2xl font-bold text-gray-900">{ticketAnalytics?.totalTickets || 0}</p>
+              <p className="text-xs text-gray-600">Total Tickets</p>
+              <p className="text-xl font-bold text-gray-900">{ticketAnalytics?.totalTickets || 0}</p>
             </div>
-            <FileText className="w-8 h-8 text-purple-600" />
+            <FileText className="w-6 h-6 text-purple-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Closed Tickets</p>
-              <p className="text-2xl font-bold text-gray-900">{ticketAnalytics?.closedTickets || 0}</p>
+              <p className="text-xs text-gray-600">Closed Tickets</p>
+              <p className="text-xl font-bold text-gray-900">{ticketAnalytics?.closedTickets || 0}</p>
             </div>
-            <CheckCircle className="w-8 h-8 text-green-600" />
+            <CheckCircle className="w-6 h-6 text-green-600" />
           </div>
         </div>
       </div>
 
       {/* TAT Distribution */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Turnaround Time Distribution</h3>
         <div className="grid grid-cols-4 gap-4">
           {ticketAnalytics?.tatDistribution.map((item, index) => (
             <div key={index} className="text-center p-4 bg-gray-50 rounded-lg">
-              <p className="text-2xl font-bold text-blue-600">{item.count}</p>
-              <p className="text-sm text-gray-600">{item.range}</p>
+              <p className="text-xl font-bold text-blue-600">{item.count}</p>
+              <p className="text-xs text-gray-600">{item.range}</p>
             </div>
           ))}
         </div>
       </div>
 
       {/* Priority & Status Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Priority Breakdown</h3>
           <div className="space-y-3">
             {Object.entries(ticketAnalytics?.priorityBreakdown || {}).map(([priority, count]) => (
@@ -575,7 +575,7 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Status Breakdown</h3>
           <div className="space-y-3">
             {Object.entries(ticketAnalytics?.statusBreakdown || {}).map(([status, count]) => (
@@ -603,60 +603,60 @@ const ReportsManagement: React.FC = () => {
   );
 
   const renderInventoryAnalytics = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Inventory Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Value</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-xs text-gray-600">Total Value</p>
+              <p className="text-xl font-bold text-gray-900">
                 {formatCurrency(inventoryAnalytics?.totalValue || 0)}
               </p>
             </div>
-            <Package className="w-8 h-8 text-green-600" />
+            <Package className="w-6 h-6 text-green-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Items</p>
-              <p className="text-2xl font-bold text-gray-900">{inventoryAnalytics?.totalItems || 0}</p>
+              <p className="text-xs text-gray-600">Total Items</p>
+              <p className="text-xl font-bold text-gray-900">{inventoryAnalytics?.totalItems || 0}</p>
             </div>
-            <BarChartIcon className="w-8 h-8 text-blue-600" />
+            <BarChartIcon className="w-6 h-6 text-blue-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Low Stock Items</p>
-              <p className="text-2xl font-bold text-red-600">{inventoryAnalytics?.lowStockItems || 0}</p>
+              <p className="text-xs text-gray-600">Low Stock Items</p>
+              <p className="text-xl font-bold text-red-600">{inventoryAnalytics?.lowStockItems || 0}</p>
             </div>
-            <AlertTriangle className="w-8 h-8 text-red-600" />
+            <AlertTriangle className="w-6 h-6 text-red-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Categories</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-xs text-gray-600">Categories</p>
+              <p className="text-xl font-bold text-gray-900">
                 {Object.keys(inventoryAnalytics?.categoryBreakdown || {}).length}
               </p>
             </div>
-            <Settings className="w-8 h-8 text-purple-600" />
+            <Settings className="w-6 h-6 text-purple-600" />
           </div>
         </div>
       </div>
 
       {/* Value Distribution & Top Moving Items */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Value Distribution by Category</h3>
           <div className="space-y-4">
             {inventoryAnalytics?.valueDistribution.map((item, index) => (
               <div key={index}>
                 <div className="flex justify-between items-center mb-1">
-                  <span className="text-sm text-gray-600">{item.category}</span>
+                  <span className="text-xs text-gray-600">{item.category}</span>
                   <span className="text-sm font-medium">{formatCurrency(item.value)}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
@@ -670,18 +670,18 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Moving Items</h3>
           <div className="space-y-3">
             {inventoryAnalytics?.topMovingItems.map((item, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                  <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center">
                     <span className="text-sm font-medium text-green-600">{index + 1}</span>
                   </div>
                   <span className="text-sm font-medium">{item.name}</span>
                 </div>
-                <span className="text-sm text-gray-600">{item.movement} units</span>
+                <span className="text-xs text-gray-600">{item.movement} units</span>
               </div>
             ))}
           </div>
@@ -691,63 +691,63 @@ const ReportsManagement: React.FC = () => {
   );
 
   const renderRevenueAnalytics = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Revenue Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-xs text-gray-600">Total Revenue</p>
+              <p className="text-xl font-bold text-gray-900">
                 {formatCurrency(revenueAnalytics?.totalRevenue || 0)}
               </p>
             </div>
-            <DollarSign className="w-8 h-8 text-green-600" />
+            <DollarSign className="w-6 h-6 text-green-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Retail Revenue</p>
-              <p className="text-2xl font-bold text-blue-600">
+              <p className="text-xs text-gray-600">Retail Revenue</p>
+              <p className="text-xl font-bold text-blue-600">
                 {formatCurrency(revenueAnalytics?.retailRevenue || 0)}
               </p>
             </div>
-            <TrendingUp className="w-8 h-8 text-blue-600" />
+            <TrendingUp className="w-6 h-6 text-blue-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Telecom Revenue</p>
-              <p className="text-2xl font-bold text-purple-600">
+              <p className="text-xs text-gray-600">Telecom Revenue</p>
+              <p className="text-xl font-bold text-purple-600">
                 {formatCurrency(revenueAnalytics?.telecomRevenue || 0)}
               </p>
             </div>
-            <TrendingUp className="w-8 h-8 text-purple-600" />
+            <TrendingUp className="w-6 h-6 text-purple-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Monthly Growth</p>
-              <p className="text-2xl font-bold text-green-600">
+              <p className="text-xs text-gray-600">Monthly Growth</p>
+              <p className="text-xl font-bold text-green-600">
                 {formatPercentage(revenueAnalytics?.monthlyGrowth || 0)}
               </p>
             </div>
-            <ArrowUp className="w-8 h-8 text-green-600" />
+            <ArrowUp className="w-6 h-6 text-green-600" />
           </div>
         </div>
       </div>
 
       {/* Revenue Breakdown */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Revenue by Client Type</h3>
           <div className="space-y-4">
             <div>
               <div className="flex justify-between items-center mb-1">
-                <span className="text-sm text-gray-600">Retail Clients</span>
+                <span className="text-xs text-gray-600">Retail Clients</span>
                 <span className="text-sm font-medium">
                   {formatCurrency(revenueAnalytics?.retailRevenue || 0)}
                 </span>
@@ -764,7 +764,7 @@ const ReportsManagement: React.FC = () => {
             </div>
             <div>
               <div className="flex justify-between items-center mb-1">
-                <span className="text-sm text-gray-600">Telecom Clients</span>
+                <span className="text-xs text-gray-600">Telecom Clients</span>
                 <span className="text-sm font-medium">
                   {formatCurrency(revenueAnalytics?.telecomRevenue || 0)}
                 </span>
@@ -782,13 +782,13 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Revenue Clients</h3>
           <div className="space-y-3">
             {revenueAnalytics?.topClients.map((client, index) => (
               <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                  <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
                     <span className="text-sm font-medium text-blue-600">{index + 1}</span>
                   </div>
                   <div>
@@ -808,7 +808,7 @@ const ReportsManagement: React.FC = () => {
       </div>
 
       {/* Monthly Revenue Trend */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Revenue Trend</h3>
         <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
           <div className="text-center">
@@ -829,52 +829,52 @@ const ReportsManagement: React.FC = () => {
   );
 
   const renderAMCAnalytics = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* AMC Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Contracts</p>
-              <p className="text-2xl font-bold text-gray-900">{amcAnalytics?.totalContracts || 0}</p>
+              <p className="text-xs text-gray-600">Total Contracts</p>
+              <p className="text-xl font-bold text-gray-900">{amcAnalytics?.totalContracts || 0}</p>
             </div>
-            <Briefcase className="w-8 h-8 text-blue-600" />
+            <Briefcase className="w-6 h-6 text-blue-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Active Contracts</p>
-              <p className="text-2xl font-bold text-green-600">{amcAnalytics?.activeContracts || 0}</p>
+              <p className="text-xs text-gray-600">Active Contracts</p>
+              <p className="text-xl font-bold text-green-600">{amcAnalytics?.activeContracts || 0}</p>
             </div>
-            <CheckCircle className="w-8 h-8 text-green-600" />
+            <CheckCircle className="w-6 h-6 text-green-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Expiring Soon</p>
-              <p className="text-2xl font-bold text-orange-600">{amcAnalytics?.expiringContracts || 0}</p>
+              <p className="text-xs text-gray-600">Expiring Soon</p>
+              <p className="text-xl font-bold text-orange-600">{amcAnalytics?.expiringContracts || 0}</p>
             </div>
-            <AlertTriangle className="w-8 h-8 text-orange-600" />
+            <AlertTriangle className="w-6 h-6 text-orange-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Contract Value</p>
-              <p className="text-2xl font-bold text-purple-600">
+              <p className="text-xs text-gray-600">Contract Value</p>
+              <p className="text-xl font-bold text-purple-600">
                 {formatCurrency(amcAnalytics?.contractValue || 0)}
               </p>
             </div>
-            <DollarSign className="w-8 h-8 text-purple-600" />
+            <DollarSign className="w-6 h-6 text-purple-600" />
           </div>
         </div>
       </div>
 
       {/* AMC Status Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Contract Status Distribution</h3>
           <div className="space-y-4">
             {Object.entries(amcAnalytics?.statusBreakdown || {}).map(([status, count]) => (
@@ -897,7 +897,7 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Visit Compliance</h3>
           <div className="text-center">
             <div className="relative inline-flex items-center justify-center w-32 h-32">
@@ -924,18 +924,18 @@ const ReportsManagement: React.FC = () => {
                 />
               </svg>
               <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-2xl font-bold text-green-600">
+                <span className="text-xl font-bold text-green-600">
                   {formatPercentage(amcAnalytics?.visitCompliance || 0)}
                 </span>
               </div>
             </div>
-            <p className="text-sm text-gray-600 mt-2">Visit Compliance Rate</p>
+            <p className="text-xs text-gray-600 mt-2">Visit Compliance Rate</p>
           </div>
         </div>
       </div>
 
       {/* Monthly Renewals */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Monthly Renewals & New Contracts</h3>
         <div className="grid grid-cols-3 gap-4">
           {amcAnalytics?.monthlyRenewals.map((month, index) => (
@@ -957,54 +957,54 @@ const ReportsManagement: React.FC = () => {
   );
 
   const renderLeadAnalytics = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Lead Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Leads</p>
-              <p className="text-2xl font-bold text-gray-900">{leadAnalytics?.totalLeads || 0}</p>
+              <p className="text-xs text-gray-600">Total Leads</p>
+              <p className="text-xl font-bold text-gray-900">{leadAnalytics?.totalLeads || 0}</p>
             </div>
-            <Target className="w-8 h-8 text-blue-600" />
+            <Target className="w-6 h-6 text-blue-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Converted</p>
-              <p className="text-2xl font-bold text-green-600">{leadAnalytics?.convertedLeads || 0}</p>
+              <p className="text-xs text-gray-600">Converted</p>
+              <p className="text-xl font-bold text-green-600">{leadAnalytics?.convertedLeads || 0}</p>
             </div>
-            <CheckCircle className="w-8 h-8 text-green-600" />
+            <CheckCircle className="w-6 h-6 text-green-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Conversion Rate</p>
-              <p className="text-2xl font-bold text-purple-600">
+              <p className="text-xs text-gray-600">Conversion Rate</p>
+              <p className="text-xl font-bold text-purple-600">
                 {formatPercentage(leadAnalytics?.conversionRate || 0)}
               </p>
             </div>
-            <TrendingUp className="w-8 h-8 text-purple-600" />
+            <TrendingUp className="w-6 h-6 text-purple-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Top Performer Rate</p>
-                             <p className="text-2xl font-bold text-orange-600">
+              <p className="text-xs text-gray-600">Top Performer Rate</p>
+                             <p className="text-xl font-bold text-orange-600">
                  {formatPercentage((leadAnalytics?.topPerformers && leadAnalytics.topPerformers.length > 0) ? leadAnalytics.topPerformers[0].rate : 0)}
                </p>
             </div>
-            <User className="w-8 h-8 text-orange-600" />
+            <User className="w-6 h-6 text-orange-600" />
           </div>
         </div>
       </div>
 
       {/* Lead Sources & Stages */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Lead Sources</h3>
           <div className="space-y-3">
             {Object.entries(leadAnalytics?.leadSources || {}).map(([source, count]) => (
@@ -1024,7 +1024,7 @@ const ReportsManagement: React.FC = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Sales Pipeline</h3>
           <div className="space-y-3">
             {Object.entries(leadAnalytics?.stageDistribution || {}).map(([stage, count]) => (
@@ -1051,13 +1051,13 @@ const ReportsManagement: React.FC = () => {
       </div>
 
       {/* Top Performers */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Performing Sales Team</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {leadAnalytics?.topPerformers.map((performer, index) => (
             <div key={index} className="p-4 bg-gray-50 rounded-lg">
               <div className="flex items-center space-x-3 mb-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
                   index === 0 ? 'bg-yellow-100 text-yellow-600' :
                   index === 1 ? 'bg-gray-100 text-gray-600' : 'bg-orange-100 text-orange-600'
                 }`}>
@@ -1065,16 +1065,16 @@ const ReportsManagement: React.FC = () => {
                 </div>
                 <div>
                   <p className="font-medium text-gray-900">{performer.name}</p>
-                  <p className="text-sm text-gray-600">Sales Representative</p>
+                  <p className="text-xs text-gray-600">Sales Representative</p>
                 </div>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Conversions</span>
+                  <span className="text-xs text-gray-600">Conversions</span>
                   <span className="text-sm font-medium">{performer.conversions}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-gray-600">Rate</span>
+                  <span className="text-xs text-gray-600">Rate</span>
                   <span className="text-sm font-medium text-green-600">
                     {formatPercentage(performer.rate)}
                   </span>
@@ -1088,49 +1088,49 @@ const ReportsManagement: React.FC = () => {
   );
 
   const renderEngineerPerformance = () => (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Performance Metrics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Total Engineers</p>
-              <p className="text-2xl font-bold text-gray-900">{engineerPerformance?.totalEngineers || 0}</p>
+              <p className="text-xs text-gray-600">Total Engineers</p>
+              <p className="text-xl font-bold text-gray-900">{engineerPerformance?.totalEngineers || 0}</p>
             </div>
-            <Users className="w-8 h-8 text-blue-600" />
+            <Users className="w-6 h-6 text-blue-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Avg Tickets/Engineer</p>
-              <p className="text-2xl font-bold text-green-600">
+              <p className="text-xs text-gray-600">Avg Tickets/Engineer</p>
+              <p className="text-xl font-bold text-green-600">
                 {engineerPerformance?.avgTicketsPerEngineer || 0}
               </p>
             </div>
-            <Activity className="w-8 h-8 text-green-600" />
+            <Activity className="w-6 h-6 text-green-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Avg Resolution Time</p>
-              <p className="text-2xl font-bold text-orange-600">
+              <p className="text-xs text-gray-600">Avg Resolution Time</p>
+              <p className="text-xl font-bold text-orange-600">
                 {engineerPerformance?.avgResolutionTime || 0} days
               </p>
             </div>
-            <Clock className="w-8 h-8 text-orange-600" />
+            <Clock className="w-6 h-6 text-orange-600" />
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600">Avg Rating</p>
-              <p className="text-2xl font-bold text-purple-600">
+              <p className="text-xs text-gray-600">Avg Rating</p>
+              <p className="text-xl font-bold text-purple-600">
                 {(engineerPerformance?.engineerStats.reduce((sum, eng) => sum + eng.customerRating, 0) / (engineerPerformance?.engineerStats.length || 1) || 0).toFixed(1)}/5
               </p>
             </div>
-            <CheckCircle className="w-8 h-8 text-purple-600" />
+            <CheckCircle className="w-6 h-6 text-purple-600" />
           </div>
         </div>
       </div>
@@ -1144,22 +1144,22 @@ const ReportsManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Engineer
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Tickets Completed
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Avg TAT
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   SLA Compliance
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Customer Rating
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Performance
                 </th>
               </tr>
@@ -1167,23 +1167,23 @@ const ReportsManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {engineerPerformance?.engineerStats.map((engineer, index) => (
                 <tr key={index} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                         <span className="text-sm font-medium text-blue-600">
                           {engineer.name.split(' ').map(n => n[0]).join('')}
                         </span>
                       </div>
                       <div className="ml-3">
-                        <div className="text-sm font-medium text-gray-900">{engineer.name}</div>
-                        <div className="text-sm text-gray-500">Field Engineer</div>
+                        <div className="text-xs font-medium text-gray-900">{engineer.name}</div>
+                        <div className="text-xs text-gray-500">Field Engineer</div>
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
                     <span className="font-medium">{engineer.ticketsCompleted}</span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
                     <span className={`font-medium ${
                       engineer.avgTAT <= 2 ? 'text-green-600' :
                       engineer.avgTAT <= 3 ? 'text-yellow-600' : 'text-red-600'
@@ -1191,7 +1191,7 @@ const ReportsManagement: React.FC = () => {
                       {engineer.avgTAT} days
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                       engineer.slaCompliance >= 95 ? 'bg-green-100 text-green-800' :
                       engineer.slaCompliance >= 85 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'
@@ -1199,7 +1199,7 @@ const ReportsManagement: React.FC = () => {
                       {formatPercentage(engineer.slaCompliance)}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
                     <div className="flex items-center">
                       <span className="font-medium">{engineer.customerRating}/5</span>
                       <div className="ml-2 flex space-x-1">
@@ -1214,7 +1214,7 @@ const ReportsManagement: React.FC = () => {
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
                     <div className="w-20 bg-gray-200 rounded-full h-2">
                       <div 
                         className={`h-2 rounded-full ${
@@ -1233,7 +1233,7 @@ const ReportsManagement: React.FC = () => {
       </div>
 
       {/* Performance Trend */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Team Performance Trend</h3>
         <div className="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
           <div className="text-center">
@@ -1255,29 +1255,29 @@ const ReportsManagement: React.FC = () => {
   );
 
   return (
-    <div className="pl-2 pr-6 py-6 space-y-6">
+    <div className="pl-2 pr-6 py-6 space-y-4">
       {/* Header */}
       <PageHeader 
         title="Reports & Analytics"
         subtitle="Comprehensive business insights and performance metrics"
-      />
-      
-      <div className="flex justify-end space-x-3">
-        <button
-          onClick={fetchAnalyticsData}
-          className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-        >
-          <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
-        </button>
-        <button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl">
-          <Download className="w-5 h-5" />
-          <span>Export Report</span>
-        </button>
-      </div>
+      >
+        <div className="flex space-x-3">
+          <button
+            onClick={fetchAnalyticsData}
+            className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span className="text-sm">Refresh</span>
+          </button>
+          <button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg">
+            <Download className="w-4 h-4" />
+            <span className="text-sm">Export Report</span>
+          </button>
+        </div>
+      </PageHeader>
 
       {/* Navigation & Filters */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
           {/* Report Type Navigation */}
           <div className="flex flex-wrap gap-2">
@@ -1305,7 +1305,7 @@ const ReportsManagement: React.FC = () => {
             <select
               value={dateRange}
               onChange={(e) => setDateRange(e.target.value as DateRange)}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="px-2 py-1 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 text-sm focus:border-blue-500"
             >
               <option value="last-7-days">Last 7 Days</option>
               <option value="last-30-days">Last 30 Days</option>
@@ -1320,14 +1320,14 @@ const ReportsManagement: React.FC = () => {
                   type="date"
                   value={customDateFrom}
                   onChange={(e) => setCustomDateFrom(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <span className="text-gray-500">to</span>
                 <input
                   type="date"
                   value={customDateTo}
                   onChange={(e) => setCustomDateTo(e.target.value)}
-                  className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
             )}
@@ -1338,7 +1338,7 @@ const ReportsManagement: React.FC = () => {
       {/* Report Content */}
       {loading ? (
         <div className="bg-white p-12 rounded-xl shadow-sm border border-gray-100 text-center">
-          <RefreshCw className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
+          <RefreshCw className="w-6 h-6 text-blue-600 animate-spin mx-auto mb-4" />
           <p className="text-gray-600">Loading analytics data...</p>
         </div>
       ) : (

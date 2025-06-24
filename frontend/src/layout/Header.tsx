@@ -140,7 +140,7 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
 
         {/* Center: Search Bar - Ultra Compact */}
         <div className="flex-1 flex justify-center">
-          <div className="hidden md:flex items-center space-x-1.5 bg-gray-700/20 rounded-md px-2 py-1 border border-white/5 hover:bg-gray-700/30 transition-all duration-300 max-w-md w-full">
+          <div className="hidden md:flex items-center space-x-1.5 bg-gray-700/20 rounded-md px-2 py-1 border border-white/5 hover:bg-gray-700/30 transition-all duration-300 max-w-sm w-full">
             <Search className="w-3 h-3 text-gray-400" />
             <input
               type="text"

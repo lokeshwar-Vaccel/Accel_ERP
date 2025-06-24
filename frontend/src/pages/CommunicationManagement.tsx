@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   MessageSquare, 
   Mail, 
@@ -23,7 +23,8 @@ import {
   Calendar,
   BarChart3,
   Target,
-  Zap
+  Zap,
+  ChevronDown
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -157,6 +158,11 @@ const CommunicationManagement: React.FC = () => {
     successRate: 0,
     failedMessages: 0
   });
+
+  // Dropdown state
+  const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showDateDropdown, setShowDateDropdown] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -565,30 +571,87 @@ const CommunicationManagement: React.FC = () => {
     }
   ];
 
+  // Type options with labels
+  const typeOptions = [
+    { value: 'all', label: 'All Types' },
+    { value: 'email', label: 'Email' },
+    { value: 'sms', label: 'SMS' },
+    { value: 'whatsapp', label: 'WhatsApp' }
+  ];
+
+  // Status options with labels
+  const statusOptions = [
+    { value: 'all', label: 'All Status' },
+    { value: 'sent', label: 'Sent' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'failed', label: 'Failed' },
+    { value: 'queued', label: 'Queued' }
+  ];
+
+  // Date options with labels
+  const dateOptions = [
+    { value: 'all', label: 'All Time' },
+    { value: 'today', label: 'Today' },
+    { value: 'week', label: 'This Week' },
+    { value: 'month', label: 'This Month' }
+  ];
+
+  const getTypeLabel = (value: string) => {
+    const option = typeOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Types';
+  };
+
+  const getStatusLabel = (value: string) => {
+    const option = statusOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Status';
+  };
+
+  const getDateLabel = (value: string) => {
+    const option = dateOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Time';
+  };
+
+  // Click outside handler for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.dropdown-container')) {
+        setShowTypeDropdown(false);
+        setShowStatusDropdown(false);
+        setShowDateDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   return (
-    <div className="pl-2 pr-6 py-6 space-y-6">
+    <div className="pl-2 pr-6 py-6 space-y-4">
       {/* Header */}
       <PageHeader 
         title="Communication Management"
         subtitle="Send and manage customer communications across multiple channels"
-      />
-      
-      <div className="flex justify-end space-x-3">
-        <button
-          onClick={fetchAllData}
-          className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-        >
-          <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh</span>
-        </button>
-        <button
-          onClick={() => setShowStatsModal(true)}
-          className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl"
-        >
-          <BarChart3 className="w-5 h-5" />
-          <span>Analytics</span>
-        </button>
-      </div>
+      >
+        <div className="flex space-x-3">
+          <button
+            onClick={fetchAllData}
+            className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span className="text-sm">Refresh</span>
+          </button>
+          <button
+            onClick={() => setShowStatsModal(true)}
+            className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span className="text-sm">Analytics</span>
+          </button>
+        </div>
+      </PageHeader>
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -602,7 +665,7 @@ const CommunicationManagement: React.FC = () => {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">Send Email</h3>
-              <p className="text-sm text-gray-600">Professional emails</p>
+              <p className="text-xs text-gray-600">Professional emails</p>
             </div>
           </div>
         </button>
@@ -617,7 +680,7 @@ const CommunicationManagement: React.FC = () => {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">Send SMS</h3>
-              <p className="text-sm text-gray-600">Quick text messages</p>
+              <p className="text-xs text-gray-600">Quick text messages</p>
             </div>
           </div>
         </button>
@@ -632,7 +695,7 @@ const CommunicationManagement: React.FC = () => {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">WhatsApp</h3>
-              <p className="text-sm text-gray-600">Business messages</p>
+              <p className="text-xs text-gray-600">Business messages</p>
             </div>
           </div>
         </button>
@@ -647,22 +710,22 @@ const CommunicationManagement: React.FC = () => {
             </div>
             <div>
               <h3 className="font-semibold text-gray-900">Bulk Send</h3>
-              <p className="text-sm text-gray-600">Multiple recipients</p>
+              <p className="text-xs text-gray-600">Multiple recipients</p>
             </div>
           </div>
         </button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statsCards.map((stat, index) => (
-          <div key={index} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">{stat.title}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                <p className="text-xs text-gray-600">{stat.title}</p>
+                <p className="text-xl font-bold text-gray-900">{stat.value}</p>
               </div>
-              <div className={`p-3 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
+              <div className={`p-2 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
                 {stat.icon}
               </div>
             </div>
@@ -671,56 +734,121 @@ const CommunicationManagement: React.FC = () => {
       </div>
 
       {/* Filters and Search */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative md:col-span-2">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
               placeholder="Search messages..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value as MessageType | 'all')}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Types</option>
-            <option value="email">Email</option>
-            <option value="sms">SMS</option>
-            <option value="whatsapp">WhatsApp</option>
-          </select>
+          {/* Type Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowTypeDropdown(!showTypeDropdown);
+                setShowStatusDropdown(false);
+                setShowDateDropdown(false);
+              }}
+              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getTypeLabel(typeFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showTypeDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showTypeDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {typeOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setTypeFilter(option.value as MessageType | 'all');
+                      setShowTypeDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      typeFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as MessageStatus | 'all')}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Status</option>
-            <option value="sent">Sent</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-            <option value="queued">Queued</option>
-          </select>
+          {/* Status Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowStatusDropdown(!showStatusDropdown);
+                setShowTypeDropdown(false);
+                setShowDateDropdown(false);
+              }}
+              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showStatusDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setStatusFilter(option.value as MessageStatus | 'all');
+                      setShowStatusDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <select
-            value={dateFilter}
-            onChange={(e) => setDateFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Time</option>
-            <option value="today">Today</option>
-            <option value="week">This Week</option>
-            <option value="month">This Month</option>
-          </select>
+          {/* Date Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowDateDropdown(!showDateDropdown);
+                setShowTypeDropdown(false);
+                setShowStatusDropdown(false);
+              }}
+              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getDateLabel(dateFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showDateDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showDateDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {dateOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setDateFilter(option.value);
+                      setShowDateDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      dateFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         
         <div className="mt-4 flex items-center justify-between">
-          <span className="text-sm text-gray-600">
+          <span className="text-xs text-gray-600">
             Showing {filteredMessages.length} of {messages.length} messages
           </span>
         </div>
@@ -732,19 +860,19 @@ const CommunicationManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Type & Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Recipients
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Message Content
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Priority & Time
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Sent By
                 </th>
               </tr>
@@ -752,20 +880,20 @@ const CommunicationManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">Loading messages...</td>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">Loading messages...</td>
                 </tr>
               ) : filteredMessages.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-12 text-center text-gray-500">No messages found</td>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">No messages found</td>
                 </tr>
               ) : (
                 filteredMessages.map((message) => (
                   <tr key={message.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center space-x-3">
                         {getTypeIcon(message.type)}
                         <div>
-                          <div className="text-sm font-medium text-gray-900 capitalize">{message.type}</div>
+                          <div className="text-xs font-medium text-gray-900 capitalize">{message.type}</div>
                           <div className="flex items-center space-x-2">
                             {getStatusIcon(message.status)}
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(message.status)}`}>
@@ -775,8 +903,8 @@ const CommunicationManagement: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">
                         {message.to.slice(0, 2).join(', ')}
                         {message.to.length > 2 && (
                           <span className="text-gray-500"> +{message.to.length - 2} more</span>
@@ -786,15 +914,15 @@ const CommunicationManagement: React.FC = () => {
                     <td className="px-6 py-4">
                       <div className="max-w-xs">
                         {message.subject && (
-                          <div className="text-sm font-medium text-gray-900 truncate">{message.subject}</div>
+                          <div className="text-xs font-medium text-gray-900 truncate">{message.subject}</div>
                         )}
-                        <div className="text-sm text-gray-600 truncate">{message.message}</div>
+                        <div className="text-xs text-gray-600 truncate">{message.message}</div>
                         {message.error && (
                           <div className="text-sm text-red-600 mt-1">Error: {message.error}</div>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div>
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                           message.priority === 'high' ? 'bg-red-100 text-red-800' :
@@ -804,14 +932,14 @@ const CommunicationManagement: React.FC = () => {
                           {message.priority}
                         </span>
                         {message.sentAt && (
-                          <div className="text-sm text-gray-600 mt-1">{formatDate(message.sentAt)}</div>
+                          <div className="text-xs text-gray-600 mt-1">{formatDate(message.sentAt)}</div>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{message.sentBy}</div>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{message.sentBy}</div>
                       {message.relatedEntity && (
-                        <div className="text-sm text-gray-500">
+                        <div className="text-xs text-gray-500">
                           {message.relatedEntity.type}: {message.relatedEntity.id}
                         </div>
                       )}
@@ -828,7 +956,7 @@ const CommunicationManagement: React.FC = () => {
       {showComposeModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-3xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">
                 Compose {messageFormData.type.charAt(0).toUpperCase() + messageFormData.type.slice(1)}
               </h2>
@@ -840,7 +968,7 @@ const CommunicationManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="p-6 space-y-6">
+            <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -855,7 +983,7 @@ const CommunicationManagement: React.FC = () => {
                   <select
                     value={messageFormData.type}
                     onChange={(e) => setMessageFormData({ ...messageFormData, type: e.target.value as MessageType })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="email">Email</option>
                     <option value="sms">SMS</option>
@@ -869,7 +997,7 @@ const CommunicationManagement: React.FC = () => {
                   <select
                     value={messageFormData.priority}
                     onChange={(e) => setMessageFormData({ ...messageFormData, priority: e.target.value as MessagePriority })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -889,7 +1017,7 @@ const CommunicationManagement: React.FC = () => {
                     ...messageFormData, 
                     recipients: Array.from(e.target.selectedOptions, option => option.value)
                   })}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 h-24 ${
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 h-24 ${
                     formErrors.recipients ? 'border-red-500' : 'border-gray-300'
                   }`}
                 >
@@ -902,7 +1030,7 @@ const CommunicationManagement: React.FC = () => {
                 {formErrors.recipients && (
                   <p className="text-red-500 text-xs mt-1">{formErrors.recipients}</p>
                 )}
-                <p className="text-sm text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple recipients</p>
+                <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple recipients</p>
               </div>
 
               {messageFormData.type === 'email' && (
@@ -914,7 +1042,7 @@ const CommunicationManagement: React.FC = () => {
                     type="text"
                     value={messageFormData.subject || ''}
                     onChange={(e) => setMessageFormData({ ...messageFormData, subject: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                       formErrors.subject ? 'border-red-500' : 'border-gray-300'
                     }`}
                     placeholder="Enter email subject"
@@ -932,7 +1060,7 @@ const CommunicationManagement: React.FC = () => {
                 <textarea
                   value={messageFormData.message}
                   onChange={(e) => setMessageFormData({ ...messageFormData, message: e.target.value })}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 h-32 ${
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 h-32 ${
                     formErrors.message ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Enter your message content"

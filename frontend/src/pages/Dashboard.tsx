@@ -154,28 +154,28 @@ export default function Dashboard() {
       title: 'Monthly Revenue', 
       value: formatCurrency(stats?.monthlyRevenue || 0), 
       change: 12.5, 
-      icon: <DollarSign className="w-6 h-6" />, 
+      icon: <DollarSign className="w-4 h-4" />, 
       color: 'green' 
     },
     { 
       title: 'Total Customers', 
       value: (stats?.totalCustomers || 0).toString(), 
       change: 8.2, 
-      icon: <Users className="w-6 h-6" />, 
+      icon: <Users className="w-4 h-4" />, 
       color: 'blue' 
     },
     { 
       title: 'Pending Tickets', 
       value: (stats?.pendingTickets || 0).toString(), 
       change: -5.1, 
-      icon: <Wrench className="w-6 h-6" />, 
+      icon: <Wrench className="w-4 h-4" />, 
       color: 'orange' 
     },
     { 
       title: 'Low Stock Items', 
       value: (stats?.lowStockItems || 0).toString(), 
       change: 0, 
-      icon: <Package className="w-6 h-6" />, 
+      icon: <Package className="w-4 h-4" />, 
       color: 'red' 
     },
   ] as const;
@@ -232,9 +232,9 @@ export default function Dashboard() {
   // Removed full-screen loading overlay - show dashboard immediately
 
   return (
-    <div className="min-h-screen space-y-8 p-2">
+    <div className="min-h-screen space-y-6 p-2">
       {/* Enhanced Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {dashboardStats.map((stat, index) => (
           <div key={index} style={{ animationDelay: `${index * 100}ms` }} className="animate-fade-in-up">
             <StatCard {...stat} />
@@ -243,21 +243,21 @@ export default function Dashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h3>
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4">
+        <h3 className="text-base font-bold text-gray-900 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {quickActions.map((action, index) => (
             <a
               key={index}
               href={action.href}
-              className="group p-4 rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200"
+              className="group p-3 rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200"
             >
-              <div className="flex items-center space-x-3">
-                <div className={`p-2 rounded-lg ${action.color} text-white group-hover:scale-110 transition-transform duration-200`}>
+              <div className="flex items-center space-x-2">
+                <div className={`p-1.5 rounded-lg ${action.color} text-white group-hover:scale-110 transition-transform duration-200`}>
                   {action.icon}
                 </div>
                 <div>
-                  <h4 className="font-medium text-gray-900 group-hover:text-gray-800">
+                  <h4 className="text-sm font-medium text-gray-900 group-hover:text-gray-800">
                     {action.title}
                   </h4>
                   <p className="text-xs text-gray-500">{action.description}</p>
@@ -269,46 +269,46 @@ export default function Dashboard() {
       </div>
 
       {/* Main Content Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Enhanced Sales Performance */}
-        <div className="lg:col-span-2 bg-white rounded-2xl shadow-xl border border-gray-100 p-8 hover:shadow-2xl transition-all duration-500 group overflow-hidden">
+        <div className="lg:col-span-2 bg-white rounded-2xl shadow-xl border border-gray-100 p-6 hover:shadow-2xl transition-all duration-500 group overflow-hidden">
           {/* Removed hover overlay */}
           
           <div className="relative">
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">Business Overview</h3>
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <h3 className="text-lg font-bold text-gray-900 mb-2">Business Overview</h3>
+                <div className="flex items-center space-x-2 text-xs text-gray-600">
                   <TrendingUp className="w-4 h-4 text-green-500" />
                   <span>Performance metrics</span>
                 </div>
               </div>
-              <div className="p-3 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg">
-                <Activity className="w-6 h-6 text-white" />
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl shadow-lg">
+                <Activity className="w-4 h-4 text-white" />
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl">
-                <div className="text-2xl font-bold text-blue-600">{stats?.totalUsers || 0}</div>
-                <div className="text-sm text-blue-700">Total Users</div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl">
+                <div className="text-lg font-bold text-blue-600">{stats?.totalUsers || 0}</div>
+                <div className="text-xs text-blue-700">Total Users</div>
               </div>
-              <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 rounded-xl">
-                <div className="text-2xl font-bold text-green-600">{stats?.activeAMCs || 0}</div>
-                <div className="text-sm text-green-700">Active AMCs</div>
+              <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-xl">
+                <div className="text-lg font-bold text-green-600">{stats?.activeAMCs || 0}</div>
+                <div className="text-xs text-green-700">Active AMCs</div>
               </div>
-              <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl">
-                <div className="text-2xl font-bold text-purple-600">{formatCurrency(stats?.monthlyRevenue || 0)}</div>
-                <div className="text-sm text-purple-700">Monthly Revenue</div>
+              <div className="text-center p-3 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl">
+                <div className="text-lg font-bold text-purple-600">{formatCurrency(stats?.monthlyRevenue || 0)}</div>
+                <div className="text-xs text-purple-700">Monthly Revenue</div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Enhanced Recent Activities */}
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 hover:shadow-2xl transition-all duration-500 group">
-          <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-bold text-gray-900">Recent Activities</h3>
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 hover:shadow-2xl transition-all duration-500 group">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-base font-bold text-gray-900">Recent Activities</h3>
             <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
           </div>
           
@@ -328,7 +328,7 @@ export default function Dashboard() {
                       <Icon className="w-4 h-4 text-white" />
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900 group-hover/item:text-gray-800 transition-colors duration-300">
+                      <p className="text-xs font-medium text-gray-900 group-hover/item:text-gray-800 transition-colors duration-300">
                         {activity.action}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
@@ -342,9 +342,9 @@ export default function Dashboard() {
       </div>
 
       {/* System Alerts */}
-      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-6 hover:shadow-2xl transition-all duration-500 group">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-bold text-gray-900">System Alerts</h3>
+      <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-4 hover:shadow-2xl transition-all duration-500 group">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-base font-bold text-gray-900">System Alerts</h3>
           <div className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"></div>
         </div>
         
@@ -364,7 +364,7 @@ export default function Dashboard() {
                 }`}>
                   <Icon className="w-4 h-4 text-white" />
                 </div>
-                <span className="text-sm font-medium text-gray-800 flex-1">{alert.message}</span>
+                <span className="text-xs font-medium text-gray-800 flex-1">{alert.message}</span>
               </div>
             );
           })}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Plus, 
   Search, 
@@ -26,7 +26,8 @@ import {
   Download,
   Upload,
   Camera,
-  Save
+  Save,
+  ChevronDown
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -163,6 +164,12 @@ const ServiceManagement: React.FC = () => {
   
   // Form errors
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Dropdown state
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
+  const [showSlaDropdown, setShowSlaDropdown] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -593,8 +600,74 @@ const ServiceManagement: React.FC = () => {
     }
   ];
 
+  // Status options with labels
+  const statusOptions = [
+    { value: 'all', label: 'All Status' },
+    { value: 'open', label: 'Open' },
+    { value: 'in_progress', label: 'In Progress' },
+    { value: 'resolved', label: 'Resolved' },
+    { value: 'closed', label: 'Closed' },
+    { value: 'cancelled', label: 'Cancelled' }
+  ];
+
+  // Priority options with labels
+  const priorityOptions = [
+    { value: 'all', label: 'All Priority' },
+    { value: 'critical', label: 'Critical' },
+    { value: 'high', label: 'High' },
+    { value: 'medium', label: 'Medium' },
+    { value: 'low', label: 'Low' }
+  ];
+
+  // SLA options with labels
+  const slaOptions = [
+    { value: 'all', label: 'All SLA' },
+    { value: 'on_track', label: 'On Track' },
+    { value: 'breached', label: 'Breached' },
+    { value: 'met', label: 'Met' }
+  ];
+
+  const getStatusLabel = (value: string) => {
+    const option = statusOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Status';
+  };
+
+  const getPriorityLabel = (value: string) => {
+    const option = priorityOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Priority';
+  };
+
+  const getSlaLabel = (value: string) => {
+    const option = slaOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All SLA';
+  };
+
+  const getAssigneeLabel = (value: string) => {
+    if (value === 'all') return 'All Assignees';
+    const user = users.find(u => u._id === value);
+    return user ? getUserName(user) : 'All Assignees';
+  };
+
+  // Click outside handler for dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.dropdown-container')) {
+        setShowStatusDropdown(false);
+        setShowPriorityDropdown(false);
+        setShowAssigneeDropdown(false);
+        setShowSlaDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader 
         title="Service Management"
         subtitle="Track tickets, manage service reports & monitor SLA"
@@ -602,31 +675,31 @@ const ServiceManagement: React.FC = () => {
         <div className="flex space-x-3">
           <button
             onClick={() => console.log('Export tickets')}
-            className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+            className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
-            <Download className="w-5 h-5" />
-            <span>Export</span>
+            <Download className="w-4 h-4" />
+            <span className="text-sm">Export</span>
           </button>
           <button
             onClick={handleCreateTicket}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-xl flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
-            <Plus className="w-5 h-5" />
-            <span>Create Ticket</span>
+            <Plus className="w-4 h-4" />
+            <span className="text-sm">Create Ticket</span>
           </button>
         </div>
       </PageHeader>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">{stat.title}</p>
-                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                <p className="text-xs text-gray-600">{stat.title}</p>
+                <p className="text-xl font-bold text-gray-900">{stat.value}</p>
               </div>
-              <div className={`p-3 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
+              <div className={`p-2 rounded-lg bg-${stat.color}-100 text-${stat.color}-600`}>
                 {stat.icon}
               </div>
             </div>
@@ -634,72 +707,170 @@ const ServiceManagement: React.FC = () => {
         ))}
       </div>
 
-      {/* Filters and Search */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+      {/* Filters */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
           <div className="relative md:col-span-2">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
               placeholder="Search tickets..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as TicketStatus | 'all')}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Status</option>
-            <option value="open">Open</option>
-            <option value="in_progress">In Progress</option>
-            <option value="resolved">Resolved</option>
-            <option value="closed">Closed</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+          {/* Status Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowStatusDropdown(!showStatusDropdown);
+                setShowPriorityDropdown(false);
+                setShowAssigneeDropdown(false);
+                setShowSlaDropdown(false);
+              }}
+              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showStatusDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setStatusFilter(option.value as TicketStatus | 'all');
+                      setShowStatusDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <select
-            value={priorityFilter}
-            onChange={(e) => setPriorityFilter(e.target.value as TicketPriority | 'all')}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Priority</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-            <option value="low">Low</option>
-          </select>
+          {/* Priority Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowPriorityDropdown(!showPriorityDropdown);
+                setShowStatusDropdown(false);
+                setShowAssigneeDropdown(false);
+                setShowSlaDropdown(false);
+              }}
+              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getPriorityLabel(priorityFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showPriorityDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showPriorityDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {priorityOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setPriorityFilter(option.value as TicketPriority | 'all');
+                      setShowPriorityDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      priorityFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <select
-            value={assigneeFilter}
-            onChange={(e) => setAssigneeFilter(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Assignees</option>
-            {users.map(user => (
-              <option key={user._id} value={user._id}>
-                {getUserName(user)}
-              </option>
-            ))}
-          </select>
+          {/* Assignee Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowAssigneeDropdown(!showAssigneeDropdown);
+                setShowStatusDropdown(false);
+                setShowPriorityDropdown(false);
+                setShowSlaDropdown(false);
+              }}
+              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getAssigneeLabel(assigneeFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showAssigneeDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showAssigneeDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                <button
+                  onClick={() => {
+                    setAssigneeFilter('all');
+                    setShowAssigneeDropdown(false);
+                  }}
+                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                    assigneeFilter === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                  }`}
+                >
+                  All Assignees
+                </button>
+                {users.map(user => (
+                  <button
+                    key={user._id}
+                    onClick={() => {
+                      setAssigneeFilter(user._id);
+                      setShowAssigneeDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      assigneeFilter === user._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {getUserName(user)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <select
-            value={slaFilter}
-            onChange={(e) => setSlaFilter(e.target.value as SLAStatus | 'all')}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All SLA</option>
-            <option value="on_track">On Track</option>
-            <option value="breached">Breached</option>
-            <option value="met">Met</option>
-          </select>
+          {/* SLA Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => {
+                setShowSlaDropdown(!showSlaDropdown);
+                setShowStatusDropdown(false);
+                setShowPriorityDropdown(false);
+                setShowAssigneeDropdown(false);
+              }}
+              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getSlaLabel(slaFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showSlaDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showSlaDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {slaOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setSlaFilter(option.value as SLAStatus | 'all');
+                      setShowSlaDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      slaFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         
         <div className="mt-4 flex items-center justify-between">
-          <span className="text-sm text-gray-600">
+          <span className="text-xs text-gray-600">
             Showing {filteredTickets.length} of {tickets.length} tickets
           </span>
         </div>
@@ -711,22 +882,22 @@ const ServiceManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Ticket
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Customer & Product
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Priority & Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Assigned To
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   SLA & Schedule
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
@@ -734,19 +905,19 @@ const ServiceManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">Loading tickets...</td>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading tickets...</td>
                 </tr>
               ) : filteredTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">No tickets found</td>
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No tickets found</td>
                 </tr>
               ) : (
                 filteredTickets.map((ticket) => (
                   <tr key={ticket._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-blue-600">{ticket.ticketNumber}</div>
-                        <div className="text-sm text-gray-900 font-medium">
+                        <div className="text-xs text-gray-900 font-medium">
                           {ticket.description.length > 50 
                             ? `${ticket.description.substring(0, 50)}...` 
                             : ticket.description}
@@ -756,18 +927,18 @@ const ServiceManagement: React.FC = () => {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{getCustomerName(ticket.customer)}</div>
+                        <div className="text-xs font-medium text-gray-900">{getCustomerName(ticket.customer)}</div>
                         {ticket.product && (
-                          <div className="text-sm text-gray-600">{getProductName(ticket.product)}</div>
+                          <div className="text-xs text-gray-600">{getProductName(ticket.product)}</div>
                         )}
                         {ticket.serialNumber && (
                           <div className="text-xs text-gray-500">S/N: {ticket.serialNumber}</div>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="space-y-1">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(ticket.priority)}`}>
                           {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
@@ -778,14 +949,14 @@ const ServiceManagement: React.FC = () => {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">
                         {getUserName(ticket.assignedTo) || (
                           <span className="text-gray-400 italic">Unassigned</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="space-y-1">
                         {ticket.slaDeadline && (
                           <div>
@@ -803,7 +974,7 @@ const ServiceManagement: React.FC = () => {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button
                           onClick={() => openDetailsModal(ticket)}
@@ -839,8 +1010,8 @@ const ServiceManagement: React.FC = () => {
       {/* Create Ticket Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Create Service Ticket</h2>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -850,7 +1021,7 @@ const ServiceManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitTicket(); }} className="p-6 space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitTicket(); }} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -865,7 +1036,7 @@ const ServiceManagement: React.FC = () => {
                   <select
                     value={ticketFormData.customer}
                     onChange={(e) => setTicketFormData({ ...ticketFormData, customer: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.customer ? 'border-red-500' : 'border-gray-300'
                     }`}
                   >
@@ -887,7 +1058,7 @@ const ServiceManagement: React.FC = () => {
                   <select
                     value={ticketFormData.product}
                     onChange={(e) => setTicketFormData({ ...ticketFormData, product: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select Product</option>
                     {products.map(product => (
@@ -907,7 +1078,7 @@ const ServiceManagement: React.FC = () => {
                   <select
                     value={ticketFormData.priority}
                     onChange={(e) => setTicketFormData({ ...ticketFormData, priority: e.target.value as TicketPriority })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
@@ -922,7 +1093,7 @@ const ServiceManagement: React.FC = () => {
                   <select
                     value={ticketFormData.assignedTo}
                     onChange={(e) => setTicketFormData({ ...ticketFormData, assignedTo: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   >
                     <option value="">Select Technician</option>
                     {users.map(user => (
@@ -940,7 +1111,7 @@ const ServiceManagement: React.FC = () => {
                     type="date"
                     value={ticketFormData.scheduledDate}
                     onChange={(e) => setTicketFormData({ ...ticketFormData, scheduledDate: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
               </div>
@@ -953,7 +1124,7 @@ const ServiceManagement: React.FC = () => {
                   type="text"
                   value={ticketFormData.serialNumber}
                   onChange={(e) => setTicketFormData({ ...ticketFormData, serialNumber: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Enter product serial number"
                 />
               </div>
@@ -966,7 +1137,7 @@ const ServiceManagement: React.FC = () => {
                   value={ticketFormData.description}
                   onChange={(e) => setTicketFormData({ ...ticketFormData, description: e.target.value })}
                   rows={4}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     formErrors.description ? 'border-red-500' : 'border-gray-300'
                   }`}
                   placeholder="Describe the problem in detail..."
@@ -1003,8 +1174,8 @@ const ServiceManagement: React.FC = () => {
        {/* Edit Ticket Modal */}
        {showEditModal && editingTicket && (
          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
-             <div className="flex items-center justify-between p-6 border-b border-gray-200">
+           <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+             <div className="flex items-center justify-between p-4 border-b border-gray-200">
                <h2 className="text-xl font-semibold text-gray-900">Edit Service Ticket</h2>
                <button
                  onClick={() => setShowEditModal(false)}
@@ -1014,7 +1185,7 @@ const ServiceManagement: React.FC = () => {
                </button>
              </div>
 
-             <form onSubmit={(e) => { e.preventDefault(); handleUpdateTicket(); }} className="p-6 space-y-4">
+             <form onSubmit={(e) => { e.preventDefault(); handleUpdateTicket(); }} className="p-4 space-y-3">
                {formErrors.general && (
                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                    <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -1033,7 +1204,7 @@ const ServiceManagement: React.FC = () => {
                    <select
                      value={ticketFormData.customer}
                      onChange={(e) => setTicketFormData({ ...ticketFormData, customer: e.target.value })}
-                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                     className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                        formErrors.customer ? 'border-red-500' : 'border-gray-300'
                      }`}
                    >
@@ -1055,7 +1226,7 @@ const ServiceManagement: React.FC = () => {
                    <select
                      value={ticketFormData.product}
                      onChange={(e) => setTicketFormData({ ...ticketFormData, product: e.target.value })}
-                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                    >
                      <option value="">Select Product</option>
                      {products.map(product => (
@@ -1075,7 +1246,7 @@ const ServiceManagement: React.FC = () => {
                    <select
                      value={ticketFormData.priority}
                      onChange={(e) => setTicketFormData({ ...ticketFormData, priority: e.target.value as TicketPriority })}
-                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                    >
                      <option value="low">Low</option>
                      <option value="medium">Medium</option>
@@ -1090,7 +1261,7 @@ const ServiceManagement: React.FC = () => {
                    <select
                      value={ticketFormData.assignedTo}
                      onChange={(e) => setTicketFormData({ ...ticketFormData, assignedTo: e.target.value })}
-                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                    >
                      <option value="">Select Technician</option>
                      {users.map(user => (
@@ -1108,7 +1279,7 @@ const ServiceManagement: React.FC = () => {
                      type="date"
                      value={ticketFormData.scheduledDate}
                      onChange={(e) => setTicketFormData({ ...ticketFormData, scheduledDate: e.target.value })}
-                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                    />
                  </div>
                </div>
@@ -1121,7 +1292,7 @@ const ServiceManagement: React.FC = () => {
                    type="text"
                    value={ticketFormData.serialNumber}
                    onChange={(e) => setTicketFormData({ ...ticketFormData, serialNumber: e.target.value })}
-                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                   className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                    placeholder="Enter product serial number"
                  />
                </div>
@@ -1134,7 +1305,7 @@ const ServiceManagement: React.FC = () => {
                    value={ticketFormData.description}
                    onChange={(e) => setTicketFormData({ ...ticketFormData, description: e.target.value })}
                    rows={4}
-                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                   className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                      formErrors.description ? 'border-red-500' : 'border-gray-300'
                    }`}
                    placeholder="Describe the problem in detail..."
@@ -1147,7 +1318,7 @@ const ServiceManagement: React.FC = () => {
                  </p>
                </div>
 
-               <div className="flex space-x-3 pt-4">
+                             <div className="flex space-x-3 pt-4">
                  <button
                    type="button"
                    onClick={() => setShowEditModal(false)}
@@ -1172,7 +1343,7 @@ const ServiceManagement: React.FC = () => {
        {showDetailsModal && selectedTicket && (
          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
            <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
-             <div className="flex items-center justify-between p-6 border-b border-gray-200">
+             <div className="flex items-center justify-between p-4 border-b border-gray-200">
                <div>
                  <h2 className="text-xl font-semibold text-gray-900">{selectedTicket.ticketNumber}</h2>
                  <p className="text-gray-600">Service Ticket Details</p>
@@ -1185,9 +1356,9 @@ const ServiceManagement: React.FC = () => {
                </button>
              </div>
 
-             <div className="p-6 space-y-6">
+             <div className="p-4 space-y-3">
                {/* Ticket Overview */}
-               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                  {/* Customer Information */}
                  <div className="bg-gray-50 p-6 rounded-lg">
                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
@@ -1197,21 +1368,21 @@ const ServiceManagement: React.FC = () => {
                    {typeof selectedTicket.customer === 'object' ? (
                      <div className="space-y-2">
                        <div>
-                         <p className="text-sm text-gray-600">Name</p>
+                         <p className="text-xs text-gray-600">Name</p>
                          <p className="font-medium">{selectedTicket.customer.name}</p>
                        </div>
                        {selectedTicket.customer.email && (
                          <div>
-                           <p className="text-sm text-gray-600">Email</p>
+                           <p className="text-xs text-gray-600">Email</p>
                            <p className="font-medium">{selectedTicket.customer.email}</p>
                          </div>
                        )}
                        <div>
-                         <p className="text-sm text-gray-600">Phone</p>
+                         <p className="text-xs text-gray-600">Phone</p>
                          <p className="font-medium">{selectedTicket.customer.phone}</p>
                        </div>
                        <div>
-                         <p className="text-sm text-gray-600">Address</p>
+                         <p className="text-xs text-gray-600">Address</p>
                          <p className="font-medium text-sm">{selectedTicket.customer.address}</p>
                        </div>
                      </div>
@@ -1229,28 +1400,28 @@ const ServiceManagement: React.FC = () => {
                    {selectedTicket.product && typeof selectedTicket.product === 'object' ? (
                      <div className="space-y-2">
                        <div>
-                         <p className="text-sm text-gray-600">Product</p>
+                         <p className="text-xs text-gray-600">Product</p>
                          <p className="font-medium">{selectedTicket.product.name}</p>
                        </div>
                        <div>
-                         <p className="text-sm text-gray-600">Category</p>
+                         <p className="text-xs text-gray-600">Category</p>
                          <p className="font-medium capitalize">{selectedTicket.product.category}</p>
                        </div>
                        {selectedTicket.product.brand && (
                          <div>
-                           <p className="text-sm text-gray-600">Brand</p>
+                           <p className="text-xs text-gray-600">Brand</p>
                            <p className="font-medium">{selectedTicket.product.brand}</p>
                          </div>
                        )}
                        {selectedTicket.product.modelNumber && (
                          <div>
-                           <p className="text-sm text-gray-600">Model</p>
+                           <p className="text-xs text-gray-600">Model</p>
                            <p className="font-medium">{selectedTicket.product.modelNumber}</p>
                          </div>
                        )}
                        {selectedTicket.serialNumber && (
                          <div>
-                           <p className="text-sm text-gray-600">Serial Number</p>
+                           <p className="text-xs text-gray-600">Serial Number</p>
                            <p className="font-medium">{selectedTicket.serialNumber}</p>
                          </div>
                        )}
@@ -1268,20 +1439,20 @@ const ServiceManagement: React.FC = () => {
                    </h3>
                    <div className="space-y-3">
                      <div>
-                       <p className="text-sm text-gray-600">Status</p>
+                       <p className="text-xs text-gray-600">Status</p>
                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedTicket.status)}`}>
                          {selectedTicket.status.replace('_', ' ').charAt(0).toUpperCase() + selectedTicket.status.replace('_', ' ').slice(1)}
                        </span>
                      </div>
                      <div>
-                       <p className="text-sm text-gray-600">Priority</p>
+                       <p className="text-xs text-gray-600">Priority</p>
                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(selectedTicket.priority)}`}>
                          {selectedTicket.priority.charAt(0).toUpperCase() + selectedTicket.priority.slice(1)}
                        </span>
                      </div>
                      {selectedTicket.slaDeadline && (
                        <div>
-                         <p className="text-sm text-gray-600">SLA Status</p>
+                         <p className="text-xs text-gray-600">SLA Status</p>
                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getSLAColor(selectedTicket.slaStatus)}`}>
                            {selectedTicket.slaStatus === 'on_track' && `${getTimeRemaining(selectedTicket.slaDeadline)} left`}
                            {selectedTicket.slaStatus === 'breached' && 'SLA Breached'}
@@ -1290,7 +1461,7 @@ const ServiceManagement: React.FC = () => {
                        </div>
                      )}
                      <div>
-                       <p className="text-sm text-gray-600">Assigned To</p>
+                       <p className="text-xs text-gray-600">Assigned To</p>
                        <p className="font-medium">{getUserName(selectedTicket.assignedTo) || 'Unassigned'}</p>
                      </div>
                    </div>
@@ -1298,7 +1469,7 @@ const ServiceManagement: React.FC = () => {
                </div>
 
                {/* Timeline Information */}
-               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                  <div>
                    <h4 className="text-sm font-medium text-gray-600">Created</h4>
                    <p className="text-lg font-medium">{formatDateTime(selectedTicket.createdAt)}</p>
@@ -1354,11 +1525,11 @@ const ServiceManagement: React.FC = () => {
                        <tbody className="divide-y divide-gray-200">
                          {selectedTicket.partsUsed.map((part, index) => (
                            <tr key={index}>
-                             <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                             <td className="px-4 py-3 text-xs font-medium text-gray-900">
                                {getProductName(part.product)}
                              </td>
-                             <td className="px-4 py-3 text-sm text-gray-600">{part.quantity}</td>
-                             <td className="px-4 py-3 text-sm text-gray-600">
+                             <td className="px-4 py-3 text-xs text-gray-600">{part.quantity}</td>
+                             <td className="px-4 py-3 text-xs text-gray-600">
                                {part.serialNumbers ? part.serialNumbers.join(', ') : '-'}
                              </td>
                            </tr>
@@ -1424,7 +1595,7 @@ const ServiceManagement: React.FC = () => {
        {showReportModal && selectedTicket && (
          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
            <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-             <div className="flex items-center justify-between p-6 border-b border-gray-200">
+             <div className="flex items-center justify-between p-4 border-b border-gray-200">
                <div>
                  <h2 className="text-xl font-semibold text-gray-900">Digital Service Report</h2>
                  <p className="text-gray-600">{selectedTicket.ticketNumber} - {getCustomerName(selectedTicket.customer)}</p>
@@ -1437,7 +1608,7 @@ const ServiceManagement: React.FC = () => {
                </button>
              </div>
 
-             <div className="p-6 space-y-6">
+             <div className="p-4 space-y-3">
                {/* Work Completed */}
                <div>
                  <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1447,7 +1618,7 @@ const ServiceManagement: React.FC = () => {
                    value={reportData.workCompleted}
                    onChange={(e) => setReportData({ ...reportData, workCompleted: e.target.value })}
                    rows={4}
-                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                   className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                    placeholder="Describe the work performed..."
                  />
                </div>
@@ -1536,7 +1707,7 @@ const ServiceManagement: React.FC = () => {
                    value={reportData.recommendations}
                    onChange={(e) => setReportData({ ...reportData, recommendations: e.target.value })}
                    rows={3}
-                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                   className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                    placeholder="Enter recommendations for future maintenance..."
                  />
                </div>
@@ -1550,7 +1721,7 @@ const ServiceManagement: React.FC = () => {
                    value={reportData.customerFeedback}
                    onChange={(e) => setReportData({ ...reportData, customerFeedback: e.target.value })}
                    rows={3}
-                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                   className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                    placeholder="Customer comments and feedback..."
                  />
                </div>
@@ -1576,7 +1747,7 @@ const ServiceManagement: React.FC = () => {
                        type="date"
                        value={reportData.nextVisitDate}
                        onChange={(e) => setReportData({ ...reportData, nextVisitDate: e.target.value })}
-                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                       className="px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                      />
                    </div>
                  )}
