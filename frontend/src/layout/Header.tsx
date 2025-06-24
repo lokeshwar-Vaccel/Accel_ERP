@@ -8,11 +8,8 @@ interface HeaderProps {
 
 export default function Header({ onMenuToggle, title }: HeaderProps) {
   return (
-    <header className="relative h-20 bg-gray-400 backdrop-blur-xl border-b border-gray-200/50 px-6 py-4 shadow-sm">
-      {/* Subtle gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-r from-blue-50/50 via-transparent to-orange-50/50 pointer-events-none"></div>
-      
-      <div className="relative flex items-center justify-between">
+    <header className="h-20 bg-gray-100 border-b border-gray-200 px-6 py-4 shadow-sm">
+      <div className="flex items-center justify-between">
         <div className="flex items-center space-x-6">
           <button
             onClick={onMenuToggle}

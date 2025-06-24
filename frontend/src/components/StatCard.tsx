@@ -40,14 +40,7 @@ export default function StatCard({ title, value, change, icon, color = 'blue' }:
   const colors = colorClasses[color];
 
   return (
-    <div className="group relative bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-500 hover:-translate-y-1 overflow-hidden">
-      {/* Animated background gradient */}
-      <div className={`absolute inset-0 bg-gradient-to-br ${colors.bg} opacity-0 group-hover:opacity-100 transition-opacity duration-500`}></div>
-      
-      {/* Subtle pattern overlay */}
-      <div className="absolute inset-0 opacity-5">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(120,119,198,0.3),transparent_50%)]"></div>
-      </div>
+    <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 hover:shadow-xl transition-all duration-500">{/* Removed overlay elements */}
 
       <div className="relative flex items-center justify-between">
         <div className="flex items-center space-x-4">
@@ -56,8 +49,7 @@ export default function StatCard({ title, value, change, icon, color = 'blue' }:
             <div className="text-white">
               {icon}
             </div>
-            {/* Shine effect */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-white/20 to-transparent rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            {/* Removed shine effect */}
           </div>
           
           <div>
@@ -83,8 +75,7 @@ export default function StatCard({ title, value, change, icon, color = 'blue' }:
         </div>
       </div>
 
-      {/* Bottom accent line */}
-      <div className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r ${colors.gradient} transform scale-x-0 group-hover:scale-x-100 transition-transform duration-500 origin-left`}></div>
+      {/* Removed bottom accent line */}
     </div>
   );
 }

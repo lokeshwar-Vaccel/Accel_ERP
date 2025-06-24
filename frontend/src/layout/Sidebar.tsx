@@ -9,6 +9,13 @@ import {
   LogOut,
   User,
   Zap,
+  ShoppingCart,
+  FileText,
+  BarChart3,
+  Upload,
+  MessageSquare,
+  Calendar,
+  Cog
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
@@ -27,15 +34,15 @@ const menuItems = [
     id: 1,
     name: 'Dashboard',
     icon: <LayoutGrid className="w-5 h-5" />,
-    path: '/',
-    key: 'admin',
+    path: '/dashboard',
+    key: 'dashboard',
   },
   {
     id: 2,
-    name: 'Client Management',
+    name: 'Customer Management',
     icon: <Users className="w-5 h-5" />,
-    path: '/client-management',
-    key: 'client-management',
+    path: '/customer-management',
+    key: 'customer-management',
   },
   {
     id: 3,
@@ -46,24 +53,66 @@ const menuItems = [
   },
   {
     id: 4,
-    name: 'Inventory',
+    name: 'Product Management',
     icon: <Package className="w-5 h-5" />,
-    path: '/inventory',
-    key: 'inventory',
+    path: '/product-management',
+    key: 'product-management',
   },
   {
     id: 5,
-    name: 'Service',
-    icon: <Wrench className="w-5 h-5" />,
-    path: '/service',
-    key: 'service',
+    name: 'Inventory Management',
+    icon: <Package className="w-5 h-5" />,
+    path: '/inventory-management',
+    key: 'inventory-management',
   },
   {
     id: 6,
-    name: 'Settings',
-    icon: <Settings className="w-5 h-5" />,
-    path: '/settings',
-    key: 'settings',
+    name: 'Service Management',
+    icon: <Wrench className="w-5 h-5" />,
+    path: '/service-management',
+    key: 'service-management',
+  },
+  {
+    id: 7,
+    name: 'AMC Management',
+    icon: <Calendar className="w-5 h-5" />,
+    path: '/amc-management',
+    key: 'amc-management',
+  },
+  {
+    id: 8,
+    name: 'Purchase Orders',
+    icon: <ShoppingCart className="w-5 h-5" />,
+    path: '/purchase-order-management',
+    key: 'purchase-order-management',
+  },
+  {
+    id: 9,
+    name: 'Reports & Analytics',
+    icon: <BarChart3 className="w-5 h-5" />,
+    path: '/reports-management',
+    key: 'reports-management',
+  },
+  {
+    id: 10,
+    name: 'File Management',
+    icon: <Upload className="w-5 h-5" />,
+    path: '/file-management',
+    key: 'file-management',
+  },
+  {
+    id: 11,
+    name: 'Communications',
+    icon: <MessageSquare className="w-5 h-5" />,
+    path: '/communication-management',
+    key: 'communication-management',
+  },
+  {
+    id: 12,
+    name: 'Admin Settings',
+    icon: <Cog className="w-5 h-5" />,
+    path: '/admin-settings',
+    key: 'admin-settings',
   },
 ];
 
@@ -106,28 +155,25 @@ export default function Sidebar({
     return user?.email || 'Admin User';
   };
 
+  // Get current path to determine active menu item
+  const currentPath = window.location.pathname;
+  const getActiveKey = () => {
+    const activeItem = menuItems.find(item => item.path === currentPath);
+    return activeItem?.key || 'dashboard';
+  };
+
   return (
     <>
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 lg:hidden transition-all duration-300"
-          onClick={onToggle}
-        />
-      )}
+      {/* Sidebar overlay removed to prevent UI blocking */}
 
       <div
         className={`
-          fixed left-0 top-0 h-full bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white z-50
-          transform transition-all duration-500 ease-out shadow-2xl
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:translate-x-0 lg:static lg:z-auto
-          w-72 flex flex-col backdrop-blur-xl border-r border-white/10
+          bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 text-white
+          ${isOpen ? 'block' : 'hidden'} lg:block
+          w-72 flex flex-col border-r border-white/10 h-screen
         `}
       >
-        {/* Animated background */}
-        <div className="absolute inset-0 opacity-5">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 via-transparent to-orange-500/20" />
-        </div>
+        {/* Removed animated background */}
 
         {/* Header */}
         <div className="relative h-20 p-5 border-b border-white/10">
@@ -143,12 +189,12 @@ export default function Sidebar({
                 <h1 className="font-bold text-xl bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
                   Sun Power
                 </h1>
-                <p className="text-xs text-gray-400 font-medium">Services CRM</p>
+                <p className="text-xs text-gray-400 font-medium">Services ERP</p>
               </div>
             </div>
             <button
               onClick={onToggle}
-              className="lg:hidden p-2 hover:bg-white/10 rounded-lg transition-all duration-200 hover:scale-110"
+              className="lg:hidden p-2 hover:bg-gray-700 rounded-lg transition-all duration-200"
             >
               <X className="w-5 h-5" />
             </button>
@@ -156,14 +202,14 @@ export default function Sidebar({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 p-5">
-          <ul className="space-y-3">
+        <nav className="flex-1 p-5 overflow-y-auto">
+          <ul className="space-y-2">
             {menuItems.map((item, index) => {
-              const isActive = currentPanel === item.key;
+              const isActive = getActiveKey() === item.key || currentPath === item.path;
               return (
                 <li
                   key={item.id}
-                  style={{ animationDelay: `${index * 100}ms` }}
+                  style={{ animationDelay: `${index * 50}ms` }}
                   className="animate-fade-in-up"
                 >
                   <button
@@ -173,34 +219,29 @@ export default function Sidebar({
                       if (window.innerWidth < 1024) onToggle();
                     }}
                     className={`
-                      group relative w-full flex items-center space-x-4 px-4 py-3 rounded-xl transition-all duration-300
-                      transform hover:scale-[1.02] hover:translate-x-1
+                      group relative w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl transition-all duration-300
                       ${isActive
                         ? 'bg-gradient-to-r from-orange-500 to-red-600 shadow-lg text-white'
-                        : 'text-gray-300 hover:bg-white/10 hover:text-white'}
+                        : 'text-gray-300 hover:bg-gray-700 hover:text-white'}
                     `}
                   >
                     {/* Active Indicator */}
                     {isActive && (
-                      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1 h-8 bg-white rounded-r-full"></div>
+                      <div className="absolute left-0 top-1/2 transform -translate-y-1/2 w-1 h-6 bg-orange-400 rounded-r-full"></div>
                     )}
 
                     {/* Icon */}
                     <div
-                      className={`relative p-1 rounded-lg transition-all duration-300
-                      ${isActive ? 'bg-white/20 shadow-inner' : 'bg-white/5 group-hover:bg-white/10'}`}
+                      className={`relative p-1.5 rounded-lg transition-all duration-300
+                      ${isActive ? 'bg-orange-600/30 shadow-inner' : 'bg-gray-600/20 group-hover:bg-gray-600/40'}`}
                     >
                       {item.icon}
-                      {isActive && (
-                        <div className="absolute inset-0 bg-white/10 rounded-lg animate-pulse"></div>
-                      )}
                     </div>
 
                     {/* Label */}
-                    <span className="font-semibold text-sm tracking-wide">{item.name}</span>
+                    <span className="font-medium text-sm tracking-wide flex-1 text-left">{item.name}</span>
 
-                    {/* Hover Effect */}
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-xl"></div>
+                    {/* Removed hover effect */}
                   </button>
                 </li>
               );
@@ -210,7 +251,7 @@ export default function Sidebar({
 
         {/* User Info */}
         <div className="relative p-6 border-t border-white/10">
-          <div className="flex items-center space-x-4 mb-4 p-3 bg-white/5 rounded-xl backdrop-blur-sm">
+          <div className="flex items-center space-x-4 mb-4 p-3 bg-gray-600/20 rounded-xl">
             <div className="relative">
               <div className="w-12 h-12 bg-gradient-to-br from-blue-400 to-purple-600 rounded-full flex items-center justify-center shadow-lg">
                 <span className="text-white font-semibold text-sm">{getUserInitials()}</span>
@@ -218,7 +259,8 @@ export default function Sidebar({
               <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-400 rounded-full border-2 border-slate-900"></div>
             </div>
             <div>
-              <p className="font-semibold text-white">{getUserDisplayName()}</p>
+              <p className="font-semibold text-white text-sm">{getUserDisplayName()}</p>
+              <p className="text-xs text-gray-400">{user?.role || 'Admin'}</p>
             </div>
           </div>
 
