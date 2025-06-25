@@ -1,19 +1,20 @@
 import React from 'react';
 import { Upload, File, Search, Download } from 'lucide-react';
+import PageHeader from '../components/ui/PageHeader';
 
 const FileManagement: React.FC = () => {
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">File Management</h1>
-          <p className="text-gray-600 mt-1">Upload, organize and manage documents</p>
-        </div>
-        <button className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2">
-          <Upload className="w-5 h-5" />
-          <span>Upload Files</span>
+    <div className="pl-2 pr-6 py-6 space-y-4">
+      {/* Header */}
+      <PageHeader 
+        title="File Management"
+        subtitle="Upload, organize and manage documents securely"
+      >
+        <button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg">
+          <Upload className="w-4 h-4" />
+          <span className="text-sm">Upload Files</span>
         </button>
-      </div>
+      </PageHeader>
 
       <div className="bg-white rounded-xl shadow-sm border p-12 text-center">
         <File className="w-16 h-16 mx-auto text-gray-300 mb-4" />

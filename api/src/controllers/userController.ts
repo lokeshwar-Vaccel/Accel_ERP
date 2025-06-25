@@ -14,11 +14,21 @@ export const getUsers = async (
   try {
     const { page = 1, limit = 10, sort = '-createdAt', search, role, status } = req.query as QueryParams & {
       role?: UserRole;
-      status?: UserStatus;
+      status?: UserStatus | 'all';
     };
 
     // Build query
     const query: any = {};
+    
+    // By default, exclude soft-deleted users unless explicitly requested
+    if (status === 'all') {
+      // Include all users including deleted ones
+    } else if (status) {
+      query.status = status;
+    } else {
+      // Default: exclude deleted users
+      query.status = { $ne: UserStatus.DELETED };
+    }
     
     if (search) {
       query.$or = [
@@ -30,10 +40,6 @@ export const getUsers = async (
     
     if (role) {
       query.role = role;
-    }
-    
-    if (status) {
-      query.status = status;
     }
 
     // Execute query with pagination
@@ -256,7 +262,7 @@ export const updateUser = async (
   }
 };
 
-// @desc    Delete user
+// @desc    Delete user (Soft Delete)
 // @route   DELETE /api/v1/users/:id
 // @access  Private (Admin only)
 export const deleteUser = async (
@@ -270,6 +276,11 @@ export const deleteUser = async (
       return next(new AppError('User not found', 404));
     }
 
+    // Check if user is already deleted
+    if (user.status === UserStatus.DELETED) {
+      return next(new AppError('User is already deleted', 400));
+    }
+
     // Prevent deleting super admin
     if (user.role === UserRole.SUPER_ADMIN) {
       return next(new AppError('Cannot delete super admin user', 403));
@@ -280,7 +291,9 @@ export const deleteUser = async (
       return next(new AppError('You cannot delete your own account', 403));
     }
 
-    await User.findByIdAndDelete(req.params.id);
+    // Soft delete: Set status to DELETED instead of removing from database
+    user.status = UserStatus.DELETED;
+    await user.save();
 
     const response: APIResponse = {
       success: true,
@@ -332,6 +345,50 @@ export const resetPassword = async (
   }
 };
 
+// @desc    Restore deleted user
+// @route   PUT /api/v1/users/:id/restore
+// @access  Private (Admin only)
+export const restoreUser = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return next(new AppError('User not found', 404));
+    }
+
+    // Check if user is actually deleted
+    if (user.status !== UserStatus.DELETED) {
+      return next(new AppError('User is not deleted', 400));
+    }
+
+    // Restore user by setting status to ACTIVE
+    user.status = UserStatus.ACTIVE;
+    await user.save();
+
+    const response: APIResponse = {
+      success: true,
+      message: 'User restored successfully',
+      data: {
+        user: {
+          id: user._id,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          email: user.email,
+          role: user.role,
+          status: user.status
+        }
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get user statistics
 // @route   GET /api/v1/users/stats
 // @access  Private (Admin only)
@@ -341,12 +398,17 @@ export const getUserStats = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const totalUsers = await User.countDocuments();
+    // Exclude deleted users from main stats
+    const totalUsers = await User.countDocuments({ status: { $ne: UserStatus.DELETED } });
     const activeUsers = await User.countDocuments({ status: UserStatus.ACTIVE });
     const inactiveUsers = await User.countDocuments({ status: UserStatus.INACTIVE });
     const suspendedUsers = await User.countDocuments({ status: UserStatus.SUSPENDED });
+    const deletedUsers = await User.countDocuments({ status: UserStatus.DELETED });
 
     const usersByRole = await User.aggregate([
+      {
+        $match: { status: { $ne: UserStatus.DELETED } }
+      },
       {
         $group: {
           _id: '$role',
@@ -355,7 +417,7 @@ export const getUserStats = async (
       }
     ]);
 
-    const recentUsers = await User.find()
+    const recentUsers = await User.find({ status: { $ne: UserStatus.DELETED } })
       .sort({ createdAt: -1 })
       .limit(5)
       .select('firstName lastName email role createdAt');
@@ -368,6 +430,7 @@ export const getUserStats = async (
         activeUsers,
         inactiveUsers,
         suspendedUsers,
+        deletedUsers,
         usersByRole,
         recentUsers
       }
