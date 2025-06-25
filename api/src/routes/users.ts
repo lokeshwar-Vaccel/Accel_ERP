@@ -22,7 +22,7 @@ router.use(checkModuleAccess('user_management'));
 // User statistics (Admin only)
 router.get('/stats', 
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), 
-  getUserStats
+  getUserStats  
 );
 
 // CRUD operations
