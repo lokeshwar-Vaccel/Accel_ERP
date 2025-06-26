@@ -12,7 +12,11 @@ interface User {
   status: string;
   phone?: string;
   address?: string;
-  moduleAccess: string[];
+moduleAccess: {
+    module: string;
+    access: boolean;
+    permission: 'read' | 'write' | 'admin';
+  }[];
   profileImage?: string;
   lastLoginAt?: string;
 }

@@ -83,7 +83,11 @@ export interface IUser extends Document {
   status: UserStatus;
   phone?: string;
   address?: string;
-  moduleAccess: string[];
+    moduleAccess: {
+    module: string;
+    access: boolean;
+    permission: 'read' | 'write' | 'admin';
+  }[];
   createdBy?: string;
   lastLoginAt?: Date;
   profileImage?: string;
@@ -247,9 +251,14 @@ export interface AuthenticatedRequest extends Request {
     id: string;
     email: string;
     role: UserRole;
-    moduleAccess: string[];
+    moduleAccess: {
+      module: string;
+      access: boolean;
+      permission: 'read' | 'write' | 'admin';
+    }[];
   };
 }
+
 
 // API Response Interface
 export interface APIResponse<T = any> {

@@ -9,8 +9,10 @@ import { checkAuthStatus } from './redux/auth/authSlice';
 
 const App = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { isAuthenticated, isLoading } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, isLoading  ,user } = useSelector((state: RootState) => state.auth);
 
+  console.log("user:",user);
+  
   // Check authentication status on app startup
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -24,7 +26,7 @@ const App = () => {
   return (
     <>
       {isAuthenticated ? (
-        <Layout>
+        <Layout moduleAccess={user.moduleAccess}>
           <AppRoutes />
         </Layout>
       ) : (

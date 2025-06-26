@@ -13,7 +13,7 @@ export const protect = async (
   try {
     // Get token from header
     let token: string | undefined;
-    
+
     if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
       token = req.headers.authorization.split(' ')[1];
     }
@@ -41,7 +41,7 @@ export const protect = async (
       id: (currentUser._id as any).toString(),
       email: currentUser.email,
       role: currentUser.role,
-      moduleAccess: currentUser.moduleAccess
+      moduleAccess: currentUser.moduleAccess // Array of objects
     };
 
     next();
@@ -73,7 +73,11 @@ export const checkModuleAccess = (module: string) => {
     }
 
     // Check if user has access to the specific module
-    if (!req.user.moduleAccess.includes(module)) {
+    const hasAccess = req.user.moduleAccess.some(
+      m => m.module === module && m.access
+    );
+
+    if (!hasAccess) {
       return next(new AppError(`You do not have access to ${module} module`, 403));
     }
 
@@ -81,12 +85,15 @@ export const checkModuleAccess = (module: string) => {
   };
 };
 
+
 // Check permission for specific actions
 export const checkPermission = (action: 'read' | 'write' | 'delete') => {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
     if (!req.user) {
       return next(new AppError('Not authorized', 401));
     }
+
+    const requestedModule = req.baseUrl.split('/')[3]; // assumes format /api/v1/{module}
 
     // Super admin and admin have all permissions
     if (req.user.role === UserRole.SUPER_ADMIN || req.user.role === UserRole.ADMIN) {
@@ -98,26 +105,41 @@ export const checkPermission = (action: 'read' | 'write' | 'delete') => {
       return next(new AppError('You only have read-only access', 403));
     }
 
-    // HR role restrictions
+    // HR-specific restrictions
     if (req.user.role === UserRole.HR) {
       const hrModules = ['user_management', 'inventory_management', 'finance'];
-      const requestedModule = req.baseUrl.split('/')[3]; // assuming /api/v1/module format
-      
       if (!hrModules.includes(requestedModule)) {
         return next(new AppError('You do not have access to this module', 403));
       }
     }
 
-    // Manager role restrictions (no admin settings)
+    // Manager-specific restrictions
     if (req.user.role === UserRole.MANAGER) {
       const restrictedModules = ['admin_settings'];
-      const requestedModule = req.baseUrl.split('/')[3];
-      
       if (restrictedModules.includes(requestedModule)) {
         return next(new AppError('You do not have access to admin settings', 403));
       }
     }
 
+    // Check if the user has permission for this module and action
+    const modulePermission = req.user.moduleAccess.find(
+      m => m.module === requestedModule && m.access
+    );
+
+    if (!modulePermission) {
+      return next(new AppError(`You do not have access to ${requestedModule}`, 403));
+    }
+
+    // If action is 'write' or 'delete', user must have 'write' or 'admin' permission
+    if ((action === 'write' || action === 'delete') && !['write', 'admin'].includes(modulePermission.permission)) {
+      return next(new AppError(`You do not have ${action} permission for ${requestedModule}`, 403));
+    }
+
+    // If action is 'read' and permission is at least 'read', allow
+    if (action === 'read' && !['read', 'write', 'admin'].includes(modulePermission.permission)) {
+      return next(new AppError(`You do not have read permission for ${requestedModule}`, 403));
+    }
+
     next();
   };
-}; 
+};
