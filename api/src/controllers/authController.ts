@@ -298,18 +298,18 @@ export const forgotPassword = async (req: Request, res: Response): Promise<void>
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Password Reset - Sum Power Services</title>
+      <title>Password Reset - Sun Power Services</title>
     </head>
     <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #0a0e1a;">
       <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 40px auto; background-color: #1c2526; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.3);">
         <tr>
           <td style="padding: 40px 30px; text-align: center;">
-            <h1 style="font-size: 24px; color: #ffffff; margin: 0 0 20px;">Sum Power Services</h1>
+            <h1 style="font-size: 24px; color: #ffffff; margin: 0 0 20px;">Sun Power Services</h1>
             <p style="font-size: 16px; color: #ffffff; margin: 0 0 10px;">Hello ${user.firstName},</p>
             <p style="font-size: 16px; color: #b0b8c4; line-height: 1.5; margin: 0 0 30px;">You requested a password reset. Click the button below to proceed:</p>
             <a href="${resetLink}" style="display: inline-block; padding: 12px 24px; background-color: #1e90ff; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: bold; border-radius: 25px; transition: background-color 0.3s ease;">Reset Your Password</a>
-            <p style="font-size: 14px; color: #b0b8c4; line-height: 1.5; margin: 30px 0 0;">If you did not request this, please ignore this email or contact our support team at <a href="mailto:support@sumpowerservices.com" style="color: #1e90ff; text-decoration: none;">support@sumpowerservices.com</a>.</p>
-            <p style="font-size: 14px; color: #6c757d; margin: 20px 0 0;">© 2025 Sum Power Services. All rights reserved.</p>
+            <p style="font-size: 14px; color: #b0b8c4; line-height: 1.5; margin: 30px 0 0;">If you did not request this, please ignore this email or contact our support team at <a href="mailto:support@sunpowerservices.com" style="color: #1e90ff; text-decoration: none;">support@sunpowerservices.com</a>.</p>
+            <p style="font-size: 14px; color: #6c757d; margin: 20px 0 0;">© 2025 Sun Power Services. All rights reserved.</p>
           </td>
         </tr>
       </table>
