@@ -12,7 +12,11 @@ interface User {
   status: string;
   phone?: string;
   address?: string;
-  moduleAccess: string[];
+moduleAccess: {
+    module: string;
+    access: boolean;
+    permission: 'read' | 'write' | 'admin';
+  }[];
   profileImage?: string;
   lastLoginAt?: string;
 }
@@ -46,6 +50,11 @@ export const checkAuthStatus = createAsyncThunk(
       const response = await api.auth.getProfile();
       return response.data;
     } catch (error: any) {
+      // Don't clear token immediately on rate limiting
+      if (error.response?.status === 429) {
+        return rejectWithValue('Server is busy. Please try again in a moment.');
+      }
+      
       localStorage.removeItem('authToken');
       return rejectWithValue(error.message || 'Failed to verify authentication');
     }
@@ -64,6 +73,10 @@ export const login = createAsyncThunk(
       
       return response.data;
     } catch (error: any) {
+      // Handle rate limiting specifically
+      if (error.response?.status === 429) {
+        return rejectWithValue('Too many login attempts. Please wait a moment and try again.');
+      }
       return rejectWithValue(error.message || 'Login failed');
     }
   }

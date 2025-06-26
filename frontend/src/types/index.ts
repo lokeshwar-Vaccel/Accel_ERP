@@ -1,99 +1,367 @@
-
-
-  export interface User {
-  id: string;
-  name: string;
+export interface User {
+  _id: string;
+  firstName: string;
+  lastName: string;
   email: string;
   role: UserRole;
-  avatar?: string;
-  department?: string;
-  permissions: string[];
+  isActive: boolean;
+  moduleAccess: string[];
   phone?: string;
-  status: 'active' | 'inactive';
-  lastLogin?: string;
   createdAt: string;
   updatedAt: string;
+  lastLogin?: string;
 }
 
-export type UserRole = 'super_admin' | 'admin' | 'hr' | 'manager' | 'viewer';
+export enum UserRole {
+  SUPER_ADMIN = 'super_admin',
+  ADMIN = 'admin',
+  HR = 'hr',
+  MANAGER = 'manager',
+  VIEWER = 'viewer'
+}
 
 export interface Customer {
-  id: string;
+  _id: string;
   name: string;
   email: string;
   phone: string;
-  company: string;
   address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  status: 'active' | 'inactive' | 'prospect';
-  type: 'residential' | 'commercial' | 'industrial';
+  customerType: CustomerType;
+  leadSource: string;
+  status: LeadStatus;
+  notes?: string;
   assignedTo: string;
-  totalContracts: number;
-  totalRevenue: number;
-  lastContact: string;
+  createdBy: string;
+  contactHistory: ContactHistory[];
   createdAt: string;
   updatedAt: string;
 }
 
-export interface InventoryItem {
-  id: string;
-  name: string;
-  sku: string;
-  category: string;
-  description: string;
-  quantity: number;
-  minStock: number;
-  maxStock: number;
-  unitPrice: number;
-  supplier: string;
-  location: string;
-  status: 'in_stock' | 'low_stock' | 'out_of_stock';
-  lastRestocked: string;
-  createdAt: string;
-  updatedAt: string;
+export enum CustomerType {
+  TELECOM = 'telecom',
+  RETAIL = 'retail'
 }
 
-export interface ServiceRequest {
-  id: string;
-  title: string;
-  description: string;
-  customerId: string;
-  customerName: string;
-  priority: 'low' | 'medium' | 'high' | 'urgent';
-  status: 'open' | 'in_progress' | 'completed' | 'cancelled';
-  assignedTo: string;
-  category: string;
-  estimatedHours: number;
-  actualHours?: number;
-  scheduledDate: string;
-  completedDate?: string;
-  cost: number;
+export enum LeadStatus {
+  NEW = 'new',
+  CONTACTED = 'contacted',
+  QUALIFIED = 'qualified',
+  CONVERTED = 'converted',
+  LOST = 'lost'
+}
+
+export interface ContactHistory {
+  type: string;
+  date: string;
   notes: string;
+  createdBy: string;
+}
+
+export interface Product {
+  _id: string;
+  name: string;
+  description: string;
+  category: ProductCategory;
+  brand: string;
+  modelNumber: string;
+  specifications: Record<string, any>;
+  price: number;
+  minStockLevel: number;
+  tags: string[];
+  warranty?: Warranty;
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface AMCContract {
-  id: string;
-  contractNumber: string;
-  customerId: string;
-  customerName: string;
-  title: string;
+export enum ProductCategory {
+  GENSET = 'genset',
+  SPARE_PART = 'spare_part',
+  ACCESSORY = 'accessory'
+}
+
+export interface Warranty {
+  duration: number;
+  unit: string;
+  terms: string;
+}
+
+export interface StockLocation {
+  _id: string;
+  name: string;
+  address: string;
+  type: string;
+  contactPerson: string;
+  phone: string;
+  isActive: boolean;
+  capacity: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Stock {
+  _id: string;
+  product: string | Product;
+  location: string | StockLocation;
+  quantity: number;
+  reservedQuantity: number;
+  lastUpdated: string;
+  transactions: StockTransaction[];
+}
+
+export interface StockTransaction {
+  type: StockTransactionType;
+  quantity: number;
+  date: string;
+  reference: string;
+  notes?: string;
+}
+
+export enum StockTransactionType {
+  INWARD = 'inward',
+  OUTWARD = 'outward',
+  TRANSFER = 'transfer',
+  ADJUSTMENT = 'adjustment'
+}
+
+export interface ServiceTicket {
+  _id: string;
+  ticketNumber: string;
+  customer: string | Customer;
+  product?: string | Product;
   description: string;
+  priority: TicketPriority;
+  status: TicketStatus;
+  assignedTo?: string | User;
+  scheduledDate?: string;
+  completedDate?: string;
+  serviceType: string;
+  urgencyLevel: string;
+  serialNumber?: string;
+  customerNotes?: string;
+  serviceReport?: string;
+  workDuration?: number;
+  partsUsed?: PartUsage[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export enum TicketStatus {
+  OPEN = 'open',
+  IN_PROGRESS = 'in_progress',
+  RESOLVED = 'resolved',
+  CANCELLED = 'cancelled'
+}
+
+export enum TicketPriority {
+  LOW = 'low',
+  MEDIUM = 'medium',
+  HIGH = 'high',
+  URGENT = 'urgent'
+}
+
+export interface PartUsage {
+  product: string;
+  quantity: number;
+  unitPrice: number;
+}
+
+export interface AMC {
+  _id: string;
+  contractNumber: string;
+  customer: string | Customer;
+  products: string[] | Product[];
   startDate: string;
   endDate: string;
-  value: number;
-  status: 'active' | 'expired' | 'cancelled' | 'pending';
-  renewalDate: string;
+  contractValue: number;
+  scheduledVisits: number;
+  completedVisits?: number;
+  status: AMCStatus;
+  contractType: string;
   paymentTerms: string;
-  serviceFrequency: string;
-  assignedTechnician: string;
-  lastServiceDate?: string;
-  nextServiceDate: string;
+  visits: AMCVisit[];
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export enum AMCStatus {
+  ACTIVE = 'active',
+  EXPIRED = 'expired',
+  CANCELLED = 'cancelled',
+  PENDING = 'pending'
+}
+
+export interface AMCVisit {
+  scheduledDate: string;
+  visitType: string;
+  assignedTo: string;
+  completedDate?: string;
+  serviceReport?: string;
+}
+
+export interface PurchaseOrder {
+  _id: string;
+  poNumber: string;
+  supplier: string;
+  items: PurchaseOrderItem[];
+  totalAmount: number;
+  status: string;
+  orderDate: string;
+  expectedDeliveryDate: string;
+  actualDeliveryDate?: string;
+  deliveryLocation: string | StockLocation;
+  paymentTerms: string;
+  supplierContact: SupplierContact;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PurchaseOrderItem {
+  product: string | Product;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+}
+
+export interface SupplierContact {
+  name: string;
+  email: string;
+  phone: string;
+}
+
+export interface FileDocument {
+  _id: string;
+  originalName: string;
+  filename: string;
+  mimetype: string;
+  size: number;
+  path: string;
+  category?: string;
+  tags: string[];
+  relatedEntity?: {
+    entityType: string;
+    entityId: string;
+  };
+  uploadedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CommunicationMessage {
+  _id: string;
+  type: 'email' | 'sms' | 'whatsapp';
+  recipient: string;
+  subject?: string;
+  content: string;
+  status: MessageStatus;
+  sentAt: string;
+  deliveredAt?: string;
+  readAt?: string;
+  createdBy: string;
+}
+
+export enum MessageStatus {
+  PENDING = 'pending',
+  SENT = 'sent',
+  DELIVERED = 'delivered',
+  READ = 'read',
+  FAILED = 'failed'
+}
+
+export interface SystemSetting {
+  key: string;
+  value: any;
+  description?: string;
+  category: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface EmailTemplate {
+  _id: string;
+  name: string;
+  subject: string;
+  content: string;
+  variables: string[];
+  category: string;
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DashboardStats {
+  totalUsers: number;
+  totalCustomers: number;
+  activeAMCs: number;
+  pendingTickets: number;
+  monthlyRevenue: number;
+  lowStockItems: number;
+}
+
+export interface DashboardActivity {
+  id: string;
+  type: string;
+  message: string;
+  timestamp: string;
+  user: string;
+}
+
+export interface ReportDefinition {
+  _id: string;
+  name: string;
+  type: ReportType;
+  description: string;
+  parameters: ReportParameter[];
+  createdBy: string;
+  createdAt: string;
+}
+
+export enum ReportType {
+  SERVICE_TICKETS = 'service-tickets',
+  INVENTORY = 'inventory',
+  REVENUE = 'revenue',
+  CUSTOMERS = 'customers',
+  PERFORMANCE = 'performance',
+  CUSTOM = 'custom'
+}
+
+export interface ReportParameter {
+  name: string;
+  type: string;
+  required: boolean;
+  defaultValue?: any;
+  options?: any[];
+}
+
+export interface BreadcrumbItem {
+  label: string;
+  path?: string;
+}
+
+export interface TableColumn {
+  key: string;
+  title: string;
+  render?: (value: any, record: any) => React.ReactNode;
+  sortable?: boolean;
+  width?: string;
+}
+
+export interface PaginationInfo {
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+}
+
+export interface ApiResponse<T> {
+  success: boolean;
+  message: string;
+  data: T;
+  pagination?: PaginationInfo;
 }
 
 export interface Module {
@@ -112,18 +380,13 @@ export interface SubModule {
   requiredRoles: UserRole[];
 }
 
-export interface BreadcrumbItem {
+export interface FormField {
+  name: string;
   label: string;
-  path?: string;
-}
-
-export interface DashboardStats {
-  totalUsers: number;
-  totalCustomers: number;
-  inventoryItems: number;
-  activeContracts: number;
-  pendingServices: number;
-  monthlyRevenue: number;
+  type: string;
+  required?: boolean;
+  options?: { value: string; label: string }[];
+  validation?: any;
 }
 
 export interface Notification {
@@ -133,59 +396,4 @@ export interface Notification {
   type: 'info' | 'warning' | 'error' | 'success';
   timestamp: Date;
   read: boolean;
-}
-
-export interface Lead {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  company: string;
-  source: string;
-  status: 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost';
-  value: number;
-  assignedTo: string;
-  notes: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface Report {
-  id: string;
-  name: string;
-  type: 'financial' | 'operational' | 'custom';
-  description: string;
-  parameters: Record<string, any>;
-  createdBy: string;
-  createdAt: string;
-  lastRun?: string;
-}
-
-export interface Technician {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  specialization: string[];
-  status: 'available' | 'busy' | 'offline';
-  rating: number;
-  completedJobs: number;
-  location: string;
-  createdAt: string;
-}
-
-export interface Supplier {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  contactPerson: string;
-  paymentTerms: string;
-  rating: number;
-  status: 'active' | 'inactive';
-  createdAt: string;
 }

@@ -98,6 +98,11 @@ class ApiClient {
         body: JSON.stringify({ newPassword }),
       }),
     
+    restore: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/users/${id}/restore`, {
+        method: 'PUT',
+      }),
+    
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/users/stats'),
   };
@@ -162,6 +167,7 @@ class ApiClient {
 
   // Stock Management APIs
   stock = {
+    // Stock Locations
     getLocations: () =>
       this.makeRequest<{ success: boolean; data: any[] }>('/stock/locations'),
     
@@ -171,19 +177,44 @@ class ApiClient {
         body: JSON.stringify(locationData),
       }),
     
-    getStock: (params?: any) =>
-      this.makeRequest<{ success: boolean; data: any[] }>(`/stock${params ? `?${new URLSearchParams(params)}` : ''}`),
-    
-    updateStock: (productId: string, locationId: string, data: any) =>
-      this.makeRequest<{ success: boolean; data: any }>(`/stock/${productId}/${locationId}`, {
+    updateLocation: (id: string, data: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/stock/locations/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
+      }),
+    
+    deleteLocation: (id: string) =>
+      this.makeRequest<{ success: boolean }>(`/stock/locations/${id}`, {
+        method: 'DELETE',
+      }),
+    
+    // Stock Management
+    getStock: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/stock${params ? `?${new URLSearchParams(params)}` : ''}`),
+    
+    adjustStock: (adjustmentData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/stock/adjust', {
+        method: 'POST',
+        body: JSON.stringify(adjustmentData),
       }),
     
     transferStock: (transferData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/stock/transfer', {
         method: 'POST',
         body: JSON.stringify(transferData),
+      }),
+    
+    // Stock Analytics
+    getLowStockItems: (locationId?: string) =>
+      this.makeRequest<{ success: boolean; data: any[] }>(`/stock?lowStock=true${locationId ? `&location=${locationId}` : ''}`),
+    
+    getStockHistory: (productId: string, locationId?: string) =>
+      this.makeRequest<{ success: boolean; data: any[] }>(`/stock/history/${productId}${locationId ? `?location=${locationId}` : ''}`),
+    
+    getInventoryReport: (params: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/reports/inventory', {
+        method: 'POST',
+        body: JSON.stringify(params),
       }),
   };
 

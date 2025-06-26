@@ -1,43 +1,42 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState, AppDispatch } from '../store';
-import { loginSuccess, loginFailure, clearError } from '../authSlice';
+import { RootState, AppDispatch } from '../../../store';
+import { loginSuccess, loginFailure, clearError } from '../../../authSlice';
 import { Building2, Mail, Lock, Eye, EyeOff, Users } from 'lucide-react';
-
-const mockLogin = async (email: string, password: string) => {
-  // Simulate an API call
-  return new Promise<{ id: string; name: string; email: string }>((resolve, reject) => {
-    setTimeout(() => {
-      if (email === 'user@example.com' && password === 'password') {
-        resolve({ id: '1', name: 'John Doe', email });
-      } else {
-        reject('Invalid credentials');
-      }
-    }, 1000);
-  });
-};
+import { userLogin } from 'redux/auth/authSlice';
+import { useNavigate, useLocation } from "react-router-dom";
 
 const Login: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const error = useSelector((state: RootState) => state.auth.error);
+  const { isLoading,userInfo ,error } = useSelector((state:any) => state.auth)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+const navigate = useNavigate();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    dispatch(clearError());
-    setIsLoading(true);
-    try {
-      const user = await mockLogin(email, password);
-      dispatch(loginSuccess(user));
-    } catch (err: any) {
-      dispatch(loginFailure(err));
-    } finally {
-      setIsLoading(false);
+ useEffect(() => {
+    if (userInfo) {
+      navigate('/client-management')
     }
-  };
+  }, [navigate, userInfo])
+
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  dispatch(clearError());
+  try {
+    const response = await dispatch(userLogin({ email, password }));
+     if(response){
+        // toast.success('Login successful!');
+        console.log('Login successful, navigating to dashboard',response);
+        navigate('/');
+      }else{
+        // toast.error(response.message || "Invalid email or password");
+      }
+  } catch (err: any) {
+    console.error("Login error:", err);
+  } 
+};
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-teal-50 flex items-center justify-center p-4">
@@ -51,7 +50,7 @@ const Login: React.FC = () => {
         </div>
 
         <div className="">
-          <form  className=" space-y-5">
+          <form  className=" space-y-5" onSubmit={handleSubmit}>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Email Address
@@ -65,7 +64,7 @@ const Login: React.FC = () => {
                   placeholder="Enter your email"
                   required
                 />
-                <Mail className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
               </div>
             </div>
 
@@ -82,7 +81,7 @@ const Login: React.FC = () => {
                   placeholder="Enter your password"
                   required
                 />
-                <Lock className="absolute left-2.5 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}

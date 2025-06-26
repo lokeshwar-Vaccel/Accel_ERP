@@ -1,92 +1,77 @@
 import React, { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
-import Dashboard from 'pages/dashboard';
-import Breadcrumb from 'components/Breadcrumb';
-import { UserManagement } from 'pages/UserManagement';
 
-function Layout({ children }: any) {
-  const [currentPanel, setCurrentPanel] = useState("admin");
+interface LayoutProps {
+  children: React.ReactNode;
+  moduleAccess: {
+    module: string;
+    access: boolean;
+    permission: 'read' | 'write' | 'admin';
+  }[];
+}
+
+function Layout({ children, moduleAccess }: LayoutProps) {
+  const [currentPanel, setCurrentPanel] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const location = useLocation();
 
-const getPanelTitle = (panel: string) => {
-  switch (panel) {
-    case 'dashboard': return 'Dashboard';
-    case 'client-management': return 'Client Management';
-    case 'user-management': return 'User Management';
-    case 'inventory': return 'Inventory';
-    case 'service': return 'Service';
-    case 'settings': return 'Settings';
-    default: return 'Dashboard';
-  }
-};
+  
 
+  const getBreadcrumbs = (path: string) => {
+    const segments = path.split('/').filter(segment => segment);
+    if (segments.length === 0 || (segments.length === 1 && segments[0] === 'dashboard')) {
+      return ['Dashboard'];
+    }
+    
+    // Convert path segments to readable names
+    const breadcrumbs = segments.map(segment => {
+      switch (segment) {
+        case 'dashboard': return 'Dashboard';
+        case 'customer-management': return 'Customer Management';
+        case 'user-management': return 'User  Management';
+        case 'product-management': return 'Product Management';
+        case 'inventory-management': return 'Inventory Management';
+        case 'service-management': return 'Service Management';
+        case 'amc-management': return 'AMC Management';
+        case 'purchase-order-management': return 'Purchase Orders';
+        case 'reports-management': return 'Reports & Analytics';
+        case 'file-management': return 'File Management';
+        case 'communication-management': return 'Communications';
+        case 'admin-settings': return 'Admin Settings';
+        default: return segment.charAt(0).toUpperCase() + segment.slice(1);
+      }
+    });
 
- const renderDashboard = () => {
-  switch (currentPanel) {
-    case 'admin':
-      return <Dashboard />;
-    case 'client-management':
-      return <div>Client Management (Coming Soon)</div>;
-    case 'user-management':
-      return <UserManagement />;
-    //   return <div>User Dashboard (Coming Soon)</div>;
-    case 'inventory':
-      return <div>Inventory Dashboard (Coming Soon)</div>;
-    case 'service':
-     return (
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 hover:shadow-2xl transition-all duration-500">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-              {/* <span className="text-2xl">⚙️</span> */}
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Service Panel</h3>
-            <p className="text-gray-600">Advanced configuration options coming soon...</p>
-          </div>
-        </div>
-      );
-    case 'settings':
-      return (
-        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8 hover:shadow-2xl transition-all duration-500">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-gradient-to-br from-gray-400 to-gray-600 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
-              <span className="text-2xl">⚙️</span>
-            </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Settings Panel</h3>
-            <p className="text-gray-600">Advanced configuration options coming soon...</p>
-          </div>
-        </div>
-      );
-    default:
-      return <Dashboard />;
-  }
-};
-
+    return breadcrumbs;
+  };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-gray-300 dark:text-slate-100 text-slate-900">
+    <div className="flex h-screen w-screen overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       {/* Sidebar */}
       <Sidebar
         currentPanel={currentPanel}
         onPanelChange={setCurrentPanel}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
+        isCollapsed={sidebarCollapsed}
+        onCollapseToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        moduleAccess={moduleAccess} // Pass the moduleAccess prop
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col overflow-hidden border-l border-slate-700 dark:border-slate-300">
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header
           onMenuToggle={() => setSidebarOpen(!sidebarOpen)}
-          title={getPanelTitle(currentPanel)}
+          pathSegments={getBreadcrumbs(location.pathname)}
         />
 
-        <Breadcrumb pathSegments={[currentPanel]} />
-
-        <main className="p-6 relative z-10 overflow-y-auto">
-          <main className="p-6 relative z-10 overflow-y-auto">
-  { renderDashboard()}
-</main>
-
+        <main className="flex-1 overflow-y-auto p-2">
+          <div className="h-full overflow-y-auto rounded-2xl bg-white shadow-lg border border-gray-200 p-2">
+            {children}
+          </div>
         </main>
       </div>
     </div>

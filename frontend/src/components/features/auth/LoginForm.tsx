@@ -14,6 +14,7 @@ export const LoginForm: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [lastAttempt, setLastAttempt] = useState<number>(0);
 
   // Redirect to dashboard if already authenticated
   useEffect(() => {
@@ -40,9 +41,18 @@ export const LoginForm: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (email && password) {
-      dispatch(login({ email, password }));
+    
+    if (!email || !password) return;
+    
+    // Prevent rapid successive attempts (minimum 2 seconds between attempts)
+    const now = Date.now();
+    const timeSinceLastAttempt = now - lastAttempt;
+    if (timeSinceLastAttempt < 2000 && lastAttempt > 0) {
+      return;
     }
+    
+    setLastAttempt(now);
+    dispatch(login({ email, password }));
   };
 
   const handleInputChange = () => {
@@ -52,10 +62,11 @@ export const LoginForm: React.FC = () => {
   };
 
   const demoAccounts = [
-    { email: 'admin@sunpower.com', role: 'Super Admin', password: 'password' },
-    { email: 'manager@sunpower.com', role: 'Manager', password: 'password' },
-    { email: 'hr@sunpower.com', role: 'HR Manager', password: 'password' },
-    { email: 'viewer@sunpower.com', role: 'Viewer', password: 'password' }
+    { email: 'admin@sunpowerservices.com', role: 'Super Admin', password: 'admin123' },
+    { email: 'john.manager@sunpowerservices.com', role: 'Manager', password: 'manager123' },
+    { email: 'lisa.hr@sunpowerservices.com', role: 'HR Manager', password: 'hr123' },
+    { email: 'sarah.tech@sunpowerservices.com', role: 'Technician', password: 'tech123' },
+    { email: 'mike.sales@sunpowerservices.com', role: 'Sales', password: 'sales123' }
   ];
 
   return (
@@ -87,7 +98,7 @@ export const LoginForm: React.FC = () => {
                 Email Address
               </label>
               <div className="relative">
-                <Mail size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                  <Mail size={16} className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
                   id="email"
                   type="email"
@@ -108,7 +119,7 @@ export const LoginForm: React.FC = () => {
                 Password
               </label>
               <div className="relative">
-                <Lock size={18} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                                  <Lock size={16} className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
                   id="password"
                   type={showPassword ? 'text' : 'password'}
@@ -163,7 +174,7 @@ export const LoginForm: React.FC = () => {
             ))}
           </div>
           <p className="text-xs text-gray-600 mt-4">
-            Click any account above to auto-fill credentials. Password: <span className="font-mono bg-gray-200 px-1 rounded">password</span>
+            Click any account above to auto-fill credentials. Each account has its own password (e.g., admin123, manager123, etc.)
           </p>
         </div>
       </div>
