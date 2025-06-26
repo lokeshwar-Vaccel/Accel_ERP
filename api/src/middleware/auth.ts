@@ -100,7 +100,7 @@ export const checkPermission = (action: 'read' | 'write' | 'delete') => {
 
     // HR role restrictions
     if (req.user.role === UserRole.HR) {
-      const hrModules = ['user_management', 'inventory_management', 'finance'];
+      const hrModules = ['users', 'products', 'purchase-orders'];
       const requestedModule = req.baseUrl.split('/')[3]; // assuming /api/v1/module format
       
       if (!hrModules.includes(requestedModule)) {
