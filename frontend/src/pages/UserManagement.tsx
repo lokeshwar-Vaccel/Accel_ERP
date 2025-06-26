@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import {
   Users, Plus, Search, Edit, Trash2, MoreHorizontal,
   Filter, Download, UserPlus, X, ChevronDown, RotateCcw,
@@ -12,6 +12,7 @@ import { apiClient } from '../utils/api';
 import { User, UserRole } from '../types';
 import PageHeader from '../components/ui/PageHeader';
 import { useCurrentModulePermission } from 'layout/Sidebar';
+import { RootState } from 'redux/store';
 
 
 // Module key-label map
@@ -75,6 +76,7 @@ export const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<UserDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const currentUser = useSelector((state: RootState) => state.auth.user?.role);
 
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -86,7 +88,7 @@ export const UserManagement: React.FC = () => {
   const [userToDelete, setUserToDelete] = useState<UserDisplay | null>(null);
   const permission = useCurrentModulePermission();
 
-  console.log("permission:", permission);
+  console.log("currentUser:", currentUser);
 
 
   // Form states
@@ -101,6 +103,9 @@ export const UserManagement: React.FC = () => {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+
+  console.log("formData:", formData);
+
 
 
   const userRoles: UserModuleKey[] = ['super_admin', 'admin', 'hr', 'manager', 'viewer'];
@@ -120,11 +125,16 @@ export const UserManagement: React.FC = () => {
   ];
 
   const roleModuleMapping: Record<string, ModuleKey[]> = {
-    'super_admin': allModules,
-    'admin': allModules.filter(m => m !== 'admin_settings'),
-    'hr': ['dashboard', 'user_management', 'reports_analytics'],
-    'manager': allModules.filter(m => m !== 'admin_settings'),
-    'viewer': ['dashboard']
+    super_admin: allModules,
+    admin: allModules,
+    hr: [
+      'dashboard',
+      'user_management',
+      'inventory_management',
+      'purchase_orders',
+    ],
+    manager: allModules.filter(m => m !== 'admin_settings'),
+    viewer: ['dashboard'],
   };
 
   // Custom dropdown states
@@ -443,7 +453,7 @@ export const UserManagement: React.FC = () => {
 
   const formatRoleDisplay = (role: string) => {
     const roleMap: { [key: string]: string } = {
-      'super_admin': 'super_admin',
+      'super_admin': 'Super Admin',
       'admin': 'Admin',
       'manager': 'Manager',
       'hr': 'HR',
@@ -472,6 +482,75 @@ export const UserManagement: React.FC = () => {
       'viewer': 'Read-only access to selected modules'
     };
     return descriptions[role as keyof typeof descriptions] || '';
+  };
+
+  const canEditUser = (currentUserRole:any, targetUserRole:any) => {
+    // Super Admin: Can edit/delete all users except other Super Admin users
+    if (currentUserRole === 'super_admin') {
+      return targetUserRole !== 'super_admin';
+    }
+    
+    // Admin: Cannot edit/delete Super Admin or other Admin users
+    if (currentUserRole === 'admin') {
+      return targetUserRole !== 'super_admin' && targetUserRole !== 'admin';
+    }
+    
+    // Manager: Can edit/delete HR and Viewer users
+    if (currentUserRole === 'manager') {
+      return ['hr', 'viewer'].includes(targetUserRole);
+    }
+    
+    // HR: Can edit/delete Viewer users only (NOT Manager users)
+    if (currentUserRole === 'hr') {
+      return targetUserRole === 'viewer';
+    }
+    
+    // Viewer: Cannot edit/delete any users
+    if (currentUserRole === 'viewer') {
+      return false;
+    }
+    
+    return false;
+  };
+
+  const getAvailableRoles = (currentUserRole:any, existingUsers:any) => {
+    const allRoles = ['super_admin', 'admin', 'hr', 'manager', 'viewer'];
+    const UserModuleMap:any = {
+      super_admin: 'Super Admin',
+      admin: 'Admin',
+      hr: 'HR',
+      manager: 'Manager',
+      viewer: 'Viewer'
+    };
+
+    // HR can only assign viewer role
+    if (currentUserRole === 'hr') {
+      return [{ value: 'viewer', label: 'Viewer' }];
+    }
+
+    // Filter roles based on business rules and existing users
+    return allRoles
+      .filter(role => {
+        // Super Admin: Can assign any role, but limit super_admin if it already exists
+        if (currentUserRole === 'super_admin') {
+          if (role === 'super_admin' && existingUsers.some((user:any) => user.role === 'super_admin')) return false;
+          return true;
+        }
+        
+        // Admin: Can assign hr, manager, viewer roles
+        if (currentUserRole === 'admin') {
+          return ['hr', 'manager', 'viewer'].includes(role);
+        }
+        
+        // Manager: Can assign hr and viewer roles
+        if (currentUserRole === 'manager') {
+          return ['hr', 'viewer'].includes(role);
+        }
+        
+        // Viewer: Cannot assign any roles
+        return false;
+      })
+      .map(role => ({ value: role, label: UserModuleMap[role] }));
   };
 
   const selectAll = (permission: 'read' | 'write') => {
@@ -650,53 +729,81 @@ export const UserManagement: React.FC = () => {
                       No users found
                     </td>
                   </tr>
-                ) : (
-                  sortedUsers.map((user: UserDisplay) => (
-                    <tr key={user.id} className={`hover:bg-gray-50 transition-colors ${user.status === 'deleted' ? 'opacity-60 bg-gray-25' : ''
-                      }`}>
+                ) : (sortedUsers.map((user: UserDisplay) => {
+                  return (
+                    <tr
+                      key={user.id}
+                      className={`hover:bg-gray-50 transition-colors ${user.status === 'deleted' ? 'opacity-60 bg-gray-25' : ''
+                        }`}
+                    >
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center ${user.status === 'deleted' ? 'bg-gray-300' : 'bg-gray-200'
-                            }`}>
+                          <div
+                            className={`w-6 h-6 rounded-full flex items-center justify-center ${user.status === 'deleted' ? 'bg-gray-300' : 'bg-gray-200'
+                              }`}
+                          >
                             <span className="text-xs font-medium text-gray-600">
-                              {user.name.split(' ').map(n => n[0]).join('')}
+                              {user.name
+                                .split(' ')
+                                .map((n) => n[0])
+                                .join('')}
                             </span>
                           </div>
                           <div className="ml-3">
-                            <div className={`text-xs font-medium ${user.status === 'deleted' ? 'text-gray-600' : 'text-gray-900'
-                              }`}>{user.name}</div>
+                            <div
+                              className={`text-xs font-medium ${user.status === 'deleted' ? 'text-gray-600' : 'text-gray-900'
+                                }`}
+                            >
+                              {user.name}
+                            </div>
                             <div className="text-xs text-gray-500">{user.email}</div>
                           </div>
                         </div>
                       </td>
+
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(user.role)}`}>
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleBadge(
+                            user.role
+                          )}`}
+                        >
                           {formatRoleDisplay(user.role)}
                         </span>
                       </td>
+
                       <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
                         {user.department}
                       </td>
+
                       <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(user.status)}`}>
+                        <span
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusBadge(
+                            user.status
+                          )}`}
+                        >
                           {user.status}
                         </span>
                       </td>
+
                       <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
                         {user.lastLogin}
                       </td>
-                      {permission === 'write' && <td className="px-4 py-3 whitespace-nowrap text-right text-xs font-medium">
-                        <div className="flex items-center justify-end space-x-2">
-                          {user.status === 'deleted' ? (
-                            <button
-                              onClick={() => handleRestore(user)}
-                              disabled={submitting}
-                              className="text-green-600 hover:text-green-900 p-2 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
-                              title="Restore User"
-                            >
-                              <RotateCcw className="w-4 h-4" />
-                            </button>
-                          ) : (
+
+                      {permission === 'write' && (
+                        <td className="px-4 py-3 whitespace-nowrap text-right text-xs font-medium">
+                          <div className="flex items-center justify-end space-x-2">
+                            {user.status === 'deleted' ? (
+                              <button
+                                onClick={() => handleRestore(user)}
+                                disabled={submitting}
+                                className="text-green-600 hover:text-green-900 p-2 rounded-lg hover:bg-green-50 transition-colors disabled:opacity-50"
+                                title="Restore User"
+                              >
+                                <RotateCcw className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              <>
+                               {canEditUser(currentUser, user.role) ? (
                             <>
                               <button
                                 onClick={() => openEditUserModal(user)}
@@ -713,12 +820,21 @@ export const UserManagement: React.FC = () => {
                                 <Trash2 className="w-4 h-4" />
                               </button>
                             </>
+                          ) : (
+                            <span className="text-gray-400 text-xs">No access</span>
                           )}
-                        </div>
-                      </td>}
+
+                              </>
+
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
-                  ))
-                )}
+                  );
+                }))
+
+                }
               </tbody>
             </table>
           </div>
@@ -847,10 +963,14 @@ export const UserManagement: React.FC = () => {
                       }`}
                   >
                     <option value="">Select a role</option>
-                    {userRoles.map(role => (
-                      <option key={role} value={role}>{UserModuleMap[role]}</option>
-                    ))}
+                  {getAvailableRoles(currentUser, users).map((role:any) => (
+                    <option key={role.value} value={role.value}>
+                      {role.label}
+                    </option>
+                  ))}
                   </select>
+
+
                   {formData.role && Object.keys(formData.moduleAccess || {}).length > 0 && (
                     <div className="mt-2 p-3 bg-blue-50 rounded-lg">
                       <div className="flex items-start gap-2">

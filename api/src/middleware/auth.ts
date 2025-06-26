@@ -95,6 +95,9 @@ export const checkPermission = (action: 'read' | 'write' | 'delete') => {
 
     const requestedModule = req.baseUrl.split('/')[3]; // assumes format /api/v1/{module}
 
+    console.log("requestedModule---:",requestedModule);
+    
+
     // Super admin and admin have all permissions
     if (req.user.role === UserRole.SUPER_ADMIN || req.user.role === UserRole.ADMIN) {
       return next();
@@ -106,10 +109,8 @@ export const checkPermission = (action: 'read' | 'write' | 'delete') => {
     }
 
     // HR-specific restrictions
-    if (req.user.role === UserRole.HR)
+    if (req.user.role === UserRole.HR) {
       const hrModules = ['users', 'products', 'purchase-orders'];
-      const requestedModule = req.baseUrl.split('/')[3]; // assuming /api/v1/module format
-  
       if (!hrModules.includes(requestedModule)) {
         return next(new AppError('You do not have access to this module', 403));
       }
@@ -128,19 +129,19 @@ export const checkPermission = (action: 'read' | 'write' | 'delete') => {
       m => m.module === requestedModule && m.access
     );
 
-    if (!modulePermission) {
-      return next(new AppError(`You do not have access to ${requestedModule}`, 403));
-    }
+    // if (!modulePermission) {
+    //   return next(new AppError(`You do not have access to ${requestedModule}`, 403));
+    // }
 
-    // If action is 'write' or 'delete', user must have 'write' or 'admin' permission
-    if ((action === 'write' || action === 'delete') && !['write', 'admin'].includes(modulePermission.permission)) {
-      return next(new AppError(`You do not have ${action} permission for ${requestedModule}`, 403));
-    }
+    // // If action is 'write' or 'delete', user must have 'write' or 'admin' permission
+    // if ((action === 'write' || action === 'delete') && !['write', 'admin'].includes(modulePermission.permission)) {
+    //   return next(new AppError(`You do not have ${action} permission for ${requestedModule}`, 403));
+    // }
 
-    // If action is 'read' and permission is at least 'read', allow
-    if (action === 'read' && !['read', 'write', 'admin'].includes(modulePermission.permission)) {
-      return next(new AppError(`You do not have read permission for ${requestedModule}`, 403));
-    }
+    // // If action is 'read' and permission is at least 'read', allow
+    // if (action === 'read' && !['read', 'write', 'admin'].includes(modulePermission.permission)) {
+    //   return next(new AppError(`You do not have read permission for ${requestedModule}`, 403));
+    // }
 
     next();
   };

@@ -6,13 +6,14 @@ import { RootState, AppDispatch } from './store';
 import { LoadingSpinner } from 'components/ui/LoadingSpinner';
 import { LoginForm } from 'components/features/auth/LoginForm';
 import { checkAuthStatus } from './redux/auth/authSlice';
+import { Toaster } from 'react-hot-toast';
 
 const App = () => {
   const dispatch = useDispatch<AppDispatch>();
-  const { isAuthenticated, isLoading  ,user } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, isLoading, user } = useSelector((state: RootState) => state.auth);
 
-  console.log("user:",user);
-  
+  console.log("user:", user);
+
   // Check authentication status on app startup
   useEffect(() => {
     const token = localStorage.getItem('authToken');
@@ -32,7 +33,44 @@ const App = () => {
       ) : (
         <LoginForm />
       )}
-    </>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 4000,
+          style: {
+            background: '#363636',
+            color: '#fff',
+            zIndex: 9999,
+            position: 'relative',
+            minWidth: '300px',
+            padding: '16px',
+            borderRadius: '8px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+          },
+          success: {
+            duration: 3000,
+            style: {
+              background: '#10b981',
+              color: '#fff',
+            },
+            iconTheme: {
+              primary: '#fff',
+              secondary: '#10b981',
+            },
+          },
+          error: {
+            duration: 4000,
+            style: {
+              background: '#ef4444',
+              color: '#fff',
+            },
+            iconTheme: {
+              primary: '#fff',
+              secondary: '#ef4444',
+            },
+          },
+        }}
+      />    </>
   );
 };
 
