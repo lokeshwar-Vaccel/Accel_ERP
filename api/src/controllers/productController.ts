@@ -25,7 +25,7 @@ export const getProducts = async (
     } = req.query as QueryParams & {
       category?: ProductCategory;
       brand?: string;
-      isActive?: string;
+      isActive?: string | boolean;
       minPrice?: string;
       maxPrice?: string;
     };
@@ -51,7 +51,7 @@ export const getProducts = async (
     }
     
     if (isActive !== undefined) {
-      query.isActive = isActive === 'true';
+      query.isActive = isActive === true || isActive === 'true';
     }
     
     if (minPrice || maxPrice) {
@@ -61,6 +61,7 @@ export const getProducts = async (
     }
 
     // Execute query with pagination
+    
     const products = await Product.find(query)
       .populate('createdBy', 'firstName lastName email')
       .sort(sort as string)
