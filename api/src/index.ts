@@ -10,6 +10,7 @@ import { connectDB } from './database/connection';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
 import routes from './routes';
+import createSampleData from './scripts/seed';
 
 // Load environment variables
 dotenv.config();
@@ -87,8 +88,10 @@ const startServer = async () => {
     await connectDB();
     
     app.listen(PORT, () => {
+
       console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
       console.log(`📡 API Documentation: http://localhost:${PORT}/api/v1`);
+      // createSampleData(); 
     });
   } catch (error) {
     console.error('Failed to start server:', error);
