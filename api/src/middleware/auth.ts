@@ -106,8 +106,10 @@ export const checkPermission = (action: 'read' | 'write' | 'delete') => {
     }
 
     // HR-specific restrictions
-    if (req.user.role === UserRole.HR) {
-      const hrModules = ['user_management', 'inventory_management', 'finance'];
+    if (req.user.role === UserRole.HR)
+      const hrModules = ['users', 'products', 'purchase-orders'];
+      const requestedModule = req.baseUrl.split('/')[3]; // assuming /api/v1/module format
+  
       if (!hrModules.includes(requestedModule)) {
         return next(new AppError('You do not have access to this module', 403));
       }
