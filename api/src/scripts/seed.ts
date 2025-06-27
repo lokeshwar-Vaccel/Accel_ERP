@@ -29,7 +29,15 @@ const sampleUsers = [
     password: 'admin123',
     role: UserRole.SUPER_ADMIN,
     status: 'active',
-    moduleAccess: ['user_management', 'customer_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics', 'admin_settings']
+    moduleAccess: [
+      { module: 'user_management', access: true, permission: 'admin' },
+      { module: 'customer_management', access: true, permission: 'admin' },
+      { module: 'inventory_management', access: true, permission: 'admin' },
+      { module: 'service_management', access: true, permission: 'admin' },
+      { module: 'amc_management', access: true, permission: 'admin' },
+      { module: 'reports_analytics', access: true, permission: 'admin' },
+      { module: 'admin_settings', access: true, permission: 'admin' }
+    ]
   },
   {
     firstName: 'John',
@@ -38,7 +46,13 @@ const sampleUsers = [
     password: 'manager123',
     role: UserRole.MANAGER,
     status: 'active',
-    moduleAccess: ['customer_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics']
+    moduleAccess: [
+      { module: 'customer_management', access: true, permission: 'write' },
+      { module: 'inventory_management', access: true, permission: 'write' },
+      { module: 'service_management', access: true, permission: 'write' },
+      { module: 'amc_management', access: true, permission: 'write' },
+      { module: 'reports_analytics', access: true, permission: 'read' }
+    ]
   },
   {
     firstName: 'Sarah',
@@ -47,7 +61,10 @@ const sampleUsers = [
     password: 'tech123',
     role: UserRole.VIEWER,
     status: 'active',
-    moduleAccess: ['service_management', 'inventory_management']
+    moduleAccess: [
+      { module: 'service_management', access: true, permission: 'read' },
+      { module: 'inventory_management', access: true, permission: 'read' }
+    ]
   },
   {
     firstName: 'Mike',
@@ -56,7 +73,11 @@ const sampleUsers = [
     password: 'sales123',
     role: UserRole.VIEWER,
     status: 'active',
-    moduleAccess: ['customer_management', 'amc_management', 'reports_analytics']
+    moduleAccess: [
+      { module: 'customer_management', access: true, permission: 'read' },
+      { module: 'amc_management', access: true, permission: 'read' },
+      { module: 'reports_analytics', access: true, permission: 'read' }
+    ]
   },
   {
     firstName: 'Lisa',
@@ -65,9 +86,60 @@ const sampleUsers = [
     password: 'hr123',
     role: UserRole.HR,
     status: 'active',
-    moduleAccess: ['user_management', 'inventory_management', 'reports_analytics']
+    moduleAccess: [
+      { module: 'user_management', access: true, permission: 'write' },
+      { module: 'inventory_management', access: true, permission: 'read' },
+      { module: 'reports_analytics', access: true, permission: 'read' }
+    ]
   }
 ];
+// const sampleUsers = [
+//   {
+//     firstName: 'Admin',
+//     lastName: 'User',
+//     email: 'admin@sunpowerservices.com',
+//     password: 'admin123',
+//     role: UserRole.SUPER_ADMIN,
+//     status: 'active',
+//     moduleAccess: ['user_management', 'customer_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics', 'admin_settings']
+//   },
+//   {
+//     firstName: 'John',
+//     lastName: 'Manager',
+//     email: 'john.manager@sunpowerservices.com',
+//     password: 'manager123',
+//     role: UserRole.MANAGER,
+//     status: 'active',
+//     moduleAccess: ['customer_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics']
+//   },
+//   {
+//     firstName: 'Sarah',
+//     lastName: 'Technician',
+//     email: 'sarah.tech@sunpowerservices.com',
+//     password: 'tech123',
+//     role: UserRole.VIEWER,
+//     status: 'active',
+//     moduleAccess: ['service_management', 'inventory_management']
+//   },
+//   {
+//     firstName: 'Mike',
+//     lastName: 'Sales',
+//     email: 'mike.sales@sunpowerservices.com',
+//     password: 'sales123',
+//     role: UserRole.VIEWER,
+//     status: 'active',
+//     moduleAccess: ['customer_management', 'amc_management', 'reports_analytics']
+//   },
+//   {
+//     firstName: 'Lisa',
+//     lastName: 'HR',
+//     email: 'lisa.hr@sunpowerservices.com',
+//     password: 'hr123',
+//     role: UserRole.HR,
+//     status: 'active',
+//     moduleAccess: ['user_management', 'inventory_management', 'reports_analytics']
+//   }
+// ];
 
 const sampleStockLocations = [
   {

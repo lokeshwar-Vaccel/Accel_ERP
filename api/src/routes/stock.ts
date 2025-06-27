@@ -2,6 +2,13 @@ import { Router } from 'express';
 import { protect, restrictTo, checkModuleAccess, checkPermission } from '../middleware/auth';
 import { validate } from '../utils/validation';
 import { 
+  getStockLocations,
+  createStockLocation,
+  updateStockLocation,
+  deleteStockLocation,
+  toggleStockLocationStatus
+} from '../controllers/stockLocationController';
+import { 
   stockQuerySchema,
   stockAdjustmentSchema,
   stockTransferSchema,
@@ -23,30 +30,6 @@ router.use(protect);
 // Check module access for inventory management
 router.use(checkModuleAccess('inventory_management'));
 
-// Placeholder controller functions for stock locations (to be implemented)
-const getStockLocations = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get stock locations endpoint',
-    data: []
-  });
-};
-
-const createStockLocation = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Create stock location endpoint',
-    data: { ...req.body, id: 'temp-id' }
-  });
-};
-
-const updateStockLocation = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Update stock location endpoint',
-    data: { id: req.params.id, ...req.body }
-  });
-};
 
 // Use getStock for low stock items too (it supports lowStock=true parameter)
 const getLowStockItems = getStock;
@@ -70,6 +53,17 @@ router.put('/locations/:id',
   validate(updateStockLocationSchema), 
   checkPermission('write'), 
   updateStockLocation
+);
+
+router.delete('/locations/:id', 
+  checkPermission('delete'), 
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), 
+  deleteStockLocation
+);
+
+router.patch('/locations/:id/toggle', 
+  checkPermission('write'), 
+  toggleStockLocationStatus
 );
 
 export default router; 
