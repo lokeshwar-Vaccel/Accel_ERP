@@ -12,7 +12,14 @@ import {
   Calendar,
   Filter,
   X,
-  Package
+  Package,
+  Users,
+  TrendingUp,
+  ChevronDown,
+  Send,
+  CreditCard,
+  Ban,
+  AlertCircle
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -32,6 +39,8 @@ interface Invoice {
   issueDate: string;
   dueDate: string;
   totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
   invoiceType: 'sale' | 'service' | 'amc' | 'other';
@@ -105,10 +114,36 @@ const InvoiceManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
 
+  // Custom dropdown states
+  const [showStatusFilterDropdown, setShowStatusFilterDropdown] = useState(false);
+  const [showPaymentFilterDropdown, setShowPaymentFilterDropdown] = useState(false);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [showInvoiceTypeDropdown, setShowInvoiceTypeDropdown] = useState(false);
+  const [showProductDropdowns, setShowProductDropdowns] = useState<Record<number, boolean>>({});
+  const [showStatusUpdateDropdown, setShowStatusUpdateDropdown] = useState(false);
+  const [showPaymentStatusDropdown, setShowPaymentStatusDropdown] = useState(false);
+  const [showPaymentMethodDropdown, setShowPaymentMethodDropdown] = useState(false);
+
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+
+  // Status update states
+  const [statusUpdate, setStatusUpdate] = useState({
+    status: '',
+    notes: ''
+  });
+  const [paymentUpdate, setPaymentUpdate] = useState({
+    paymentStatus: '',
+    paymentMethod: '',
+    paymentDate: '',
+    paidAmount: 0,
+    notes: ''
+  });
 
   // Form states
   const [newInvoice, setNewInvoice] = useState({
@@ -141,6 +176,27 @@ const InvoiceManagement: React.FC = () => {
   // Initialize data
   useEffect(() => {
     fetchAllData();
+  }, []);
+
+  // Close dropdowns when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Element;
+      if (!target.closest('.dropdown-container')) {
+        setShowStatusFilterDropdown(false);
+        setShowPaymentFilterDropdown(false);
+        setShowCustomerDropdown(false);
+        setShowLocationDropdown(false);
+        setShowInvoiceTypeDropdown(false);
+        setShowProductDropdowns({});
+        setShowStatusUpdateDropdown(false);
+        setShowPaymentStatusDropdown(false);
+        setShowPaymentMethodDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const fetchAllData = async () => {
@@ -242,12 +298,192 @@ const InvoiceManagement: React.FC = () => {
     });
     setStockValidation({});
     setFormErrors({});
+    // Reset all dropdown states
+    setShowCustomerDropdown(false);
+    setShowLocationDropdown(false);
+    setShowInvoiceTypeDropdown(false);
+    setShowProductDropdowns({});
     setShowCreateModal(true);
   };
 
   const handleViewInvoice = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     setShowViewModal(true);
+  };
+
+  // Status management functions
+  const handleUpdateStatus = (invoice: Invoice, newStatus: string) => {
+    setSelectedInvoice(invoice);
+    setStatusUpdate({ status: invoice.status, notes: '' }); // Pre-select current status
+    setShowStatusUpdateDropdown(false); // Reset dropdown state
+    setShowStatusModal(true);
+  };
+
+  const handleUpdatePayment = (invoice: Invoice) => {
+    setSelectedInvoice(invoice);
+    
+    // Smart defaults based on current payment status
+    let defaultPaymentStatus = 'paid';
+    let defaultPaidAmount = invoice.totalAmount;
+    
+    if (invoice.paymentStatus === 'pending') {
+      defaultPaymentStatus = 'partial';
+      defaultPaidAmount = Math.round(invoice.totalAmount * 0.5); // Default to 50% for partial
+    } else if (invoice.paymentStatus === 'partial') {
+      defaultPaymentStatus = 'paid';
+      // For existing partial payments, suggest paying the remaining amount
+      const remainingAmount = invoice.remainingAmount || (invoice.totalAmount - (invoice.paidAmount || 0));
+      defaultPaidAmount = invoice.totalAmount;
+    }
+
+    setPaymentUpdate({
+      paymentStatus: defaultPaymentStatus,
+      paymentMethod: '',
+      paymentDate: new Date().toISOString().split('T')[0],
+      paidAmount: defaultPaidAmount,
+      notes: ''
+    });
+    // Reset dropdown states
+    setShowPaymentStatusDropdown(false);
+    setShowPaymentMethodDropdown(false);
+    setShowPaymentModal(true);
+  };
+
+  const submitStatusUpdate = async () => {
+    if (!selectedInvoice) return;
+
+    setSubmitting(true);
+    try {
+      await apiClient.invoices.update(selectedInvoice._id, statusUpdate);
+      await fetchInvoices();
+      await fetchStats();
+      setShowStatusModal(false);
+      setStatusUpdate({ status: '', notes: '' });
+    } catch (error) {
+      console.error('Error updating invoice status:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const submitPaymentUpdate = async () => {
+    if (!selectedInvoice) return;
+
+    setSubmitting(true);
+    try {
+      await apiClient.invoices.update(selectedInvoice._id, paymentUpdate);
+      await fetchInvoices();
+      await fetchStats();
+      setShowPaymentModal(false);
+      setPaymentUpdate({ paymentStatus: '', paymentMethod: '', paymentDate: '', paidAmount: 0, notes: '' });
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Quick actions
+  const quickSendInvoice = async (invoice: Invoice) => {
+    await handleUpdateStatusQuick(invoice._id, 'sent');
+  };
+
+  const quickMarkPaid = async (invoice: Invoice) => {
+    await handlePaymentUpdateQuick(invoice._id, {
+      paymentStatus: 'paid',
+      paymentDate: new Date().toISOString(),
+      paidAmount: invoice.totalAmount
+    });
+  };
+
+  const quickCancelInvoice = async (invoice: Invoice) => {
+    if (confirm('Are you sure you want to cancel this invoice?')) {
+      await handleUpdateStatusQuick(invoice._id, 'cancelled');
+    }
+  };
+
+  const handleUpdateStatusQuick = async (invoiceId: string, status: string) => {
+    try {
+      await apiClient.invoices.update(invoiceId, { status });
+      await fetchInvoices();
+      await fetchStats();
+    } catch (error) {
+      console.error('Error updating invoice status:', error);
+    }
+  };
+
+  const handlePaymentUpdateQuick = async (invoiceId: string, paymentData: any) => {
+    try {
+      await apiClient.invoices.update(invoiceId, paymentData);
+      await fetchInvoices();
+      await fetchStats();
+    } catch (error) {
+      console.error('Error updating payment:', error);
+    }
+  };
+
+  // Get available actions for an invoice
+  const getAvailableActions = (invoice: Invoice) => {
+    const actions = [];
+    
+    // Always available
+    actions.push({
+      icon: <Eye className="w-4 h-4" />,
+      label: 'View',
+      action: () => handleViewInvoice(invoice),
+      color: 'text-blue-600 hover:text-blue-900 hover:bg-blue-50'
+    });
+
+    // Edit Status - Available for all invoices except cancelled
+    if (invoice.status !== 'cancelled') {
+      actions.push({
+        icon: <Edit className="w-4 h-4" />,
+        label: 'Edit Status',
+        action: () => handleUpdateStatus(invoice, invoice.status),
+        color: 'text-purple-600 hover:text-purple-900 hover:bg-purple-50'
+      });
+    }
+
+    // Payment Management - Available for invoices that can have payments
+    if (invoice.status !== 'cancelled' && invoice.status !== 'draft') {
+      actions.push({
+        icon: <DollarSign className="w-4 h-4" />,
+        label: 'Update Payment',
+        action: () => handleUpdatePayment(invoice),
+        color: 'text-green-600 hover:text-green-900 hover:bg-green-50'
+      });
+    }
+
+    // Quick actions based on status
+    if (invoice.status === 'draft') {
+      actions.push({
+        icon: <Send className="w-4 h-4" />,
+        label: 'Quick Send',
+        action: () => quickSendInvoice(invoice),
+        color: 'text-orange-600 hover:text-orange-900 hover:bg-orange-50'
+      });
+    }
+
+    if (invoice.status === 'sent' && invoice.paymentStatus === 'pending') {
+      actions.push({
+        icon: <CheckCircle className="w-4 h-4" />,
+        label: 'Quick Paid',
+        action: () => quickMarkPaid(invoice),
+        color: 'text-green-600 hover:text-green-900 hover:bg-green-50'
+      });
+    }
+
+    // Cancel option for non-finalized invoices
+    if (invoice.status !== 'cancelled' && invoice.paymentStatus !== 'paid') {
+      actions.push({
+        icon: <X className="w-4 h-4" />,
+        label: 'Cancel',
+        action: () => quickCancelInvoice(invoice),
+        color: 'text-red-600 hover:text-red-900 hover:bg-red-50'
+      });
+    }
+
+    return actions;
   };
 
   const addInvoiceItem = () => {
@@ -496,6 +732,92 @@ const InvoiceManagement: React.FC = () => {
     }
   ];
 
+  // Helper functions for dropdown labels
+  const getStatusFilterLabel = (value: string) => {
+    const options = [
+      { value: 'all', label: 'All Status' },
+      { value: 'draft', label: 'Draft' },
+      { value: 'sent', label: 'Sent' },
+      { value: 'paid', label: 'Paid' },
+      { value: 'overdue', label: 'Overdue' },
+      { value: 'cancelled', label: 'Cancelled' }
+    ];
+    return options.find(opt => opt.value === value)?.label || 'All Status';
+  };
+
+  const getPaymentFilterLabel = (value: string) => {
+    const options = [
+      { value: 'all', label: 'All Payments' },
+      { value: 'pending', label: 'Pending' },
+      { value: 'partial', label: 'Partial' },
+      { value: 'paid', label: 'Paid' },
+      { value: 'failed', label: 'Failed' }
+    ];
+    return options.find(opt => opt.value === value)?.label || 'All Payments';
+  };
+
+  const getCustomerLabel = (value: string) => {
+    if (!value) return 'Select customer';
+    const customer = customers.find(c => c._id === value);
+    return customer ? `${customer.name} - ${customer.email}` : 'Select customer';
+  };
+
+  const getLocationLabel = (value: string) => {
+    if (!value) return 'Select location';
+    const location = locations.find(l => l._id === value);
+    return location ? `${location.name} - ${location.type.replace('_', ' ')}` : 'Select location';
+  };
+
+  const getInvoiceTypeLabel = (value: string) => {
+    const options = [
+      { value: 'sale', label: 'Sale' },
+      { value: 'service', label: 'Service' },
+      { value: 'amc', label: 'AMC' },
+      { value: 'other', label: 'Other' }
+    ];
+    return options.find(opt => opt.value === value)?.label || 'Sale';
+  };
+
+  const getProductLabel = (value: string) => {
+    if (!value) return 'Select product';
+    const product = products.find(p => p._id === value);
+    return product ? `${product.name} - ₹${product.price.toLocaleString()}` : 'Select product';
+  };
+
+  const getStatusUpdateLabel = (value: string) => {
+    const options = [
+      { value: 'draft', label: 'Draft - Can be edited, not sent to customer' },
+      { value: 'sent', label: 'Sent - Sent to customer, awaiting payment' },
+      { value: 'paid', label: 'Paid - Payment completed' },
+      { value: 'overdue', label: 'Overdue - Past due date, payment pending' },
+      { value: 'cancelled', label: 'Cancelled - Invoice cancelled' }
+    ];
+    return options.find(opt => opt.value === value)?.label || 'Select status';
+  };
+
+  const getPaymentStatusLabel = (value: string) => {
+    const options = [
+      { value: 'pending', label: 'Pending - No payment received' },
+      { value: 'partial', label: 'Partial Payment - Some amount paid' },
+      { value: 'paid', label: 'Paid in Full - Complete payment' },
+      { value: 'failed', label: 'Payment Failed - Transaction failed' }
+    ];
+    return options.find(opt => opt.value === value)?.label || 'Select payment status';
+  };
+
+  const getPaymentMethodLabel = (value: string) => {
+    const options = [
+      { value: '', label: 'Select payment method' },
+      { value: 'cash', label: 'Cash' },
+      { value: 'cheque', label: 'Cheque' },
+      { value: 'bank_transfer', label: 'Bank Transfer' },
+      { value: 'upi', label: 'UPI' },
+      { value: 'card', label: 'Credit/Debit Card' },
+      { value: 'other', label: 'Other' }
+    ];
+    return options.find(opt => opt.value === value)?.label || 'Select payment method';
+  };
+
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader 
@@ -542,30 +864,76 @@ const InvoiceManagement: React.FC = () => {
             />
           </div>
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Status</option>
-            <option value="draft">Draft</option>
-            <option value="sent">Sent</option>
-            <option value="paid">Paid</option>
-            <option value="overdue">Overdue</option>
-            <option value="cancelled">Cancelled</option>
-          </select>
+          {/* Status Filter Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => setShowStatusFilterDropdown(!showStatusFilterDropdown)}
+              className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getStatusFilterLabel(statusFilter)}</span>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStatusFilterDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showStatusFilterDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {[
+                  { value: 'all', label: 'All Status' },
+                  { value: 'draft', label: 'Draft' },
+                  { value: 'sent', label: 'Sent' },
+                  { value: 'paid', label: 'Paid' },
+                  { value: 'overdue', label: 'Overdue' },
+                  { value: 'cancelled', label: 'Cancelled' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setStatusFilter(option.value);
+                      setShowStatusFilterDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
-          <select
-            value={paymentFilter}
-            onChange={(e) => setPaymentFilter(e.target.value)}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="all">All Payments</option>
-            <option value="pending">Pending</option>
-            <option value="partial">Partial</option>
-            <option value="paid">Paid</option>
-            <option value="failed">Failed</option>
-          </select>
+          {/* Payment Filter Custom Dropdown */}
+          <div className="relative dropdown-container">
+            <button
+              onClick={() => setShowPaymentFilterDropdown(!showPaymentFilterDropdown)}
+              className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getPaymentFilterLabel(paymentFilter)}</span>
+              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showPaymentFilterDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showPaymentFilterDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {[
+                  { value: 'all', label: 'All Payments' },
+                  { value: 'pending', label: 'Pending' },
+                  { value: 'partial', label: 'Partial' },
+                  { value: 'paid', label: 'Paid' },
+                  { value: 'failed', label: 'Failed' }
+                ].map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setPaymentFilter(option.value);
+                      setShowPaymentFilterDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                      paymentFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         
         <div className="mt-4 flex items-center justify-between">
@@ -581,14 +949,15 @@ const InvoiceManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Invoice #</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due Date</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Payment</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -612,14 +981,14 @@ const InvoiceManagement: React.FC = () => {
                         <div className="text-xs text-gray-500">{invoice.customer.email}</div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {new Date(invoice.issueDate).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-900">
-                      {new Date(invoice.dueDate).toLocaleDateString()}
-                    </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       ₹{invoice.totalAmount.toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      ₹{(invoice.paidAmount || 0).toLocaleString()}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                      ₹{(invoice.remainingAmount || invoice.totalAmount - (invoice.paidAmount || 0)).toLocaleString()}
                     </td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
@@ -631,16 +1000,22 @@ const InvoiceManagement: React.FC = () => {
                         {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {new Date(invoice.dueDate).toLocaleDateString()}
+                    </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => handleViewInvoice(invoice)}
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
-                          title="View Invoice"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </div>
+                                              <div className="flex items-center space-x-2">
+                          {getAvailableActions(invoice).map((action, index) => (
+                            <button
+                              key={index}
+                              onClick={action.action}
+                              className={`${action.color} p-1 rounded transition-colors`}
+                              title={action.label}
+                            >
+                              {action.icon}
+                            </button>
+                          ))}
+                        </div>
                     </td>
                   </tr>
                 ))
@@ -678,21 +1053,49 @@ const InvoiceManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Customer *
                   </label>
-                  <select
-                    value={newInvoice.customer}
-                    onChange={(e) => setNewInvoice({ ...newInvoice, customer: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.customer ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    required
-                  >
-                    <option value="">Select customer</option>
-                    {customers.map(customer => (
-                      <option key={customer._id} value={customer._id}>
-                        {customer.name} - {customer.email}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                        formErrors.customer ? 'border-red-500' : 'border-gray-300'
+                      } hover:border-gray-400`}
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getCustomerLabel(newInvoice.customer)}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCustomerDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showCustomerDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                        <button
+                          onClick={() => {
+                            setNewInvoice({ ...newInvoice, customer: '' });
+                            setShowCustomerDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            !newInvoice.customer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          Select customer
+                        </button>
+                        {customers.map(customer => (
+                          <button
+                            key={customer._id}
+                            onClick={() => {
+                              setNewInvoice({ ...newInvoice, customer: customer._id });
+                              setShowCustomerDropdown(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                              newInvoice.customer === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
+                          >
+                            <div>
+                              <div className="font-medium">{customer.name}</div>
+                              <div className="text-xs text-gray-500">{customer.email}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   {formErrors.customer && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.customer}</p>
                   )}
@@ -702,29 +1105,55 @@ const InvoiceManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Location *
                   </label>
-                  <select
-                    value={newInvoice.location}
-                    onChange={(e) => {
-                      setNewInvoice({ ...newInvoice, location: e.target.value });
-                      // Re-validate all items when location changes
-                      newInvoice.items.forEach((item, index) => {
-                        if (item.product) {
-                          validateStockForItem(index, item.product, item.quantity);
-                        }
-                      });
-                    }}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.location ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    required
-                  >
-                    <option value="">Select location</option>
-                    {locations.map((location) => (
-                      <option key={location._id} value={location._id}>
-                        {location.name} - {location.type.replace('_', ' ')}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => setShowLocationDropdown(!showLocationDropdown)}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                        formErrors.location ? 'border-red-500' : 'border-gray-300'
+                      } hover:border-gray-400`}
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getLocationLabel(newInvoice.location)}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showLocationDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                        <button
+                          onClick={() => {
+                            setNewInvoice({ ...newInvoice, location: '' });
+                            setShowLocationDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            !newInvoice.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          Select location
+                        </button>
+                        {locations.map((location) => (
+                          <button
+                            key={location._id}
+                            onClick={() => {
+                              setNewInvoice({ ...newInvoice, location: location._id });
+                              setShowLocationDropdown(false);
+                              // Re-validate all items when location changes
+                              newInvoice.items.forEach((item, index) => {
+                                if (item.product) {
+                                  validateStockForItem(index, item.product, item.quantity);
+                                }
+                              });
+                            }}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                              newInvoice.location === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
+                          >
+                            <div>
+                              <div className="font-medium">{location.name}</div>
+                              <div className="text-xs text-gray-500 capitalize">{location.type.replace('_', ' ')}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                   {formErrors.location && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.location}</p>
                   )}
@@ -752,16 +1181,38 @@ const InvoiceManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Invoice Type
                   </label>
-                  <select
-                    value={newInvoice.invoiceType}
-                    onChange={(e) => setNewInvoice({ ...newInvoice, invoiceType: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="sale">Sale</option>
-                    <option value="service">Service</option>
-                    <option value="amc">AMC</option>
-                    <option value="other">Other</option>
-                  </select>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => setShowInvoiceTypeDropdown(!showInvoiceTypeDropdown)}
+                      className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getInvoiceTypeLabel(newInvoice.invoiceType)}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showInvoiceTypeDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showInvoiceTypeDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                        {[
+                          { value: 'sale', label: 'Sale' },
+                          { value: 'service', label: 'Service' },
+                          { value: 'amc', label: 'AMC' },
+                          { value: 'other', label: 'Other' }
+                        ].map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              setNewInvoice({ ...newInvoice, invoiceType: option.value });
+                              setShowInvoiceTypeDropdown(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                              newInvoice.invoiceType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -803,20 +1254,52 @@ const InvoiceManagement: React.FC = () => {
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Product
                           </label>
-                          <select
-                            value={item.product}
-                            onChange={(e) => updateInvoiceItem(index, 'product', e.target.value)}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                              formErrors[`item_${index}_product`] ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                          >
-                            <option value="">Select product</option>
-                            {products.map(product => (
-                              <option key={product._id} value={product._id}>
-                                {product.name} - ₹{product.price.toLocaleString()}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="relative dropdown-container">
+                            <button
+                              onClick={() => setShowProductDropdowns({ 
+                                ...showProductDropdowns, 
+                                [index]: !showProductDropdowns[index] 
+                              })}
+                              className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                formErrors[`item_${index}_product`] ? 'border-red-500' : 'border-gray-300'
+                              } hover:border-gray-400`}
+                            >
+                              <span className="text-gray-700 truncate mr-1">{getProductLabel(item.product)}</span>
+                              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showProductDropdowns[index] ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showProductDropdowns[index] && (
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                <button
+                                  onClick={() => {
+                                    updateInvoiceItem(index, 'product', '');
+                                    setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
+                                  }}
+                                  className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                    !item.product ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                  }`}
+                                >
+                                  Select product
+                                </button>
+                                {products.map(product => (
+                                  <button
+                                    key={product._id}
+                                    onClick={() => {
+                                      updateInvoiceItem(index, 'product', product._id);
+                                      setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
+                                    }}
+                                    className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                      item.product === product._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                    }`}
+                                  >
+                                    <div>
+                                      <div className="font-medium">{product.name}</div>
+                                      <div className="text-xs text-gray-500">₹{product.price.toLocaleString()} • {product.category}</div>
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           {formErrors[`item_${index}_product`] && (
                             <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_product`]}</p>
                           )}
@@ -1118,6 +1601,409 @@ const InvoiceManagement: React.FC = () => {
             </div>
           </div>
         </Modal>
+      )}
+
+      {/* Status Update Modal */}
+      {showStatusModal && selectedInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg m-4">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Update Invoice Status</h2>
+              <button
+                onClick={() => setShowStatusModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="text-sm text-gray-600 mb-2">
+                  Invoice: <span className="font-medium text-gray-900">{selectedInvoice.invoiceNumber}</span>
+                </div>
+                <div className="flex items-center space-x-4">
+                  <div>
+                    <span className="text-xs text-gray-500">Current Status:</span>
+                    <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedInvoice.status)}`}>
+                      {selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500">Payment:</span>
+                    <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(selectedInvoice.paymentStatus)}`}>
+                      {selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Change Status To
+                </label>
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => setShowStatusUpdateDropdown(!showStatusUpdateDropdown)}
+                    className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
+                  >
+                    <span className="text-gray-700 truncate mr-1">{getStatusUpdateLabel(statusUpdate.status)}</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStatusUpdateDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showStatusUpdateDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {[
+                        { value: 'draft', label: 'Draft - Can be edited, not sent to customer' },
+                        { value: 'sent', label: 'Sent - Sent to customer, awaiting payment' },
+                        { value: 'paid', label: 'Paid - Payment completed' },
+                        { value: 'overdue', label: 'Overdue - Past due date, payment pending' },
+                        { value: 'cancelled', label: 'Cancelled - Invoice cancelled' }
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setStatusUpdate({ ...statusUpdate, status: option.value });
+                            setShowStatusUpdateDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            statusUpdate.status === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Status change guidance */}
+                {statusUpdate.status !== selectedInvoice.status && (
+                  <div className="mt-2 p-3 rounded-lg bg-blue-50 border border-blue-200">
+                    <div className="text-sm text-blue-800">
+                      <strong>Status Change:</strong> {selectedInvoice.status} → {statusUpdate.status}
+                      {statusUpdate.status === 'cancelled' && (
+                        <div className="mt-1 text-red-600">Warning: Cancelled invoices cannot be changed back.</div>
+                      )}
+                      {statusUpdate.status === 'draft' && selectedInvoice.status !== 'draft' && (
+                        <div className="mt-1 text-orange-600">Note: Moving back to draft will allow editing again.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Notes <span className="text-gray-500">(Optional)</span>
+                </label>
+                <textarea
+                  value={statusUpdate.notes}
+                  onChange={(e) => setStatusUpdate({ ...statusUpdate, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  placeholder="Add notes about this status change..."
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => setShowStatusModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitStatusUpdate}
+                  disabled={!statusUpdate.status || submitting}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Updating...' : 'Update Status'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Update Modal */}
+      {showPaymentModal && selectedInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Update Payment</h2>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Invoice Summary */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="text-sm text-gray-600 mb-3">
+                  Invoice: <span className="font-medium text-gray-900">{selectedInvoice.invoiceNumber}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-500">Total Amount:</span>
+                    <div className="text-lg font-bold text-gray-900">₹{selectedInvoice.totalAmount.toLocaleString()}</div>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Already Paid:</span>
+                    <div className="text-lg font-bold text-green-600">₹{(selectedInvoice.paidAmount || 0).toLocaleString()}</div>
+                  </div>
+                                      <div>
+                      <span className="text-gray-500">Remaining:</span>
+                      <div className="text-lg font-bold text-red-600">₹{(selectedInvoice.remainingAmount || selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0)).toLocaleString()}</div>
+                    </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-200">
+                  <span className="text-xs text-gray-500">Payment Status:</span>
+                  <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(selectedInvoice.paymentStatus)}`}>
+                    {selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment Amount */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  {selectedInvoice.paymentStatus === 'partial' ? 'Additional Payment Amount (₹) *' : 'Payment Amount (₹) *'}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max={selectedInvoice.totalAmount}
+                  step="0.01"
+                  value={paymentUpdate.paidAmount}
+                  onChange={(e) => {
+                    const amount = parseFloat(e.target.value) || 0;
+                    setPaymentUpdate({ 
+                      ...paymentUpdate, 
+                      paidAmount: amount,
+                      // Auto-update payment status based on amount
+                      paymentStatus: amount >= selectedInvoice.totalAmount ? 'paid' : amount > 0 ? 'partial' : 'pending'
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder={selectedInvoice.paymentStatus === 'partial' ? 'Enter additional payment amount' : 'Enter payment amount'}
+                />
+                <div className="mt-2 flex justify-between text-sm">
+                  {selectedInvoice.paymentStatus === 'partial' ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentUpdate({ 
+                          ...paymentUpdate, 
+                          paidAmount: (selectedInvoice.paidAmount || 0) + Math.round((selectedInvoice.remainingAmount || selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0)) * 0.5),
+                          paymentStatus: 'partial'
+                        })}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        Half Remaining (₹{Math.round(((selectedInvoice.remainingAmount || selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0)) * 0.5)).toLocaleString()})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentUpdate({ 
+                          ...paymentUpdate, 
+                          paidAmount: selectedInvoice.totalAmount,
+                          paymentStatus: 'paid'
+                        })}
+                        className="text-green-600 hover:text-green-800"
+                      >
+                        Pay Full Remaining (₹{(selectedInvoice.remainingAmount || selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0)).toLocaleString()})
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentUpdate({ 
+                          ...paymentUpdate, 
+                          paidAmount: Math.round(selectedInvoice.totalAmount * 0.5),
+                          paymentStatus: 'partial'
+                        })}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        50% (₹{Math.round(selectedInvoice.totalAmount * 0.5).toLocaleString()})
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaymentUpdate({ 
+                          ...paymentUpdate, 
+                          paidAmount: selectedInvoice.totalAmount,
+                          paymentStatus: 'paid'
+                        })}
+                        className="text-green-600 hover:text-green-800"
+                      >
+                        Full Amount (₹{selectedInvoice.totalAmount.toLocaleString()})
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Balance Calculation */}
+              {paymentUpdate.paidAmount > 0 && paymentUpdate.paidAmount < selectedInvoice.totalAmount && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <div className="text-sm text-yellow-800">
+                    <div className="font-medium">Payment Summary:</div>
+                    <div className="mt-2 space-y-1">
+                      {selectedInvoice.paymentStatus === 'partial' && (
+                        <div className="flex justify-between">
+                          <span>Previously Paid:</span>
+                          <span className="font-medium">₹{(selectedInvoice.paidAmount || 0).toLocaleString()}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span>New Total Paid:</span>
+                        <span className="font-medium">₹{paymentUpdate.paidAmount.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Remaining Balance:</span>
+                        <span className="font-medium text-red-600">₹{(selectedInvoice.totalAmount - paymentUpdate.paidAmount).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Full Payment Confirmation */}
+              {paymentUpdate.paidAmount >= selectedInvoice.totalAmount && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <div className="text-sm text-green-800">
+                    <div className="flex items-center">
+                      <CheckCircle className="w-4 h-4 mr-2" />
+                      <span className="font-medium">Full Payment - Invoice will be marked as PAID</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Status
+                </label>
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => setShowPaymentStatusDropdown(!showPaymentStatusDropdown)}
+                    className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
+                  >
+                    <span className="text-gray-700 truncate mr-1">{getPaymentStatusLabel(paymentUpdate.paymentStatus)}</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showPaymentStatusDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showPaymentStatusDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {[
+                        { value: 'pending', label: 'Pending - No payment received' },
+                        { value: 'partial', label: 'Partial Payment - Some amount paid' },
+                        { value: 'paid', label: 'Paid in Full - Complete payment' },
+                        { value: 'failed', label: 'Payment Failed - Transaction failed' }
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setPaymentUpdate({ ...paymentUpdate, paymentStatus: option.value });
+                            setShowPaymentStatusDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            paymentUpdate.paymentStatus === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Method
+                </label>
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => setShowPaymentMethodDropdown(!showPaymentMethodDropdown)}
+                    className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
+                  >
+                    <span className="text-gray-700 truncate mr-1">{getPaymentMethodLabel(paymentUpdate.paymentMethod)}</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showPaymentMethodDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showPaymentMethodDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {[
+                        { value: '', label: 'Select payment method' },
+                        { value: 'cash', label: 'Cash' },
+                        { value: 'cheque', label: 'Cheque' },
+                        { value: 'bank_transfer', label: 'Bank Transfer' },
+                        { value: 'upi', label: 'UPI' },
+                        { value: 'card', label: 'Credit/Debit Card' },
+                        { value: 'other', label: 'Other' }
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setPaymentUpdate({ ...paymentUpdate, paymentMethod: option.value });
+                            setShowPaymentMethodDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            paymentUpdate.paymentMethod === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Date
+                </label>
+                <input
+                  type="date"
+                  value={paymentUpdate.paymentDate}
+                  onChange={(e) => setPaymentUpdate({ ...paymentUpdate, paymentDate: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Payment Notes
+                </label>
+                <textarea
+                  value={paymentUpdate.notes}
+                  onChange={(e) => setPaymentUpdate({ ...paymentUpdate, notes: e.target.value })}
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  placeholder="Transaction ID, reference number, or other payment details..."
+                />
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitPaymentUpdate}
+                  disabled={!paymentUpdate.paymentStatus || paymentUpdate.paidAmount < 0 || submitting}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Updating...' : 'Update Payment'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -22,6 +22,8 @@ export interface IInvoice extends mongoose.Document {
   taxAmount: number;
   discountAmount: number;
   totalAmount: number;
+  paidAmount: number; // Amount paid so far
+  remainingAmount: number; // Calculated: totalAmount - paidAmount
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
   paymentMethod?: string;
@@ -121,6 +123,17 @@ const invoiceSchema = new Schema<IInvoice>({
     required: true,
     min: 0
   },
+  paidAmount: {
+    type: Number,
+    required: true,
+    min: 0,
+    default: 0
+  },
+  remainingAmount: {
+    type: Number,
+    required: true,
+    min: 0
+  },
   status: {
     type: String,
     enum: ['draft', 'sent', 'paid', 'overdue', 'cancelled'],
@@ -175,9 +188,26 @@ invoiceSchema.pre('save', function(this: IInvoice, next) {
   this.taxAmount = this.items.reduce((sum, item) => sum + (item.taxAmount || 0), 0);
   this.totalAmount = this.subtotal + this.taxAmount - this.discountAmount;
   
-  // Update payment status based on amount
+  // Ensure paidAmount doesn't exceed totalAmount
+  if (this.paidAmount > this.totalAmount) {
+    this.paidAmount = this.totalAmount;
+  }
+  
+  // Calculate remaining amount
+  this.remainingAmount = Math.max(0, this.totalAmount - this.paidAmount);
+  
+  // Auto-update payment status based on amounts
   if (this.totalAmount === 0) {
     this.paymentStatus = 'paid';
+    this.paidAmount = 0;
+    this.remainingAmount = 0;
+  } else if (this.paidAmount === 0) {
+    this.paymentStatus = 'pending';
+  } else if (this.paidAmount >= this.totalAmount) {
+    this.paymentStatus = 'paid';
+    this.remainingAmount = 0;
+  } else if (this.paidAmount > 0 && this.paidAmount < this.totalAmount) {
+    this.paymentStatus = 'partial';
   }
   
   next();

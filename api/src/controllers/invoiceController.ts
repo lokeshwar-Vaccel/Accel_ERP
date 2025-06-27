@@ -247,7 +247,7 @@ export const updateInvoice = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { status, paymentStatus, paymentMethod, paymentDate, notes } = req.body;
+    const { status, paymentStatus, paymentMethod, paymentDate, paidAmount, notes } = req.body;
 
     const invoice = await Invoice.findById(req.params.id);
     if (!invoice) {
@@ -259,6 +259,16 @@ export const updateInvoice = async (
     if (paymentStatus) invoice.paymentStatus = paymentStatus;
     if (paymentMethod) invoice.paymentMethod = paymentMethod;
     if (paymentDate) invoice.paymentDate = new Date(paymentDate);
+    if (typeof paidAmount === 'number') {
+      // Validate paidAmount
+      if (paidAmount < 0) {
+        return next(new AppError('Paid amount cannot be negative', 400));
+      }
+      if (paidAmount > invoice.totalAmount) {
+        return next(new AppError('Paid amount cannot exceed total amount', 400));
+      }
+      invoice.paidAmount = paidAmount;
+    }
     if (notes) invoice.notes = notes;
 
     await invoice.save();
