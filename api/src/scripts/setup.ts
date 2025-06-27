@@ -29,7 +29,21 @@ const setup = async () => {
         role: UserRole.SUPER_ADMIN,
         status: UserStatus.ACTIVE,
         phone: '+911234567890',
-        address: 'Sun Power Services Head Office'
+        address: 'Sun Power Services Head Office',
+        moduleAccess: [
+          { module: 'dashboard', access: true, permission: 'admin' },
+          { module: 'customer_management', access: true, permission: 'admin' },
+          { module: 'user_management', access: true, permission: 'admin' },
+          { module: 'product_management', access: true, permission: 'admin' },
+          { module: 'inventory_management', access: true, permission: 'admin' },
+          { module: 'service_management', access: true, permission: 'admin' },
+          { module: 'amc_management', access: true, permission: 'admin' },
+          { module: 'purchase_orders', access: true, permission: 'admin' },
+          { module: 'reports_analytics', access: true, permission: 'admin' },
+          { module: 'file_management', access: true, permission: 'admin' },
+          { module: 'communications', access: true, permission: 'admin' },
+          { module: 'admin_settings', access: true, permission: 'admin' }
+        ]
       });
 
       console.log('Super Admin created:', {
@@ -91,7 +105,7 @@ const setup = async () => {
         },
         price: 150000,
         minStockLevel: 5,
-        createdBy: null // Will be set to super admin ID
+        createdBy: null as string | null // Will be set to super admin ID
       },
       {
         name: 'Engine Oil Filter',
@@ -106,7 +120,7 @@ const setup = async () => {
         },
         price: 500,
         minStockLevel: 50,
-        createdBy: null
+        createdBy: null as string | null
       },
       {
         name: 'Battery Charger',
@@ -122,7 +136,7 @@ const setup = async () => {
         },
         price: 5000,
         minStockLevel: 20,
-        createdBy: null
+        createdBy: null as string | null
       }
     ];
 
@@ -131,7 +145,7 @@ const setup = async () => {
     for (const productData of sampleProducts) {
       const existingProduct = await Product.findOne({ name: productData.name });
       if (!existingProduct && superAdminUser) {
-        productData.createdBy = superAdminUser._id.toString();
+        productData.createdBy = (superAdminUser._id as mongoose.Types.ObjectId).toString();
         await Product.create(productData);
         console.log(`Created sample product: ${productData.name}`);
       }

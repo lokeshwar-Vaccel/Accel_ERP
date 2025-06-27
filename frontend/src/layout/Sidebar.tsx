@@ -134,6 +134,7 @@ export function useCurrentModulePermission() {
   const moduleEntry = user?.moduleAccess?.find(
     (entry) => entry.module === currentModuleKey
   );
+  
   return moduleEntry?.permission ?? null; // "read", "write", "admin", or null
 }
 
@@ -147,20 +148,32 @@ export default function Sidebar({
   moduleAccess, // Receive moduleAccess as a prop
 }: SidebarProps) {
   const navigate = useNavigate();
-    console.log("moduleAccess12:",moduleAccess);
-
 
   // Get current path to determine active menu item
   const location = useLocation();
   const activeKey = getActiveKeyFromPath(location.pathname);
-  // Filter menu items based on moduleAccess
-  const accessibleMenuItems = menuItems.filter(item =>
-    moduleAccess.some(mod => mod.module === item.key && mod.access === true)
-  );
-
-
-  console.log("menuItems5555:",menuItems);
   
+  // Filter menu items based on moduleAccess with fallback
+  const accessibleMenuItems = React.useMemo(() => {
+    // If moduleAccess is not provided or is empty, show at least dashboard
+    if (!moduleAccess || !Array.isArray(moduleAccess) || moduleAccess.length === 0) {
+      console.warn("ModuleAccess is empty or undefined, showing dashboard only");
+      return menuItems.filter(item => item.key === 'dashboard');
+    }
+
+    const filtered = menuItems.filter(item =>
+      moduleAccess.some(mod => mod.module === item.key && mod.access === true)
+    );
+
+    // If no modules are accessible, at least show dashboard
+    if (filtered.length === 0) {
+      console.warn("No accessible modules found, showing dashboard only");
+      return menuItems.filter(item => item.key === 'dashboard');
+    }
+
+    return filtered;
+  }, [moduleAccess]);
+
   return (
     <>
       <div

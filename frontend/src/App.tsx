@@ -16,6 +16,7 @@ const App = () => {
   const { isAuthenticated, isLoading, user } = useSelector((state: RootState) => state.auth);
 
   console.log("user:", user);
+  console.log("user.moduleAccess:", user?.moduleAccess);
 
   // Check authentication status on app startup
   useEffect(() => {
@@ -25,12 +26,15 @@ const App = () => {
     }
   }, [dispatch]);
 
+  // Fallback moduleAccess if user doesn't have it defined
+  const moduleAccess = user?.moduleAccess || [];
+
   // Removed full-screen loading overlay to prevent UI blocking
 
   return (
     <>
       {isAuthenticated ? (
-        <Layout moduleAccess={user.moduleAccess}>
+        <Layout moduleAccess={moduleAccess}>
           <AppRoutes />
         </Layout>
       ) : (

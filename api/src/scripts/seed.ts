@@ -30,12 +30,17 @@ const sampleUsers = [
     role: UserRole.SUPER_ADMIN,
     status: 'active',
     moduleAccess: [
-      { module: 'user_management', access: true, permission: 'admin' },
+      { module: 'dashboard', access: true, permission: 'admin' },
       { module: 'customer_management', access: true, permission: 'admin' },
+      { module: 'user_management', access: true, permission: 'admin' },
+      { module: 'product_management', access: true, permission: 'admin' },
       { module: 'inventory_management', access: true, permission: 'admin' },
       { module: 'service_management', access: true, permission: 'admin' },
       { module: 'amc_management', access: true, permission: 'admin' },
+      { module: 'purchase_orders', access: true, permission: 'admin' },
       { module: 'reports_analytics', access: true, permission: 'admin' },
+      { module: 'file_management', access: true, permission: 'admin' },
+      { module: 'communications', access: true, permission: 'admin' },
       { module: 'admin_settings', access: true, permission: 'admin' }
     ]
   },
@@ -47,11 +52,17 @@ const sampleUsers = [
     role: UserRole.MANAGER,
     status: 'active',
     moduleAccess: [
+      { module: 'dashboard', access: true, permission: 'write' },
       { module: 'customer_management', access: true, permission: 'write' },
+      { module: 'user_management', access: true, permission: 'read' },
+      { module: 'product_management', access: true, permission: 'write' },
       { module: 'inventory_management', access: true, permission: 'write' },
       { module: 'service_management', access: true, permission: 'write' },
       { module: 'amc_management', access: true, permission: 'write' },
-      { module: 'reports_analytics', access: true, permission: 'read' }
+      { module: 'purchase_orders', access: true, permission: 'write' },
+      { module: 'reports_analytics', access: true, permission: 'read' },
+      { module: 'file_management', access: true, permission: 'write' },
+      { module: 'communications', access: true, permission: 'write' }
     ]
   },
   {
@@ -62,8 +73,11 @@ const sampleUsers = [
     role: UserRole.VIEWER,
     status: 'active',
     moduleAccess: [
-      { module: 'service_management', access: true, permission: 'read' },
-      { module: 'inventory_management', access: true, permission: 'read' }
+      { module: 'dashboard', access: true, permission: 'read' },
+      { module: 'service_management', access: true, permission: 'write' },
+      { module: 'inventory_management', access: true, permission: 'read' },
+      { module: 'product_management', access: true, permission: 'read' },
+      { module: 'communications', access: true, permission: 'read' }
     ]
   },
   {
@@ -74,9 +88,11 @@ const sampleUsers = [
     role: UserRole.VIEWER,
     status: 'active',
     moduleAccess: [
-      { module: 'customer_management', access: true, permission: 'read' },
-      { module: 'amc_management', access: true, permission: 'read' },
-      { module: 'reports_analytics', access: true, permission: 'read' }
+      { module: 'dashboard', access: true, permission: 'read' },
+      { module: 'customer_management', access: true, permission: 'write' },
+      { module: 'amc_management', access: true, permission: 'write' },
+      { module: 'reports_analytics', access: true, permission: 'read' },
+      { module: 'communications', access: true, permission: 'read' }
     ]
   },
   {
@@ -87,9 +103,12 @@ const sampleUsers = [
     role: UserRole.HR,
     status: 'active',
     moduleAccess: [
+      { module: 'dashboard', access: true, permission: 'read' },
       { module: 'user_management', access: true, permission: 'write' },
       { module: 'inventory_management', access: true, permission: 'read' },
-      { module: 'reports_analytics', access: true, permission: 'read' }
+      { module: 'purchase_orders', access: true, permission: 'read' },
+      { module: 'reports_analytics', access: true, permission: 'read' },
+      { module: 'communications', access: true, permission: 'read' }
     ]
   }
 ];
