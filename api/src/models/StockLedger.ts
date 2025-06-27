@@ -13,7 +13,7 @@ const stockLedgerSchema = new Schema<IStockLedger>(
     transactionDate: { type: Date, default: Date.now },
     resultingQuantity: { type: Number, required: true },
     referenceId: { type: String, required: true }, // e.g., "AD250627-A-123456"
-    referenceType: { type: String, enum: ['purchase_order', 'service_ticket', 'adjustment', 'transfer', 'sale'] },
+    referenceType: { type: String, enum: ['purchase_order', 'service_ticket', 'adjustment', 'transfer', 'sale', 'reservation'] },
   },
   { timestamps: true }
 );

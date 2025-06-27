@@ -58,6 +58,7 @@ export const getStockLedger = async (
     const ledgerQuery = StockLedger.find(query)
       .populate('product', 'name category description')
       .populate('location', 'name address contactPerson')
+      .populate('performedBy', 'firstName lastName email')
       .sort(sort as string)
       .skip((Number(page) - 1) * Number(limit))
       .limit(Number(limit));

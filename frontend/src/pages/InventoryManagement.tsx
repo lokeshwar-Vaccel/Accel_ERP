@@ -84,6 +84,9 @@ interface StockAdjustmentFormData {
   quantity: number;
   reason: string;
   notes: string;
+  reservationType?: string;
+  referenceId?: string;
+  reservedUntil?: string;
 }
 
 interface StockTransferFormData {
@@ -113,6 +116,9 @@ const InventoryManagement: React.FC = () => {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showLocationTypeDropdown, setShowLocationTypeDropdown] = useState(false);
+  const [showToLocationDropdown, setShowToLocationDropdown] = useState(false);
+  const [showAdjustmentTypeDropdown, setShowAdjustmentTypeDropdown] = useState(false);
+  const [showReservationTypeDropdown, setShowReservationTypeDropdown] = useState(false);
 
   // Modal states
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -126,6 +132,17 @@ const InventoryManagement: React.FC = () => {
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [editingLocationId, setEditingLocationId] = useState<string | null>(null);
   const [stockTransactions, setStockTransactions] = useState<any[]>([]);
+  const [stockLedgerData, setStockLedgerData] = useState<any[]>([]);
+  const [ledgerPagination, setLedgerPagination] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    pages: 0
+  });
+  const [ledgerFilters, setLedgerFilters] = useState({
+    search: '',
+    location: ''
+  });
   const [locationFormData, setLocationFormData] = useState<LocationFormData>({
     name: '',
     address: '',
@@ -139,7 +156,10 @@ const InventoryManagement: React.FC = () => {
     adjustmentType: 'add',
     quantity: 0,
     reason: '',
-    notes: ''
+    notes: '',
+    reservationType: 'service',
+    referenceId: '',
+    reservedUntil: ''
   });
   const [transferFormData, setTransferFormData] = useState<StockTransferFormData>({
     product: '',
@@ -164,6 +184,9 @@ const InventoryManagement: React.FC = () => {
         setShowStatusDropdown(false);
         setShowCategoryDropdown(false);
         setShowLocationTypeDropdown(false);
+        setShowToLocationDropdown(false);
+        setShowAdjustmentTypeDropdown(false);
+        setShowReservationTypeDropdown(false);
       }
     };
 
@@ -291,15 +314,20 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleUpdateStock = (stockItem: StockItem) => {
+    setSelectedItem(stockItem);
     setAdjustmentFormData({
       product: typeof stockItem.product === 'string' ? stockItem.product : stockItem.product._id,
       location: typeof stockItem.location === 'string' ? stockItem.location : stockItem.location._id,
-      adjustmentType: 'adjustment',
-      quantity: stockItem.quantity,
+      adjustmentType: 'add',
+      quantity: 1,
       reason: '',
-      notes: ''
+      notes: '',
+      reservationType: 'service',
+      referenceId: '',
+      reservedUntil: ''
     });
     setFormErrors({});
+    setShowAdjustmentTypeDropdown(false);
     setShowAdjustmentModal(true);
   };
 
@@ -318,6 +346,7 @@ const InventoryManagement: React.FC = () => {
       notes: ''
     });
     setFormErrors({});
+    setShowToLocationDropdown(false);
     setShowTransferModal(true);
   };
 
@@ -390,9 +419,47 @@ const InventoryManagement: React.FC = () => {
     if (!adjustmentFormData.location) {
       errors.location = 'Location is required';
     }
-    if (adjustmentFormData.quantity <= 0) {
-      errors.quantity = 'Quantity must be greater than 0';
+    if (!adjustmentFormData.adjustmentType) {
+      errors.adjustmentType = 'Adjustment type is required';
     }
+    
+    // Quantity validation based on adjustment type
+    if (adjustmentFormData.adjustmentType === 'set') {
+      if (adjustmentFormData.quantity < 0) {
+        errors.quantity = 'Stock level cannot be negative';
+      }
+    } else if (adjustmentFormData.adjustmentType === 'subtract') {
+      if (adjustmentFormData.quantity <= 0) {
+        errors.quantity = 'Quantity must be greater than 0';
+      } else if (selectedItem && adjustmentFormData.quantity > selectedItem.quantity) {
+        errors.quantity = `Cannot subtract more than current stock (${selectedItem.quantity})`;
+      }
+    } else if (adjustmentFormData.adjustmentType === 'reserve') {
+      if (adjustmentFormData.quantity <= 0) {
+        errors.quantity = 'Quantity must be greater than 0';
+      } else if (selectedItem && adjustmentFormData.quantity > (selectedItem.availableQuantity || (selectedItem.quantity - selectedItem.reservedQuantity))) {
+        const availableQty = selectedItem.availableQuantity || (selectedItem.quantity - selectedItem.reservedQuantity);
+        errors.quantity = `Cannot reserve more than available stock (${availableQty})`;
+      }
+      if (!adjustmentFormData.reservationType) {
+        errors.reservationType = 'Reservation type is required';
+      }
+    } else if (adjustmentFormData.adjustmentType === 'release') {
+      if (adjustmentFormData.quantity <= 0) {
+        errors.quantity = 'Quantity must be greater than 0';
+      } else if (selectedItem && adjustmentFormData.quantity > selectedItem.reservedQuantity) {
+        errors.quantity = `Cannot release more than reserved stock (${selectedItem.reservedQuantity})`;
+      }
+    } else if (adjustmentFormData.adjustmentType === 'add') {
+      if (adjustmentFormData.quantity <= 0) {
+        errors.quantity = 'Quantity must be greater than 0';
+      }
+    } else {
+      if (adjustmentFormData.quantity <= 0) {
+        errors.quantity = 'Quantity must be greater than 0';
+      }
+    }
+    
     if (!adjustmentFormData.reason.trim()) {
       errors.reason = 'Reason is required';
     }
@@ -438,16 +505,25 @@ const InventoryManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const { product, location, adjustmentType, quantity, reason, notes } = adjustmentFormData;
+      const { product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId, reservedUntil } = adjustmentFormData;
 
-      await apiClient.stock.adjustStock({
+      const adjustmentData: any = {
         product,
         location,
         adjustmentType,
         quantity,
         reason,
         notes
-      });
+      };
+
+      // Add reservation-specific fields when needed
+      if (adjustmentType === 'reserve') {
+        adjustmentData.reservationType = reservationType;
+        if (referenceId) adjustmentData.referenceId = referenceId;
+        if (reservedUntil) adjustmentData.reservedUntil = reservedUntil;
+      }
+
+      await apiClient.stock.adjustStock(adjustmentData);
       await fetchInventory(); // Refresh inventory
       setShowAdjustmentModal(false);
       setAdjustmentFormData({
@@ -456,7 +532,10 @@ const InventoryManagement: React.FC = () => {
         adjustmentType: 'add',
         quantity: 0,
         reason: '',
-        notes: ''
+        notes: '',
+        reservationType: 'service',
+        referenceId: '',
+        reservedUntil: ''
       });
     } catch (error: any) {
       console.error('Error updating stock:', error);
@@ -526,6 +605,7 @@ const InventoryManagement: React.FC = () => {
       
       await fetchInventory(); // Refresh inventory
       setShowTransferModal(false);
+      setShowToLocationDropdown(false);
       setTransferFormData({
         product: '',
         fromLocation: '',
@@ -550,33 +630,103 @@ const InventoryManagement: React.FC = () => {
   const viewStockHistory = async (item: StockItem) => {
     setSelectedItem(item);
     try {
-      // For now, we'll simulate the transaction history
-      // In a real implementation, this would fetch from the backend
-      const mockTransactions = [
-        {
-          _id: '1',
-          type: 'inward',
-          quantity: 100,
-          date: new Date().toISOString(),
-          reason: 'Initial stock',
-          user: 'Admin',
-          reference: 'PO-001'
-        },
-        {
-          _id: '2',
-          type: 'outward',
-          quantity: 25,
-          date: new Date(Date.now() - 86400000).toISOString(),
-          reason: 'Service ticket',
-          user: 'Technician',
-          reference: 'ST-001'
-        }
-      ];
-      setStockTransactions(mockTransactions);
+      const productId = typeof item.product === 'string' ? item.product : item.product._id;
+      const locationId = typeof item.location === 'string' ? item.location : item.location._id;
+      
+      const response = await apiClient.stockLedger.getByProduct(productId, locationId, {
+        sort: '-transactionDate',
+        limit: 50
+      });
+      
+      const transactions = response.data.ledgers.map((ledger: any) => ({
+        _id: ledger._id,
+        type: ledger.transactionType,
+        quantity: ledger.quantity,
+        date: ledger.transactionDate,
+        reason: ledger.reason || getTransactionReason(ledger.referenceType),
+        user: ledger.performedBy?.firstName && ledger.performedBy?.lastName 
+          ? `${ledger.performedBy.firstName} ${ledger.performedBy.lastName}`
+          : 'System',
+        reference: ledger.referenceId,
+        referenceType: ledger.referenceType,
+        notes: ledger.notes,
+        resultingQuantity: ledger.resultingQuantity
+      }));
+      
+      setStockTransactions(transactions);
       setShowHistoryModal(true);
     } catch (error) {
       console.error('Error fetching stock history:', error);
+      setStockTransactions([]);
+      setShowHistoryModal(true);
     }
+  };
+
+  const getTransactionReason = (referenceType: string): string => {
+    switch (referenceType) {
+      case 'adjustment': return 'Stock Adjustment';
+      case 'transfer': return 'Stock Transfer';
+      case 'reservation': return 'Stock Reservation';
+      case 'purchase_order': return 'Purchase Order';
+      case 'service_ticket': return 'Service Ticket';
+      case 'sale': return 'Sale';
+      default: return 'System Transaction';
+    }
+  };
+
+  const fetchStockLedger = async (page = 1, resetData = false) => {
+    try {
+      setLoading(true);
+      const params = {
+        page: page.toString(),
+        limit: ledgerPagination.limit.toString(),
+        sort: '-transactionDate',
+        ...(ledgerFilters.search && { search: ledgerFilters.search }),
+        ...(ledgerFilters.location && { location: ledgerFilters.location })
+      };
+
+      const response = await apiClient.stockLedger.getAll(params);
+      
+      const formattedLedger = response.data.ledgers.map((ledger: any) => ({
+        _id: ledger._id,
+        product: ledger.product,
+        location: ledger.location,
+        transactionType: ledger.transactionType,
+        quantity: ledger.quantity,
+        resultingQuantity: ledger.resultingQuantity,
+        reason: ledger.reason || getTransactionReason(ledger.referenceType),
+        notes: ledger.notes,
+        referenceId: ledger.referenceId,
+        referenceType: ledger.referenceType,
+        transactionDate: ledger.transactionDate,
+        performedBy: ledger.performedBy
+      }));
+
+      if (resetData) {
+        setStockLedgerData(formattedLedger);
+      } else {
+        setStockLedgerData(prev => [...prev, ...formattedLedger]);
+      }
+      
+      setLedgerPagination({
+        page: response.pagination.page,
+        limit: response.pagination.limit,
+        total: response.pagination.total,
+        pages: response.pagination.pages
+      });
+    } catch (error) {
+      console.error('Error fetching stock ledger:', error);
+      setStockLedgerData([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleShowStockLedger = () => {
+    setLedgerFilters({ search: '', location: '' });
+    setLedgerPagination(prev => ({ ...prev, page: 1 }));
+    setShowLedgerModal(true);
+    fetchStockLedger(1, true);
   };
 
   const filteredInventory = Array.isArray(inventory) ? inventory.filter(item => {
@@ -784,6 +934,100 @@ const InventoryManagement: React.FC = () => {
     return option ? option.label : 'Select Type';
   };
 
+  const getToLocationLabel = (value: string) => {
+    if (!value) return 'Select destination location';
+    const location = locations.find(loc => loc._id === value);
+    return location ? location.name : 'Select destination location';
+  };
+
+  // Adjustment type options with descriptions
+  const adjustmentTypeOptions = [
+    { 
+      value: 'add', 
+      label: 'Add Stock', 
+      description: 'Increase stock quantity',
+      icon: '➕',
+      color: 'text-green-600'
+    },
+    { 
+      value: 'subtract', 
+      label: 'Remove Stock', 
+      description: 'Decrease stock quantity',
+      icon: '➖',
+      color: 'text-red-600'
+    },
+    { 
+      value: 'set', 
+      label: 'Set Stock Level', 
+      description: 'Set exact stock quantity',
+      icon: '🎯',
+      color: 'text-blue-600'
+    },
+    { 
+      value: 'reserve', 
+      label: 'Reserve Stock', 
+      description: 'Reserve stock for orders/services',
+      icon: '🔒',
+      color: 'text-orange-600'
+    },
+    { 
+      value: 'release', 
+      label: 'Release Reserved Stock', 
+      description: 'Release previously reserved stock',
+      icon: '🔓',
+      color: 'text-purple-600'
+    }
+  ];
+
+  const getAdjustmentTypeLabel = (value: string) => {
+    const option = adjustmentTypeOptions.find(opt => opt.value === value);
+    return option ? option.label : 'Select adjustment type';
+  };
+
+  // Reservation type options
+  const reservationTypeOptions = [
+    { value: 'service', label: 'Service/Maintenance' },
+    { value: 'sale', label: 'Sale/Order' },
+    { value: 'transfer', label: 'Transfer' },
+    { value: 'other', label: 'Other' }
+  ];
+
+  const getReservationTypeLabel = (value: string) => {
+    const option = reservationTypeOptions.find(opt => opt.value === value);
+    return option ? option.label : 'Select reservation type';
+  };
+
+  const calculateResultingQuantity = () => {
+    if (!selectedItem || !adjustmentFormData.quantity) return selectedItem?.quantity || 0;
+    
+    const currentQty = selectedItem.quantity;
+    const currentReserved = selectedItem.reservedQuantity;
+    const adjustQty = adjustmentFormData.quantity;
+    
+    switch (adjustmentFormData.adjustmentType) {
+      case 'add':
+        return currentQty + adjustQty;
+      case 'subtract':
+        return Math.max(0, currentQty - adjustQty);
+      case 'set':
+        return adjustQty;
+      case 'reserve':
+        return { quantity: currentQty, reserved: currentReserved + adjustQty };
+      case 'release':
+        return { quantity: currentQty, reserved: Math.max(0, currentReserved - adjustQty) };
+      default:
+        return currentQty;
+    }
+  };
+
+  const getResultDisplayValue = () => {
+    const result = calculateResultingQuantity();
+    if (adjustmentFormData.adjustmentType === 'reserve' || adjustmentFormData.adjustmentType === 'release') {
+      return typeof result === 'object' ? result.reserved : selectedItem?.reservedQuantity || 0;
+    }
+    return typeof result === 'number' ? result : selectedItem?.quantity || 0;
+  };
+
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader 
@@ -799,7 +1043,7 @@ const InventoryManagement: React.FC = () => {
             <span className="text-sm">Add Location</span>
           </button>
           <button 
-            onClick={() => setShowLedgerModal(true)}
+            onClick={handleShowStockLedger}
             className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Package className="w-4 h-4" />
@@ -1244,7 +1488,10 @@ const InventoryManagement: React.FC = () => {
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Transfer Stock</h2>
               <button
-                onClick={() => setShowTransferModal(false)}
+                onClick={() => {
+                  setShowTransferModal(false);
+                  setShowToLocationDropdown(false);
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="w-6 h-6" />
@@ -1324,24 +1571,48 @@ const InventoryManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     To Location *
                   </label>
-                  <select
-                    name="toLocation"
-                    value={transferFormData.toLocation}
-                    onChange={(e) => setTransferFormData({ ...transferFormData, toLocation: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Select destination location</option>
-                    {locations
-                      .filter(location => location._id !== transferFormData.fromLocation)
-                      .map(location => (
-                        <option key={location._id} value={location._id}>
-                          {location.name}
-                        </option>
-                      ))
-                    }
-                  </select>
+                  <div className="relative dropdown-container">
+                    <button
+                      type="button"
+                      onClick={() => setShowToLocationDropdown(!showToLocationDropdown)}
+                      className={`flex items-center justify-between w-full px-2.5 py-1.5 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                        formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
+                      } hover:border-gray-400`}
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getToLocationLabel(transferFormData.toLocation)}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showToLocationDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showToLocationDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                        {locations
+                          .filter(location => location._id !== transferFormData.fromLocation)
+                          .map((location) => (
+                            <button
+                              key={location._id}
+                              type="button"
+                              onClick={() => {
+                                setTransferFormData({ ...transferFormData, toLocation: location._id });
+                                setShowToLocationDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                transferFormData.toLocation === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                              }`}
+                            >
+                              <div>
+                                <div className="font-medium">{location.name}</div>
+                                <div className="text-xs text-gray-500 capitalize">{location.type.replace('_', ' ')}</div>
+                              </div>
+                            </button>
+                          ))
+                        }
+                        {locations.filter(location => location._id !== transferFormData.fromLocation).length === 0 && (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            No other locations available
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                   {formErrors.toLocation && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.toLocation}</p>
                   )}
@@ -1405,7 +1676,10 @@ const InventoryManagement: React.FC = () => {
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowTransferModal(false)}
+                  onClick={() => {
+                    setShowTransferModal(false);
+                    setShowToLocationDropdown(false);
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
@@ -1424,90 +1698,357 @@ const InventoryManagement: React.FC = () => {
       )}
 
       {/* Stock Adjustment Modal */}
-      {showAdjustmentModal && (
+      {showAdjustmentModal && selectedItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Adjust Stock</h2>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Adjust Stock</h2>
+                <p className="text-sm text-gray-600">
+                  {selectedItem.product.name} @ {selectedItem.location.name}
+                </p>
+              </div>
               <button
-                onClick={() => setShowAdjustmentModal(false)}
+                onClick={() => {
+                  setShowAdjustmentModal(false);
+                  setShowAdjustmentTypeDropdown(false);
+                  setShowReservationTypeDropdown(false);
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitStock(); }} className="p-4 space-y-3">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitStock(); }} className="p-4 space-y-4">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Current Stock Status */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-900 mb-3">Current Stock Status</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-gray-900">{selectedItem.quantity}</p>
+                    <p className="text-xs text-gray-600">Total Stock</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-yellow-600">{selectedItem.reservedQuantity || 0}</p>
+                    <p className="text-xs text-gray-600">Reserved</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-green-600">
+                      {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))}
+                    </p>
+                    <p className="text-xs text-gray-600">Available</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Adjustment Form */}
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Adjustment Type *
                   </label>
-                  <select
-                    name="adjustmentType"
-                    value={adjustmentFormData.adjustmentType}
-                    onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, adjustmentType: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="add">Add Stock</option>
-                    <option value="subtract">Remove Stock</option>
-                    <option value="set">Set Stock Level</option>
-                  </select>
+                  <div className="relative dropdown-container">
+                    <button
+                      type="button"
+                      onClick={() => setShowAdjustmentTypeDropdown(!showAdjustmentTypeDropdown)}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                        formErrors.adjustmentType ? 'border-red-500' : 'border-gray-300'
+                      } hover:border-gray-400`}
+                    >
+                      <div className="flex items-center space-x-2">
+                        <span className="text-lg">
+                          {adjustmentTypeOptions.find(opt => opt.value === adjustmentFormData.adjustmentType)?.icon}
+                        </span>
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {getAdjustmentTypeLabel(adjustmentFormData.adjustmentType)}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {adjustmentTypeOptions.find(opt => opt.value === adjustmentFormData.adjustmentType)?.description}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAdjustmentTypeDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showAdjustmentTypeDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
+                        {adjustmentTypeOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              setAdjustmentFormData({ ...adjustmentFormData, adjustmentType: option.value });
+                              setShowAdjustmentTypeDropdown(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors ${
+                              adjustmentFormData.adjustmentType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
+                          >
+                            <div className="flex items-center space-x-3">
+                              <span className="text-lg">{option.icon}</span>
+                              <div>
+                                <div className="font-medium">{option.label}</div>
+                                <div className="text-xs text-gray-500">{option.description}</div>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {formErrors.adjustmentType && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.adjustmentType}</p>
+                  )}
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Quantity *
+                    {adjustmentFormData.adjustmentType === 'set' && (
+                      <span className="text-xs text-gray-500 ml-1">(Final stock level)</span>
+                    )}
+                    {adjustmentFormData.adjustmentType === 'reserve' && selectedItem && (
+                      <span className="text-xs text-gray-500 ml-1">
+                        (Max: {selectedItem.availableQuantity || (selectedItem.quantity - selectedItem.reservedQuantity)})
+                      </span>
+                    )}
+                    {adjustmentFormData.adjustmentType === 'release' && selectedItem && (
+                      <span className="text-xs text-gray-500 ml-1">
+                        (Max: {selectedItem.reservedQuantity})
+                      </span>
+                    )}
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="number"
+                      name="quantity"
+                      value={adjustmentFormData.quantity}
+                      onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, quantity: Number(e.target.value) })}
+                      min={adjustmentFormData.adjustmentType === 'set' ? '0' : '1'}
+                      max={adjustmentFormData.adjustmentType === 'subtract' ? selectedItem.quantity : undefined}
+                      className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                        formErrors.quantity ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder={
+                        adjustmentFormData.adjustmentType === 'set' 
+                          ? 'Enter final stock level'
+                          : adjustmentFormData.adjustmentType === 'reserve'
+                          ? 'Enter quantity to reserve'
+                          : adjustmentFormData.adjustmentType === 'release'
+                          ? 'Enter quantity to release'
+                          : `Enter quantity to ${adjustmentFormData.adjustmentType}`
+                      }
+                    />
+                    {adjustmentFormData.adjustmentType === 'subtract' && (
+                      <button
+                        type="button"
+                        onClick={() => setAdjustmentFormData({ ...adjustmentFormData, quantity: selectedItem.quantity })}
+                        className="px-3 py-2 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        All ({selectedItem.quantity})
+                      </button>
+                    )}
+                    {adjustmentFormData.adjustmentType === 'set' && selectedItem.quantity > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setAdjustmentFormData({ ...adjustmentFormData, quantity: selectedItem.quantity })}
+                        className="px-3 py-2 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        Current ({selectedItem.quantity})
+                      </button>
+                    )}
+                    {adjustmentFormData.adjustmentType === 'reserve' && selectedItem && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const maxReservable = selectedItem.availableQuantity || (selectedItem.quantity - selectedItem.reservedQuantity);
+                          setAdjustmentFormData({ ...adjustmentFormData, quantity: maxReservable });
+                        }}
+                        className="px-3 py-2 text-xs bg-orange-100 text-orange-700 border border-orange-300 rounded-lg hover:bg-orange-200 transition-colors"
+                      >
+                        All Available ({selectedItem.availableQuantity || (selectedItem.quantity - selectedItem.reservedQuantity)})
+                      </button>
+                    )}
+                    {adjustmentFormData.adjustmentType === 'release' && selectedItem && selectedItem.reservedQuantity > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setAdjustmentFormData({ ...adjustmentFormData, quantity: selectedItem.reservedQuantity })}
+                        className="px-3 py-2 text-xs bg-purple-100 text-purple-700 border border-purple-300 rounded-lg hover:bg-purple-200 transition-colors"
+                      >
+                        All Reserved ({selectedItem.reservedQuantity})
+                      </button>
+                    )}
+                  </div>
+                  {formErrors.quantity && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
+                  )}
+                </div>
+
+                {/* Result Preview */}
+                {adjustmentFormData.quantity > 0 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-blue-900">Result Preview:</span>
+                      <div className="flex items-center space-x-2">
+                        {adjustmentFormData.adjustmentType === 'reserve' || adjustmentFormData.adjustmentType === 'release' ? (
+                          <div className="text-sm">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-blue-700">Reserved: {selectedItem.reservedQuantity}</span>
+                              <span className="text-blue-500">→</span>
+                              <span className="text-lg font-bold text-blue-900">
+                                {getResultDisplayValue()}
+                              </span>
+                              <span className="text-xs text-blue-600">
+                                ({adjustmentFormData.adjustmentType === 'reserve' ? '+' : '-'}{adjustmentFormData.quantity})
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm text-blue-700">{selectedItem.quantity}</span>
+                            <span className="text-blue-500">→</span>
+                            <span className="text-lg font-bold text-blue-900">
+                              {getResultDisplayValue()}
+                            </span>
+                            <span className="text-xs text-blue-600">
+                              ({adjustmentFormData.adjustmentType === 'add' ? '+' : 
+                                adjustmentFormData.adjustmentType === 'subtract' ? '-' : '='}{adjustmentFormData.quantity})
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Reason *
                   </label>
                   <input
-                    type="number"
-                    name="quantity"
-                    value={adjustmentFormData.quantity}
-                    onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, quantity: Number(e.target.value) })}
-                    min="0"
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter quantity"
+                    type="text"
+                    name="reason"
+                    value={adjustmentFormData.reason}
+                    onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, reason: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                      formErrors.reason ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder={
+                      adjustmentFormData.adjustmentType === 'reserve' 
+                        ? "Enter reason for reservation (e.g., 'Service order #123', 'Customer quote')"
+                        : adjustmentFormData.adjustmentType === 'release'
+                        ? "Enter reason for release (e.g., 'Service completed', 'Order cancelled')"
+                        : "Enter reason for adjustment (e.g., 'Damaged goods', 'Stock count correction')"
+                    }
+                  />
+                  {formErrors.reason && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.reason}</p>
+                  )}
+                </div>
+
+                {/* Reservation-specific fields */}
+                {adjustmentFormData.adjustmentType === 'reserve' && (
+                  <>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Reservation Type *
+                      </label>
+                      <div className="relative dropdown-container">
+                        <button
+                          type="button"
+                          onClick={() => setShowReservationTypeDropdown(!showReservationTypeDropdown)}
+                          className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                            formErrors.reservationType ? 'border-red-500' : 'border-gray-300'
+                          } hover:border-gray-400`}
+                        >
+                          <span className="text-gray-700 truncate mr-1">{getReservationTypeLabel(adjustmentFormData.reservationType || '')}</span>
+                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showReservationTypeDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showReservationTypeDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
+                            {reservationTypeOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => {
+                                  setAdjustmentFormData({ ...adjustmentFormData, reservationType: option.value });
+                                  setShowReservationTypeDropdown(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                  adjustmentFormData.reservationType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                              >
+                                {option.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      {formErrors.reservationType && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.reservationType}</p>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Reference ID
+                        </label>
+                        <input
+                          type="text"
+                          name="referenceId"
+                          value={adjustmentFormData.referenceId || ''}
+                          onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, referenceId: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Order/Service ID (optional)"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Reserved Until
+                        </label>
+                        <input
+                          type="datetime-local"
+                          name="reservedUntil"
+                          value={adjustmentFormData.reservedUntil || ''}
+                          onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, reservedUntil: e.target.value })}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    name="notes"
+                    value={adjustmentFormData.notes}
+                    onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, notes: e.target.value })}
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    placeholder="Additional notes (optional)"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Reason *
-                </label>
-                <input
-                  type="text"
-                  name="reason"
-                  value={adjustmentFormData.reason}
-                  onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, reason: e.target.value })}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter reason for adjustment"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  name="notes"
-                  value={adjustmentFormData.notes}
-                  onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, notes: e.target.value })}
-                  rows={3}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Additional notes (optional)"
-                />
               </div>
 
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowAdjustmentModal(false)}
+                  onClick={() => {
+                    setShowAdjustmentModal(false);
+                    setShowAdjustmentTypeDropdown(false);
+                    setShowReservationTypeDropdown(false);
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
@@ -1569,7 +2110,8 @@ const InventoryManagement: React.FC = () => {
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Quantity</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Change</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Result Qty</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
@@ -1578,26 +2120,54 @@ const InventoryManagement: React.FC = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {stockTransactions.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No transactions found</td>
+                        <td colSpan={7} className="px-4 py-8 text-center text-gray-500">No transactions found</td>
                       </tr>
                     ) : (
                       stockTransactions.map((transaction) => (
                         <tr key={transaction._id} className="hover:bg-gray-50">
                           <td className="px-4 py-4 text-xs text-gray-900">
                             {new Date(transaction.date).toLocaleDateString()}
+                            <div className="text-xs text-gray-500">
+                              {new Date(transaction.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
                           </td>
                           <td className="px-4 py-4 text-sm">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              transaction.type === 'inward' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              transaction.type === 'inward' ? 'bg-green-100 text-green-800' : 
+                              transaction.type === 'outward' ? 'bg-red-100 text-red-800' :
+                              transaction.type === 'reservation' ? 'bg-orange-100 text-orange-800' :
+                              transaction.type === 'release' ? 'bg-purple-100 text-purple-800' :
+                              'bg-blue-100 text-blue-800'
                             }`}>
-                              {transaction.type === 'inward' ? '↗ Inward' : '↙ Outward'}
+                              {transaction.type === 'inward' ? '↗ Inward' : 
+                               transaction.type === 'outward' ? '↙ Outward' : 
+                               transaction.type === 'reservation' ? '🔒 Reserved' :
+                               transaction.type === 'release' ? '🔓 Released' :
+                               '⚡ Adjustment'}
                             </span>
                           </td>
-                          <td className="px-4 py-4 text-xs font-medium text-gray-900">
-                            {transaction.type === 'inward' ? '+' : '-'}{transaction.quantity}
+                          <td className="px-4 py-4 text-xs font-medium">
+                            <span className={`${
+                              transaction.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
+                              {transaction.quantity > 0 ? '+' : ''}{transaction.quantity}
+                            </span>
                           </td>
-                          <td className="px-4 py-4 text-xs text-gray-600">{transaction.reason}</td>
-                          <td className="px-4 py-4 text-xs text-gray-600">{transaction.reference}</td>
+                          <td className="px-4 py-4 text-xs font-bold text-gray-900">
+                            {transaction.resultingQuantity}
+                          </td>
+                          <td className="px-4 py-4 text-xs text-gray-600">
+                            <div>{transaction.reason}</div>
+                            {transaction.notes && (
+                              <div className="text-xs text-gray-400 mt-1 italic">{transaction.notes}</div>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 text-xs">
+                            <div className="font-mono text-blue-600">{transaction.reference}</div>
+                            {transaction.referenceType && (
+                              <div className="text-xs text-gray-500 capitalize">{transaction.referenceType.replace('_', ' ')}</div>
+                            )}
+                          </td>
                           <td className="px-4 py-4 text-xs text-gray-600">{transaction.user}</td>
                         </tr>
                       ))
@@ -1622,9 +2192,12 @@ const InventoryManagement: React.FC = () => {
       {/* Stock Ledger Modal */}
       {showLedgerModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl m-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Stock Ledger - All Transactions</h2>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Stock Ledger</h2>
+                <p className="text-sm text-gray-600">Complete transaction history across all products and locations</p>
+              </div>
               <button
                 onClick={() => setShowLedgerModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -1633,48 +2206,168 @@ const InventoryManagement: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-6">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
-                <h3 className="text-lg font-medium text-yellow-800 mb-2">📋 Stock Ledger Features</h3>
-                <p className="text-yellow-700 text-sm">
-                  This will show comprehensive Inward/Outward stock movements including:
-                </p>
-                <ul className="text-yellow-700 text-sm mt-2 ml-3 list-disc">
-                  <li>Purchase Order receipts (Inward)</li>
-                  <li>Service ticket parts usage (Outward)</li>
-                  <li>Stock adjustments and transfers</li>
-                  <li>Serial number tracking</li>
-                  <li>Stock reconciliation reports</li>
-                </ul>
-              </div>
-
-              <div className="text-center py-12">
-                <Package className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Stock Ledger Coming Soon</h3>
-                <p className="text-gray-600 mb-4">
-                  Comprehensive stock transaction ledger with Purchase Order integration and Serial number tracking
-                </p>
-                <div className="flex justify-center space-x-4">
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                    Purchase Orders
-                  </span>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                    Serial Numbers
-                  </span>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                    Reconciliation
-                  </span>
+            {/* Filters */}
+            <div className="p-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-4">
+                <div className="relative flex-1 max-w-sm">
+                  <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                  <input
+                    type="text"
+                    placeholder="Search products, locations, or reference..."
+                    value={ledgerFilters.search}
+                    onChange={(e) => setLedgerFilters({ ...ledgerFilters, search: e.target.value })}
+                    className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                  />
                 </div>
+                
+                <select
+                  value={ledgerFilters.location}
+                  onChange={(e) => setLedgerFilters({ ...ledgerFilters, location: e.target.value })}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                >
+                  <option value="">All Locations</option>
+                  {locations.map(location => (
+                    <option key={location._id} value={location._id}>{location.name}</option>
+                  ))}
+                </select>
+
+
+
+                <button
+                  onClick={() => fetchStockLedger(1, true)}
+                  className="px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+                >
+                  Apply Filters
+                </button>
+              </div>
+              
+              <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
+                <span>Showing {stockLedgerData.length} of {ledgerPagination.total} transactions</span>
+                <span>Page {ledgerPagination.page} of {ledgerPagination.pages}</span>
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-200">
-              <button
-                onClick={() => setShowLedgerModal(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Close
-              </button>
+            {/* Ledger Table */}
+            <div className="flex-1 overflow-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Change</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Result</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {loading && stockLedgerData.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                        <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                        Loading transactions...
+                      </td>
+                    </tr>
+                  ) : stockLedgerData.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
+                        <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                        <p>No transactions found</p>
+                        <p className="text-xs text-gray-400">Try adjusting your filters</p>
+                      </td>
+                    </tr>
+                  ) : (
+                    stockLedgerData.map((ledger) => (
+                      <tr key={ledger._id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-xs">
+                          <div className="text-gray-900">{new Date(ledger.transactionDate).toLocaleDateString()}</div>
+                          <div className="text-gray-500">{new Date(ledger.transactionDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          <div className="font-medium text-gray-900">{ledger.product?.name || 'Unknown Product'}</div>
+                          <div className="text-gray-500">{ledger.product?.category}</div>
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          <div className="font-medium text-gray-900">{ledger.location?.name || 'Unknown Location'}</div>
+                          <div className="text-gray-500 capitalize">{ledger.location?.type?.replace('_', ' ')}</div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            ledger.transactionType === 'inward' ? 'bg-green-100 text-green-800' : 
+                            ledger.transactionType === 'outward' ? 'bg-red-100 text-red-800' :
+                            ledger.transactionType === 'reservation' ? 'bg-orange-100 text-orange-800' :
+                            ledger.transactionType === 'release' ? 'bg-purple-100 text-purple-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {ledger.transactionType === 'inward' ? '↗ Inward' : 
+                             ledger.transactionType === 'outward' ? '↙ Outward' : 
+                             ledger.transactionType === 'reservation' ? '🔒 Reserved' :
+                             ledger.transactionType === 'release' ? '🔓 Released' :
+                             '⚡ Adjustment'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs font-medium">
+                          <span className={`${
+                            ledger.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {ledger.quantity > 0 ? '+' : ''}{ledger.quantity}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-xs font-bold text-gray-900">
+                          {ledger.resultingQuantity}
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          <div className="font-mono text-blue-600">{ledger.referenceId}</div>
+                          <div className="text-gray-500 capitalize">{ledger.referenceType?.replace('_', ' ')}</div>
+                          {ledger.reason && <div className="text-gray-600 mt-1">{ledger.reason}</div>}
+                          {ledger.notes && <div className="text-gray-400 mt-1 italic">{ledger.notes}</div>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-gray-600">
+                          {ledger.performedBy?.firstName && ledger.performedBy?.lastName 
+                            ? `${ledger.performedBy.firstName} ${ledger.performedBy.lastName}`
+                            : 'System'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => setShowLedgerModal(false)}
+                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+              
+              {ledgerPagination.pages > 1 && (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => ledgerPagination.page > 1 && fetchStockLedger(ledgerPagination.page - 1, true)}
+                    disabled={ledgerPagination.page <= 1}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Page {ledgerPagination.page} of {ledgerPagination.pages}
+                  </span>
+                  <button
+                    onClick={() => ledgerPagination.page < ledgerPagination.pages && fetchStockLedger(ledgerPagination.page + 1, true)}
+                    disabled={ledgerPagination.page >= ledgerPagination.pages}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>

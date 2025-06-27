@@ -121,7 +121,9 @@ export enum StockTransactionType {
   INWARD = 'inward',
   OUTWARD = 'outward',
   TRANSFER = 'transfer',
-  ADJUSTMENT = 'adjustment'
+  ADJUSTMENT = 'adjustment',
+  RESERVATION = 'reservation',
+  RELEASE = 'release'
 }
 
 export interface ServiceTicket {

@@ -27,12 +27,16 @@ export interface UpdateStockLocationInput {
 export interface StockAdjustmentInput {
   product: string;
   location: string;
-  adjustmentType: 'add' | 'subtract' | 'set';
+  adjustmentType: 'add' | 'subtract' | 'set' | 'reserve' | 'release';
   quantity: number;
-  reason: 'damaged' | 'expired' | 'stolen' | 'found' | 'correction' | 'return' | 'other';
+  reason: string; // Made flexible to allow custom reasons for reservations
   notes?: string;
   batchNumber?: string;
   serialNumbers?: string[];
+  // Reservation-specific fields
+  reservationType?: 'service' | 'sale' | 'transfer' | 'other';
+  referenceId?: string;
+  reservedUntil?: string;
 }
 
 export interface StockTransferInput {
@@ -182,20 +186,20 @@ export const updateStockLocationSchema = Joi.object<UpdateStockLocationInput>({
 export const stockAdjustmentSchema = Joi.object<StockAdjustmentInput>({
   product: Joi.string().hex().length(24).required(),
   location: Joi.string().hex().length(24).required(),
-  adjustmentType: Joi.string().valid('add', 'subtract', 'set').required(),
+  adjustmentType: Joi.string().valid('add', 'subtract', 'set', 'reserve', 'release').required(),
   quantity: Joi.number().min(0).required(),
-  reason: Joi.string().valid(
-    'damaged',
-    'expired',
-    'stolen',
-    'found',
-    'correction',
-    'return',
-    'other'
-  ).required(),
+  reason: Joi.string().min(1).max(200).required(), // Made flexible for custom reasons
   notes: Joi.string().max(500).allow(''),
   batchNumber: Joi.string().max(50),
-  serialNumbers: Joi.array().items(Joi.string().max(100))
+  serialNumbers: Joi.array().items(Joi.string().max(100)),
+  // Reservation-specific fields (required when adjustmentType is 'reserve')
+  reservationType: Joi.when('adjustmentType', {
+    is: 'reserve',
+    then: Joi.string().valid('service', 'sale', 'transfer', 'other').required(),
+    otherwise: Joi.string().valid('service', 'sale', 'transfer', 'other').optional()
+  }),
+  referenceId: Joi.string().max(100).allow(''),
+  reservedUntil: Joi.date().iso().greater('now').allow('')
 });
 
 // Stock transfer schema

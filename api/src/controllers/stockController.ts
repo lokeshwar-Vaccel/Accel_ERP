@@ -243,7 +243,7 @@ export const adjustStock = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { product, location, adjustmentType, quantity, reason, notes} = req.body;
+    const { product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId: reservationReferenceId, reservedUntil } = req.body;
 
     let stock = await Stock.findOne({ product, location });
 
@@ -264,6 +264,17 @@ export const adjustStock = async (
         stock.quantity -= quantity;
       } else if (adjustmentType === 'set') {
         stock.quantity = quantity;
+      } else if (adjustmentType === 'reserve') {
+        const availableQuantity = stock.quantity - stock.reservedQuantity;
+        if (availableQuantity < quantity) {
+          return next(new AppError('Insufficient available stock for reservation', 400));
+        }
+        stock.reservedQuantity += quantity;
+      } else if (adjustmentType === 'release') {
+        if (stock.reservedQuantity < quantity) {
+          return next(new AppError('Cannot release more than reserved quantity', 400));
+        }
+        stock.reservedQuantity -= quantity;
       }
     }
 
@@ -271,19 +282,42 @@ export const adjustStock = async (
     stock.lastUpdated = new Date();
     await stock.save();
 
-    const referenceId = await generateReferenceId('adjustment');
+    const referenceId = await generateReferenceId(
+      adjustmentType === 'reserve' || adjustmentType === 'release' ? 'reservation' : 'adjustment'
+    );
+    
+    // Determine transaction type and quantity for ledger
+    let transactionType: string;
+    let ledgerQuantity: number;
+    let ledgerReason = reason;
+    
+    if (adjustmentType === 'reserve') {
+      transactionType = 'reservation';
+      ledgerQuantity = quantity; // Positive for reservations
+      ledgerReason = `Stock Reserved - ${reservationType ? `${reservationType} - ` : ''}${reason}`;
+    } else if (adjustmentType === 'release') {
+      transactionType = 'release';
+      ledgerQuantity = -quantity; // Negative for releases (reducing reserved)
+      ledgerReason = `Reserved Stock Released - ${reason}`;
+    } else {
+      transactionType = 'adjustment';
+      ledgerQuantity = adjustmentType === 'subtract' ? -quantity : quantity;
+    }
+
     await StockLedger.create({
       product,
       location,
-      transactionType: 'adjustment',
-      quantity: adjustmentType === 'subtract' ? -quantity : quantity,
-      reason,
-      notes,
+      transactionType,
+      quantity: ledgerQuantity,
+      reason: ledgerReason,
+      notes: adjustmentType === 'reserve' && reservationReferenceId 
+        ? `${notes || ''} [Ref: ${reservationReferenceId}]${reservedUntil ? ` [Until: ${new Date(reservedUntil).toLocaleDateString()}]` : ''}`.trim()
+        : notes,
       performedBy: req.user!.id,
       transactionDate: new Date(),
       resultingQuantity: stock.quantity,
       referenceId,
-      referenceType: 'adjustment',
+      referenceType: adjustmentType === 'reserve' || adjustmentType === 'release' ? 'reservation' : 'adjustment',
     });
 
     const populatedStock = await Stock.findById(stock._id)
@@ -292,7 +326,9 @@ export const adjustStock = async (
 
     const response: APIResponse = {
       success: true,
-      message: 'Stock adjusted successfully',
+      message: adjustmentType === 'reserve' ? 'Stock reserved successfully' : 
+               adjustmentType === 'release' ? 'Reserved stock released successfully' : 
+               'Stock adjusted successfully',
       data: { 
         stock: populatedStock,
         adjustment: {
@@ -303,6 +339,11 @@ export const adjustStock = async (
           adjustedBy: req.user!.id,
           adjustedAt: new Date(),
           referenceId,
+          ...(adjustmentType === 'reserve' && {
+            reservationType,
+            reservationReferenceId,
+            reservedUntil
+          })
         }
       }
     };

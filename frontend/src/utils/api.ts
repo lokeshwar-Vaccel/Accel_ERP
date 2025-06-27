@@ -221,14 +221,22 @@ class ApiClient {
     getLowStockItems: (locationId?: string) =>
       this.makeRequest<{ success: boolean; data: any[] }>(`/stock?lowStock=true${locationId ? `&location=${locationId}` : ''}`),
     
-    getStockHistory: (productId: string, locationId?: string) =>
-      this.makeRequest<{ success: boolean; data: any[] }>(`/stock/history/${productId}${locationId ? `?location=${locationId}` : ''}`),
-    
     getInventoryReport: (params: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/reports/inventory', {
         method: 'POST',
         body: JSON.stringify(params),
       }),
+  };
+
+  // Stock Ledger APIs
+  stockLedger = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { ledgers: any[] }; pagination: any }>(`/ledger${params ? `?${new URLSearchParams(params)}` : ''}`),
+    
+    getByProduct: (productId: string, locationId?: string, params?: any) => {
+      const allParams = { stockId: productId, ...(locationId && { location: locationId }), ...params };
+      return this.makeRequest<{ success: boolean; data: { ledgers: any[] }; pagination: any }>(`/ledger?${new URLSearchParams(allParams)}`);
+    },
   };
 
   // Service Management APIs

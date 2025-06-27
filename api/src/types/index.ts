@@ -63,7 +63,9 @@ export enum StockTransactionType {
   INWARD = 'inward',
   OUTWARD = 'outward',
   ADJUSTMENT = 'adjustment',
-  TRANSFER = 'transfer'
+  TRANSFER = 'transfer',
+  RESERVATION = 'reservation',
+  RELEASE = 'release'
 }
 
 // Product Categories
@@ -112,7 +114,7 @@ export interface IStockLedger extends Document {
   transactionDate?: Date;
   resultingQuantity: number;
   referenceId: string;
-  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'sale';
+  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'sale' | 'reservation';
   unitCost?: number;
   totalCost?: number;
   batchNumber?: string;
@@ -261,7 +263,7 @@ export interface IStockTransaction extends Document {
   toLocation?: string;
   quantity: number;
   reference?: string;
-  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer';
+  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'reservation';
   notes?: string;
   createdBy: string;
 }
