@@ -303,6 +303,24 @@ const InventoryManagement: React.FC = () => {
     setShowAdjustmentModal(true);
   };
 
+  const handleTransferStock = (stockItem: StockItem) => {
+    setSelectedItem(stockItem); // Store the selected item for access to stock details
+    
+    // Calculate available quantity and set reasonable default
+    const availableQty = stockItem.availableQuantity || (stockItem.quantity - (stockItem.reservedQuantity || 0));
+    const defaultQty = availableQty <= 10 ? availableQty : 1;
+    
+    setTransferFormData({
+      product: typeof stockItem.product === 'string' ? stockItem.product : stockItem.product._id,
+      fromLocation: typeof stockItem.location === 'string' ? stockItem.location : stockItem.location._id,
+      toLocation: '',
+      quantity: Math.max(1, defaultQty), // Ensure at least 1
+      notes: ''
+    });
+    setFormErrors({});
+    setShowTransferModal(true);
+  };
+
   const validateLocationForm = (): boolean => {
     const errors: Record<string, string> = {};
 
@@ -383,6 +401,37 @@ const InventoryManagement: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
+  const validateTransferForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!transferFormData.product) {
+      errors.product = 'Product is required';
+    }
+    if (!transferFormData.fromLocation) {
+      errors.fromLocation = 'Source location is required';
+    }
+    if (!transferFormData.toLocation) {
+      errors.toLocation = 'Destination location is required';
+    }
+    if (transferFormData.fromLocation === transferFormData.toLocation) {
+      errors.toLocation = 'Destination must be different from source location';
+    }
+    if (transferFormData.quantity <= 0) {
+      errors.quantity = 'Quantity must be greater than 0';
+    }
+
+    // Check available quantity
+    if (selectedItem) {
+      const availableQty = selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0));
+      if (transferFormData.quantity > availableQty) {
+        errors.quantity = `Cannot transfer more than available quantity (${availableQty})`;
+      }
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleSubmitStock = async () => {
     if (!validateStockForm()) return;
 
@@ -415,6 +464,83 @@ const InventoryManagement: React.FC = () => {
         setFormErrors(error.response.data.errors);
       } else {
         setFormErrors({ general: 'Failed to adjust stock' });
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getCurrentStockStatus = async (productId: string, locationId: string) => {
+    try {
+      const response = await apiClient.stock.getStock({ product: productId, location: locationId });
+      let stockData: any[] = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          stockData = response.data;
+        } else if (response.data.stockLevels && Array.isArray(response.data.stockLevels)) {
+          stockData = response.data.stockLevels;
+        }
+      }
+      return stockData.length > 0 ? stockData[0] : null;
+    } catch (error) {
+      console.error('Error fetching current stock status:', error);
+      return null;
+    }
+  };
+
+  const handleSubmitTransfer = async () => {
+    if (!validateTransferForm()) return;
+
+    setSubmitting(true);
+    try {
+      setFormErrors({});
+      const { product, fromLocation, toLocation, quantity, notes } = transferFormData;
+
+      // Get fresh stock data before transfer
+      const currentStock = await getCurrentStockStatus(product, fromLocation);
+      
+      if (currentStock) {
+        const availableQuantity = currentStock.availableQuantity || (currentStock.quantity - (currentStock.reservedQuantity || 0));
+        
+        // Validate available quantity
+        if (quantity > availableQuantity) {
+          setFormErrors({ 
+            quantity: `Insufficient stock. Available: ${availableQuantity}, Requested: ${quantity}` 
+          });
+          setSelectedItem(currentStock);
+          return;
+        }
+      } else {
+        setFormErrors({ general: 'Could not verify current stock levels. Please refresh and try again.' });
+        return;
+      }
+
+      // Send transfer request
+      await apiClient.stock.transferStock({
+        product,
+        fromLocation,
+        toLocation,
+        quantity,
+        notes
+      });
+      
+      await fetchInventory(); // Refresh inventory
+      setShowTransferModal(false);
+      setTransferFormData({
+        product: '',
+        fromLocation: '',
+        toLocation: '',
+        quantity: 0,
+        notes: ''
+      });
+    } catch (error: any) {
+      console.error('Error transferring stock:', error);
+      
+      if (error.response?.data?.errors) {
+        setFormErrors(error.response.data.errors);
+      } else {
+        const errorMessage = error.response?.data?.message || error.message || 'Failed to transfer stock';
+        setFormErrors({ general: errorMessage });
       }
     } finally {
       setSubmitting(false);
@@ -833,6 +959,7 @@ const InventoryManagement: React.FC = () => {
                             <Package className="w-4 h-4" />
                           </button>
                           <button 
+                            onClick={() => handleTransferStock(item)}
                             className="text-purple-600 hover:text-purple-900 p-2 rounded-lg hover:bg-purple-50 transition-colors"
                             title="Transfer Stock"
                           >
@@ -1106,6 +1233,192 @@ const InventoryManagement: React.FC = () => {
                 )}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Transfer Modal */}
+      {showTransferModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Transfer Stock</h2>
+              <button
+                onClick={() => setShowTransferModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitTransfer(); }} className="p-4 space-y-3">
+              {formErrors.general && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-600 text-sm">{formErrors.general}</p>
+                </div>
+              )}
+
+                             <div className="grid grid-cols-1 gap-4">
+                 <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                     Product
+                   </label>
+                   <div className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+                     {products.find(p => p._id === transferFormData.product)?.name || 'Product'}
+                   </div>
+                 </div>
+
+                 <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                     From Location
+                   </label>
+                   <div className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+                     {locations.find(l => l._id === transferFormData.fromLocation)?.name || 'Source Location'}
+                   </div>
+                 </div>
+
+                 {/* Stock Information */}
+                 {selectedItem && (
+                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                     <div className="flex items-center justify-between mb-2">
+                       <h4 className="text-sm font-medium text-blue-900">Current Stock Status</h4>
+                       <button
+                         type="button"
+                         onClick={async () => {
+                           console.log('Manual refresh triggered');
+                           const freshStock = await getCurrentStockStatus(transferFormData.product, transferFormData.fromLocation);
+                           if (freshStock) {
+                             console.log('Fresh stock data:', freshStock);
+                             setSelectedItem(freshStock);
+                           } else {
+                             console.error('Failed to get fresh stock data');
+                           }
+                         }}
+                         className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+                       >
+                         Refresh
+                       </button>
+                     </div>
+                     <div className="grid grid-cols-3 gap-4 text-xs">
+                       <div className="text-center">
+                         <p className="font-bold text-gray-900">{selectedItem.quantity}</p>
+                         <p className="text-gray-600">Total Stock</p>
+                       </div>
+                       <div className="text-center">
+                         <p className="font-bold text-yellow-600">{selectedItem.reservedQuantity || 0}</p>
+                         <p className="text-gray-600">Reserved</p>
+                       </div>
+                       <div className="text-center">
+                         <p className="font-bold text-green-600">
+                           {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))}
+                         </p>
+                         <p className="text-gray-600">Available</p>
+                       </div>
+                     </div>
+                     
+
+                   </div>
+                 )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    To Location *
+                  </label>
+                  <select
+                    name="toLocation"
+                    value={transferFormData.toLocation}
+                    onChange={(e) => setTransferFormData({ ...transferFormData, toLocation: e.target.value })}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                      formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">Select destination location</option>
+                    {locations
+                      .filter(location => location._id !== transferFormData.fromLocation)
+                      .map(location => (
+                        <option key={location._id} value={location._id}>
+                          {location.name}
+                        </option>
+                      ))
+                    }
+                  </select>
+                  {formErrors.toLocation && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.toLocation}</p>
+                  )}
+                </div>
+
+                                 <div>
+                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                     Quantity *
+                     {selectedItem && (
+                       <span className="text-xs text-gray-500 ml-1">
+                         (Max: {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))})
+                       </span>
+                     )}
+                   </label>
+                   <div className="flex space-x-2">
+                     <input
+                       type="number"
+                       name="quantity"
+                       value={transferFormData.quantity}
+                       onChange={(e) => setTransferFormData({ ...transferFormData, quantity: Number(e.target.value) })}
+                       min="1"
+                       max={selectedItem ? (selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))) : undefined}
+                       className={`flex-1 px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                         formErrors.quantity ? 'border-red-500' : 'border-gray-300'
+                       }`}
+                       placeholder="Enter quantity to transfer"
+                     />
+                     {selectedItem && (
+                       <button
+                         type="button"
+                         onClick={() => {
+                           const maxQty = selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0));
+                           setTransferFormData({ ...transferFormData, quantity: maxQty });
+                         }}
+                         className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+                       >
+                         Max
+                       </button>
+                     )}
+                   </div>
+                   {formErrors.quantity && (
+                     <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
+                   )}
+                 </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    name="notes"
+                    value={transferFormData.notes}
+                    onChange={(e) => setTransferFormData({ ...transferFormData, notes: e.target.value })}
+                    rows={3}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                    placeholder="Additional notes (optional)"
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowTransferModal(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Transferring...' : 'Transfer Stock'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

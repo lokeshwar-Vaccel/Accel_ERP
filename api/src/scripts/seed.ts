@@ -369,12 +369,54 @@ const sampleCustomers = [
   }
 ];
 
+// Function to fix existing stock availableQuantity data
+const fixExistingStockData = async () => {
+  console.log('🔧 Fixing existing stock availableQuantity data...');
+  
+  try {
+    const result = await Stock.updateMany(
+      {},
+      [
+        {
+          $set: {
+            availableQuantity: { 
+              $max: [0, { $subtract: ["$quantity", { $ifNull: ["$reservedQuantity", 0] }] }] 
+            },
+            lastUpdated: new Date()
+          }
+        }
+      ]
+    );
+    
+    console.log(`✅ Fixed ${result.modifiedCount} stock records with correct availableQuantity`);
+    
+    // Show some sample fixed records
+    const sampleFixedRecords = await Stock.find({}, {
+      quantity: 1, 
+      reservedQuantity: 1, 
+      availableQuantity: 1
+    }).limit(3);
+    
+    console.log('📊 Sample fixed stock records:');
+    sampleFixedRecords.forEach((record, index) => {
+      console.log(`   ${index + 1}. Qty: ${record.quantity}, Reserved: ${record.reservedQuantity}, Available: ${record.availableQuantity}`);
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fixing stock data:', error);
+    throw error;
+  }
+};
+
 const createSampleData = async () => {
   try {
     console.log('🌱 Starting database seeding...');
 
     // Connect to database
     await connectDB();
+
+    // Fix existing stock data before clearing (in case user wants to preserve some data)
+    await fixExistingStockData();
 
     // Clear existing data
     console.log('🗑️  Clearing existing data...');
@@ -420,11 +462,15 @@ const createSampleData = async () => {
     for (const product of createdProducts) {
       for (const location of createdLocations) {
         const quantity = Math.floor(Math.random() * 50) + 10; // Random quantity between 10-60
+        const reservedQuantity = Math.floor(quantity * 0.1); // 10% reserved
+        const availableQuantity = Math.max(0, quantity - reservedQuantity); // Calculate available quantity
+        
         stockEntries.push({
           product: product._id,
           location: location._id,
           quantity,
-          reservedQuantity: Math.floor(quantity * 0.1), // 10% reserved
+          reservedQuantity,
+          availableQuantity, // ✅ Now properly calculated
           lastUpdated: new Date(),
           transactions: [
             {
@@ -439,7 +485,7 @@ const createSampleData = async () => {
       }
     }
     const createdStock = await Stock.insertMany(stockEntries);
-    console.log(`✅ Created ${createdStock.length} stock entries`);
+    console.log(`✅ Created ${createdStock.length} stock entries with correct availableQuantity`);
 
     // Create Customers
     console.log('👔 Creating customers...');
@@ -672,17 +718,48 @@ const createSampleData = async () => {
   }
 };
 
+// Standalone function to fix existing stock data without clearing database
+const fixStockDataOnly = async () => {
+  try {
+    console.log('🔧 Starting stock data fix...');
+    await connectDB();
+    await fixExistingStockData();
+    console.log('✅ Stock data fix completed successfully');
+  } catch (error) {
+    console.error('❌ Stock data fix failed:', error);
+    throw error;
+  } finally {
+    await mongoose.connection.close();
+    console.log('🔌 Database connection closed');
+  }
+};
+
 // Run if called directly
 if (require.main === module) {
-  createSampleData()
-    .then(() => {
-      console.log('✅ Seeding completed successfully');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('❌ Seeding failed:', error);
-      process.exit(1);
-    });
+  // Check if user wants to run only the fix
+  if (process.argv.includes('--fix-stock-only')) {
+    fixStockDataOnly()
+      .then(() => {
+        console.log('✅ Stock fix completed successfully');
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error('❌ Stock fix failed:', error);
+        process.exit(1);
+      });
+  } else {
+    // Run full seeding
+    createSampleData()
+      .then(() => {
+        console.log('✅ Seeding completed successfully');
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error('❌ Seeding failed:', error);
+        process.exit(1);
+      });
+  }
 }
 
-export default createSampleData; 
+export default createSampleData;
+export { fixStockDataOnly }; 
