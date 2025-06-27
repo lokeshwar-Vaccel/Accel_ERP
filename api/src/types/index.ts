@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 // User Roles
 export enum UserRole {
@@ -100,6 +100,26 @@ export interface IUser extends Document {
   comparePassword(candidatePassword: string): Promise<boolean>;
   generateJWT(): string;
 }
+// Interface for StockLedger document
+export interface IStockLedger extends Document {
+  product: Types.ObjectId;
+  location: Types.ObjectId;
+  transactionType: StockTransactionType;
+  quantity: number;
+  reason?: string;
+  notes?: string;
+  performedBy: Types.ObjectId;
+  transactionDate?: Date;
+  resultingQuantity: number;
+  referenceId: string;
+  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'sale';
+  unitCost?: number;
+  totalCost?: number;
+  batchNumber?: string;
+  serialNumbers?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
 // Customer Interface
 export interface ICustomer extends Document {
@@ -158,6 +178,7 @@ export interface IStock extends Document {
   availableQuantity: number;
   lastUpdated: Date;
 }
+
 
 // Service Ticket Interface
 export interface IServiceTicket extends Document {
