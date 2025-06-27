@@ -12,6 +12,7 @@ import dashboardRoutes from './dashboard';
 import fileRoutes from './files';
 import adminRoutes from './admin';
 import communicationRoutes from './communications';
+import ledgerRoutes from './stockLedgerRoutes';
 
 const router = Router();
 
@@ -34,7 +35,8 @@ router.get('/', (req, res) => {
       dashboard: '/dashboard',
       files: '/files',
       admin: '/admin',
-      communications: '/communications'
+      communications: '/communications',
+      ledger: '/ledger'
     }
   });
 });
@@ -53,5 +55,6 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/files', fileRoutes);
 router.use('/admin', adminRoutes);
 router.use('/communications', communicationRoutes);
+router.use('/ledger', ledgerRoutes);
 
 export default router; 
