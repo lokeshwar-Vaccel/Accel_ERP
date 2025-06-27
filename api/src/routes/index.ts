@@ -13,6 +13,7 @@ import fileRoutes from './files';
 import adminRoutes from './admin';
 import communicationRoutes from './communications';
 import ledgerRoutes from './stockLedgerRoutes';
+import invoiceRoutes from './invoices';
 
 const router = Router();
 
@@ -36,7 +37,8 @@ router.get('/', (req, res) => {
       files: '/files',
       admin: '/admin',
       communications: '/communications',
-      ledger: '/ledger'
+      ledger: '/ledger',
+      invoices: '/invoices'
     }
   });
 });
@@ -56,5 +58,6 @@ router.use('/files', fileRoutes);
 router.use('/admin', adminRoutes);
 router.use('/communications', communicationRoutes);
 router.use('/ledger', ledgerRoutes);
+router.use('/invoices', invoiceRoutes);
 
 export default router; 

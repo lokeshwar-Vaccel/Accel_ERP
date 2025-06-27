@@ -14,7 +14,8 @@
     "seed": "ts-node --transpile-only src/scripts/seed.ts",
     "seed:fix-stock-only": "ts-node --transpile-only src/scripts/seed.ts --fix-stock-only",
     "fix-stock": "ts-node --transpile-only src/scripts/fix-stock-available-quantity.ts",
-    "fix-stockledger-indexes": "ts-node --transpile-only src/scripts/fix-stockledger-indexes.ts"
+    "fix-stockledger-indexes": "ts-node --transpile-only src/scripts/fix-stockledger-indexes.ts",
+    "update-admin-access": "ts-node --transpile-only src/scripts/update-admin-access.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

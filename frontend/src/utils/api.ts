@@ -228,6 +228,27 @@ class ApiClient {
       }),
   };
 
+  // Invoice Management APIs
+  invoices = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { invoices: any[] } }>(`/invoices${params ? `?${new URLSearchParams(params)}` : ''}`),
+    
+    create: (invoiceData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/invoices', {
+        method: 'POST',
+        body: JSON.stringify(invoiceData),
+      }),
+    
+    update: (id: string, data: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/invoices/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/invoices/stats'),
+  };
+
   // Stock Ledger APIs
   stockLedger = {
     getAll: (params?: any) =>

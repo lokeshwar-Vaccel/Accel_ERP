@@ -35,6 +35,7 @@ const sampleUsers = [
       { module: 'user_management', access: true, permission: 'admin' },
       { module: 'product_management', access: true, permission: 'admin' },
       { module: 'inventory_management', access: true, permission: 'admin' },
+      { module: 'invoice_management', access: true, permission: 'admin' },
       { module: 'service_management', access: true, permission: 'admin' },
       { module: 'amc_management', access: true, permission: 'admin' },
       { module: 'purchase_orders', access: true, permission: 'admin' },

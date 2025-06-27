@@ -6,6 +6,7 @@ import { UserManagement } from "../pages/UserManagement";
 import CustomerManagement from "../pages/CustomerManagement";
 import ProductManagement from "../pages/ProductManagement";
 import InventoryManagement from "../pages/InventoryManagement";
+import InvoiceManagement from "../pages/InvoiceManagement";
 import ServiceManagement from "../pages/ServiceManagement";
 import AMCManagement from "../pages/AMCManagement";
 import PurchaseOrderManagement from "../pages/PurchaseOrderManagement";
@@ -46,6 +47,9 @@ const AppRoutes: React.FC = () => {
 
             {/* Inventory Management */}
             <Route path="/inventory-management" element={<InventoryManagement />} />
+
+            {/* Invoice Management */}
+            <Route path="/invoice-management" element={<InvoiceManagement />} />
 
             {/* Service Management */}
             <Route path="/service-management" element={<ServiceManagement />} />

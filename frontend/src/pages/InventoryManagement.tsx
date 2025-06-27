@@ -139,9 +139,17 @@ const InventoryManagement: React.FC = () => {
     total: 0,
     pages: 0
   });
+  const [ledgerSummary, setLedgerSummary] = useState({
+    totalInward: 0,
+    totalOutward: 0,
+    netMovement: 0,
+    totalTransactions: 0
+  });
   const [ledgerFilters, setLedgerFilters] = useState({
     search: '',
-    location: ''
+    location: '',
+    transactionType: '',
+    dateRange: '30' // Last 30 days
   });
   const [locationFormData, setLocationFormData] = useState<LocationFormData>({
     name: '',
@@ -383,7 +391,7 @@ const InventoryManagement: React.FC = () => {
         ));
       } else {
         // Create new location
-        const response = await apiClient.stock.createLocation(locationFormData);
+      const response = await apiClient.stock.createLocation(locationFormData);
         const newLocation = (response.data as any).location || response.data;
         setLocations([...locations, newLocation]);
       }
@@ -429,8 +437,8 @@ const InventoryManagement: React.FC = () => {
         errors.quantity = 'Stock level cannot be negative';
       }
     } else if (adjustmentFormData.adjustmentType === 'subtract') {
-      if (adjustmentFormData.quantity <= 0) {
-        errors.quantity = 'Quantity must be greater than 0';
+    if (adjustmentFormData.quantity <= 0) {
+      errors.quantity = 'Quantity must be greater than 0';
       } else if (selectedItem && adjustmentFormData.quantity > selectedItem.quantity) {
         errors.quantity = `Cannot subtract more than current stock (${selectedItem.quantity})`;
       }
@@ -682,7 +690,9 @@ const InventoryManagement: React.FC = () => {
         limit: ledgerPagination.limit.toString(),
         sort: '-transactionDate',
         ...(ledgerFilters.search && { search: ledgerFilters.search }),
-        ...(ledgerFilters.location && { location: ledgerFilters.location })
+        ...(ledgerFilters.location && { location: ledgerFilters.location }),
+        ...(ledgerFilters.transactionType && { transactionType: ledgerFilters.transactionType }),
+        ...(ledgerFilters.dateRange && { dateRange: ledgerFilters.dateRange })
       };
 
       const response = await apiClient.stockLedger.getAll(params);
@@ -714,6 +724,30 @@ const InventoryManagement: React.FC = () => {
         total: response.pagination.total,
         pages: response.pagination.pages
       });
+
+      // Calculate summary statistics
+      if (resetData) {
+        const summary = formattedLedger.reduce((acc, ledger) => {
+          const quantity = Math.abs(ledger.quantity);
+          
+          if (ledger.transactionType === 'inward') {
+            acc.totalInward += quantity;
+          } else if (ledger.transactionType === 'outward') {
+            acc.totalOutward += quantity;
+          }
+          
+          acc.totalTransactions += 1;
+          return acc;
+        }, {
+          totalInward: 0,
+          totalOutward: 0,
+          totalTransactions: 0,
+          netMovement: 0
+        });
+        
+        summary.netMovement = summary.totalInward - summary.totalOutward;
+        setLedgerSummary(summary);
+      }
     } catch (error) {
       console.error('Error fetching stock ledger:', error);
       setStockLedgerData([]);
@@ -723,7 +757,7 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleShowStockLedger = () => {
-    setLedgerFilters({ search: '', location: '' });
+    setLedgerFilters({ search: '', location: '', transactionType: '', dateRange: '30' });
     setLedgerPagination(prev => ({ ...prev, page: 1 }));
     setShowLedgerModal(true);
     fetchStockLedger(1, true);
@@ -1248,42 +1282,42 @@ const InventoryManagement: React.FC = () => {
                 </h3>
 
                 <form onSubmit={(e) => { e.preventDefault(); handleSubmitLocation(); }} className="space-y-3">
-                  {formErrors.general && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                      <p className="text-red-600 text-sm">{formErrors.general}</p>
-                    </div>
-                  )}
+              {formErrors.general && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-600 text-sm">{formErrors.general}</p>
+                </div>
+              )}
 
                   <div className="grid grid-cols-1 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Location Name *
-                      </label>
-                      <input
-                        type="text"
-                        name="name"
-                        value={locationFormData.name}
-                        onChange={(e) => setLocationFormData({ ...locationFormData, name: e.target.value })}
-                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                          formErrors.name ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                        placeholder="Enter location name"
-                      />
-                      {formErrors.name && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
-                      )}
-                    </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Location Name *
+                  </label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={locationFormData.name}
+                    onChange={(e) => setLocationFormData({ ...locationFormData, name: e.target.value })}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                      formErrors.name ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                    placeholder="Enter location name"
+                  />
+                  {formErrors.name && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
+                  )}
+                </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Location Type *
-                      </label>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Location Type *
+                  </label>
                       <div className="relative dropdown-container">
                         <button
                           type="button"
                           onClick={() => setShowLocationTypeDropdown(!showLocationTypeDropdown)}
                           className={`flex items-center justify-between w-full px-2.5 py-1.5 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                            formErrors.type ? 'border-red-500' : 'border-gray-300'
+                      formErrors.type ? 'border-red-500' : 'border-gray-300'
                           } hover:border-gray-400`}
                         >
                           <span className="text-gray-700 truncate mr-1">{getLocationTypeLabel(locationFormData.type)}</span>
@@ -1309,63 +1343,63 @@ const InventoryManagement: React.FC = () => {
                           </div>
                         )}
                       </div>
-                      {formErrors.type && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>
-                      )}
-                    </div>
+                  {formErrors.type && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>
+                  )}
+              </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Address *
-                      </label>
-                      <textarea
-                        name="address"
-                        value={locationFormData.address}
-                        onChange={(e) => setLocationFormData({ ...locationFormData, address: e.target.value })}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Address *
+                </label>
+                <textarea
+                  name="address"
+                  value={locationFormData.address}
+                  onChange={(e) => setLocationFormData({ ...locationFormData, address: e.target.value })}
                         rows={4}
                         className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none ${
-                          formErrors.address ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                        placeholder="Enter complete address"
-                      />
-                      {formErrors.address && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
-                      )}
-                    </div>
+                    formErrors.address ? 'border-red-500' : 'border-gray-300'
+                  }`}
+                  placeholder="Enter complete address"
+                />
+                {formErrors.address && (
+                  <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
+                )}
+              </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Contact Person
-                        </label>
-                        <input
-                          type="text"
-                          name="contactPerson"
-                          value={locationFormData.contactPerson}
-                          onChange={(e) => setLocationFormData({ ...locationFormData, contactPerson: e.target.value })}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter contact person name"
-                        />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Contact Person
+                  </label>
+                  <input
+                    type="text"
+                    name="contactPerson"
+                    value={locationFormData.contactPerson}
+                    onChange={(e) => setLocationFormData({ ...locationFormData, contactPerson: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter contact person name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Contact Phone
+                  </label>
+                  <input
+                    type="tel"
+                    name="phone"
+                    value={locationFormData.phone}
+                    onChange={(e) => setLocationFormData({ ...locationFormData, phone: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter phone number"
+                  />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Contact Phone
-                        </label>
-                        <input
-                          type="tel"
-                          name="phone"
-                          value={locationFormData.phone}
-                          onChange={(e) => setLocationFormData({ ...locationFormData, phone: e.target.value })}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter phone number"
-                        />
-                      </div>
-                    </div>
-                  </div>
+                </div>
+              </div>
 
-                  <div className="flex space-x-3 pt-4">
-                    <button
-                      type="button"
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
                       onClick={() => {
                         if (isEditingLocation) {
                           setIsEditingLocation(false);
@@ -1383,21 +1417,21 @@ const InventoryManagement: React.FC = () => {
                           setShowLocationModal(false);
                         }
                       }}
-                      className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                    >
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
                       {isEditingLocation ? 'Cancel Edit' : 'Cancel'}
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={submitting}
-                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                    >
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                >
                       {submitting ? (isEditingLocation ? 'Updating...' : 'Creating...') : (isEditingLocation ? 'Update Location' : 'Create Location')}
-                    </button>
-                  </div>
-                </form>
-                </div>
+                </button>
               </div>
+            </form>
+          </div>
+        </div>
 
               {/* Right side - Existing Locations */}
               <div className="w-1/2 p-4">
@@ -1703,7 +1737,7 @@ const InventoryManagement: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">Adjust Stock</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Adjust Stock</h2>
                 <p className="text-sm text-gray-600">
                   {selectedItem.product.name} @ {selectedItem.location.name}
                 </p>
@@ -1769,7 +1803,7 @@ const InventoryManagement: React.FC = () => {
                         <div>
                           <div className="font-medium text-gray-900">
                             {getAdjustmentTypeLabel(adjustmentFormData.adjustmentType)}
-                          </div>
+                </div>
                           <div className="text-xs text-gray-500">
                             {adjustmentTypeOptions.find(opt => opt.value === adjustmentFormData.adjustmentType)?.description}
                           </div>
@@ -1826,11 +1860,11 @@ const InventoryManagement: React.FC = () => {
                     )}
                   </label>
                   <div className="flex space-x-2">
-                    <input
-                      type="number"
-                      name="quantity"
-                      value={adjustmentFormData.quantity}
-                      onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, quantity: Number(e.target.value) })}
+                  <input
+                    type="number"
+                    name="quantity"
+                    value={adjustmentFormData.quantity}
+                    onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, quantity: Number(e.target.value) })}
                       min={adjustmentFormData.adjustmentType === 'set' ? '0' : '1'}
                       max={adjustmentFormData.adjustmentType === 'subtract' ? selectedItem.quantity : undefined}
                       className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
@@ -1885,11 +1919,11 @@ const InventoryManagement: React.FC = () => {
                         All Reserved ({selectedItem.reservedQuantity})
                       </button>
                     )}
-                  </div>
+                </div>
                   {formErrors.quantity && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
                   )}
-                </div>
+              </div>
 
                 {/* Result Preview */}
                 {adjustmentFormData.quantity > 0 && (
@@ -1928,15 +1962,15 @@ const InventoryManagement: React.FC = () => {
                   </div>
                 )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Reason *
-                  </label>
-                  <input
-                    type="text"
-                    name="reason"
-                    value={adjustmentFormData.reason}
-                    onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, reason: e.target.value })}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Reason *
+                </label>
+                <input
+                  type="text"
+                  name="reason"
+                  value={adjustmentFormData.reason}
+                  onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, reason: e.target.value })}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                       formErrors.reason ? 'border-red-500' : 'border-gray-300'
                     }`}
@@ -1951,7 +1985,7 @@ const InventoryManagement: React.FC = () => {
                   {formErrors.reason && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.reason}</p>
                   )}
-                </div>
+              </div>
 
                 {/* Reservation-specific fields */}
                 {adjustmentFormData.adjustmentType === 'reserve' && (
@@ -2026,18 +2060,18 @@ const InventoryManagement: React.FC = () => {
                   </>
                 )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    name="notes"
-                    value={adjustmentFormData.notes}
-                    onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, notes: e.target.value })}
-                    rows={3}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  name="notes"
+                  value={adjustmentFormData.notes}
+                  onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, notes: e.target.value })}
+                  rows={3}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                    placeholder="Additional notes (optional)"
-                  />
+                  placeholder="Additional notes (optional)"
+                />
                 </div>
               </div>
 
@@ -2206,20 +2240,105 @@ const InventoryManagement: React.FC = () => {
               </button>
             </div>
 
+                        {/* Summary Cards */}
+            <div className="p-4 bg-white border-b border-gray-200">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-green-600 font-medium">Total Inward</p>
+                      <p className="text-2xl font-bold text-green-700">{ledgerSummary.totalInward.toLocaleString()}</p>
+                      <p className="text-xs text-green-600">Purchase & Stock In</p>
+                    </div>
+                    <div className="text-green-500">
+                      <TrendingUp className="w-8 h-8" />
+                    </div>
+                  </div>
+              </div>
+
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-red-600 font-medium">Total Outward</p>
+                      <p className="text-2xl font-bold text-red-700">{ledgerSummary.totalOutward.toLocaleString()}</p>
+                      <p className="text-xs text-red-600">Sales & Stock Out</p>
+                    </div>
+                    <div className="text-red-500">
+                      <TrendingDown className="w-8 h-8" />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-blue-600 font-medium">Net Movement</p>
+                      <p className={`text-2xl font-bold ${ledgerSummary.netMovement >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                        {ledgerSummary.netMovement >= 0 ? '+' : ''}{ledgerSummary.netMovement.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-blue-600">Inward - Outward</p>
+                    </div>
+                    <div className="text-blue-500">
+                      <BarChart3 className="w-8 h-8" />
+                </div>
+              </div>
+            </div>
+
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-orange-600 font-medium">Transactions</p>
+                      <p className="text-2xl font-bold text-orange-700">{ledgerSummary.totalTransactions}</p>
+                      <p className="text-xs text-orange-600">Total Movements</p>
+                    </div>
+                    <div className="text-orange-500">
+                      <Package className="w-8 h-8" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Filters */}
             <div className="p-4 bg-gray-50 border-b border-gray-200">
-              <div className="flex flex-col md:flex-row md:items-center space-y-3 md:space-y-0 md:space-x-4">
-                <div className="relative flex-1 max-w-sm">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
+                <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
                     type="text"
-                    placeholder="Search products, locations, or reference..."
+                    placeholder="Search transactions..."
                     value={ledgerFilters.search}
                     onChange={(e) => setLedgerFilters({ ...ledgerFilters, search: e.target.value })}
                     className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                   />
                 </div>
-                
+
+                <select
+                  value={ledgerFilters.dateRange}
+                  onChange={(e) => setLedgerFilters({ ...ledgerFilters, dateRange: e.target.value })}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                >
+                  <option value="7">Last 7 days</option>
+                  <option value="30">Last 30 days</option>
+                  <option value="90">Last 3 months</option>
+                  <option value="365">Last year</option>
+                  <option value="">All time</option>
+                </select>
+
+                <select
+                  value={ledgerFilters.transactionType}
+                  onChange={(e) => setLedgerFilters({ ...ledgerFilters, transactionType: e.target.value })}
+                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                >
+                  <option value="">All Types</option>
+                  <option value="inward">Inward (Purchase)</option>
+                  <option value="outward">Outward (Sale)</option>
+                  <option value="transfer">Transfer</option>
+                  <option value="adjustment">Adjustment</option>
+                  <option value="reservation">Reservation</option>
+                  <option value="release">Release</option>
+                </select>
+
                 <select
                   value={ledgerFilters.location}
                   onChange={(e) => setLedgerFilters({ ...ledgerFilters, location: e.target.value })}
@@ -2231,8 +2350,6 @@ const InventoryManagement: React.FC = () => {
                   ))}
                 </select>
 
-
-
                 <button
                   onClick={() => fetchStockLedger(1, true)}
                   className="px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
@@ -2241,7 +2358,7 @@ const InventoryManagement: React.FC = () => {
                 </button>
               </div>
               
-              <div className="mt-3 flex items-center justify-between text-xs text-gray-600">
+              <div className="flex items-center justify-between text-xs text-gray-600">
                 <span>Showing {stockLedgerData.length} of {ledgerPagination.total} transactions</span>
                 <span>Page {ledgerPagination.page} of {ledgerPagination.pages}</span>
               </div>
@@ -2339,13 +2456,13 @@ const InventoryManagement: React.FC = () => {
             {/* Pagination */}
             <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
               <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => setShowLedgerModal(false)}
-                  className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-                >
-                  Close
-                </button>
-              </div>
+              <button
+                onClick={() => setShowLedgerModal(false)}
+                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
               
               {ledgerPagination.pages > 1 && (
                 <div className="flex items-center space-x-2">
