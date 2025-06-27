@@ -42,7 +42,7 @@ export const LoginForm: React.FC = () => {
 
 
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!validateForm()) return;
@@ -51,7 +51,12 @@ export const LoginForm: React.FC = () => {
     if (now - lastAttempt < 2000 && lastAttempt > 0) return;
 
     setLastAttempt(now);
-    dispatch(login({ email, password }));
+    const res = await dispatch(login({ email, password }));
+    // if(!res.error){
+    //   console.log("res565:",res);
+    //   toast.success(res.message)
+    // }
+    
   };
 
   const validateForm = () => {
@@ -112,7 +117,6 @@ export const LoginForm: React.FC = () => {
                 }}
                 className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 placeholder="you@example.com"
-                required
               />
             </div>
           </div>
@@ -132,7 +136,6 @@ export const LoginForm: React.FC = () => {
                 }}
                 className="w-full pl-10 pr-10 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                 placeholder="Enter your password"
-                required
               />
               <button
                 type="button"
@@ -144,7 +147,7 @@ export const LoginForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Forgot Password */}
+         {/* Forgot Password */}
           <div className="text-right">
             <button
               type="button"

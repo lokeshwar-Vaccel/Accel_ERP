@@ -13,6 +13,7 @@ import { User, UserRole } from '../types';
 import PageHeader from '../components/ui/PageHeader';
 import { useCurrentModulePermission } from 'layout/Sidebar';
 import { RootState } from 'redux/store';
+import toast from 'react-hot-toast';
 
 
 // Module key-label map
@@ -66,7 +67,7 @@ interface UserFormData {
   lastName: string;
   email: string;
   password?: string;
-  role: UserRole;
+  role: string;
   phone?: string;
   moduleAccess: ModuleAccess[];
 }
@@ -97,7 +98,7 @@ export const UserManagement: React.FC = () => {
     lastName: '',
     email: '',
     password: '',
-    role: UserRole.VIEWER,
+    role: "",
     phone: '',
     moduleAccess: []
   });
@@ -205,7 +206,7 @@ export const UserManagement: React.FC = () => {
       lastName: '',
       email: '',
       password: '',
-      role: UserRole.VIEWER,
+      role: '',
       phone: '',
       moduleAccess: []
     });
@@ -252,7 +253,7 @@ export const UserManagement: React.FC = () => {
       lastName: '',
       email: '',
       password: '',
-      role: UserRole.VIEWER,
+      role: '',
       phone: '',
       moduleAccess: []
     });
@@ -311,32 +312,42 @@ export const UserManagement: React.FC = () => {
     setSubmitting(true);
     try {
       if (isEditing && selectedUser) {
-        await apiClient.users.update(selectedUser.id, formData);
+        const res = await apiClient.users.update(selectedUser.id, formData);
+        toast.success(res?.message)
       } else {
-        await apiClient.users.create(formData);
+         const response = await apiClient.users.create(formData);
+        toast.success(response?.message)
       }
 
       await fetchUsers();
       closeUserModal();
     } catch (err) {
       console.error('Error saving user:', err);
-      setError(isEditing ? 'Failed to update user' : 'Failed to create user');
+      const msg = isEditing ? 'Failed to update user' : 'Failed to create user';
+      toast.error(msg);
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
   };
+
 
   const handleDelete = async () => {
     if (!userToDelete) return;
 
     setSubmitting(true);
     try {
-      await apiClient.users.delete(userToDelete.id);
+     const response = await apiClient.users.delete(userToDelete.id);
+              toast.success(response?.message)
+
       await fetchUsers();
       closeDeleteConfirm();
     } catch (err) {
       console.error('Error deactivating user:', err);
       setError('Failed to deactivate user');
+           const msg = isEditing ? 'Failed to delete user' : 'Failed to delete user';
+      toast.error(msg);
+      setError(msg);
     } finally {
       setSubmitting(false);
     }
@@ -484,38 +495,38 @@ export const UserManagement: React.FC = () => {
     return descriptions[role as keyof typeof descriptions] || '';
   };
 
-  const canEditUser = (currentUserRole:any, targetUserRole:any) => {
+  const canEditUser = (currentUserRole: any, targetUserRole: any) => {
     // Super Admin: Can edit/delete all users except other Super Admin users
     if (currentUserRole === 'super_admin') {
       return targetUserRole !== 'super_admin';
     }
-    
+
     // Admin: Cannot edit/delete Super Admin or other Admin users
     if (currentUserRole === 'admin') {
       return targetUserRole !== 'super_admin' && targetUserRole !== 'admin';
     }
-    
+
     // Manager: Can edit/delete HR and Viewer users
     if (currentUserRole === 'manager') {
       return ['hr', 'viewer'].includes(targetUserRole);
     }
-    
+
     // HR: Can edit/delete Viewer users only (NOT Manager users)
     if (currentUserRole === 'hr') {
       return targetUserRole === 'viewer';
     }
-    
+
     // Viewer: Cannot edit/delete any users
     if (currentUserRole === 'viewer') {
       return false;
     }
-    
+
     return false;
   };
 
-  const getAvailableRoles = (currentUserRole:any, existingUsers:any) => {
+  const getAvailableRoles = (currentUserRole: any, existingUsers: any) => {
     const allRoles = ['super_admin', 'admin', 'hr', 'manager', 'viewer'];
-    const UserModuleMap:any = {
+    const UserModuleMap: any = {
       super_admin: 'Super Admin',
       admin: 'Admin',
       hr: 'HR',
@@ -533,20 +544,20 @@ export const UserManagement: React.FC = () => {
       .filter(role => {
         // Super Admin: Can assign any role, but limit super_admin if it already exists
         if (currentUserRole === 'super_admin') {
-          if (role === 'super_admin' && existingUsers.some((user:any) => user.role === 'super_admin')) return false;
+          if (role === 'super_admin' && existingUsers.some((user: any) => user.role === 'super_admin')) return false;
           return true;
         }
-        
+
         // Admin: Can assign hr, manager, viewer roles
         if (currentUserRole === 'admin') {
           return ['hr', 'manager', 'viewer'].includes(role);
         }
-        
+
         // Manager: Can assign hr and viewer roles
         if (currentUserRole === 'manager') {
           return ['hr', 'viewer'].includes(role);
         }
-        
+
         // Viewer: Cannot assign any roles
         return false;
       })
@@ -803,26 +814,26 @@ export const UserManagement: React.FC = () => {
                               </button>
                             ) : (
                               <>
-                               {canEditUser(currentUser, user.role) ? (
-                            <>
-                              <button
-                                onClick={() => openEditUserModal(user)}
-                                className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                                title="Edit User"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => openDeleteConfirm(user)}
-                                className="text-orange-600 hover:text-orange-900 p-2 rounded-lg hover:bg-orange-50 transition-colors"
-                                title="Deactivate User"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </>
-                          ) : (
-                            <span className="text-gray-400 text-xs">No access</span>
-                          )}
+                                {canEditUser(currentUser, user.role) ? (
+                                  <>
+                                    <button
+                                      onClick={() => openEditUserModal(user)}
+                                      className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                                      title="Edit User"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => openDeleteConfirm(user)}
+                                      className="text-orange-600 hover:text-orange-900 p-2 rounded-lg hover:bg-orange-50 transition-colors"
+                                      title="Deactivate User"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span className="text-gray-400 text-xs">No access</span>
+                                )}
 
                               </>
 
@@ -963,11 +974,11 @@ export const UserManagement: React.FC = () => {
                       }`}
                   >
                     <option value="">Select a role</option>
-                  {getAvailableRoles(currentUser, users).map((role:any) => (
-                    <option key={role.value} value={role.value}>
-                      {role.label}
-                    </option>
-                  ))}
+                    {getAvailableRoles(currentUser, users).map((role: any) => (
+                      <option key={role.value} value={role.value}>
+                        {role.label}
+                      </option>
+                    ))}
                   </select>
 
 

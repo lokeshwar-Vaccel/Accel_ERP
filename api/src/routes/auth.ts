@@ -18,6 +18,7 @@ const router = Router();
 router.post('/login', login);
 router.post('/forgot-password', forgotPassword);
 router.post('/reset-password', resetPassword);
+router.post('/logout', logout);
 
 // Protected routes
 router.use(protect); // All routes after this middleware are protected
@@ -25,7 +26,6 @@ router.use(protect); // All routes after this middleware are protected
 router.get('/me', getMe);
 router.put('/profile', updateProfile);
 router.put('/change-password', changePassword);
-router.post('/logout', logout);
 // Admin only routes
 router.post('/register', restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), register);
 

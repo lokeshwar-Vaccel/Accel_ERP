@@ -7,6 +7,9 @@ import { LoadingSpinner } from 'components/ui/LoadingSpinner';
 import { LoginForm } from 'components/features/auth/LoginForm';
 import { checkAuthStatus } from './redux/auth/authSlice';
 import { Toaster } from 'react-hot-toast';
+import { ForgotPasswordForm } from 'components/features/auth/ForgotPasswordForm';
+import { Navigate, Route, Routes } from 'react-router-dom';
+import { ResetPasswordForm } from 'components/features/auth/ResetPasswordForm';
 
 const App = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -31,7 +34,19 @@ const App = () => {
           <AppRoutes />
         </Layout>
       ) : (
-        <LoginForm />
+        <>
+          <Routes>
+            <Route path="/login" element={<LoginForm />} />
+            <Route path="/forgot-password" element={<ForgotPasswordForm />} />
+            <Route path="/reset-password" element={<ResetPasswordForm />} />
+            <Route
+              path="/forgot-password"
+              element={
+                <Navigate to="/login" replace />
+              }
+            />
+          </Routes>
+        </>
       )}
       <Toaster
         position="top-right"

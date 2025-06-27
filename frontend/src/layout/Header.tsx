@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Menu, Bell, Search, ChevronDown, LogOut, User } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { logout, forceLogout } from '../redux/auth/authSlice';
+import toast from 'react-hot-toast';
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -23,6 +24,7 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
   const dropdownRef = useRef<HTMLDivElement>(null);
   const dispatch = useDispatch<AppDispatch>();
   const { user, isLoading } = useSelector((state: RootState) => state.auth);
+  const navigate = useNavigate();
 
   const paths = pathSegments.map((segment, index) => ({
     name: toTitleCase(segment),
@@ -46,7 +48,10 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await dispatch(logout()).unwrap();
+     const res:any =  await dispatch(logout()).unwrap();
+     console.log("res:",res);
+     navigate('/login');
+     toast.success(res?.message)
     } catch (error) {
       console.warn('Normal logout failed, forcing local logout:', error);
       dispatch(forceLogout());

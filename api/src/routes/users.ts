@@ -38,7 +38,7 @@ router.route('/')
 router.route('/:id')
   .get(checkPermission('read'), getUser)
   .put(
-    restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), 
+    restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER, UserRole.HR), 
     checkPermission('write'), 
     updateUser
   )

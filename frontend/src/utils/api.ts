@@ -1,3 +1,5 @@
+import { forgotPassword } from "redux/auth/authSlice";
+
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 class ApiClient {
@@ -58,6 +60,17 @@ class ApiClient {
     changePassword: (data: { currentPassword: string; newPassword: string }) =>
       this.makeRequest<{ success: boolean }>('/auth/change-password', {
         method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+    resetPassword: (data: { token: string; newPassword: string }) =>
+      this.makeRequest<{ success: boolean }>('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+
+    forgotPassword: (data: { email: string }) =>
+      this.makeRequest<{ success: boolean }>('/auth/forgot-password', {
+        method: 'POST',
         body: JSON.stringify(data),
       }),
     
