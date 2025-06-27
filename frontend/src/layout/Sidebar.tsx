@@ -89,7 +89,7 @@ const menuItems = [
     name: 'Purchase Orders',
     icon: <ShoppingCart className="w-4 h-4" />,
     path: '/purchase-order-management',
-    key: 'purchase_order_management',
+    key: 'purchase_orders',
   },
   {
     id: 9,
@@ -110,7 +110,7 @@ const menuItems = [
     name: 'Communications',
     icon: <MessageSquare className="w-4 h-4" />,
     path: '/communication-management',
-    key: 'communication_management',
+    key: 'communications',
   },
   {
     id: 12,
@@ -155,11 +155,11 @@ export default function Sidebar({
   const activeKey = getActiveKeyFromPath(location.pathname);
   // Filter menu items based on moduleAccess
   const accessibleMenuItems = menuItems.filter(item =>
-    moduleAccess.some(mod => mod.module === item.key && mod.access)
+    moduleAccess.some(mod => mod.module === item.key && mod.access === true)
   );
 
 
-  console.log("accessibleMenuItems:",accessibleMenuItems);
+  console.log("menuItems5555:",menuItems);
   
   return (
     <>

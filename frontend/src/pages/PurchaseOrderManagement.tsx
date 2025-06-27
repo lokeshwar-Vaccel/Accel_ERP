@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
+import {
+  Plus,
+  Search,
+  Filter,
   Package,
   DollarSign,
   Calendar,
@@ -103,34 +103,34 @@ const PurchaseOrderManagement: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  
+
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | 'all'>('all');
   const [supplierFilter, setSupplierFilter] = useState('');
-  
+
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
-  
+
   // Selected data
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
-  
+
   // Form data
   const [formData, setFormData] = useState<POFormData>({
     supplier: '',
     expectedDeliveryDate: '',
     items: [{ product: '', quantity: 1, unitPrice: 0 }]
   });
-  
+
   const [receiveData, setReceiveData] = useState<ReceiveItemsData>({
     receivedItems: [],
     location: 'main-warehouse'
   });
-  
+
   // Form errors
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -161,7 +161,7 @@ const PurchaseOrderManagement: React.FC = () => {
       console.log('Fetching purchase orders...');
       const response = await apiClient.purchaseOrders.getAll();
       console.log('Purchase orders response:', response);
-      
+
       let ordersData: PurchaseOrder[] = [];
       if (response.success && response.data) {
         if (Array.isArray(response.data)) {
@@ -171,7 +171,7 @@ const PurchaseOrderManagement: React.FC = () => {
         }
         console.log('Found purchase orders:', ordersData.length);
       }
-      
+
       // Set fallback data if no real data
       if (ordersData.length === 0) {
         ordersData = [
@@ -284,7 +284,7 @@ const PurchaseOrderManagement: React.FC = () => {
           }
         ];
       }
-      
+
       setPurchaseOrders(ordersData);
     } catch (error) {
       console.error('Error fetching purchase orders:', error);
@@ -307,9 +307,11 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   // Helper functions
-  const getCreatedByName = (createdBy: string | { firstName: string; lastName: string; email: string }): string => {
+  const getCreatedByName = (createdBy: string | { firstName: string; lastName: string; email: string }) => {
     if (typeof createdBy === 'string') return createdBy;
-    return `${createdBy.firstName} ${createdBy.lastName}`;
+    if (createdBy && typeof createdBy === 'object') {
+      return `${createdBy.firstName || ''} ${createdBy.lastName || ''}`.trim();
+    }
   };
 
   const getProductName = (product: string | { name: string }): string => {
@@ -371,7 +373,7 @@ const PurchaseOrderManagement: React.FC = () => {
     if (formData.items.length === 0) {
       errors.items = 'At least one item is required';
     }
-    
+
     formData.items.forEach((item, index) => {
       if (!item.product) {
         errors[`items.${index}.product`] = 'Product is required';
@@ -394,9 +396,9 @@ const PurchaseOrderManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      
+
       const totalAmount = formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-      
+
       const poData = {
         ...formData,
         totalAmount,
@@ -405,7 +407,7 @@ const PurchaseOrderManagement: React.FC = () => {
           totalPrice: item.quantity * item.unitPrice
         }))
       };
-      
+
       const response = await apiClient.purchaseOrders.create(poData);
       setPurchaseOrders([response.data, ...purchaseOrders]);
       setShowCreateModal(false);
@@ -428,9 +430,9 @@ const PurchaseOrderManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      
+
       const totalAmount = formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-      
+
       const poData = {
         ...formData,
         totalAmount,
@@ -439,7 +441,7 @@ const PurchaseOrderManagement: React.FC = () => {
           totalPrice: item.quantity * item.unitPrice
         }))
       };
-      
+
       const response = await apiClient.purchaseOrders.update(editingPO._id, poData);
       setPurchaseOrders(purchaseOrders.map(po => po._id === editingPO._id ? response.data : po));
       setShowEditModal(false);
@@ -460,7 +462,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const handleStatusUpdate = async (poId: string, newStatus: PurchaseOrderStatus) => {
     try {
       const response = await apiClient.purchaseOrders.updateStatus(poId, newStatus);
-      setPurchaseOrders(purchaseOrders.map(po => 
+      setPurchaseOrders(purchaseOrders.map(po =>
         po._id === poId ? { ...po, status: newStatus } : po
       ));
     } catch (error) {
@@ -474,7 +476,7 @@ const PurchaseOrderManagement: React.FC = () => {
     setSubmitting(true);
     try {
       await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
-      setPurchaseOrders(purchaseOrders.map(po => 
+      setPurchaseOrders(purchaseOrders.map(po =>
         po._id === selectedPO._id ? { ...po, status: 'received', actualDeliveryDate: new Date().toISOString() } : po
       ));
       setShowReceiveModal(false);
@@ -516,10 +518,10 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const filteredPOs = purchaseOrders.filter(po => {
     const matchesSearch = po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         po.supplier.toLowerCase().includes(searchTerm.toLowerCase());
+      po.supplier.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
     const matchesSupplier = !supplierFilter || po.supplier.toLowerCase().includes(supplierFilter.toLowerCase());
-    
+
     return matchesSearch && matchesStatus && matchesSupplier;
   });
 
@@ -638,7 +640,7 @@ const PurchaseOrderManagement: React.FC = () => {
   return (
     <div className="p-4 space-y-3">
       {/* Header */}
-      <PageHeader 
+      <PageHeader
         title="Purchase Order Management"
         subtitle="Manage procurement and purchase orders efficiently"
       >
@@ -712,9 +714,8 @@ const PurchaseOrderManagement: React.FC = () => {
                       setStatusFilter(option.value as PurchaseOrderStatus | 'all');
                       setShowStatusDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                      statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                    }`}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -742,9 +743,8 @@ const PurchaseOrderManagement: React.FC = () => {
                     setSupplierFilter('all');
                     setShowSupplierDropdown(false);
                   }}
-                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                    supplierFilter === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                  }`}
+                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${supplierFilter === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                    }`}
                 >
                   All Suppliers
                 </button>
@@ -753,7 +753,7 @@ const PurchaseOrderManagement: React.FC = () => {
             )}
           </div>
         </div>
-        
+
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xs text-gray-600">
             Showing {filteredPOs.length} of {purchaseOrders.length} purchase orders
@@ -919,9 +919,8 @@ const PurchaseOrderManagement: React.FC = () => {
                     type="text"
                     value={formData.supplier}
                     onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.supplier ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplier ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter supplier name"
                   />
                   {formErrors.supplier && (
@@ -936,9 +935,8 @@ const PurchaseOrderManagement: React.FC = () => {
                     type="date"
                     value={formData.expectedDeliveryDate}
                     onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.expectedDeliveryDate ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.expectedDeliveryDate ? 'border-red-500' : 'border-gray-300'
+                      }`}
                   />
                   {formErrors.expectedDeliveryDate && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.expectedDeliveryDate}</p>
@@ -959,7 +957,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     <span>Add Item</span>
                   </button>
                 </div>
-                
+
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-12 gap-3 items-end p-4 bg-gray-50 rounded-lg">
@@ -968,9 +966,8 @@ const PurchaseOrderManagement: React.FC = () => {
                         <select
                           value={item.product}
                           onChange={(e) => updateItem(index, 'product', e.target.value)}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                            formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                         >
                           <option value="">Select Product</option>
                           {products.map(product => (
@@ -989,9 +986,8 @@ const PurchaseOrderManagement: React.FC = () => {
                           type="number"
                           value={item.quantity}
                           onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                            formErrors[`items.${index}.quantity`] ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.quantity`] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                           min="1"
                         />
                         {formErrors[`items.${index}.quantity`] && (
@@ -1004,9 +1000,8 @@ const PurchaseOrderManagement: React.FC = () => {
                           type="number"
                           value={item.unitPrice}
                           onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                            formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                           min="0"
                           step="0.01"
                         />
@@ -1091,9 +1086,8 @@ const PurchaseOrderManagement: React.FC = () => {
                     type="text"
                     value={formData.supplier}
                     onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.supplier ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplier ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter supplier name"
                   />
                   {formErrors.supplier && (
@@ -1108,9 +1102,8 @@ const PurchaseOrderManagement: React.FC = () => {
                     type="date"
                     value={formData.expectedDeliveryDate}
                     onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.expectedDeliveryDate ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.expectedDeliveryDate ? 'border-red-500' : 'border-gray-300'
+                      }`}
                   />
                   {formErrors.expectedDeliveryDate && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.expectedDeliveryDate}</p>
@@ -1131,7 +1124,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     <span>Add Item</span>
                   </button>
                 </div>
-                
+
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-12 gap-3 items-end p-4 bg-gray-50 rounded-lg">
@@ -1140,9 +1133,8 @@ const PurchaseOrderManagement: React.FC = () => {
                         <select
                           value={item.product}
                           onChange={(e) => updateItem(index, 'product', e.target.value)}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                            formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                         >
                           <option value="">Select Product</option>
                           {products.map(product => (
@@ -1161,9 +1153,8 @@ const PurchaseOrderManagement: React.FC = () => {
                           type="number"
                           value={item.quantity}
                           onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                            formErrors[`items.${index}.quantity`] ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.quantity`] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                           min="1"
                         />
                         {formErrors[`items.${index}.quantity`] && (
@@ -1176,9 +1167,8 @@ const PurchaseOrderManagement: React.FC = () => {
                           type="number"
                           value={item.unitPrice}
                           onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                            formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
+                            }`}
                           min="0"
                           step="0.01"
                         />
@@ -1259,7 +1249,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     <p><span className="text-xs text-gray-600">PO Number:</span> <span className="font-medium">{selectedPO.poNumber}</span></p>
                     <p><span className="text-xs text-gray-600">Supplier:</span> <span className="font-medium">{selectedPO.supplier}</span></p>
                     <p><span className="text-xs text-gray-600">Total Amount:</span> <span className="font-medium">{formatCurrency(selectedPO.totalAmount)}</span></p>
-                    <p><span className="text-xs text-gray-600">Status:</span> 
+                    <p><span className="text-xs text-gray-600">Status:</span>
                       <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedPO.status)}`}>
                         {selectedPO.status.charAt(0).toUpperCase() + selectedPO.status.slice(1)}
                       </span>
@@ -1278,7 +1268,7 @@ const PurchaseOrderManagement: React.FC = () => {
                       <p><span className="text-xs text-gray-600">Actual Delivery:</span> <span className="font-medium">{formatDate(selectedPO.actualDeliveryDate)}</span></p>
                     )}
                     {selectedPO.deliveryStatus && (
-                      <p><span className="text-xs text-gray-600">Delivery Status:</span> 
+                      <p><span className="text-xs text-gray-600">Delivery Status:</span>
                         <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDeliveryStatusColor(selectedPO.deliveryStatus)}`}>
                           {selectedPO.deliveryStatus.replace('_', ' ')}
                         </span>

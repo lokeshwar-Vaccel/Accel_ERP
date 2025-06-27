@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Plus, 
-  Search, 
+import {
+  Plus,
+  Search,
   Package,
   AlertTriangle,
   TrendingUp,
@@ -17,7 +17,17 @@ import {
   History,
   ChevronDown,
   X,
-  Eye
+  Eye,
+  Building2,
+  User,
+  Phone,
+  Shield,
+  Clock,
+  Tag,
+  Filter,
+  LocateFixed,
+  Map,
+  MapPinIcon
 } from 'lucide-react';
 import { Table } from '../components/ui/Table';
 import { Modal } from '../components/ui/Modal';
@@ -107,7 +117,8 @@ const InventoryManagement: React.FC = () => {
   const [locationFilter, setLocationFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  
+  const [selectedType, setSelectedType] = useState('all');
+
   // Custom dropdown states
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -115,15 +126,23 @@ const InventoryManagement: React.FC = () => {
 
   // Modal states
   const [showLocationModal, setShowLocationModal] = useState(false);
+  const [showAddLocationModal, setAddShowLocationModal] = useState(false);
   const [showAdjustmentModal, setShowAdjustmentModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
-  
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   // Form states
   const [selectedItem, setSelectedItem] = useState<StockItem | null>(null);
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [stockTransactions, setStockTransactions] = useState<any[]>([]);
+  const [editingLocation, setEditingLocation] = useState<string | null>(null);
+  const [userToDelete, setUserToDelete] = useState<any | null>(null);
+  const [selectedLocation, setSelectedLocation] = useState(null);
+
+  console.log("selectedLocation:", selectedLocation);
+
   const [locationFormData, setLocationFormData] = useState<LocationFormData>({
     name: '',
     address: '',
@@ -147,6 +166,21 @@ const InventoryManagement: React.FC = () => {
     notes: ''
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  const filteredLocations = locations.filter(location => {
+    const matchesSearch = location.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      location.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      location.contactPerson?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesType = selectedType === 'all' || location.type === selectedType;
+
+    return matchesSearch && matchesType;
+  });
+
+  const uniqueTypes = [...new Set(locations.map(location => location.type))];
+
+  console.log("filteredLocations:", filteredLocations);
+
 
   // Initialize data
   useEffect(() => {
@@ -225,7 +259,9 @@ const InventoryManagement: React.FC = () => {
   const fetchLocations = async () => {
     try {
       const response = await apiClient.stock.getLocations();
-      setLocations(Array.isArray(response.data) ? response.data : []);
+      console.log("response:", response);
+
+      setLocations(Array.isArray(response.data.locations) ? response.data.locations : []);
     } catch (error) {
       console.error('Error fetching locations:', error);
       setLocations([]);
@@ -242,6 +278,24 @@ const InventoryManagement: React.FC = () => {
     });
     setFormErrors({});
     setShowLocationModal(true);
+  };
+
+  const handleEditLocation = (location: any) => {
+    setEditingLocation(location._id);
+    setLocationFormData(location);
+    setAddShowLocationModal(true);
+  };
+
+  const handleCreateNewLocation = () => {
+    setLocationFormData({
+      name: '',
+      address: '',
+      type: 'warehouse',
+      contactPerson: '',
+      phone: ''
+    });
+    setFormErrors({});
+    setAddShowLocationModal(true);
   };
 
   const handleUpdateStock = (stockItem: StockItem) => {
@@ -280,9 +334,17 @@ const InventoryManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const response = await apiClient.stock.createLocation(locationFormData);
-      setLocations([...locations, response.data]);
-      setShowLocationModal(false);
+      // const response = await apiClient.stock.createLocation(locationFormData);
+      // setLocations([...locations, response.data.location]);
+      if (editingLocation) {
+        await apiClient.stock.updateLocation(editingLocation, locationFormData);
+        setLocations(prev => prev.map(loc => (loc._id === editingLocation ? { ...loc, ...locationFormData } : loc)));
+      } else {
+        const response = await apiClient.stock.createLocation(locationFormData);
+        setLocations(prev => [...prev, response.data.location]);
+      }
+      setAddShowLocationModal(false);
+      fetchLocations();
       setLocationFormData({
         name: '',
         address: '',
@@ -300,6 +362,40 @@ const InventoryManagement: React.FC = () => {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const openDeleteConfirm = (location: any) => {
+    setUserToDelete(location);
+    setShowDeleteConfirm(true);
+  };
+
+  const closeDeleteConfirm = () => {
+    setShowDeleteConfirm(false);
+    setUserToDelete(null);
+  };
+
+  const handleViewLocation = (location: any) => {
+    setSelectedLocation(location);
+    setShowViewModal(true);
+  };
+
+  const closeViewModal = () => {
+    setShowViewModal(false);
+    setSelectedLocation(null);
+  };
+
+  const handleDeleteLocation = async () => {
+    if (!userToDelete) return;
+
+    try {
+      await apiClient.stock.deleteLocation(userToDelete._id);
+      setLocations(prev => prev.filter(loc => loc._id !== userToDelete._id));
+      // await fetchLocations();
+      closeDeleteConfirm();
+    } catch (error) {
+      console.error('Error deleting location:', error);
+    }
+
   };
 
   const validateStockForm = (): boolean => {
@@ -392,22 +488,124 @@ const InventoryManagement: React.FC = () => {
     }
   };
 
+  // Transfer initiation handler
+  const handleInitiateTransfer = (stockItem: StockItem) => {
+    const productId = typeof stockItem.product === 'string' ? stockItem.product : stockItem.product._id;
+    const locationId = typeof stockItem.location === 'string' ? stockItem.location : stockItem.location._id;
+    const maxQuantity = stockItem.availableQuantity || (stockItem.quantity - (stockItem.reservedQuantity || 0));
+
+    setTransferFormData({
+      product: productId,
+      fromLocation: locationId,
+      toLocation: '',
+      quantity: Math.min(maxQuantity, 1),
+      notes: ''
+    });
+    setFormErrors({});
+    setShowTransferModal(true);
+  };
+
+  // Transfer form validation
+  const validateTransferForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!transferFormData.product) {
+      errors.product = 'Product is required';
+    }
+    if (!transferFormData.fromLocation) {
+      errors.fromLocation = 'Source location is required';
+    }
+    if (!transferFormData.toLocation) {
+      errors.toLocation = 'Destination location is required';
+    }
+    if (transferFormData.fromLocation === transferFormData.toLocation) {
+      errors.toLocation = 'Source and destination locations must be different';
+    }
+    if (transferFormData.quantity <= 0) {
+      errors.quantity = 'Transfer quantity must be greater than 0';
+    }
+
+    // Check maximum available quantity
+    const sourceItem = inventory.find(item => {
+      const productId = typeof item.product === 'string' ? item.product : item.product._id;
+      const locationId = typeof item.location === 'string' ? item.location : item.location._id;
+      return productId === transferFormData.product && locationId === transferFormData.fromLocation;
+    });
+
+    if (sourceItem) {
+      const maxAvailable = sourceItem.availableQuantity || (sourceItem.quantity - (sourceItem.reservedQuantity || 0));
+      if (transferFormData.quantity > maxAvailable) {
+        errors.quantity = `Cannot transfer more than ${maxAvailable} units`;
+      }
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Transfer submission handler
+  const handleSubmitTransfer = async () => {
+    if (!validateTransferForm()) return;
+
+    setSubmitting(true);
+    try {
+      await apiClient.stock.transferStock(transferFormData);
+
+      // Simulate inventory update
+      setInventory(prevInventory => {
+        return prevInventory.map(item => {
+          const productId = typeof item.product === 'string' ? item.product : item.product._id;
+          const locationId = typeof item.location === 'string' ? item.location : item.location._id;
+
+          // Update source location
+          if (productId === transferFormData.product && locationId === transferFormData.fromLocation) {
+            return {
+              ...item,
+              quantity: item.quantity - transferFormData.quantity,
+              availableQuantity: (item.availableQuantity || 0) - transferFormData.quantity
+            };
+          }
+
+          return item;
+        });
+      });
+
+      setShowTransferModal(false);
+      setTransferFormData({
+        product: '',
+        fromLocation: '',
+        toLocation: '',
+        quantity: 0,
+        notes: ''
+      });
+
+      // Show success message (in real app, use toast notification)
+      alert('Stock transfer completed successfully!');
+
+    } catch (error) {
+      console.error('Stock transfer failed:', error);
+      setFormErrors({ general: 'Stock transfer failed. Please try again.' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const filteredInventory = Array.isArray(inventory) ? inventory.filter(item => {
     const productName = typeof item.product === 'string' ? '' : item.product.name;
     const locationName = typeof item.location === 'string' ? '' : item.location.name;
-    
+
     const matchesSearch = productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         locationName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesLocation = locationFilter === 'all' || 
-                          (typeof item.location === 'object' && item.location._id === locationFilter);
-    
+      locationName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesLocation = locationFilter === 'all' ||
+      (typeof item.location === 'object' && item.location._id === locationFilter);
+
     return matchesSearch && matchesLocation;
   }) : [];
 
   const getStockStatus = (item: StockItem) => {
     const product = typeof item.product === 'object' ? item.product : null;
     if (!product) return 'unknown';
-    
+
     if (item.quantity <= 0) return 'out_of_stock';
     if (item.quantity <= product.minStockLevel) return 'low_stock';
     return 'in_stock';
@@ -587,26 +785,26 @@ const InventoryManagement: React.FC = () => {
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
-      <PageHeader 
+      <PageHeader
         title="Inventory Management"
         subtitle="Track and manage stock across all locations"
       >
         <div className="flex space-x-3">
-          <button 
+          <button
             onClick={handleCreateLocation}
             className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <MapPin className="w-4 h-4" />
             <span className="text-sm">Add Location</span>
           </button>
-          <button 
+          <button
             onClick={() => setShowLedgerModal(true)}
             className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Package className="w-4 h-4" />
             <span className="text-sm">Stock Ledger</span>
           </button>
-          <button 
+          <button
             onClick={fetchAllData}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
@@ -665,9 +863,8 @@ const InventoryManagement: React.FC = () => {
                       setCategoryFilter(option.value);
                       setShowCategoryDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                      categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                    }`}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -676,7 +873,7 @@ const InventoryManagement: React.FC = () => {
             )}
           </div>
         </div>
-        
+
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xs text-gray-600">
             Showing {filteredInventory.length} of {inventory.length} items
@@ -745,21 +942,23 @@ const InventoryManagement: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-2">
-                          <button 
+                          <button
                             onClick={() => handleUpdateStock(item)}
                             className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
                             title="Adjust Stock"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
-                          <button 
+                          <button
                             onClick={() => viewStockHistory(item)}
                             className="text-green-600 hover:text-green-900 p-2 rounded-lg hover:bg-green-50 transition-colors"
                             title="View History"
                           >
                             <Package className="w-4 h-4" />
                           </button>
-                          <button 
+                          <button
+                            onClick={() => handleInitiateTransfer(item)}
+                            // disabled={maxTransfer <= 0}
                             className="text-purple-600 hover:text-purple-900 p-2 rounded-lg hover:bg-purple-50 transition-colors"
                             title="Transfer Stock"
                           >
@@ -781,16 +980,18 @@ const InventoryManagement: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Add New Location</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{editingLocation ? 'Edit Location' : 'Add Locations'}</h2>
               <button
-                onClick={() => setShowLocationModal(false)}
+                onClick={showAddLocationModal ?
+                  () => { setAddShowLocationModal(false); setEditingLocation(null) }
+                  : () => { setShowLocationModal(false); setAddShowLocationModal(false); setSelectedType('all') }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitLocation(); }} className="p-4 space-y-3">
+            {showAddLocationModal && <form onSubmit={(e) => { e.preventDefault(); handleSubmitLocation(); }} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -807,9 +1008,8 @@ const InventoryManagement: React.FC = () => {
                     name="name"
                     value={locationFormData.name}
                     onChange={(e) => setLocationFormData({ ...locationFormData, name: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.name ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter location name"
                   />
                   {formErrors.name && (
@@ -824,9 +1024,8 @@ const InventoryManagement: React.FC = () => {
                     name="type"
                     value={locationFormData.type}
                     onChange={(e) => setLocationFormData({ ...locationFormData, type: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.type ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.type ? 'border-red-500' : 'border-gray-300'
+                      }`}
                   >
                     <option value="warehouse">Warehouse</option>
                     <option value="main_office">Main Office</option>
@@ -847,9 +1046,8 @@ const InventoryManagement: React.FC = () => {
                   value={locationFormData.address}
                   onChange={(e) => setLocationFormData({ ...locationFormData, address: e.target.value })}
                   rows={3}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                    formErrors.address ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.address ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   placeholder="Enter complete address"
                 />
                 {formErrors.address && (
@@ -889,7 +1087,7 @@ const InventoryManagement: React.FC = () => {
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowLocationModal(false)}
+                  onClick={() => { setAddShowLocationModal(false); setEditingLocation(null) }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
@@ -899,10 +1097,255 @@ const InventoryManagement: React.FC = () => {
                   disabled={submitting}
                   className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
                 >
-                  {submitting ? 'Creating...' : 'Create Location'}
+                  {editingLocation ? submitting ? 'Updating...' : 'Update Location' : submitting ? 'Creating...' : 'Create Location'}
                 </button>
               </div>
-            </form>
+            </form>}
+
+            {!showAddLocationModal && <div className=" bg-gray-50 p-6">
+              <div className="max-w-7xl mx-auto">
+                {/* Header */}
+                <div className="mb-8">
+
+                  <div className="flex items-center justify-between mb-6">
+                    <div className='flex justify-between'>
+                      <MapPinIcon className="h-8 w-8 text-blue-600 m-2" />
+                      <div>
+                        <h1 className="text-1xl font-bold text-gray-900 flex items-center gap-2">
+                          Locations
+                        </h1>
+                        <p className="text-gray-600 text-sm mt-1">Manage your warehouse locations</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleCreateNewLocation}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-5 py-2 rounded-lg font-medium flex items-center gap-2 transition-colors shadow-md"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add Location
+                    </button>
+                  </div>
+
+                  {/* Search Bar */}
+                  <div className="flex gap-4 items-center">
+                    <div className="relative flex-1 max-w-md">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
+                      <input
+                        type="text"
+                        placeholder="Search locations..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+
+                    <div className="relative">
+                      <Filter className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                      <select
+                        value={selectedType}
+                        onChange={(e) => setSelectedType(e.target.value)}
+                        className="pl-9 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm font-medium min-w-[140px] appearance-none cursor-pointer"
+                      >
+                        <option value="all">All Types</option>
+                        {uniqueTypes.map(type => (
+                          <option key={type} value={type} className="capitalize">
+                            {type.charAt(0).toUpperCase() + type.slice(1)}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-4 mt-6">
+                    {filteredLocations.length === 0 ? (
+                      <div className="text-center py-12">
+                        <Building2 className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">
+                          {searchTerm ? 'No locations found' : 'No locations yet'}
+                        </h3>
+                        <p className="text-gray-600 mb-6">
+                          {searchTerm ? 'Try adjusting your search terms' : 'Get started by adding your first location'}
+                        </p>
+                        {!searchTerm && (
+                          <button
+                            onClick={handleCreateNewLocation}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-medium flex items-center gap-2 mx-auto transition-colors"
+                          >
+                            <Plus className="h-5 w-5" />
+                            Add Your First Location
+                          </button>
+                        )}
+                      </div>
+                    ) : (filteredLocations.map(location => (
+                      <div key={location._id} className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-shadow">
+                        <div className="p-4">
+                          {/* Header */}
+                          <div className="flex items-start justify-between ">
+                            {/* <div className="flex items-start justify-between mb-4"> */}
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-blue-100 rounded-lg">
+                                <Building2 className="h-5 w-5 text-blue-600" />
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h3 className="text-lg font-semibold text-gray-900">{location.name}</h3>
+                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${location.isActive
+                                    ? 'bg-green-100 text-green-700'
+                                    : 'bg-red-100 text-red-700'
+                                    }`}>
+                                    {location.isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-500 capitalize">{location.type}</p>
+                              </div>
+                            </div>
+                            {/* </div> */}
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleViewLocation(location)}
+                                className="p-2 hover:text-green-400 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                title="View details"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleEditLocation(location)}
+                                className="p-2 hover:text-blue-400 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Edit location"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => openDeleteConfirm(location)}
+                                className="p-2 hover:text-red-400 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Delete location"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+
+                        </div>
+                      </div>
+                    )
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>}
+          </div>
+        </div>
+      )}
+
+      {/* View Modal */}
+      {showViewModal && selectedLocation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[70vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-orange-400 to-orange-600 text-white p-6 rounded-t-2xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white bg-opacity-20 rounded-lg">
+                    <Building2 className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold">{selectedLocation.name}</h2>
+                    <p className="text-blue-100 text-sm">Location Details</p>
+                  </div>
+                </div>
+                <button
+                  onClick={closeViewModal}
+                  className="p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              {/* Status and Type */}
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div className={`p-4 rounded-lg border-2 ${selectedLocation.isActive
+                  ? 'bg-green-50 border-green-200'
+                  : 'bg-red-50 border-red-200'
+                  }`}>
+                  <div className="flex items-center gap-2">
+                    <Shield className={`h-5 w-5 ${selectedLocation.isActive ? 'text-green-600' : 'text-red-600'
+                      }`} />
+                    <div className={`text-sm font-medium ${selectedLocation.isActive ? 'text-green-600' : 'text-red-600'
+                      }`}>Status</div>
+                  </div>
+                  <div className={`text-2xl font-bold ${selectedLocation.isActive ? 'text-green-700' : 'text-red-700'
+                    }`}>
+                    {selectedLocation.isActive ? 'Active' : 'Inactive'}
+                  </div>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-lg border-2 border-blue-200">
+                  <div className="flex items-center gap-2">
+                    <Tag className="h-5 w-5 text-blue-600" />
+                    <div className="text-blue-600 text-sm font-medium">Type</div>
+                  </div>
+                  <div className="text-2xl font-bold text-blue-700 capitalize">{selectedLocation.type}</div>
+                </div>
+              </div>
+
+              {/* Contact Information */}
+              <div className="mb-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Location Details</h3>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <MapPin className="h-5 w-5 text-gray-500 mt-0.5 flex-shrink-0" />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">Address</div>
+                      <div className="text-gray-700 mt-1">{selectedLocation.address}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <User className="h-5 w-5 text-gray-500" />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">Contact Person</div>
+                      <div className="text-gray-700 mt-1">{selectedLocation.contactPerson}</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                    <Phone className="h-5 w-5 text-gray-500" />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-gray-900">Phone</div>
+                      <div className="text-gray-700 mt-1">{selectedLocation.phone}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Timestamps */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+                  <div className="text-sm font-medium text-gray-900 flex items-center gap-2 mb-2">
+                    <Clock className="h-4 w-4 text-gray-500" />
+                    Last Updated
+                  </div>
+                  <div className="text-gray-700 font-medium">
+                    {new Date(selectedLocation.updatedAt).toLocaleDateString('en-IN', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric'
+                    })}
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">
+                    {new Date(selectedLocation.updatedAt).toLocaleTimeString('en-IN', {
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -1071,9 +1514,8 @@ const InventoryManagement: React.FC = () => {
                             {new Date(transaction.date).toLocaleDateString()}
                           </td>
                           <td className="px-4 py-4 text-sm">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              transaction.type === 'inward' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${transaction.type === 'inward' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                              }`}>
                               {transaction.type === 'inward' ? '↗ Inward' : '↙ Outward'}
                             </span>
                           </td>
@@ -1090,14 +1532,39 @@ const InventoryManagement: React.FC = () => {
                 </table>
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="px-6 py-4 border-t border-gray-200">
-              <button
-                onClick={() => setShowHistoryModal(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Close
-              </button>
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm m-4">
+            <div className="p-4">
+              <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-orange-100 rounded-full">
+                <Trash2 className="w-6 h-6 text-orange-600" />
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
+                Delete Location
+              </h3>
+              <p className="text-gray-600 text-center mb-6">
+                Are you sure you want to deactivate <strong>{userToDelete.name}</strong>?
+                {/* The user will be marked as deleted but can be restored later if needed. */}
+              </p>
+              <div className="flex space-x-3">
+                <button
+                  onClick={closeDeleteConfirm}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDeleteLocation}
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50"
+                >
+                  {submitting ? 'Deleting...' : 'Delete Location'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1151,18 +1618,183 @@ const InventoryManagement: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
 
-            <div className="px-6 py-4 border-t border-gray-200">
+      {/* Transfer Modal */}
+      {showTransferModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-lg mx-4">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Transfer Stock</h3>
               <button
-                onClick={() => setShowLedgerModal(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                onClick={() => setShowTransferModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
-                Close
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6">
+              {/* Product Details Card */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                <div className="flex items-start space-x-3">
+                  <Package className="w-8 h-8 text-yellow-600 mt-1" />
+                  <div className="flex-1">
+                    <h4 className="font-semibold text-gray-900">
+                      {products.find(p => p._id === transferFormData.product)?.name || 'Unknown Product'}
+                    </h4>
+                    <p className="text-sm text-gray-600 mb-2">
+                      Model Number: {products.find(p => p._id === transferFormData.product)?.modelNumber || 'N/A'}
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-500">Total Stock:</span>
+                        <span className="ml-2 font-medium">
+                          {inventory.find(item => {
+                            const productId = typeof item.product === 'string' ? item.product : item.product._id;
+                            const locationId = typeof item.location === 'string' ? item.location : item.location._id;
+                            return productId === transferFormData.product && locationId === transferFormData.fromLocation;
+                          })?.quantity || 0}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500">Available:</span>
+                        <span className="ml-2 font-medium text-green-600">
+                          {inventory.find(item => {
+                            const productId = typeof item.product === 'string' ? item.product : item.product._id;
+                            const locationId = typeof item.location === 'string' ? item.location : item.location._id;
+                            return productId === transferFormData.product && locationId === transferFormData.fromLocation;
+                          })?.availableQuantity || 0}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {formErrors.general && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-600">{formErrors.general}</p>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">From Location</label>
+                  <div className="flex items-center p-3 bg-gray-50 border border-gray-300 rounded-lg">
+                    <MapPin className="w-4 h-4 text-gray-400 mr-2" />
+                    <span className="text-gray-700">
+                      {locations.find(l => l._id === transferFormData.fromLocation)?.name || 'Unknown Location'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    To Location <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={transferFormData.toLocation}
+                    onChange={(e) => {
+                      setTransferFormData({ ...transferFormData, toLocation: e.target.value });
+                      if (formErrors.toLocation) {
+                        setFormErrors({ ...formErrors, toLocation: '' });
+                      }
+                    }}
+                    className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${formErrors.toLocation ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
+                  >
+                    <option value="">Select destination location</option>
+                    {locations
+                      .filter(loc => loc._id !== transferFormData.fromLocation)
+                      .map(loc => (
+                        <option key={loc._id} value={loc._id}>{loc.name}</option>
+                      ))
+                    }
+                  </select>
+                  {formErrors.toLocation && (
+                    <p className="mt-1 text-sm text-red-600">{formErrors.toLocation}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quantity <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={transferFormData.quantity}
+                    onChange={(e) => {
+                      setTransferFormData({ ...transferFormData, quantity: Number(e.target.value) });
+                      if (formErrors.quantity) {
+                        setFormErrors({ ...formErrors, quantity: '' });
+                      }
+                    }}
+                    min="1"
+                    max={inventory.find(item => {
+                      const productId = typeof item.product === 'string' ? item.product : item.product._id;
+                      const locationId = typeof item.location === 'string' ? item.location : item.location._id;
+                      return productId === transferFormData.product && locationId === transferFormData.fromLocation;
+                    })?.availableQuantity || 0}
+                    className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors ${formErrors.quantity ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                      }`}
+                    placeholder="Enter quantity to transfer"
+                  />
+                  {formErrors.quantity && (
+                    <p className="mt-1 text-sm text-red-600">{formErrors.quantity}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Notes</label>
+                  <textarea
+                    value={transferFormData.notes}
+                    onChange={(e) => setTransferFormData({ ...transferFormData, notes: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-colors resize-none"
+                    rows={3}
+                    placeholder="Add notes about this transfer (optional)"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center rounded-lg justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowTransferModal(false)}
+                disabled={submitting}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-100 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitTransfer}
+                disabled={submitting}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? (
+                  <span className="flex items-center">
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Transferring...
+                  </span>
+                ) : (
+                  'Transfer Stock'
+                )}
               </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 };
