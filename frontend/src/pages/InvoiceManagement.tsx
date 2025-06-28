@@ -1515,92 +1515,101 @@ const InvoiceManagement: React.FC = () => {
 
       {/* View Invoice Modal */}
       {showViewModal && selectedInvoice && (
-        <Modal
-          title={`Invoice ${selectedInvoice.invoiceNumber}`}
-          isOpen={showViewModal}
-          onClose={() => setShowViewModal(false)}
-          size="xl"
-        >
-          <div className="space-y-6">
-            {/* Invoice Header */}
-            <div className="border-b border-gray-200 pb-4">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">
-                    Invoice #{selectedInvoice.invoiceNumber}
-                  </h3>
-                  <p className="text-sm text-gray-600 mt-1">
-                    Issue Date: {new Date(selectedInvoice.issueDate).toLocaleDateString()}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    Due Date: {new Date(selectedInvoice.dueDate).toLocaleDateString()}
-                  </p>
-                </div>
-                <div className="text-right">
-                  <div className="flex space-x-2 mb-2">
-                    <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedInvoice.status)}`}>
-                      {selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}
-                    </span>
-                    <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getPaymentStatusColor(selectedInvoice.paymentStatus)}`}>
-                      {selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}
-                    </span>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Invoice {selectedInvoice.invoiceNumber}</h2>
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Invoice Header */}
+              <div className="border-b border-gray-200 pb-4">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">
+                      Invoice #{selectedInvoice.invoiceNumber}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Issue Date: {new Date(selectedInvoice.issueDate).toLocaleDateString()}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Due Date: {new Date(selectedInvoice.dueDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div className="flex space-x-2 mb-2">
+                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedInvoice.status)}`}>
+                        {selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}
+                      </span>
+                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getPaymentStatusColor(selectedInvoice.paymentStatus)}`}>
+                        {selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {/* Customer Info */}
-            <div>
-              <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
-              <div className="text-sm text-gray-600">
-                <p className="font-medium">{selectedInvoice.customer.name}</p>
-                <p>{selectedInvoice.customer.email}</p>
-                <p>{selectedInvoice.customer.phone}</p>
+              {/* Customer Info */}
+              <div>
+                <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
+                <div className="text-sm text-gray-600">
+                  <p className="font-medium">{selectedInvoice.customer.name}</p>
+                  <p>{selectedInvoice.customer.email}</p>
+                  <p>{selectedInvoice.customer.phone}</p>
+                </div>
               </div>
-            </div>
 
-            {/* Invoice Items */}
-            <div>
-              <h4 className="font-medium text-gray-900 mb-3">Items:</h4>
-              <div className="overflow-x-auto">
-                <table className="w-full border border-gray-200 rounded-lg">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {selectedInvoice.items.map((item, index) => (
-                      <tr key={index}>
-                        <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">₹{item.unitPrice.toLocaleString()}</td>
-                        <td className="px-4 py-2 text-sm text-gray-900">{item.taxRate}%</td>
-                        <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{item.totalPrice.toLocaleString()}</td>
+              {/* Invoice Items */}
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3">Items:</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full border border-gray-200 rounded-lg">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {selectedInvoice.items.map((item, index) => (
+                        <tr key={index}>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">₹{item.unitPrice.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.taxRate}%</td>
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{item.totalPrice.toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-            </div>
 
-            {/* Invoice Total */}
-            <div className="border-t border-gray-200 pt-4">
-              <div className="flex justify-end">
-                <div className="w-64 space-y-2 text-right">
-                  <div className="flex justify-between text-lg font-bold">
-                    <span>Total Amount:</span>
-                    <span>₹{selectedInvoice.totalAmount.toLocaleString()}</span>
+              {/* Invoice Total */}
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex justify-end">
+                  <div className="w-64 space-y-2 text-right">
+                    <div className="flex justify-between text-lg font-bold">
+                      <span>Total Amount:</span>
+                      <span>₹{selectedInvoice.totalAmount.toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
+
+
           </div>
-        </Modal>
+        </div>
       )}
 
       {/* Status Update Modal */}
