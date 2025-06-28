@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { PurchaseOrder } from '../models/PurchaseOrder';
 import { Stock } from '../models/Stock';
+import { StockLedger } from '../models/StockLedger';
 import { AuthenticatedRequest, APIResponse, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
 
@@ -47,7 +48,7 @@ export const getPurchaseOrders = async (
     
     if (search) {
       query.$or = [
-        { orderNumber: { $regex: search, $options: 'i' } },
+        { poNumber: { $regex: search, $options: 'i' } },
         { supplier: { $regex: search, $options: 'i' } },
         { notes: { $regex: search, $options: 'i' } }
       ];
@@ -134,37 +135,39 @@ export const createPurchaseOrder = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Generate order number
-    const orderCount = await PurchaseOrder.countDocuments();
-    const orderNumber = `PO-${new Date().getFullYear()}-${String(orderCount + 1).padStart(4, '0')}`;
-
-    // Calculate total amount
+    // Calculate total amount from items
     let totalAmount = 0;
-    for (const item of req.body.items) {
-      totalAmount += item.quantity * item.unitPrice;
+    if (req.body.items && Array.isArray(req.body.items)) {
+      for (const item of req.body.items) {
+        totalAmount += (item.quantity || 0) * (item.unitPrice || 0);
+      }
     }
 
+    // Prepare order data - let the model handle poNumber generation via pre-save hook
     const orderData = {
       ...req.body,
-      orderNumber,
       totalAmount,
-      createdBy: req.user!.id
+      createdBy: req.user!.id,
+      orderDate: new Date()
     };
+
+    console.log('Creating purchase order with data:', orderData);
 
     const order = await PurchaseOrder.create(orderData);
 
     const populatedOrder = await PurchaseOrder.findById(order._id)
-      .populate('items.product', 'name category brand')
+      .populate('items.product', 'name category brand modelNumber price')
       .populate('createdBy', 'firstName lastName email');
 
     const response: APIResponse = {
       success: true,
       message: 'Purchase order created successfully',
-      data: { order: populatedOrder }
+      data: populatedOrder
     };
 
     res.status(201).json(response);
   } catch (error) {
+    console.error('Error creating purchase order:', error);
     next(error);
   }
 };
@@ -254,9 +257,11 @@ export const receiveItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { receivedItems, location } = req.body;
+    const { receivedItems, location, receiptDate, inspectedBy, notes } = req.body;
 
-    const order = await PurchaseOrder.findById(req.params.id);
+    const order = await PurchaseOrder.findById(req.params.id)
+      .populate('items.product', 'name category brand');
+    
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
     }
@@ -265,50 +270,107 @@ export const receiveItems = async (
       return next(new AppError('Purchase order must be confirmed before receiving items', 400));
     }
 
-    // Update stock for received items
+    console.log(`Receiving items for PO ${order.poNumber}:`, receivedItems);
+
+    // Process each received item
     for (const receivedItem of receivedItems) {
-      const { productId, quantityReceived } = receivedItem;
+      const { 
+        productId, 
+        product, 
+        quantityReceived, 
+        receivedQuantity, 
+        condition = 'good', 
+        batchNumber, 
+        notes: itemNotes 
+      } = receivedItem;
       
+      // Handle both field name formats for compatibility
+      const actualProductId = productId || product;
+      const actualQuantityReceived = quantityReceived || receivedQuantity;
+      
+      if (!actualProductId) {
+        console.warn('Skipping item: missing product ID');
+        continue;
+      }
+      
+      if (actualQuantityReceived <= 0) {
+        console.warn(`Skipping item ${actualProductId}: invalid quantity ${actualQuantityReceived}`);
+        continue; // Skip items with zero or negative quantity
+      }
+
       // Find or create stock record
       let stock = await Stock.findOne({ 
-        product: productId, 
+        product: actualProductId, 
         location: location
       });
 
+      const previousQuantity = stock ? stock.quantity : 0;
+
       if (stock) {
-        stock.quantity += quantityReceived;
+        stock.quantity += actualQuantityReceived;
         stock.availableQuantity = stock.quantity - stock.reservedQuantity;
         stock.lastUpdated = new Date();
         await stock.save();
       } else {
         // Create new stock record if doesn't exist
-        await Stock.create({
-          product: productId,
+        stock = await Stock.create({
+          product: actualProductId,
           location: location,
-          quantity: quantityReceived,
-          availableQuantity: quantityReceived,
+          quantity: actualQuantityReceived,
+          availableQuantity: actualQuantityReceived,
           reservedQuantity: 0,
           lastUpdated: new Date()
         });
       }
+
+      console.log(`Updated stock for product ${actualProductId}: ${previousQuantity} -> ${stock.quantity}`);
+
+      // Create StockLedger entry for traceability
+      await StockLedger.create({
+        stock: stock._id,
+        product: actualProductId,
+        location: location,
+        transactionType: 'inward',
+        quantity: actualQuantityReceived,
+        resultingQuantity: stock.quantity,
+        reason: `Purchase Order Receipt - ${order.poNumber}`,
+        referenceType: 'purchase_order',
+        referenceId: order._id,
+        performedBy: req.user!.id,
+        transactionDate: receiptDate ? new Date(receiptDate) : new Date(),
+        notes: itemNotes || notes || `Received from supplier: ${order.supplier}`,
+        metadata: {
+          condition,
+          batchNumber,
+          poNumber: order.poNumber,
+          supplier: order.supplier,
+          inspectedBy: inspectedBy || req.user!.id
+        }
+      });
+
+      console.log(`Created stock ledger entry for ${actualQuantityReceived} units of product ${actualProductId}`);
     }
 
-    // Mark as received
+    // Mark purchase order as received
     order.status = 'received';
-    order.actualDeliveryDate = new Date();
+    order.actualDeliveryDate = receiptDate ? new Date(receiptDate) : new Date();
     await order.save();
+
+    console.log(`Purchase order ${order.poNumber} marked as received`);
 
     const response: APIResponse = {
       success: true,
-      message: 'Items received successfully',
+      message: 'Items received successfully and stock updated',
       data: { 
         order,
-        receivedItems
+        receivedItems,
+        message: 'Stock levels and ledger have been updated'
       }
     };
 
     res.status(200).json(response);
   } catch (error) {
+    console.error('Error receiving purchase order items:', error);
     next(error);
   }
 };
@@ -421,6 +483,50 @@ export const getPurchaseOrderStats = async (
         monthlyOrders,
         topSuppliers
       }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update purchase order status
+// @route   PUT /api/v1/purchase-orders/:id/status
+// @access  Private
+export const updatePurchaseOrderStatus = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { status } = req.body;
+    
+    const order = await PurchaseOrder.findById(req.params.id);
+    if (!order) {
+      return next(new AppError('Purchase order not found', 404));
+    }
+
+    // Validate status transitions
+    const validTransitions: Record<string, string[]> = {
+      'draft': ['sent', 'cancelled'],
+      'sent': ['confirmed', 'cancelled'],
+      'confirmed': ['received', 'cancelled'],
+      'received': [], // Cannot change from received
+      'cancelled': [] // Cannot change from cancelled
+    };
+
+    if (!validTransitions[order.status].includes(status)) {
+      return next(new AppError(`Cannot change status from ${order.status} to ${status}`, 400));
+    }
+
+    order.status = status;
+    await order.save();
+
+    const response: APIResponse = {
+      success: true,
+      message: `Purchase order status updated to ${status}`,
+      data: order
     };
 
     res.status(200).json(response);

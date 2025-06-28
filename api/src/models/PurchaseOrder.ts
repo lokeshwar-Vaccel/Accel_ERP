@@ -49,7 +49,6 @@ const poItemSchema = new Schema({
 const purchaseOrderSchema = new Schema({
   poNumber: {
     type: String,
-    required: [true, 'PO number is required'],
     unique: true,
     uppercase: true,
     trim: true
@@ -141,22 +140,33 @@ purchaseOrderSchema.virtual('daysUntilDelivery').get(function(this: IPurchaseOrd
 // Generate unique PO number
 purchaseOrderSchema.pre('save', async function(this: IPurchaseOrderSchema, next) {
   if (this.isNew && !this.poNumber) {
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    
-    // Find the last PO number for this month
-    const PurchaseOrderModel = this.constructor as mongoose.Model<IPurchaseOrderSchema>;
-    const lastPO = await PurchaseOrderModel.findOne({
-      poNumber: { $regex: `^PO-${year}${month}` }
-    }).sort({ poNumber: -1 });
-    
-    let sequence = 1;
-    if (lastPO) {
-      const lastSequence = parseInt(lastPO.poNumber.split('-')[2]);
-      sequence = lastSequence + 1;
+    try {
+      const year = new Date().getFullYear();
+      const month = String(new Date().getMonth() + 1).padStart(2, '0');
+      
+      // Find the last PO number for this month
+      const PurchaseOrderModel = this.constructor as mongoose.Model<IPurchaseOrderSchema>;
+      const lastPO = await PurchaseOrderModel.findOne({
+        poNumber: { $regex: `^PO-${year}${month}` }
+      }).sort({ poNumber: -1 });
+      
+      let sequence = 1;
+      if (lastPO && lastPO.poNumber) {
+        const poNumberParts = lastPO.poNumber.split('-');
+        if (poNumberParts.length >= 3) {
+          const lastSequence = parseInt(poNumberParts[2]);
+          if (!isNaN(lastSequence)) {
+            sequence = lastSequence + 1;
+          }
+        }
+      }
+      
+      this.poNumber = `PO-${year}${month}-${String(sequence).padStart(4, '0')}`;
+      console.log('Generated PO number:', this.poNumber);
+    } catch (error) {
+      console.error('Error generating PO number:', error);
+      return next(error as Error);
     }
-    
-    this.poNumber = `PO-${year}${month}-${String(sequence).padStart(4, '0')}`;
   }
   next();
 });

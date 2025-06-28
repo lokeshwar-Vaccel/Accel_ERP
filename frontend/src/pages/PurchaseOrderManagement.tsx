@@ -137,6 +137,7 @@ const PurchaseOrderManagement: React.FC = () => {
   // Core state
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [locations, setLocations] = useState<StockLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -189,7 +190,8 @@ const PurchaseOrderManagement: React.FC = () => {
     try {
       await Promise.all([
         fetchPurchaseOrders(),
-        fetchProducts()
+        fetchProducts(),
+        fetchLocations()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -432,6 +434,70 @@ const PurchaseOrderManagement: React.FC = () => {
     }
   };
 
+  const fetchLocations = async () => {
+    try {
+      console.log('Fetching locations from API...');
+      const response = await apiClient.stock.getLocations();
+      console.log('Locations API Response:', response);
+      
+      let locationsData: StockLocation[] = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          locationsData = response.data;
+        } else if ((response.data as any).locations && Array.isArray((response.data as any).locations)) {
+          locationsData = (response.data as any).locations;
+        }
+        console.log('Found locations:', locationsData.length);
+      }
+      
+      setLocations(locationsData);
+      
+      // If no locations found, create some mock data
+      if (locationsData.length === 0) {
+        console.log('No locations found, using fallback data');
+        const mockLocations: StockLocation[] = [
+          {
+            _id: 'loc-main-warehouse',
+            name: 'Main Warehouse',
+            type: 'warehouse'
+          },
+          {
+            _id: 'loc-secondary-warehouse',
+            name: 'Secondary Warehouse', 
+            type: 'warehouse'
+          },
+          {
+            _id: 'loc-field-office',
+            name: 'Field Office',
+            type: 'office'
+          }
+        ];
+        setLocations(mockLocations);
+      }
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+      // Set default locations on error
+      const defaultLocations: StockLocation[] = [
+        {
+          _id: 'loc-main-warehouse',
+          name: 'Main Warehouse',
+          type: 'warehouse'
+        },
+        {
+          _id: 'loc-secondary-warehouse',
+          name: 'Secondary Warehouse',
+          type: 'warehouse'
+        },
+        {
+          _id: 'loc-field-office',
+          name: 'Field Office',
+          type: 'office'
+        }
+      ];
+      setLocations(defaultLocations);
+    }
+  };
+
   // Helper functions
   const getCreatedByName = (createdBy: string | { firstName: string; lastName: string; email: string }) => {
     if (typeof createdBy === 'string') return createdBy;
@@ -492,6 +558,10 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const openReceiveModal = (po: PurchaseOrder) => {
     setSelectedPO(po);
+    
+    // Use the first available location or a default if none exist
+    const defaultLocation = locations.length > 0 ? locations[0]._id : 'loc-main-warehouse';
+    
     setReceiveData({
       receivedItems: po.items.map(item => ({
         productId: typeof item.product === 'string' ? item.product : item.product._id,
@@ -500,9 +570,9 @@ const PurchaseOrderManagement: React.FC = () => {
         batchNumber: '',
         notes: ''
       })),
-      location: 'main-warehouse',
-      receiptDate: '',
-      inspectedBy: ''
+      location: defaultLocation,
+      receiptDate: new Date().toISOString().split('T')[0], // Set today's date
+      inspectedBy: 'Admin' // Default inspector
     });
     setShowReceiveModal(true);
   };
@@ -621,14 +691,25 @@ const PurchaseOrderManagement: React.FC = () => {
 
     setSubmitting(true);
     try {
+      console.log('Sending receive data:', receiveData);
       await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
       setPurchaseOrders(purchaseOrders.map(po =>
         po._id === selectedPO._id ? { ...po, status: 'received', actualDeliveryDate: new Date().toISOString() } : po
       ));
       setShowReceiveModal(false);
       setSelectedPO(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error receiving items:', error);
+      
+      let errorMessage = 'Failed to receive items';
+      if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // Display error to user
+      alert(`Error: ${errorMessage}`);
     } finally {
       setSubmitting(false);
     }
@@ -1747,20 +1828,67 @@ const PurchaseOrderManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Delivery Location */}
+              {/* Receipt Information */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Delivery Location *
+                  </label>
+                  <select
+                    value={receiveData.location}
+                    onChange={(e) => setReceiveData({ ...receiveData, location: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {locations.length === 0 ? (
+                      <option value="">Loading locations...</option>
+                    ) : (
+                      locations.map(location => (
+                        <option key={location._id} value={location._id}>
+                          {location.name} ({location.type})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Receipt Date *
+                  </label>
+                  <input
+                    type="date"
+                    value={receiveData.receiptDate}
+                    onChange={(e) => setReceiveData({ ...receiveData, receiptDate: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Inspected By
+                  </label>
+                  <input
+                    type="text"
+                    value={receiveData.inspectedBy}
+                    onChange={(e) => setReceiveData({ ...receiveData, inspectedBy: e.target.value })}
+                    placeholder="Inspector name"
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Receipt Notes */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Delivery Location *
+                  Receipt Notes
                 </label>
-                <select
-                  value={receiveData.location}
-                  onChange={(e) => setReceiveData({ ...receiveData, location: e.target.value })}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="main-warehouse">Main Warehouse</option>
-                  <option value="secondary-warehouse">Secondary Warehouse</option>
-                  <option value="field-office">Field Office</option>
-                </select>
+                <textarea
+                  value={receiveData.notes || ''}
+                  onChange={(e) => setReceiveData({ ...receiveData, notes: e.target.value })}
+                  rows={2}
+                  placeholder="Any additional notes about the delivery..."
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                />
               </div>
 
               {/* Items to Receive */}
@@ -1770,40 +1898,97 @@ const PurchaseOrderManagement: React.FC = () => {
                   {selectedPO.items.map((item, index) => {
                     const receivedItem = receiveData.receivedItems[index];
                     return (
-                      <div key={index} className="grid grid-cols-12 gap-4 items-center p-4 bg-gray-50 rounded-lg">
-                        <div className="col-span-6">
-                          <div className="text-xs font-medium text-gray-900">
-                            {getProductName(item.product)}
+                      <div key={index} className="p-4 bg-gray-50 rounded-lg">
+                        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center mb-3">
+                          <div className="md:col-span-2">
+                            <div className="text-xs font-medium text-gray-900">
+                              {getProductName(item.product)}
+                            </div>
+                            {typeof item.product === 'object' && item.product.category && (
+                              <div className="text-xs text-gray-500">Category: {item.product.category}</div>
+                            )}
                           </div>
-                          {typeof item.product === 'object' && item.product.category && (
-                            <div className="text-xs text-gray-500">Category: {item.product.category}</div>
-                          )}
+                          <div className="text-center">
+                            <div className="text-xs text-gray-600">Ordered</div>
+                            <div className="text-sm font-medium">{item.quantity}</div>
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Received</label>
+                            <input
+                              type="number"
+                              value={receivedItem?.quantityReceived || 0}
+                              onChange={(e) => {
+                                const newReceivedItems = [...receiveData.receivedItems];
+                                newReceivedItems[index] = {
+                                  ...newReceivedItems[index],
+                                  quantityReceived: parseInt(e.target.value) || 0
+                                };
+                                setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
+                              }}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                              min="0"
+                              max={item.quantity}
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Condition</label>
+                            <select
+                              value={receivedItem?.condition || 'good'}
+                              onChange={(e) => {
+                                const newReceivedItems = [...receiveData.receivedItems];
+                                newReceivedItems[index] = {
+                                  ...newReceivedItems[index],
+                                  condition: e.target.value as 'good' | 'damaged' | 'defective'
+                                };
+                                setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
+                              }}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs"
+                            >
+                              <option value="good">Good</option>
+                              <option value="damaged">Damaged</option>
+                              <option value="defective">Defective</option>
+                            </select>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs text-gray-600">Unit Price</div>
+                            <div className="text-sm font-medium">{formatCurrency(item.unitPrice)}</div>
+                          </div>
                         </div>
-                        <div className="col-span-2 text-center">
-                          <div className="text-xs text-gray-600">Ordered</div>
-                          <div className="text-sm font-medium">{item.quantity}</div>
-                        </div>
-                        <div className="col-span-2">
-                          <label className="block text-xs text-gray-600 mb-1">Received</label>
-                          <input
-                            type="number"
-                            value={receivedItem?.quantityReceived || 0}
-                            onChange={(e) => {
-                              const newReceivedItems = [...receiveData.receivedItems];
-                              newReceivedItems[index] = {
-                                ...newReceivedItems[index],
-                                quantityReceived: parseInt(e.target.value) || 0
-                              };
-                              setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
-                            }}
-                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                            min="0"
-                            max={item.quantity}
-                          />
-                        </div>
-                        <div className="col-span-2 text-center">
-                          <div className="text-xs text-gray-600">Unit Price</div>
-                          <div className="text-sm font-medium">{formatCurrency(item.unitPrice)}</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Batch Number</label>
+                            <input
+                              type="text"
+                              value={receivedItem?.batchNumber || ''}
+                              onChange={(e) => {
+                                const newReceivedItems = [...receiveData.receivedItems];
+                                newReceivedItems[index] = {
+                                  ...newReceivedItems[index],
+                                  batchNumber: e.target.value
+                                };
+                                setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
+                              }}
+                              placeholder="Optional batch/lot number"
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Item Notes</label>
+                            <input
+                              type="text"
+                              value={receivedItem?.notes || ''}
+                              onChange={(e) => {
+                                const newReceivedItems = [...receiveData.receivedItems];
+                                newReceivedItems[index] = {
+                                  ...newReceivedItems[index],
+                                  notes: e.target.value
+                                };
+                                setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
+                              }}
+                              placeholder="Notes about this item"
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs"
+                            />
+                          </div>
                         </div>
                       </div>
                     );
@@ -1814,20 +1999,39 @@ const PurchaseOrderManagement: React.FC = () => {
               {/* Summary */}
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="text-xs font-medium text-gray-900 mb-2">Receipt Summary</h4>
-                <div className="grid grid-cols-3 gap-4 text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                   <div>
-                    <span className="text-gray-600">Total Items Ordered:</span>
-                    <span className="ml-2 font-medium">{selectedPO.items.reduce((sum, item) => sum + item.quantity, 0)}</span>
+                    <span className="text-gray-600">Items Ordered:</span>
+                    <div className="font-medium">{selectedPO.items.reduce((sum, item) => sum + item.quantity, 0)}</div>
                   </div>
                   <div>
-                    <span className="text-gray-600">Total Items Received:</span>
-                    <span className="ml-2 font-medium">{receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)}</span>
+                    <span className="text-gray-600">Items Received:</span>
+                    <div className="font-medium">{receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)}</div>
                   </div>
                   <div>
-                    <span className="text-gray-600">Delivery Location:</span>
-                    <span className="ml-2 font-medium">{receiveData.location.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}</span>
+                    <span className="text-gray-600">Receipt Date:</span>
+                    <div className="font-medium">{receiveData.receiptDate ? new Date(receiveData.receiptDate).toLocaleDateString() : 'Not set'}</div>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Inspector:</span>
+                    <div className="font-medium">{receiveData.inspectedBy || 'Not assigned'}</div>
                   </div>
                 </div>
+                <div className="mt-2">
+                  <span className="text-gray-600">Location:</span>
+                  <span className="ml-2 font-medium">
+                    {(() => {
+                      const location = locations.find(loc => loc._id === receiveData.location);
+                      return location ? `${location.name} (${location.type})` : receiveData.location;
+                    })()}
+                  </span>
+                </div>
+                {receiveData.notes && (
+                  <div className="mt-2">
+                    <span className="text-gray-600">Notes:</span>
+                    <div className="font-medium italic">{receiveData.notes}</div>
+                  </div>
+                )}
               </div>
 
               <div className="flex space-x-3 pt-4">
@@ -1851,6 +2055,6 @@ const PurchaseOrderManagement: React.FC = () => {
       )}
     </div>
   );
-};
-
+  };
+  
 export default PurchaseOrderManagement; 

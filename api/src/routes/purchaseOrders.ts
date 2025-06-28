@@ -15,6 +15,7 @@ import {
   getPurchaseOrder,
   createPurchaseOrder,
   updatePurchaseOrder,
+  updatePurchaseOrderStatus,
   sendPurchaseOrder,
   receiveItems,
   cancelPurchaseOrder,
@@ -57,6 +58,8 @@ router.route('/:id')
   .delete(restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), deletePurchaseOrder);
 
 // Purchase order actions
+router.put('/:id/status', checkPermission('write'), updatePurchaseOrderStatus);
+
 router.post('/:id/send', 
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER), 
   checkPermission('write'), 

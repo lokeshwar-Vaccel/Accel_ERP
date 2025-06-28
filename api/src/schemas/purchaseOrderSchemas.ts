@@ -87,14 +87,21 @@ export interface ApprovePOInput {
 }
 
 export interface ReceivePOInput {
-  receivedDate?: string;
+  location: string;
+  receiptDate: string;
+  inspectedBy: string;
+  notes: string;
+  receivedDate: string;
   receivedItems: {
     product: string;
+    productId: string;
     orderedQuantity: number;
     receivedQuantity: number;
+    quantityReceived: number;
     rejectedQuantity?: number;
     unitPrice?: number;
     condition?: 'good' | 'damaged' | 'defective';
+    batchNumber?: string;
     batchNumbers?: string[];
     serialNumbers?: string[];
     expiryDate?: string;
@@ -316,22 +323,32 @@ export const approvePOSchema = Joi.object<ApprovePOInput>({
 
 // Purchase order delivery schema (for receiving goods)
 export const receivePOSchema = Joi.object<ReceivePOInput>({
+  location: Joi.string().required(), // Location where items are received
+  receiptDate: Joi.alternatives().try(
+    Joi.date().iso(),
+    Joi.string().allow('').default(new Date().toISOString())
+  ).default(new Date().toISOString()),
+  inspectedBy: Joi.string().allow('').default('System'),
+  notes: Joi.string().max(1000).allow(''),
   receivedDate: Joi.date().iso().default(() => new Date()),
   receivedItems: Joi.array().items(
     Joi.object({
-      product: Joi.string().hex().length(24).required(),
-      orderedQuantity: Joi.number().min(1).required(),
-      receivedQuantity: Joi.number().min(0).required(),
+      product: Joi.string().hex().length(24), // Original field name
+      productId: Joi.string().hex().length(24), // Frontend field name
+      orderedQuantity: Joi.number().min(1),
+      receivedQuantity: Joi.number().min(0), // Original field name
+      quantityReceived: Joi.number().min(0), // Frontend field name
       rejectedQuantity: Joi.number().min(0).default(0),
       unitPrice: Joi.number().min(0).precision(2),
       condition: Joi.string().valid('good', 'damaged', 'defective').default('good'),
+      batchNumber: Joi.string().max(50).allow(''),
       batchNumbers: Joi.array().items(Joi.string().max(50)),
       serialNumbers: Joi.array().items(Joi.string().max(100)),
       expiryDate: Joi.date().iso(),
-      notes: Joi.string().max(500)
-    })
+      notes: Joi.string().max(500).allow('')
+    }).or('product', 'productId').or('receivedQuantity', 'quantityReceived')
   ).min(1).required(),
-  deliveryNote: Joi.string().max(100), // Delivery note number
+  deliveryNote: Joi.string().max(100).allow(''), // Delivery note number
   invoice: Joi.object({
     invoiceNumber: Joi.string().max(100),
     invoiceDate: Joi.date().iso(),
