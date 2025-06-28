@@ -24,14 +24,16 @@ import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 
 // Types matching backend structure
-type AMCStatus = 'active' | 'expired' | 'cancelled' | 'pending';
-type VisitStatus = 'pending' | 'completed' | 'cancelled';
+type AMCStatus = 'active' | 'expired' | 'cancelled' | 'pending' | 'suspended';
+type VisitStatus = 'pending' | 'completed' | 'cancelled' | 'rescheduled';
+type NotificationStatus = 'active' | 'sent' | 'dismissed';
 
 interface User {
   _id: string;
   firstName: string;
   lastName: string;
   email: string;
+  role: string;
   fullName?: string;
 }
 
@@ -41,7 +43,13 @@ interface Customer {
   email?: string;
   phone: string;
   address: string;
+  contactPerson?: string;
   customerType: string;
+  location?: {
+    latitude?: number;
+    longitude?: number;
+    address: string;
+  };
 }
 
 interface Product {
@@ -50,7 +58,30 @@ interface Product {
   category: string;
   brand?: string;
   modelNumber?: string;
+  serialNumber?: string;
+  warrantyInfo?: {
+    startDate: string;
+    endDate: string;
+    type: string;
+  };
   specifications?: Record<string, any>;
+}
+
+interface ServiceTicket {
+  _id: string;
+  ticketNumber: string;
+  customer: string | Customer;
+  product: string | Product;
+  status: string;
+  priority: string;
+}
+
+interface PurchaseOrder {
+  _id: string;
+  poNumber: string;
+  supplier: string;
+  totalAmount: number;
+  status: string;
 }
 
 interface VisitSchedule {
@@ -59,7 +90,34 @@ interface VisitSchedule {
   completedDate?: string;
   assignedTo?: string | User;
   status: VisitStatus;
+  visitType: 'routine' | 'emergency' | 'followup' | 'inspection';
+  duration?: number; // in hours
   notes?: string;
+  checklistItems?: Array<{
+    item: string;
+    completed: boolean;
+    notes?: string;
+  }>;
+  partsUsed?: Array<{
+    product: string;
+    quantity: number;
+    cost: number;
+  }>;
+  serviceTicket?: string;
+  travelTime?: number;
+  customerFeedback?: {
+    rating: number;
+    comments?: string;
+  };
+}
+
+interface AMCNotification {
+  _id?: string;
+  type: 'visit_due' | 'contract_expiring' | 'visit_overdue' | 'renewal_due';
+  message: string;
+  dueDate: string;
+  status: NotificationStatus;
+  createdAt: string;
 }
 
 interface AMC {
@@ -76,6 +134,24 @@ interface AMC {
   nextVisitDate?: string;
   visitSchedule: VisitSchedule[];
   terms?: string;
+  attachments?: string[];
+  billingCycle: 'monthly' | 'quarterly' | 'half-yearly' | 'yearly';
+  renewalTerms?: string;
+  discountPercentage?: number;
+  paymentStatus: 'paid' | 'pending' | 'overdue' | 'partial';
+  lastPaymentDate?: string;
+  emergencyContactHours?: string;
+  responseTime?: number; // in hours
+  coverageArea?: string;
+  exclusions?: string[];
+  performanceMetrics?: {
+    avgResponseTime: number;
+    customerSatisfaction: number;
+    issueResolutionRate: number;
+  };
+  linkedPurchaseOrders?: string[];
+  linkedServiceTickets?: string[];
+  notifications?: AMCNotification[];
   createdBy: string | User;
   createdAt: string;
   updatedAt: string;
@@ -84,6 +160,8 @@ interface AMC {
   contractDuration?: number;
   daysUntilExpiry?: number;
   completionPercentage?: number;
+  nextDueAmount?: number;
+  overdueVisits?: number;
 }
 
 interface AMCFormData {
@@ -93,7 +171,14 @@ interface AMCFormData {
   endDate: string;
   contractValue: number;
   scheduledVisits: number;
+  billingCycle: 'monthly' | 'quarterly' | 'half-yearly' | 'yearly';
+  discountPercentage: number;
+  responseTime: number;
+  emergencyContactHours: string;
+  coverageArea: string;
   terms: string;
+  renewalTerms: string;
+  exclusions: string[];
 }
 
 const AMCManagement: React.FC = () => {
@@ -101,6 +186,9 @@ const AMCManagement: React.FC = () => {
   const [amcs, setAmcs] = useState<AMC[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [serviceTickets, setServiceTickets] = useState<ServiceTicket[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
@@ -108,16 +196,23 @@ const AMCManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<AMCStatus | 'all'>('all');
   const [customerFilter, setCustomerFilter] = useState('all');
+  const [expiryFilter, setExpiryFilter] = useState('all'); // all, 30days, 60days, 90days
+  const [paymentFilter, setPaymentFilter] = useState('all');
   
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showExpiryModal, setShowExpiryModal] = useState(false);
+  const [showVisitModal, setShowVisitModal] = useState(false);
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
+  const [showServiceModal, setShowServiceModal] = useState(false);
+  const [showPOModal, setShowPOModal] = useState(false);
   
   // Selected data
   const [selectedAMC, setSelectedAMC] = useState<AMC | null>(null);
   const [editingAMC, setEditingAMC] = useState<AMC | null>(null);
+  const [selectedVisit, setSelectedVisit] = useState<VisitSchedule | null>(null);
   
   // Form data
   const [amcFormData, setAmcFormData] = useState<AMCFormData>({
@@ -125,6 +220,35 @@ const AMCManagement: React.FC = () => {
     products: [],
     startDate: '',
     endDate: '',
+    contractValue: 0,
+    scheduledVisits: 4,
+    billingCycle: 'monthly',
+    discountPercentage: 0,
+    responseTime: 24,
+    emergencyContactHours: '9 AM - 6 PM',
+    coverageArea: '',
+    terms: '',
+    renewalTerms: '',
+    exclusions: []
+  });
+
+  const [visitFormData, setVisitFormData] = useState({
+    scheduledDate: '',
+    assignedTo: '',
+    visitType: 'routine' as 'routine' | 'emergency' | 'followup' | 'inspection',
+    duration: 2,
+    notes: '',
+    checklistItems: [
+      { item: 'Visual inspection of equipment', completed: false, notes: '' },
+      { item: 'Check oil levels and quality', completed: false, notes: '' },
+      { item: 'Inspect air filters', completed: false, notes: '' },
+      { item: 'Test safety systems', completed: false, notes: '' },
+      { item: 'Check electrical connections', completed: false, notes: '' }
+    ]
+  });
+
+  const [renewalFormData, setRenewalFormData] = useState({
+    newEndDate: '',
     contractValue: 0,
     scheduledVisits: 4,
     terms: ''
@@ -136,6 +260,11 @@ const AMCManagement: React.FC = () => {
   // Dropdown state
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [showExpiryDropdown, setShowExpiryDropdown] = useState(false);
+  const [showPaymentDropdown, setShowPaymentDropdown] = useState(false);
+  const [showBillingCycleDropdown, setShowBillingCycleDropdown] = useState(false);
+  const [showVisitTypeDropdown, setShowVisitTypeDropdown] = useState(false);
+  const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
 
   useEffect(() => {
     fetchAllData();
@@ -147,7 +276,10 @@ const AMCManagement: React.FC = () => {
       await Promise.all([
         fetchAMCs(),
         fetchCustomers(),
-        fetchProducts()
+        fetchProducts(),
+        fetchUsers(),
+        fetchServiceTickets(),
+        fetchPurchaseOrders()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -234,6 +366,66 @@ const AMCManagement: React.FC = () => {
     }
   };
 
+  const fetchUsers = async () => {
+    try {
+      console.log('Fetching users from API...');
+      const response = await apiClient.users.getAll();
+      console.log('Users API Response:', response);
+      
+      let usersData: User[] = [];
+      if (response.success && response.data && Array.isArray(response.data)) {
+        usersData = response.data;
+        console.log('Found users:', usersData.length);
+      } else {
+        console.log('No user data or unexpected format:', response);
+      }
+      setUsers(usersData);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      setUsers([]);
+    }
+  };
+
+  const fetchServiceTickets = async () => {
+    try {
+      console.log('Fetching service tickets from API...');
+      const response = await apiClient.services.getAll();
+      console.log('Service Tickets API Response:', response);
+      
+      let serviceTicketsData: ServiceTicket[] = [];
+      if (response.success && response.data && Array.isArray(response.data)) {
+        serviceTicketsData = response.data;
+        console.log('Found service tickets:', serviceTicketsData.length);
+      } else {
+        console.log('No service ticket data or unexpected format:', response);
+      }
+      setServiceTickets(serviceTicketsData);
+    } catch (error) {
+      console.error('Error fetching service tickets:', error);
+      setServiceTickets([]);
+    }
+  };
+
+  const fetchPurchaseOrders = async () => {
+    try {
+      console.log('Fetching purchase orders from API...');
+      const response = await apiClient.purchaseOrders.getAll();
+      console.log('Purchase Orders API Response:', response);
+      
+      let purchaseOrdersData: PurchaseOrder[] = [];
+      if (response.success && response.data && Array.isArray(response.data)) {
+        purchaseOrdersData = response.data;
+        console.log('Found purchase orders:', purchaseOrdersData.length);
+      } else {
+        console.log('No purchase order data or unexpected format:', response);
+      }
+      setPurchaseOrders(purchaseOrdersData);
+    } catch (error) {
+      console.error('Error fetching purchase orders:', error);
+      setPurchaseOrders([]);
+    }
+  };
+
   // Helper functions
   const getUserName = (user: string | User | undefined): string => {
     if (!user) return '';
@@ -261,7 +453,14 @@ const AMCManagement: React.FC = () => {
       endDate: '',
       contractValue: 0,
       scheduledVisits: 4,
-      terms: ''
+      billingCycle: 'monthly',
+      discountPercentage: 0,
+      responseTime: 0,
+      emergencyContactHours: '',
+      coverageArea: '',
+      terms: '',
+      renewalTerms: '',
+      exclusions: []
     });
     setFormErrors({});
     setShowAddModal(true);
@@ -276,7 +475,14 @@ const AMCManagement: React.FC = () => {
       endDate: amc.endDate.split('T')[0],
       contractValue: amc.contractValue,
       scheduledVisits: amc.scheduledVisits,
-      terms: amc.terms || ''
+      billingCycle: amc.billingCycle,
+      discountPercentage: amc.discountPercentage || 0,
+      responseTime: amc.responseTime || 0,
+      emergencyContactHours: amc.emergencyContactHours || '',
+      coverageArea: amc.coverageArea || '',
+      terms: amc.terms || '',
+      renewalTerms: amc.renewalTerms || '',
+      exclusions: amc.exclusions || []
     });
     setFormErrors({});
     setShowEditModal(true);
@@ -380,12 +586,18 @@ const AMCManagement: React.FC = () => {
       endDate: '',
       contractValue: 0,
       scheduledVisits: 4,
-      terms: ''
+      billingCycle: 'monthly',
+      discountPercentage: 0,
+      responseTime: 0,
+      emergencyContactHours: '',
+      coverageArea: '',
+      terms: '',
+      renewalTerms: '',
+      exclusions: []
     });
   };
 
   const filteredAMCs = amcs.filter(amc => {
-    // Handle potential undefined customer gracefully
     const customerName = getCustomerName(amc.customer);
     const matchesSearch = amc.contractNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          customerName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -393,7 +605,36 @@ const AMCManagement: React.FC = () => {
     const matchesCustomer = customerFilter === 'all' || 
                            (amc.customer && typeof amc.customer === 'object' && amc.customer._id === customerFilter);
     
-    return matchesSearch && matchesStatus && matchesCustomer;
+    // Expiry filter
+    let matchesExpiry = true;
+    if (expiryFilter !== 'all') {
+      const today = new Date();
+      const endDate = new Date(amc.endDate);
+      const daysUntilExpiry = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      switch (expiryFilter) {
+        case '30days':
+          matchesExpiry = daysUntilExpiry <= 30 && daysUntilExpiry > 0;
+          break;
+        case '60days':
+          matchesExpiry = daysUntilExpiry <= 60 && daysUntilExpiry > 0;
+          break;
+        case '90days':
+          matchesExpiry = daysUntilExpiry <= 90 && daysUntilExpiry > 0;
+          break;
+        case 'expired':
+          matchesExpiry = daysUntilExpiry <= 0;
+          break;
+      }
+    }
+
+    // Payment filter
+    let matchesPayment = true;
+    if (paymentFilter !== 'all') {
+      matchesPayment = amc.paymentStatus === paymentFilter;
+    }
+    
+    return matchesSearch && matchesStatus && matchesCustomer && matchesExpiry && matchesPayment;
   });
 
   const getStatusColor = (status: AMCStatus) => {
@@ -406,6 +647,8 @@ const AMCManagement: React.FC = () => {
         return 'bg-gray-100 text-gray-800';
       case 'pending':
         return 'bg-yellow-100 text-yellow-800';
+      case 'suspended':
+        return 'bg-gray-100 text-gray-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -421,6 +664,8 @@ const AMCManagement: React.FC = () => {
         return <X className="w-4 h-4" />;
       case 'pending':
         return <Clock className="w-4 h-4" />;
+      case 'suspended':
+        return <AlertTriangle className="w-4 h-4" />;
       default:
         return <FileText className="w-4 h-4" />;
     }
@@ -468,10 +713,28 @@ const AMCManagement: React.FC = () => {
       color: 'orange'
     },
     {
+      title: 'Overdue Visits',
+      value: amcs.filter(amc => {
+        if (!amc.nextVisitDate) return false;
+        return new Date(amc.nextVisitDate) < new Date() && amc.status === 'active';
+      }).length.toString(),
+      icon: <Calendar className="w-6 h-6" />,
+      color: 'red'
+    },
+    {
       title: 'Total Value',
       value: formatCurrency(amcs.reduce((sum, amc) => sum + amc.contractValue, 0)),
       icon: <DollarSign className="w-6 h-6" />,
       color: 'purple'
+    },
+    {
+      title: 'This Month Revenue',
+      value: formatCurrency(amcs.filter(amc => {
+        if (amc.billingCycle === 'monthly') return amc.status === 'active';
+        return false;
+      }).reduce((sum, amc) => sum + (amc.contractValue / 12), 0)),
+      icon: <TrendingUp className="w-6 h-6" />,
+      color: 'indigo'
     }
   ];
 
@@ -481,7 +744,8 @@ const AMCManagement: React.FC = () => {
     { value: 'active', label: 'Active' },
     { value: 'expired', label: 'Expired' },
     { value: 'pending', label: 'Pending' },
-    { value: 'cancelled', label: 'Cancelled' }
+    { value: 'cancelled', label: 'Cancelled' },
+    { value: 'suspended', label: 'Suspended' }
   ];
 
   const getStatusLabel = (value: string) => {
@@ -502,6 +766,11 @@ const AMCManagement: React.FC = () => {
       if (!target.closest('.dropdown-container')) {
         setShowStatusDropdown(false);
         setShowCustomerDropdown(false);
+        setShowExpiryDropdown(false);
+        setShowPaymentDropdown(false);
+        setShowBillingCycleDropdown(false);
+        setShowVisitTypeDropdown(false);
+        setShowAssigneeDropdown(false);
       }
     };
 
@@ -510,6 +779,129 @@ const AMCManagement: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  // Enhanced helper functions
+  const generateVisitSchedule = (startDate: Date, endDate: Date, scheduledVisits: number): VisitSchedule[] => {
+    const schedule: VisitSchedule[] = [];
+    const contractDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const intervalDays = Math.floor(contractDays / scheduledVisits);
+
+    for (let i = 0; i < scheduledVisits; i++) {
+      const visitDate = new Date(startDate.getTime() + (i * intervalDays * 24 * 60 * 60 * 1000));
+      schedule.push({
+        scheduledDate: visitDate.toISOString(),
+        status: 'pending',
+        visitType: 'routine',
+        duration: 2,
+        checklistItems: [
+          { item: 'Visual inspection of equipment', completed: false, notes: '' },
+          { item: 'Check oil levels and quality', completed: false, notes: '' },
+          { item: 'Inspect air filters', completed: false, notes: '' },
+          { item: 'Test safety systems', completed: false, notes: '' },
+          { item: 'Check electrical connections', completed: false, notes: '' }
+        ]
+      });
+    }
+
+    return schedule;
+  };
+
+  const handleScheduleVisit = (amc: AMC) => {
+    setSelectedAMC(amc);
+    setVisitFormData({
+      scheduledDate: '',
+      assignedTo: '',
+      visitType: 'routine',
+      duration: 2,
+      notes: '',
+      checklistItems: [
+        { item: 'Visual inspection of equipment', completed: false, notes: '' },
+        { item: 'Check oil levels and quality', completed: false, notes: '' },
+        { item: 'Inspect air filters', completed: false, notes: '' },
+        { item: 'Test safety systems', completed: false, notes: '' },
+        { item: 'Check electrical connections', completed: false, notes: '' }
+      ]
+    });
+    setFormErrors({});
+    setShowVisitModal(true);
+  };
+
+  const handleCreateServiceTicket = (amc: AMC) => {
+    setSelectedAMC(amc);
+    setShowServiceModal(true);
+  };
+
+  const handleCreatePurchaseOrder = (amc: AMC) => {
+    setSelectedAMC(amc);
+    setShowPOModal(true);
+  };
+
+  const handleRenewContract = (amc: AMC) => {
+    setSelectedAMC(amc);
+    const currentEndDate = new Date(amc.endDate);
+    const newEndDate = new Date(currentEndDate);
+    newEndDate.setFullYear(newEndDate.getFullYear() + 1);
+    
+    setRenewalFormData({
+      newEndDate: newEndDate.toISOString().split('T')[0],
+      contractValue: amc.contractValue,
+      scheduledVisits: amc.scheduledVisits,
+      terms: amc.renewalTerms || amc.terms || ''
+    });
+    setFormErrors({});
+    setShowRenewalModal(true);
+  };
+
+  const handleCompleteVisit = async (amc: AMC, visitId: string) => {
+    try {
+      // For now, we'll implement this as a simple update
+      // In the future, a specific completeVisit API endpoint can be added
+      await apiClient.amc.update(amc._id, {
+        visitSchedule: amc.visitSchedule.map(visit => 
+          visit._id === visitId 
+            ? { ...visit, status: 'completed', completedDate: new Date().toISOString() }
+            : visit
+        )
+      });
+      await fetchAMCs(); // Refresh data
+    } catch (error) {
+      console.error('Error completing visit:', error);
+    }
+  };
+
+  const handleSubmitVisit = async () => {
+    if (!selectedAMC) return;
+
+    setSubmitting(true);
+    try {
+      await apiClient.amc.scheduleVisit(selectedAMC._id, visitFormData);
+      await fetchAMCs(); // Refresh data
+      setShowVisitModal(false);
+      setSelectedAMC(null);
+    } catch (error: any) {
+      console.error('Error scheduling visit:', error);
+      setFormErrors({ general: 'Failed to schedule visit' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSubmitRenewal = async () => {
+    if (!selectedAMC) return;
+
+    setSubmitting(true);
+    try {
+      await apiClient.amc.renew(selectedAMC._id, renewalFormData);
+      await fetchAMCs(); // Refresh data
+      setShowRenewalModal(false);
+      setSelectedAMC(null);
+    } catch (error: any) {
+      console.error('Error renewing contract:', error);
+      setFormErrors({ general: 'Failed to renew contract' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="p-4 space-y-3">
@@ -572,6 +964,11 @@ const AMCManagement: React.FC = () => {
               onClick={() => {
                 setShowStatusDropdown(!showStatusDropdown);
                 setShowCustomerDropdown(false);
+                setShowExpiryDropdown(false);
+                setShowPaymentDropdown(false);
+                setShowBillingCycleDropdown(false);
+                setShowVisitTypeDropdown(false);
+                setShowAssigneeDropdown(false);
               }}
               className="flex items-center justify-between w-full md:w-32 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
             >
@@ -604,6 +1001,11 @@ const AMCManagement: React.FC = () => {
               onClick={() => {
                 setShowCustomerDropdown(!showCustomerDropdown);
                 setShowStatusDropdown(false);
+                setShowExpiryDropdown(false);
+                setShowPaymentDropdown(false);
+                setShowBillingCycleDropdown(false);
+                setShowVisitTypeDropdown(false);
+                setShowAssigneeDropdown(false);
               }}
               className="flex items-center justify-between w-full md:w-40 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
             >

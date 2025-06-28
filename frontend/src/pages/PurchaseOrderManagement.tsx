@@ -24,7 +24,8 @@ import {
   ArrowRight,
   Check,
   Ban,
-  ChevronDown
+  ChevronDown,
+  Trash2
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -44,18 +45,40 @@ interface POItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  notes?: string;
+}
+
+interface Supplier {
+  _id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  contactPerson?: string;
+}
+
+interface StockLocation {
+  _id: string;
+  name: string;
+  type: string;
 }
 
 interface PurchaseOrder {
   _id: string;
   poNumber: string;
-  supplier: string;
+  supplier: string | Supplier;
   items: POItem[];
   totalAmount: number;
   status: PurchaseOrderStatus;
   orderDate: string;
   expectedDeliveryDate?: string;
   actualDeliveryDate?: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  sourceType?: 'manual' | 'amc' | 'service' | 'inventory';
+  sourceId?: string;
+  notes?: string;
+  attachments?: string[];
+  approvedBy?: string;
   createdBy: string | {
     _id: string;
     firstName: string;
@@ -76,6 +99,8 @@ interface Product {
   brand?: string;
   modelNumber?: string;
   price?: number;
+  minStockLevel?: number;
+  currentStock?: number;
   specifications?: Record<string, any>;
 }
 
@@ -83,17 +108,28 @@ interface ReceiveItemsData {
   receivedItems: Array<{
     productId: string;
     quantityReceived: number;
+    condition: 'good' | 'damaged' | 'defective';
+    batchNumber?: string;
+    notes?: string;
   }>;
   location: string;
+  receiptDate: string;
+  inspectedBy: string;
+  notes?: string;
 }
 
 interface POFormData {
   supplier: string;
   expectedDeliveryDate: string;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  sourceType: 'manual' | 'amc' | 'service' | 'inventory';
+  sourceId?: string;
+  notes?: string;
   items: Array<{
     product: string;
     quantity: number;
     unitPrice: number;
+    notes?: string;
   }>;
 }
 
@@ -123,12 +159,18 @@ const PurchaseOrderManagement: React.FC = () => {
   const [formData, setFormData] = useState<POFormData>({
     supplier: '',
     expectedDeliveryDate: '',
+    priority: 'low',
+    sourceType: 'manual',
+    sourceId: '',
+    notes: '',
     items: [{ product: '', quantity: 1, unitPrice: 0 }]
   });
 
   const [receiveData, setReceiveData] = useState<ReceiveItemsData>({
     receivedItems: [],
-    location: 'main-warehouse'
+    location: 'main-warehouse',
+    receiptDate: '',
+    inspectedBy: ''
   });
 
   // Form errors
@@ -207,6 +249,10 @@ const PurchaseOrderManagement: React.FC = () => {
             status: 'confirmed',
             orderDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
             expectedDeliveryDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+            priority: 'medium',
+            sourceType: 'amc',
+            sourceId: 'AMC-2024-0001',
+            notes: 'Parts required for scheduled AMC maintenance',
             createdBy: {
               _id: 'u1',
               firstName: 'Admin',
@@ -239,6 +285,10 @@ const PurchaseOrderManagement: React.FC = () => {
             status: 'sent',
             orderDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
             expectedDeliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            priority: 'high',
+            sourceType: 'service',
+            sourceId: 'SRV-2024-0123',
+            notes: 'Urgent replacement for customer service request',
             createdBy: {
               _id: 'u1',
               firstName: 'Admin',
@@ -272,6 +322,9 @@ const PurchaseOrderManagement: React.FC = () => {
             orderDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
             expectedDeliveryDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
             actualDeliveryDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
+            priority: 'low',
+            sourceType: 'inventory',
+            notes: 'Regular inventory replenishment',
             createdBy: {
               _id: 'u1',
               firstName: 'Admin',
@@ -294,12 +347,85 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const fetchProducts = async () => {
     try {
+      console.log('Fetching products from API...');
       const response = await apiClient.products.getAll();
+      console.log('Products API Response:', response);
+      
       let productsData: Product[] = [];
-      if (response.success && response.data && Array.isArray(response.data)) {
+      if (response.success && response.data) {
+        if (Array.isArray(response.data)) {
+          productsData = response.data;
+        } else if ((response.data as any).products && Array.isArray((response.data as any).products)) {
+          productsData = (response.data as any).products;
+        }
+        console.log('Found products:', productsData.length);
+      } else if (Array.isArray(response.data)) {
+        // Fallback for different response format
         productsData = response.data;
+        console.log('Found products (fallback format):', productsData.length);
+      } else {
+        console.log('No product data found in response');
       }
+      
       setProducts(productsData);
+      
+      // If still no products, show some mock data for development
+      if (productsData.length === 0) {
+        console.log('No products found, using mock data for development');
+        const mockProducts: Product[] = [
+          {
+            _id: 'mock-1',
+            name: '250 KVA Generator Set',
+            category: 'genset',
+            brand: 'Cummins',
+            modelNumber: 'C250D5',
+            price: 850000,
+            minStockLevel: 1,
+            currentStock: 3
+          },
+          {
+            _id: 'mock-2',
+            name: 'Oil Filter - Heavy Duty',
+            category: 'spare_part',
+            brand: 'Cummins',
+            modelNumber: 'LF9009',
+            price: 1500,
+            minStockLevel: 10,
+            currentStock: 25
+          },
+          {
+            _id: 'mock-3',
+            name: 'Air Filter Assembly',
+            category: 'spare_part',
+            brand: 'Caterpillar',
+            modelNumber: 'AF25550',
+            price: 2800,
+            minStockLevel: 5,
+            currentStock: 12
+          },
+          {
+            _id: 'mock-4',
+            name: 'Control Panel - Digital',
+            category: 'accessory',
+            brand: 'Comap',
+            modelNumber: 'InteliLite NT',
+            price: 45000,
+            minStockLevel: 2,
+            currentStock: 4
+          },
+          {
+            _id: 'mock-5',
+            name: 'Fuel Injection Pump',
+            category: 'spare_part',
+            brand: 'Perkins',
+            modelNumber: 'DELPHI-9520A',
+            price: 28000,
+            minStockLevel: 1,
+            currentStock: 2
+          }
+        ];
+        setProducts(mockProducts);
+      }
     } catch (error) {
       console.error('Error fetching products:', error);
       setProducts([]);
@@ -319,27 +445,42 @@ const PurchaseOrderManagement: React.FC = () => {
     return product.name;
   };
 
-  const handleCreatePO = () => {
+  const handleCreatePO = async () => {
     setFormData({
       supplier: '',
       expectedDeliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      priority: 'low',
+      sourceType: 'manual',
+      sourceId: '',
+      notes: '',
       items: [{ product: '', quantity: 1, unitPrice: 0 }]
     });
     setFormErrors({});
+    
+    // Ensure products are loaded when modal opens
+    if (products.length === 0) {
+      console.log('No products loaded, fetching products...');
+      await fetchProducts();
+    }
+    
     setShowCreateModal(true);
   };
 
   const handleEditPO = (po: PurchaseOrder) => {
     setEditingPO(po);
-    setFormData({
-      supplier: po.supplier,
-      expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : '',
-      items: po.items.map(item => ({
-        product: typeof item.product === 'string' ? item.product : item.product._id,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice
-      }))
-    });
+          setFormData({
+        supplier: typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)._id,
+        expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : '',
+        priority: po.priority || 'low',
+        sourceType: po.sourceType || 'manual',
+        sourceId: po.sourceId || '',
+        notes: po.notes || '',
+        items: po.items.map(item => ({
+          product: typeof item.product === 'string' ? item.product : item.product._id,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice
+        }))
+      });
     setFormErrors({});
     setShowEditModal(true);
   };
@@ -354,9 +495,14 @@ const PurchaseOrderManagement: React.FC = () => {
     setReceiveData({
       receivedItems: po.items.map(item => ({
         productId: typeof item.product === 'string' ? item.product : item.product._id,
-        quantityReceived: item.quantity
+        quantityReceived: item.quantity,
+        condition: 'good',
+        batchNumber: '',
+        notes: ''
       })),
-      location: 'main-warehouse'
+      location: 'main-warehouse',
+      receiptDate: '',
+      inspectedBy: ''
     });
     setShowReceiveModal(true);
   };
@@ -492,6 +638,10 @@ const PurchaseOrderManagement: React.FC = () => {
     setFormData({
       supplier: '',
       expectedDeliveryDate: '',
+      priority: 'low',
+      sourceType: 'manual',
+      sourceId: '',
+      notes: '',
       items: [{ product: '', quantity: 1, unitPrice: 0 }]
     });
   };
@@ -517,10 +667,11 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const filteredPOs = purchaseOrders.filter(po => {
+    const supplierName = typeof po.supplier === 'string' ? po.supplier : po.supplier.name;
     const matchesSearch = po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      po.supplier.toLowerCase().includes(searchTerm.toLowerCase());
+      supplierName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
-    const matchesSupplier = !supplierFilter || po.supplier.toLowerCase().includes(supplierFilter.toLowerCase());
+    const matchesSupplier = !supplierFilter || supplierName.toLowerCase().includes(supplierFilter.toLowerCase());
 
     return matchesSearch && matchesStatus && matchesSupplier;
   });
@@ -811,7 +962,7 @@ const PurchaseOrderManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-xs font-medium text-gray-900">{po.supplier}</div>
+                      <div className="text-xs font-medium text-gray-900">{typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier).name}</div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div>
@@ -910,7 +1061,8 @@ const PurchaseOrderManagement: React.FC = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              {/* Basic Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Supplier *
@@ -935,6 +1087,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     type="date"
                     value={formData.expectedDeliveryDate}
                     onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
+                    min={new Date().toISOString().split('T')[0]}
                     className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.expectedDeliveryDate ? 'border-red-500' : 'border-gray-300'
                       }`}
                   />
@@ -944,40 +1097,136 @@ const PurchaseOrderManagement: React.FC = () => {
                 </div>
               </div>
 
+              {/* Advanced Options */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Priority
+                  </label>
+                  <select
+                    value={formData.priority}
+                    onChange={(e) => setFormData({ ...formData, priority: e.target.value as 'low' | 'medium' | 'high' | 'urgent' })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="low">Low Priority</option>
+                    <option value="medium">Medium Priority</option>
+                    <option value="high">High Priority</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Source Type
+                  </label>
+                  <select
+                    value={formData.sourceType}
+                    onChange={(e) => setFormData({ ...formData, sourceType: e.target.value as 'manual' | 'amc' | 'service' | 'inventory' })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="manual">Manual Purchase</option>
+                    <option value="amc">AMC Requirement</option>
+                    <option value="service">Service Request</option>
+                    <option value="inventory">Inventory Replenishment</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Reference ID
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.sourceId || ''}
+                    onChange={(e) => setFormData({ ...formData, sourceId: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder={
+                      formData.sourceType === 'amc' ? 'AMC Contract Number' :
+                      formData.sourceType === 'service' ? 'Service Ticket Number' :
+                      formData.sourceType === 'inventory' ? 'Stock Request ID' :
+                      'Reference ID (optional)'
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Notes
+                </label>
+                <textarea
+                  value={formData.notes || ''}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  rows={2}
+                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                  placeholder="Additional notes or specifications..."
+                />
+              </div>
+
               {/* Items Section */}
               <div>
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="text-lg font-medium">Items</h3>
-                  <button
-                    type="button"
-                    onClick={addItem}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Item</span>
-                  </button>
+                  <div className="flex items-center space-x-2">
+                    {products.length === 0 && (
+                      <span className="text-xs text-orange-600 mr-2">⚠️ No products loaded</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (products.length === 0) {
+                          fetchProducts();
+                        }
+                        addItem();
+                      }}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Item</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-12 gap-3 items-end p-4 bg-gray-50 rounded-lg">
-                      <div className="col-span-5">
+                      <div className="col-span-4">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
                         <select
                           value={item.product}
-                          onChange={(e) => updateItem(index, 'product', e.target.value)}
+                          onChange={(e) => {
+                            updateItem(index, 'product', e.target.value);
+                            // Auto-populate unit price if product has a default price
+                            const selectedProduct = products.find(p => p._id === e.target.value);
+                            if (selectedProduct?.price && item.unitPrice === 0) {
+                              updateItem(index, 'unitPrice', selectedProduct.price);
+                            }
+                          }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
                             }`}
                         >
-                          <option value="">Select Product</option>
+                          <option value="">
+                            {products.length === 0 ? 'Loading products...' : 'Select Product'}
+                          </option>
                           {products.map(product => (
                             <option key={product._id} value={product._id}>
-                              {product.name} ({product.category})
+                              {product.name} 
+                              {product.brand && ` - ${product.brand}`}
+                              {product.category && ` (${product.category})`}
+                              {product.price && ` - ₹${product.price}`}
                             </option>
                           ))}
                         </select>
                         {formErrors[`items.${index}.product`] && (
                           <p className="text-red-500 text-xs mt-1">{formErrors[`items.${index}.product`]}</p>
+                        )}
+                        {products.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={fetchProducts}
+                            className="text-xs text-blue-600 hover:text-blue-700 mt-1"
+                          >
+                            🔄 Refresh Products
+                          </button>
                         )}
                       </div>
                       <div className="col-span-2">
@@ -994,7 +1243,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           <p className="text-red-500 text-xs mt-1">{formErrors[`items.${index}.quantity`]}</p>
                         )}
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (₹) *</label>
                         <input
                           type="number"
@@ -1011,27 +1260,46 @@ const PurchaseOrderManagement: React.FC = () => {
                       </div>
                       <div className="col-span-2">
                         <div className="text-xs font-medium text-gray-900">
-                          {formatCurrency(item.quantity * item.unitPrice)}
+                          Total: {formatCurrency(item.quantity * item.unitPrice)}
                         </div>
                         {formData.items.length > 1 && (
                           <button
                             type="button"
                             onClick={() => removeItem(index)}
-                            className="text-red-600 hover:text-red-700 text-sm mt-1"
+                            className="text-red-600 hover:text-red-700 text-xs mt-1 flex items-center space-x-1"
                           >
-                            Remove
+                            <Trash2 className="w-3 h-3" />
+                            <span>Remove</span>
                           </button>
                         )}
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Item Notes</label>
+                        <input
+                          type="text"
+                          value={item.notes || ''}
+                          onChange={(e) => updateItem(index, 'notes', e.target.value)}
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs"
+                          placeholder="Specifications..."
+                        />
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Total */}
-                <div className="mt-4 text-right">
-                  <p className="text-lg font-semibold">
-                    Total: {formatCurrency(formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}
-                  </p>
+                {/* Total Summary */}
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <div className="text-sm text-blue-700">
+                      {formData.items.length} item(s) • {formData.items.reduce((sum, item) => sum + item.quantity, 0)} total quantity
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-blue-700">Subtotal</p>
+                      <p className="text-xl font-bold text-blue-900">
+                        {formatCurrency(formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1045,7 +1313,7 @@ const PurchaseOrderManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
+                  disabled={submitting || formData.items.length === 0}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {submitting ? 'Creating...' : 'Create Purchase Order'}
@@ -1117,7 +1385,12 @@ const PurchaseOrderManagement: React.FC = () => {
                   <h3 className="text-lg font-medium">Items</h3>
                   <button
                     type="button"
-                    onClick={addItem}
+                    onClick={() => {
+                      if (products.length === 0) {
+                        fetchProducts();
+                      }
+                      addItem();
+                    }}
                     className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
                   >
                     <Plus className="w-4 h-4" />
@@ -1128,23 +1401,44 @@ const PurchaseOrderManagement: React.FC = () => {
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-12 gap-3 items-end p-4 bg-gray-50 rounded-lg">
-                      <div className="col-span-5">
+                      <div className="col-span-4">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
                         <select
                           value={item.product}
-                          onChange={(e) => updateItem(index, 'product', e.target.value)}
+                          onChange={(e) => {
+                            updateItem(index, 'product', e.target.value);
+                            // Auto-populate unit price if product has a default price
+                            const selectedProduct = products.find(p => p._id === e.target.value);
+                            if (selectedProduct?.price && item.unitPrice === 0) {
+                              updateItem(index, 'unitPrice', selectedProduct.price);
+                            }
+                          }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
                             }`}
                         >
-                          <option value="">Select Product</option>
+                          <option value="">
+                            {products.length === 0 ? 'Loading products...' : 'Select Product'}
+                          </option>
                           {products.map(product => (
                             <option key={product._id} value={product._id}>
-                              {product.name} ({product.category})
+                              {product.name} 
+                              {product.brand && ` - ${product.brand}`}
+                              {product.category && ` (${product.category})`}
+                              {product.price && ` - ₹${product.price}`}
                             </option>
                           ))}
                         </select>
                         {formErrors[`items.${index}.product`] && (
                           <p className="text-red-500 text-xs mt-1">{formErrors[`items.${index}.product`]}</p>
+                        )}
+                        {products.length === 0 && (
+                          <button
+                            type="button"
+                            onClick={fetchProducts}
+                            className="text-xs text-blue-600 hover:text-blue-700 mt-1"
+                          >
+                            🔄 Refresh Products
+                          </button>
                         )}
                       </div>
                       <div className="col-span-2">
@@ -1161,7 +1455,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           <p className="text-red-500 text-xs mt-1">{formErrors[`items.${index}.quantity`]}</p>
                         )}
                       </div>
-                      <div className="col-span-3">
+                      <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (₹) *</label>
                         <input
                           type="number"
@@ -1178,27 +1472,46 @@ const PurchaseOrderManagement: React.FC = () => {
                       </div>
                       <div className="col-span-2">
                         <div className="text-xs font-medium text-gray-900">
-                          {formatCurrency(item.quantity * item.unitPrice)}
+                          Total: {formatCurrency(item.quantity * item.unitPrice)}
                         </div>
                         {formData.items.length > 1 && (
                           <button
                             type="button"
                             onClick={() => removeItem(index)}
-                            className="text-red-600 hover:text-red-700 text-sm mt-1"
+                            className="text-red-600 hover:text-red-700 text-xs mt-1 flex items-center space-x-1"
                           >
-                            Remove
+                            <Trash2 className="w-3 h-3" />
+                            <span>Remove</span>
                           </button>
                         )}
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Item Notes</label>
+                        <input
+                          type="text"
+                          value={item.notes || ''}
+                          onChange={(e) => updateItem(index, 'notes', e.target.value)}
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs"
+                          placeholder="Specifications..."
+                        />
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Total */}
-                <div className="mt-4 text-right">
-                  <p className="text-lg font-semibold">
-                    Total: {formatCurrency(formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}
-                  </p>
+                {/* Total Summary */}
+                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <div className="text-sm text-blue-700">
+                      {formData.items.length} item(s) • {formData.items.reduce((sum, item) => sum + item.quantity, 0)} total quantity
+                    </div>
+                    <div className="text-right">
+                      <p className="text-sm text-blue-700">Subtotal</p>
+                      <p className="text-xl font-bold text-blue-900">
+                        {formatCurrency(formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -1247,7 +1560,7 @@ const PurchaseOrderManagement: React.FC = () => {
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Basic Information</h3>
                   <div className="space-y-2">
                     <p><span className="text-xs text-gray-600">PO Number:</span> <span className="font-medium">{selectedPO.poNumber}</span></p>
-                    <p><span className="text-xs text-gray-600">Supplier:</span> <span className="font-medium">{selectedPO.supplier}</span></p>
+                    <p><span className="text-xs text-gray-600">Supplier:</span> <span className="font-medium">{typeof selectedPO.supplier === 'string' ? selectedPO.supplier : (selectedPO.supplier as Supplier).name}</span></p>
                     <p><span className="text-xs text-gray-600">Total Amount:</span> <span className="font-medium">{formatCurrency(selectedPO.totalAmount)}</span></p>
                     <p><span className="text-xs text-gray-600">Status:</span>
                       <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedPO.status)}`}>
