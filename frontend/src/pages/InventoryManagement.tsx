@@ -119,6 +119,9 @@ const InventoryManagement: React.FC = () => {
   const [showToLocationDropdown, setShowToLocationDropdown] = useState(false);
   const [showAdjustmentTypeDropdown, setShowAdjustmentTypeDropdown] = useState(false);
   const [showReservationTypeDropdown, setShowReservationTypeDropdown] = useState(false);
+  const [showDateRangeDropdown, setShowDateRangeDropdown] = useState(false);
+  const [showTransactionTypeDropdown, setShowTransactionTypeDropdown] = useState(false);
+  const [showLedgerLocationDropdown, setShowLedgerLocationDropdown] = useState(false);
 
   // Modal states
   const [showLocationModal, setShowLocationModal] = useState(false);
@@ -195,6 +198,9 @@ const InventoryManagement: React.FC = () => {
         setShowToLocationDropdown(false);
         setShowAdjustmentTypeDropdown(false);
         setShowReservationTypeDropdown(false);
+        setShowDateRangeDropdown(false);
+        setShowTransactionTypeDropdown(false);
+        setShowLedgerLocationDropdown(false);
       }
     };
 
@@ -1060,6 +1066,37 @@ const InventoryManagement: React.FC = () => {
       return typeof result === 'object' ? result.reserved : selectedItem?.reservedQuantity || 0;
     }
     return typeof result === 'number' ? result : selectedItem?.quantity || 0;
+  };
+
+  // Stock Ledger filter helper functions
+  const getDateRangeLabel = (value: string) => {
+    const options = [
+      { value: '7', label: 'Last 7 days' },
+      { value: '30', label: 'Last 30 days' },
+      { value: '90', label: 'Last 3 months' },
+      { value: '365', label: 'Last year' },
+      { value: '', label: 'All time' }
+    ];
+    return options.find(opt => opt.value === value)?.label || 'Last 30 days';
+  };
+
+  const getTransactionTypeLabel = (value: string) => {
+    const options = [
+      { value: '', label: 'All Types' },
+      { value: 'inward', label: 'Inward (Purchase)' },
+      { value: 'outward', label: 'Outward (Sale)' },
+      { value: 'transfer', label: 'Transfer' },
+      { value: 'adjustment', label: 'Adjustment' },
+      { value: 'reservation', label: 'Reservation' },
+      { value: 'release', label: 'Release' }
+    ];
+    return options.find(opt => opt.value === value)?.label || 'All Types';
+  };
+
+  const getLedgerLocationLabel = (value: string) => {
+    if (!value) return 'All Locations';
+    const location = locations.find(loc => loc._id === value);
+    return location ? location.name : 'All Locations';
   };
 
   return (
@@ -2103,7 +2140,7 @@ const InventoryManagement: React.FC = () => {
       {/* Stock History Modal */}
       {showHistoryModal && selectedItem && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">
                 Stock History - {selectedItem.product.name} @ {selectedItem.location.name}
@@ -2143,7 +2180,7 @@ const InventoryManagement: React.FC = () => {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-32">Type</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Change</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Result Qty</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reason</th>
@@ -2165,7 +2202,7 @@ const InventoryManagement: React.FC = () => {
                               {new Date(transaction.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </div>
                           </td>
-                          <td className="px-4 py-4 text-sm">
+                          <td className="px-4 py-3 text-xs">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                               transaction.type === 'inward' ? 'bg-green-100 text-green-800' : 
                               transaction.type === 'outward' ? 'bg-red-100 text-red-800' :
@@ -2180,29 +2217,29 @@ const InventoryManagement: React.FC = () => {
                                '⚡ Adjustment'}
                             </span>
                           </td>
-                          <td className="px-4 py-4 text-xs font-medium">
+                          <td className="px-4 py-3 text-xs font-medium">
                             <span className={`${
                               transaction.quantity > 0 ? 'text-green-600' : 'text-red-600'
                             }`}>
                               {transaction.quantity > 0 ? '+' : ''}{transaction.quantity}
                             </span>
                           </td>
-                          <td className="px-4 py-4 text-xs font-bold text-gray-900">
+                          <td className="px-4 py-3 text-xs font-bold text-gray-900">
                             {transaction.resultingQuantity}
                           </td>
-                          <td className="px-4 py-4 text-xs text-gray-600">
+                          <td className="px-4 py-3 text-xs text-gray-600">
                             <div>{transaction.reason}</div>
                             {transaction.notes && (
                               <div className="text-xs text-gray-400 mt-1 italic">{transaction.notes}</div>
                             )}
                           </td>
-                          <td className="px-4 py-4 text-xs">
+                          <td className="px-4 py-3 text-xs">
                             <div className="font-mono text-blue-600">{transaction.reference}</div>
                             {transaction.referenceType && (
                               <div className="text-xs text-gray-500 capitalize">{transaction.referenceType.replace('_', ' ')}</div>
                             )}
                           </td>
-                          <td className="px-4 py-4 text-xs text-gray-600">{transaction.user}</td>
+                          <td className="px-4 py-3 text-xs text-gray-600">{transaction.user}</td>
                         </tr>
                       ))
                     )}
@@ -2211,14 +2248,7 @@ const InventoryManagement: React.FC = () => {
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-200">
-              <button
-                onClick={() => setShowHistoryModal(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Close
-              </button>
-            </div>
+
           </div>
         </div>
       )}
@@ -2301,61 +2331,136 @@ const InventoryManagement: React.FC = () => {
 
             {/* Filters */}
             <div className="p-4 bg-gray-50 border-b border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
                     type="text"
                     placeholder="Search transactions..."
                     value={ledgerFilters.search}
-                    onChange={(e) => setLedgerFilters({ ...ledgerFilters, search: e.target.value })}
+                    onChange={(e) => {
+                      setLedgerFilters({ ...ledgerFilters, search: e.target.value });
+                      fetchStockLedger(1, true);
+                    }}
                     className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                   />
                 </div>
 
-                <select
-                  value={ledgerFilters.dateRange}
-                  onChange={(e) => setLedgerFilters({ ...ledgerFilters, dateRange: e.target.value })}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                >
-                  <option value="7">Last 7 days</option>
-                  <option value="30">Last 30 days</option>
-                  <option value="90">Last 3 months</option>
-                  <option value="365">Last year</option>
-                  <option value="">All time</option>
-                </select>
+                {/* Date Range Custom Dropdown */}
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => setShowDateRangeDropdown(!showDateRangeDropdown)}
+                    className="flex items-center justify-between w-full px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                  >
+                    <span className="text-gray-700 truncate mr-1">{getDateRangeLabel(ledgerFilters.dateRange)}</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showDateRangeDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showDateRangeDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {[
+                        { value: '7', label: 'Last 7 days' },
+                        { value: '30', label: 'Last 30 days' },
+                        { value: '90', label: 'Last 3 months' },
+                        { value: '365', label: 'Last year' },
+                        { value: '', label: 'All time' }
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setLedgerFilters({ ...ledgerFilters, dateRange: option.value });
+                            setShowDateRangeDropdown(false);
+                            fetchStockLedger(1, true);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            ledgerFilters.dateRange === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-                <select
-                  value={ledgerFilters.transactionType}
-                  onChange={(e) => setLedgerFilters({ ...ledgerFilters, transactionType: e.target.value })}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                >
-                  <option value="">All Types</option>
-                  <option value="inward">Inward (Purchase)</option>
-                  <option value="outward">Outward (Sale)</option>
-                  <option value="transfer">Transfer</option>
-                  <option value="adjustment">Adjustment</option>
-                  <option value="reservation">Reservation</option>
-                  <option value="release">Release</option>
-                </select>
+                {/* Transaction Type Custom Dropdown */}
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => setShowTransactionTypeDropdown(!showTransactionTypeDropdown)}
+                    className="flex items-center justify-between w-full px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                  >
+                    <span className="text-gray-700 truncate mr-1">{getTransactionTypeLabel(ledgerFilters.transactionType)}</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showTransactionTypeDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showTransactionTypeDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {[
+                        { value: '', label: 'All Types' },
+                        { value: 'inward', label: 'Inward (Purchase)' },
+                        { value: 'outward', label: 'Outward (Sale)' },
+                        { value: 'transfer', label: 'Transfer' },
+                        { value: 'adjustment', label: 'Adjustment' },
+                        { value: 'reservation', label: 'Reservation' },
+                        { value: 'release', label: 'Release' }
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setLedgerFilters({ ...ledgerFilters, transactionType: option.value });
+                            setShowTransactionTypeDropdown(false);
+                            fetchStockLedger(1, true);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            ledgerFilters.transactionType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
-                <select
-                  value={ledgerFilters.location}
-                  onChange={(e) => setLedgerFilters({ ...ledgerFilters, location: e.target.value })}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-                >
-                  <option value="">All Locations</option>
-                  {locations.map(location => (
-                    <option key={location._id} value={location._id}>{location.name}</option>
-                  ))}
-                </select>
-
-                <button
-                  onClick={() => fetchStockLedger(1, true)}
-                  className="px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
-                >
-                  Apply Filters
-                </button>
+                {/* Location Custom Dropdown */}
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => setShowLedgerLocationDropdown(!showLedgerLocationDropdown)}
+                    className="flex items-center justify-between w-full px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                  >
+                    <span className="text-gray-700 truncate mr-1">{getLedgerLocationLabel(ledgerFilters.location)}</span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLedgerLocationDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showLedgerLocationDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                      <button
+                        onClick={() => {
+                          setLedgerFilters({ ...ledgerFilters, location: '' });
+                          setShowLedgerLocationDropdown(false);
+                          fetchStockLedger(1, true);
+                        }}
+                        className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                          !ledgerFilters.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                        }`}
+                      >
+                        All Locations
+                      </button>
+                      {locations.map(location => (
+                        <button
+                          key={location._id}
+                          onClick={() => {
+                            setLedgerFilters({ ...ledgerFilters, location: location._id });
+                            setShowLedgerLocationDropdown(false);
+                            fetchStockLedger(1, true);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            ledgerFilters.location === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {location.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div className="flex items-center justify-between text-xs text-gray-600">
@@ -2454,17 +2559,8 @@ const InventoryManagement: React.FC = () => {
             </div>
 
             {/* Pagination */}
-            <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-              <button
-                onClick={() => setShowLedgerModal(false)}
-                className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
-              >
-                Close
-              </button>
-            </div>
-              
-              {ledgerPagination.pages > 1 && (
+            {ledgerPagination.pages > 1 && (
+              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-center">
                 <div className="flex items-center space-x-2">
                   <button
                     onClick={() => ledgerPagination.page > 1 && fetchStockLedger(ledgerPagination.page - 1, true)}
@@ -2484,8 +2580,8 @@ const InventoryManagement: React.FC = () => {
                     Next
                   </button>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       )}
