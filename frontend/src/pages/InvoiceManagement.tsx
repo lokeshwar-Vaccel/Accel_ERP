@@ -1331,13 +1331,6 @@ const InvoiceManagement: React.FC = () => {
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Quantity
-                            {stockValidation[index] && (
-                              <span className={`ml-2 text-xs ${
-                                stockValidation[index].isValid ? 'text-green-600' : 'text-red-600'
-                              }`}>
-                                ({stockValidation[index].message})
-                              </span>
-                            )}
                           </label>
                           <input
                             type="number"
