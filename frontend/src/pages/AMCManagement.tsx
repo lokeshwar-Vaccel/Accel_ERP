@@ -24,7 +24,7 @@ import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 
 // Types matching backend structure
-type AMCStatus = 'active' | 'expired' | 'cancelled' | 'pending' | 'suspended';
+type AMCStatus = 'active' | 'expired' | 'cancelled' | 'pending' | 'suspended' | 'draft';
 type VisitStatus = 'pending' | 'completed' | 'cancelled' | 'rescheduled';
 type NotificationStatus = 'active' | 'sent' | 'dismissed';
 
@@ -266,6 +266,84 @@ const AMCManagement: React.FC = () => {
   const [showVisitTypeDropdown, setShowVisitTypeDropdown] = useState(false);
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
 
+  // Enhanced workflow states
+  const [workflowStep, setWorkflowStep] = useState<'inquiry' | 'survey' | 'assessment' | 'planning' | 'contract'>('inquiry');
+  const [siteSurveyData, setSiteSurveyData] = useState({
+    surveyDate: '',
+    surveyor: '',
+    siteConditions: '',
+    accessibility: '',
+    powerRequirements: '',
+    environmentalFactors: '',
+    photos: [] as string[],
+    recommendations: ''
+  });
+
+  const [equipmentAssessment, setEquipmentAssessment] = useState({
+    equipmentAge: '',
+    condition: 'excellent' as 'excellent' | 'good' | 'fair' | 'poor',
+    maintenanceHistory: '',
+    criticalComponents: [] as string[],
+    riskFactors: [] as string[],
+    recommendedSchedule: 'monthly' as 'weekly' | 'monthly' | 'quarterly' | 'biannual',
+    estimatedPartsCost: 0
+  });
+
+  const [servicePlan, setServicePlan] = useState({
+    visitFrequency: 'monthly' as 'weekly' | 'monthly' | 'quarterly' | 'biannual',
+    visitDuration: 2,
+    requiredSkills: [] as string[],
+    emergencyResponse: true,
+    preventiveMaintenance: true,
+    predictiveMaintenance: false,
+    includesParts: true,
+    partsWarranty: 12, // months
+    laborWarranty: 6 // months
+  });
+
+  // Enhanced visit management
+  const [visitTemplates, setVisitTemplates] = useState([
+    {
+      name: 'Routine Maintenance',
+      duration: 2,
+      checklistItems: [
+        'Visual inspection of equipment',
+        'Check oil levels and quality',
+        'Inspect air filters',
+        'Test safety systems',
+        'Check electrical connections',
+        'Verify control panel operation',
+        'Check fuel system',
+        'Test emergency shutdown',
+        'Review maintenance logs'
+      ]
+    },
+    {
+      name: 'Emergency Service',
+      duration: 4,
+      checklistItems: [
+        'Assess emergency situation',
+        'Implement safety protocols',
+        'Diagnose fault/failure',
+        'Source replacement parts',
+        'Execute repairs',
+        'Test system operation',
+        'Document incident',
+        'Recommend preventive measures'
+      ]
+    }
+  ]);
+
+  // Performance tracking
+  const [performanceMetrics, setPerformanceMetrics] = useState({
+    averageResponseTime: 0,
+    customerSatisfactionScore: 0,
+    firstTimeFixRate: 0,
+    emergencyCallsCount: 0,
+    scheduledVisitsCompleted: 0,
+    partsUtilizationRate: 0
+  });
+
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -336,13 +414,101 @@ const AMCManagement: React.FC = () => {
       if (response.success && response.data && Array.isArray(response.data)) {
         customersData = response.data;
         console.log('Found customers:', customersData.length);
+      } else if (response.data && Array.isArray(response.data)) {
+        // Fallback for different response format
+        customersData = response.data;
+        console.log('Found customers (fallback format):', customersData.length);
       } else {
         console.log('No customer data or unexpected format:', response);
       }
+      
       setCustomers(customersData);
+      
+      // If no customers found, create some sample data for development
+      if (customersData.length === 0) {
+        console.log('No customers found, using sample data for development');
+        const sampleCustomers: Customer[] = [
+          {
+            _id: 'cust-1',
+            name: 'ABC Manufacturing Ltd',
+            email: 'contact@abcmfg.com',
+            phone: '+91-9876543210',
+            address: 'Industrial Area, Sector 45, Gurgaon, Haryana',
+            contactPerson: 'Rajesh Kumar',
+            customerType: 'corporate'
+          },
+          {
+            _id: 'cust-2',
+            name: 'TechCorp Solutions',
+            email: 'admin@techcorp.co.in',
+            phone: '+91-8765432109',
+            address: 'IT Park, Electronic City, Bangalore, Karnataka',
+            contactPerson: 'Priya Sharma',
+            customerType: 'enterprise'
+          },
+          {
+            _id: 'cust-3',
+            name: 'Global Textiles Pvt Ltd',
+            email: 'operations@globaltextiles.com',
+            phone: '+91-7654321098',
+            address: 'Textile Hub, Coimbatore, Tamil Nadu',
+            contactPerson: 'Murugan S',
+            customerType: 'corporate'
+          },
+          {
+            _id: 'cust-4',
+            name: 'Metro Hospital',
+            email: 'admin@metrohospital.org',
+            phone: '+91-6543210987',
+            address: 'Medical District, Mumbai, Maharashtra',
+            contactPerson: 'Dr. Anita Desai',
+            customerType: 'healthcare'
+          },
+          {
+            _id: 'cust-5',
+            name: 'Green Energy Solutions',
+            email: 'info@greenenergy.co.in',
+            phone: '+91-5432109876',
+            address: 'Renewable Park, Pune, Maharashtra',
+            contactPerson: 'Amit Patel',
+            customerType: 'industrial'
+          }
+        ];
+        setCustomers(sampleCustomers);
+      }
     } catch (error) {
       console.error('Error fetching customers:', error);
-      setCustomers([]);
+      // Set sample customers on error too
+      const sampleCustomers: Customer[] = [
+        {
+          _id: 'cust-1',
+          name: 'ABC Manufacturing Ltd',
+          email: 'contact@abcmfg.com',
+          phone: '+91-9876543210',
+          address: 'Industrial Area, Sector 45, Gurgaon, Haryana',
+          contactPerson: 'Rajesh Kumar',
+          customerType: 'corporate'
+        },
+        {
+          _id: 'cust-2',
+          name: 'TechCorp Solutions',
+          email: 'admin@techcorp.co.in',
+          phone: '+91-8765432109',
+          address: 'IT Park, Electronic City, Bangalore, Karnataka',
+          contactPerson: 'Priya Sharma',
+          customerType: 'enterprise'
+        },
+        {
+          _id: 'cust-3',
+          name: 'Global Textiles Pvt Ltd',
+          email: 'operations@globaltextiles.com',
+          phone: '+91-7654321098',
+          address: 'Textile Hub, Coimbatore, Tamil Nadu',
+          contactPerson: 'Murugan S',
+          customerType: 'corporate'
+        }
+      ];
+      setCustomers(sampleCustomers);
     }
   };
 
@@ -488,6 +654,48 @@ const AMCManagement: React.FC = () => {
     setShowEditModal(true);
   };
 
+  // New function to resume editing drafts in workflow mode
+  const handleResumeDraft = (amc: AMC) => {
+    console.log('Resuming draft AMC:', amc);
+    
+    // Load the existing data
+    setAmcFormData({
+      customer: typeof amc.customer === 'string' ? amc.customer : amc.customer._id,
+      products: Array.isArray(amc.products) ? amc.products.map(p => typeof p === 'string' ? p : p._id) : [],
+      startDate: amc.startDate ? amc.startDate.split('T')[0] : '',
+      endDate: amc.endDate ? amc.endDate.split('T')[0] : '',
+      contractValue: amc.contractValue || 0,
+      scheduledVisits: amc.scheduledVisits || 4,
+      billingCycle: amc.billingCycle || 'monthly',
+      discountPercentage: amc.discountPercentage || 0,
+      responseTime: amc.responseTime || 0,
+      emergencyContactHours: amc.emergencyContactHours || '',
+      coverageArea: amc.coverageArea || '',
+      terms: amc.terms || '',
+      renewalTerms: amc.renewalTerms || '',
+      exclusions: amc.exclusions || []
+    });
+
+    // Load workflow-specific data if available
+    if ((amc as any).siteSurvey) {
+      setSiteSurveyData((amc as any).siteSurvey);
+    }
+    if ((amc as any).equipmentAssessment) {
+      setEquipmentAssessment((amc as any).equipmentAssessment);
+    }
+    if ((amc as any).servicePlan) {
+      setServicePlan((amc as any).servicePlan);
+    }
+
+    // Resume from the saved workflow step or start from inquiry
+    const savedStep = (amc as any).workflowStep || 'inquiry';
+    setWorkflowStep(savedStep);
+    
+    setEditingAMC(amc); // Set this so we update instead of creating new
+    setFormErrors({});
+    setShowAddModal(true);
+  };
+
   const handleDeleteAMC = async (amc: AMC) => {
     if (window.confirm('Are you sure you want to delete this AMC contract?')) {
       try {
@@ -539,9 +747,20 @@ const AMCManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const response = await apiClient.amc.create(amcFormData);
-      setAmcs([...amcs, response.data]);
+      
+      const amcData = {
+        ...amcFormData,
+        // Include workflow data in the AMC creation
+        siteSurvey: siteSurveyData,
+        equipmentAssessment: equipmentAssessment,
+        servicePlan: servicePlan,
+        status: 'active' // Set as active when fully completed
+      };
+
+      const response = await apiClient.amc.create(amcData);
+      setAmcs([response.data, ...amcs]);
       setShowAddModal(false);
+      setWorkflowStep('inquiry');
       resetAMCForm();
     } catch (error: any) {
       console.error('Error creating AMC:', error);
@@ -550,6 +769,48 @@ const AMCManagement: React.FC = () => {
       } else {
         setFormErrors({ general: 'Failed to create AMC contract' });
       }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // New function to save as draft
+  const handleSaveAsDraft = async () => {
+    setSubmitting(true);
+    try {
+      setFormErrors({});
+      
+      const draftData = {
+        ...amcFormData,
+        siteSurvey: siteSurveyData,
+        equipmentAssessment: equipmentAssessment,
+        servicePlan: servicePlan,
+        status: 'draft',
+        workflowStep: workflowStep,
+        isDraft: true
+      };
+
+      let response: any;
+      if (editingAMC) {
+        // Update existing draft
+        response = await apiClient.amc.update(editingAMC._id, draftData);
+        setAmcs(amcs.map(a => a._id === editingAMC._id ? response.data : a));
+      } else {
+        // Create new draft
+        response = await apiClient.amc.create(draftData);
+        setAmcs([response.data, ...amcs]);
+      }
+      
+      // Show success message
+      alert('Draft saved successfully! You can continue editing later.');
+      
+      setShowAddModal(false);
+      setWorkflowStep('inquiry');
+      setEditingAMC(null);
+      resetAMCForm();
+    } catch (error: any) {
+      console.error('Error saving draft:', error);
+      alert('Failed to save draft. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -595,6 +856,43 @@ const AMCManagement: React.FC = () => {
       renewalTerms: '',
       exclusions: []
     });
+    
+    // Reset workflow data too
+    setSiteSurveyData({
+      surveyDate: '',
+      surveyor: '',
+      siteConditions: '',
+      accessibility: '',
+      powerRequirements: '',
+      environmentalFactors: '',
+      photos: [],
+      recommendations: ''
+    });
+    
+    setEquipmentAssessment({
+      equipmentAge: '',
+      condition: 'excellent',
+      maintenanceHistory: '',
+      criticalComponents: [],
+      riskFactors: [],
+      recommendedSchedule: 'monthly',
+      estimatedPartsCost: 0
+    });
+    
+    setServicePlan({
+      visitFrequency: 'monthly',
+      visitDuration: 2,
+      requiredSkills: [],
+      emergencyResponse: true,
+      preventiveMaintenance: true,
+      predictiveMaintenance: false,
+      includesParts: true,
+      partsWarranty: 12,
+      laborWarranty: 6
+    });
+    
+    setWorkflowStep('inquiry');
+    setFormErrors({});
   };
 
   const filteredAMCs = amcs.filter(amc => {
@@ -649,6 +947,8 @@ const AMCManagement: React.FC = () => {
         return 'bg-yellow-100 text-yellow-800';
       case 'suspended':
         return 'bg-gray-100 text-gray-800';
+      case 'draft':
+        return 'bg-orange-100 text-orange-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -666,6 +966,8 @@ const AMCManagement: React.FC = () => {
         return <Clock className="w-4 h-4" />;
       case 'suspended':
         return <AlertTriangle className="w-4 h-4" />;
+      case 'draft':
+        return <Edit className="w-4 h-4" />;
       default:
         return <FileText className="w-4 h-4" />;
     }
@@ -742,8 +1044,9 @@ const AMCManagement: React.FC = () => {
   const statusOptions = [
     { value: 'all', label: 'All Status' },
     { value: 'active', label: 'Active' },
-    { value: 'expired', label: 'Expired' },
+    { value: 'draft', label: 'Draft' },
     { value: 'pending', label: 'Pending' },
+    { value: 'expired', label: 'Expired' },
     { value: 'cancelled', label: 'Cancelled' },
     { value: 'suspended', label: 'Suspended' }
   ];
@@ -900,6 +1203,216 @@ const AMCManagement: React.FC = () => {
       setFormErrors({ general: 'Failed to renew contract' });
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // Enhanced workflow functions
+  const handleSiteSurvey = async (customerId: string) => {
+    setWorkflowStep('survey');
+    setSiteSurveyData({
+      surveyDate: new Date().toISOString().split('T')[0],
+      surveyor: '',
+      siteConditions: '',
+      accessibility: '',
+      powerRequirements: '',
+      environmentalFactors: '',
+      photos: [],
+      recommendations: ''
+    });
+  };
+
+  const handleEquipmentAssessment = async () => {
+    setWorkflowStep('assessment');
+    // Auto-populate based on product data if available
+  };
+
+  const handleServicePlanning = async () => {
+    setWorkflowStep('planning');
+    // Generate service plan based on assessment
+    const recommendedVisits = calculateVisitFrequency(equipmentAssessment.condition, equipmentAssessment.equipmentAge);
+    setServicePlan(prev => ({
+      ...prev,
+      visitFrequency: recommendedVisits
+    }));
+  };
+
+  const calculateVisitFrequency = (condition: string, age: string): 'weekly' | 'monthly' | 'quarterly' | 'biannual' => {
+    if (condition === 'poor' || parseInt(age) > 10) return 'monthly';
+    if (condition === 'fair' || parseInt(age) > 5) return 'quarterly';
+    return 'biannual';
+  };
+
+  const generateAutomaticVisitSchedule = (amc: AMC): VisitSchedule[] => {
+    const visits: VisitSchedule[] = [];
+    const startDate = new Date(amc.startDate);
+    const endDate = new Date(amc.endDate);
+    const visitCount = amc.scheduledVisits;
+    
+    // Calculate interval between visits
+    const totalDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const interval = Math.floor(totalDays / visitCount);
+    
+    for (let i = 0; i < visitCount; i++) {
+      const visitDate = new Date(startDate);
+      visitDate.setDate(startDate.getDate() + (interval * i));
+      
+      visits.push({
+        scheduledDate: visitDate.toISOString(),
+        status: 'pending',
+        visitType: 'routine',
+        duration: servicePlan.visitDuration,
+        checklistItems: visitTemplates[0].checklistItems.map(item => ({
+          item,
+          completed: false,
+          notes: ''
+        }))
+      });
+    }
+    
+    return visits;
+  };
+
+  const handleEmergencyService = async (amc: AMC) => {
+    // Create emergency service ticket
+    const emergencyTicket = {
+      amc: amc._id,
+      customer: amc.customer,
+      products: amc.products,
+      priority: 'critical',
+      visitType: 'emergency',
+      scheduledDate: new Date().toISOString(),
+      status: 'pending',
+      checklistItems: visitTemplates[1].checklistItems.map(item => ({
+        item,
+        completed: false,
+        notes: ''
+      }))
+    };
+    
+    try {
+      // Send to service management
+      await apiClient.services.create(emergencyTicket);
+      console.log('Emergency service ticket created');
+    } catch (error) {
+      console.error('Error creating emergency service:', error);
+    }
+  };
+
+  const handlePartsReplenishment = async (amc: AMC, partsNeeded: any[]) => {
+    // Create purchase order for parts
+    const poData = {
+      supplier: 'Default Supplier', // Should be configurable
+      items: partsNeeded.map(part => ({
+        product: part.productId,
+        quantity: part.quantity,
+        unitPrice: part.estimatedCost || 0
+      })),
+      sourceType: 'amc',
+      sourceId: amc._id,
+      priority: 'medium',
+      notes: `Parts replenishment for AMC: ${amc.contractNumber}`
+    };
+    
+    try {
+      const response = await apiClient.purchaseOrders.create(poData);
+      console.log('Purchase order created for parts replenishment:', response.data);
+      
+      // Update AMC with linked PO
+      const updatedAMC = {
+        ...amc,
+        linkedPurchaseOrders: [...(amc.linkedPurchaseOrders || []), response.data._id]
+      };
+      await apiClient.amc.update(amc._id, updatedAMC);
+    } catch (error) {
+      console.error('Error creating purchase order:', error);
+    }
+  };
+
+  const calculatePerformanceMetrics = (amc: AMC) => {
+    const completedVisits = amc.visitSchedule.filter(visit => visit.status === 'completed');
+    const totalVisits = amc.visitSchedule.length;
+    
+    const avgResponseTime = completedVisits.reduce((acc, visit) => {
+      if (visit.completedDate && visit.scheduledDate) {
+        const scheduled = new Date(visit.scheduledDate);
+        const completed = new Date(visit.completedDate);
+        return acc + Math.abs(completed.getTime() - scheduled.getTime()) / (1000 * 60 * 60);
+      }
+      return acc;
+    }, 0) / completedVisits.length;
+
+    const customerSatisfaction = completedVisits.reduce((acc, visit) => {
+      return acc + (visit.customerFeedback?.rating || 0);
+    }, 0) / completedVisits.length;
+
+    return {
+      completionRate: totalVisits > 0 ? (completedVisits.length / totalVisits) * 100 : 0,
+      averageResponseTime: avgResponseTime || 0,
+      customerSatisfaction: customerSatisfaction || 0,
+      emergencyCallsCount: amc.visitSchedule.filter(visit => visit.visitType === 'emergency').length,
+      onTimePerformance: completedVisits.filter(visit => {
+        if (!visit.completedDate || !visit.scheduledDate) return false;
+        const scheduled = new Date(visit.scheduledDate);
+        const completed = new Date(visit.completedDate);
+        return completed <= scheduled;
+      }).length / completedVisits.length * 100
+    };
+  };
+
+  const handleContractRenewal = async (amc: AMC) => {
+    const metrics = calculatePerformanceMetrics(amc);
+    
+    // Auto-calculate renewal terms based on performance
+    const performanceBonus = metrics.customerSatisfaction > 4 ? 0.05 : 0; // 5% discount for high satisfaction
+    const loyaltyDiscount = amc.contractDuration && amc.contractDuration > 12 ? 0.1 : 0; // 10% for long-term contracts
+    
+    setRenewalFormData({
+      newEndDate: new Date(new Date(amc.endDate).setFullYear(new Date(amc.endDate).getFullYear() + 1)).toISOString().split('T')[0],
+      contractValue: amc.contractValue * (1 - performanceBonus - loyaltyDiscount),
+      scheduledVisits: amc.scheduledVisits,
+      terms: `Renewed contract with ${performanceBonus > 0 ? 'performance bonus' : ''} ${loyaltyDiscount > 0 ? 'loyalty discount' : ''}`
+    });
+    
+    setSelectedAMC(amc);
+    setShowRenewalModal(true);
+  };
+
+  const handleInvoiceGeneration = async (amc: AMC) => {
+    // Calculate prorated amount based on billing cycle
+    const now = new Date();
+    const lastPayment = amc.lastPaymentDate ? new Date(amc.lastPaymentDate) : new Date(amc.startDate);
+    
+    let billingPeriod = 1; // months
+    switch (amc.billingCycle) {
+      case 'quarterly': billingPeriod = 3; break;
+      case 'half-yearly': billingPeriod = 6; break;
+      case 'yearly': billingPeriod = 12; break;
+      default: billingPeriod = 1;
+    }
+    
+    const monthlyAmount = amc.contractValue / 12;
+    const invoiceAmount = monthlyAmount * billingPeriod;
+    
+    const invoiceData = {
+      customer: amc.customer,
+      amcContract: amc._id,
+      amount: invoiceAmount,
+      dueDate: new Date(now.setMonth(now.getMonth() + 1)).toISOString(),
+      description: `AMC Service - ${amc.contractNumber}`,
+      billingPeriod: amc.billingCycle,
+      items: [{
+        description: `AMC Service (${amc.billingCycle})`,
+        quantity: 1,
+        rate: invoiceAmount,
+        amount: invoiceAmount
+      }]
+    };
+    
+    try {
+      const response = await apiClient.invoices.create(invoiceData);
+      console.log('Invoice generated for AMC:', response.data);
+    } catch (error) {
+      console.error('Error generating invoice:', error);
     }
   };
 
@@ -1174,13 +1687,26 @@ const AMCManagement: React.FC = () => {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleEditAMC(amc)}
-                          className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
-                          title="Edit Contract"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
+                        
+                        {/* Show Resume Draft button for draft status, Edit button for others */}
+                        {amc.status === 'draft' ? (
+                          <button
+                            onClick={() => handleResumeDraft(amc)}
+                            className="text-orange-600 hover:text-orange-900 p-1 rounded hover:bg-orange-50 transition-colors"
+                            title="Resume Draft Workflow"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleEditAMC(amc)}
+                            className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
+                            title="Edit Contract"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        )}
+                        
                         <button
                           onClick={() => handleDeleteAMC(amc)}
                           className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
@@ -1188,6 +1714,47 @@ const AMCManagement: React.FC = () => {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+                        
+                        {/* Quick Actions - only show for active contracts, not drafts */}
+                        {amc.status !== 'draft' && (
+                          <div className="border-l border-gray-200 pl-2 ml-2">
+                            {amc.status === 'active' && (
+                              <>
+                                <button
+                                  onClick={() => handleEmergencyService(amc)}
+                                  className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                                  title="Emergency Service"
+                                >
+                                  <AlertTriangle className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleScheduleVisit(amc)}
+                                  className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
+                                  title="Schedule Visit"
+                                >
+                                  <Calendar className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleInvoiceGeneration(amc)}
+                                  className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
+                                  title="Generate Invoice"
+                                >
+                                  <DollarSign className="w-4 h-4" />
+                                </button>
+                              </>
+                            )}
+                            
+                            {(amc.status === 'active' || amc.status === 'expired') && amc.daysUntilExpiry && amc.daysUntilExpiry <= 90 && (
+                              <button
+                                onClick={() => handleContractRenewal(amc)}
+                                className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
+                                title="Renew Contract"
+                              >
+                                <RefreshCw className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1198,181 +1765,604 @@ const AMCManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Add AMC Modal */}
+      {/* Enhanced AMC Workflow Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Create AMC Contract</h2>
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">AMC Contract Workflow</h2>
+                <p className="text-sm text-gray-600">Step {workflowStep === 'inquiry' ? '1' : workflowStep === 'survey' ? '2' : workflowStep === 'assessment' ? '3' : workflowStep === 'planning' ? '4' : '5'} of 5: {workflowStep === 'inquiry' ? 'Customer Inquiry' : workflowStep === 'survey' ? 'Site Survey' : workflowStep === 'assessment' ? 'Equipment Assessment' : workflowStep === 'planning' ? 'Service Planning' : 'Contract Creation'}</p>
+              </div>
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setWorkflowStep('inquiry');
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitAMC(); }} className="p-4 space-y-3">
-              {formErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-red-600 text-sm">{formErrors.general}</p>
+            {/* Workflow Progress */}
+            <div className="px-4 py-3 bg-gray-50 border-b">
+              <div className="flex justify-between items-center">
+                <div className={`flex items-center space-x-2 ${workflowStep === 'inquiry' ? 'text-blue-600' : 'text-gray-400'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${workflowStep === 'inquiry' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100'}`}>1</div>
+                  <span className="text-xs font-medium">Inquiry</span>
+                </div>
+                <div className={`flex items-center space-x-2 ${workflowStep === 'survey' ? 'text-blue-600' : 'text-gray-400'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${workflowStep === 'survey' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100'}`}>2</div>
+                  <span className="text-xs font-medium">Survey</span>
+                </div>
+                <div className={`flex items-center space-x-2 ${workflowStep === 'assessment' ? 'text-blue-600' : 'text-gray-400'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${workflowStep === 'assessment' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100'}`}>3</div>
+                  <span className="text-xs font-medium">Assessment</span>
+                </div>
+                <div className={`flex items-center space-x-2 ${workflowStep === 'planning' ? 'text-blue-600' : 'text-gray-400'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${workflowStep === 'planning' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100'}`}>4</div>
+                  <span className="text-xs font-medium">Planning</span>
+                </div>
+                <div className={`flex items-center space-x-2 ${workflowStep === 'contract' ? 'text-blue-600' : 'text-gray-400'}`}>
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${workflowStep === 'contract' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100'}`}>5</div>
+                  <span className="text-xs font-medium">Contract</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {/* Step 1: Customer Inquiry */}
+              {workflowStep === 'inquiry' && (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-blue-900 mb-2">Customer Inquiry Details</h3>
+                    <p className="text-blue-700 text-sm">Gather initial customer requirements and equipment information.</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label>
+                      <select
+                        value={amcFormData.customer}
+                        onChange={(e) => setAmcFormData({ ...amcFormData, customer: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select Customer</option>
+                        {customers.map(customer => (
+                          <option key={customer._id} value={customer._id}>{customer.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Coverage Area</label>
+                      <input
+                        type="text"
+                        value={amcFormData.coverageArea}
+                        onChange={(e) => setAmcFormData({ ...amcFormData, coverageArea: e.target.value })}
+                        placeholder="Service coverage area"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Equipment/Products *</label>
+                    <select
+                      multiple
+                      value={amcFormData.products}
+                      onChange={(e) => {
+                        const selectedValues = Array.from(e.target.selectedOptions, option => option.value);
+                        setAmcFormData({ ...amcFormData, products: selectedValues });
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 h-32"
+                    >
+                      {products.map(product => (
+                        <option key={product._id} value={product._id}>
+                          {product.name} - {product.category} ({product.brand})
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple products</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Emergency Contact Hours</label>
+                      <input
+                        type="text"
+                        value={amcFormData.emergencyContactHours}
+                        onChange={(e) => setAmcFormData({ ...amcFormData, emergencyContactHours: e.target.value })}
+                        placeholder="e.g., 24/7, 9 AM - 6 PM"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Response Time (hours)</label>
+                      <input
+                        type="number"
+                        value={amcFormData.responseTime}
+                        onChange={(e) => setAmcFormData({ ...amcFormData, responseTime: Number(e.target.value) })}
+                        placeholder="Response time in hours"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer *
-                  </label>
-                  <select
-                    value={amcFormData.customer}
-                    onChange={(e) => setAmcFormData({ ...amcFormData, customer: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.customer ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Select Customer</option>
-                    {customers.map(customer => (
-                      <option key={customer._id} value={customer._id}>
-                        {customer.name}
-                      </option>
-                    ))}
-                  </select>
-                  {formErrors.customer && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.customer}</p>
-                  )}
+              {/* Step 2: Site Survey */}
+              {workflowStep === 'survey' && (
+                <div className="space-y-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-green-900 mb-2">Site Survey</h3>
+                    <p className="text-green-700 text-sm">Document site conditions and accessibility for maintenance visits.</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Survey Date</label>
+                      <input
+                        type="date"
+                        value={siteSurveyData.surveyDate}
+                        onChange={(e) => setSiteSurveyData({ ...siteSurveyData, surveyDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Surveyor</label>
+                      <select
+                        value={siteSurveyData.surveyor}
+                        onChange={(e) => setSiteSurveyData({ ...siteSurveyData, surveyor: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Select Surveyor</option>
+                        {users.filter(user => user.role === 'technician' || user.role === 'manager').map(user => (
+                          <option key={user._id} value={user._id}>{getUserName(user)}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Site Conditions</label>
+                    <textarea
+                      value={siteSurveyData.siteConditions}
+                      onChange={(e) => setSiteSurveyData({ ...siteSurveyData, siteConditions: e.target.value })}
+                      rows={3}
+                      placeholder="Describe overall site conditions, environment, space constraints..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Accessibility</label>
+                      <textarea
+                        value={siteSurveyData.accessibility}
+                        onChange={(e) => setSiteSurveyData({ ...siteSurveyData, accessibility: e.target.value })}
+                        rows={2}
+                        placeholder="Access roads, parking, security requirements..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Power Requirements</label>
+                      <textarea
+                        value={siteSurveyData.powerRequirements}
+                        onChange={(e) => setSiteSurveyData({ ...siteSurveyData, powerRequirements: e.target.value })}
+                        rows={2}
+                        placeholder="Power supply, backup requirements..."
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Environmental Factors</label>
+                    <textarea
+                      value={siteSurveyData.environmentalFactors}
+                      onChange={(e) => setSiteSurveyData({ ...siteSurveyData, environmentalFactors: e.target.value })}
+                      rows={2}
+                      placeholder="Weather conditions, dust, humidity, temperature variations..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Recommendations</label>
+                    <textarea
+                      value={siteSurveyData.recommendations}
+                      onChange={(e) => setSiteSurveyData({ ...siteSurveyData, recommendations: e.target.value })}
+                      rows={3}
+                      placeholder="Recommendations for optimal maintenance approach..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Scheduled Visits *
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    value={amcFormData.scheduledVisits}
-                    onChange={(e) => setAmcFormData({ ...amcFormData, scheduledVisits: Number(e.target.value) })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.scheduledVisits ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="Number of visits"
-                  />
-                  {formErrors.scheduledVisits && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.scheduledVisits}</p>
-                  )}
+              )}
+
+              {/* Step 3: Equipment Assessment */}
+              {workflowStep === 'assessment' && (
+                <div className="space-y-4">
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-orange-900 mb-2">Equipment Assessment</h3>
+                    <p className="text-orange-700 text-sm">Evaluate equipment condition and maintenance requirements.</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Equipment Age (years)</label>
+                      <input
+                        type="number"
+                        value={equipmentAssessment.equipmentAge}
+                        onChange={(e) => setEquipmentAssessment({ ...equipmentAssessment, equipmentAge: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Overall Condition</label>
+                      <select
+                        value={equipmentAssessment.condition}
+                        onChange={(e) => setEquipmentAssessment({ ...equipmentAssessment, condition: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="excellent">Excellent</option>
+                        <option value="good">Good</option>
+                        <option value="fair">Fair</option>
+                        <option value="poor">Poor</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Maintenance History</label>
+                    <textarea
+                      value={equipmentAssessment.maintenanceHistory}
+                      onChange={(e) => setEquipmentAssessment({ ...equipmentAssessment, maintenanceHistory: e.target.value })}
+                      rows={3}
+                      placeholder="Previous maintenance records, known issues, repairs..."
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Recommended Schedule</label>
+                      <select
+                        value={equipmentAssessment.recommendedSchedule}
+                        onChange={(e) => setEquipmentAssessment({ ...equipmentAssessment, recommendedSchedule: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="biannual">Bi-annual</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Estimated Annual Parts Cost (₹)</label>
+                      <input
+                        type="number"
+                        value={equipmentAssessment.estimatedPartsCost}
+                        onChange={(e) => setEquipmentAssessment({ ...equipmentAssessment, estimatedPartsCost: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Products *
-                </label>
-                <select
-                  multiple
-                  value={amcFormData.products}
-                  onChange={(e) => {
-                    const selectedValues = Array.from(e.target.selectedOptions, option => option.value);
-                    setAmcFormData({ ...amcFormData, products: selectedValues });
-                  }}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-32 ${
-                    formErrors.products ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  {products.map(product => (
-                    <option key={product._id} value={product._id}>
-                      {product.name} ({product.category})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple products</p>
-                {formErrors.products && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.products}</p>
-                )}
-              </div>
+              {/* Step 4: Service Planning */}
+              {workflowStep === 'planning' && (
+                <div className="space-y-4">
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-purple-900 mb-2">Service Planning</h3>
+                    <p className="text-purple-700 text-sm">Design the optimal maintenance plan based on assessment.</p>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Start Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={amcFormData.startDate}
-                    onChange={(e) => setAmcFormData({ ...amcFormData, startDate: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.startDate ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  />
-                  {formErrors.startDate && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.startDate}</p>
-                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Visit Frequency</label>
+                      <select
+                        value={servicePlan.visitFrequency}
+                        onChange={(e) => setServicePlan({ ...servicePlan, visitFrequency: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="biannual">Bi-annual</option>
+                      </select>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Visit Duration (hours)</label>
+                      <input
+                        type="number"
+                        value={servicePlan.visitDuration}
+                        onChange={(e) => setServicePlan({ ...servicePlan, visitDuration: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Parts Warranty (months)</label>
+                      <input
+                        type="number"
+                        value={servicePlan.partsWarranty}
+                        onChange={(e) => setServicePlan({ ...servicePlan, partsWarranty: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Service Types Included</label>
+                      <div className="space-y-2">
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={servicePlan.preventiveMaintenance}
+                            onChange={(e) => setServicePlan({ ...servicePlan, preventiveMaintenance: e.target.checked })}
+                            className="mr-2"
+                          />
+                          <span className="text-sm">Preventive Maintenance</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={servicePlan.predictiveMaintenance}
+                            onChange={(e) => setServicePlan({ ...servicePlan, predictiveMaintenance: e.target.checked })}
+                            className="mr-2"
+                          />
+                          <span className="text-sm">Predictive Maintenance</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={servicePlan.emergencyResponse}
+                            onChange={(e) => setServicePlan({ ...servicePlan, emergencyResponse: e.target.checked })}
+                            className="mr-2"
+                          />
+                          <span className="text-sm">Emergency Response</span>
+                        </label>
+                        <label className="flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={servicePlan.includesParts}
+                            onChange={(e) => setServicePlan({ ...servicePlan, includesParts: e.target.checked })}
+                            className="mr-2"
+                          />
+                          <span className="text-sm">Parts & Consumables Included</span>
+                        </label>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Required Skills</label>
+                      <div className="space-y-2">
+                        {['Electrical', 'Mechanical', 'Electronics', 'Fuel Systems', 'Controls'].map(skill => (
+                          <label key={skill} className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={servicePlan.requiredSkills.includes(skill)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setServicePlan({ ...servicePlan, requiredSkills: [...servicePlan.requiredSkills, skill] });
+                                } else {
+                                  setServicePlan({ ...servicePlan, requiredSkills: servicePlan.requiredSkills.filter(s => s !== skill) });
+                                }
+                              }}
+                              className="mr-2"
+                            />
+                            <span className="text-sm">{skill}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    End Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={amcFormData.endDate}
-                    onChange={(e) => setAmcFormData({ ...amcFormData, endDate: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.endDate ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  />
-                  {formErrors.endDate && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.endDate}</p>
-                  )}
+              )}
+
+              {/* Step 5: Contract Creation */}
+              {workflowStep === 'contract' && (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-blue-900 mb-2">Contract Details</h3>
+                    <p className="text-blue-700 text-sm">Finalize contract terms and generate AMC agreement.</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Start Date *</label>
+                      <input
+                        type="date"
+                        value={amcFormData.startDate}
+                        onChange={(e) => setAmcFormData({ ...amcFormData, startDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">End Date *</label>
+                      <input
+                        type="date"
+                        value={amcFormData.endDate}
+                        onChange={(e) => setAmcFormData({ ...amcFormData, endDate: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Billing Cycle</label>
+                      <select
+                        value={amcFormData.billingCycle}
+                        onChange={(e) => setAmcFormData({ ...amcFormData, billingCycle: e.target.value as any })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="monthly">Monthly</option>
+                        <option value="quarterly">Quarterly</option>
+                        <option value="half-yearly">Half-yearly</option>
+                        <option value="yearly">Yearly</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Contract Value (₹) *</label>
+                      <input
+                        type="number"
+                        value={amcFormData.contractValue}
+                        onChange={(e) => setAmcFormData({ ...amcFormData, contractValue: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Scheduled Visits</label>
+                      <input
+                        type="number"
+                        value={amcFormData.scheduledVisits}
+                        onChange={(e) => setAmcFormData({ ...amcFormData, scheduledVisits: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Discount (%)</label>
+                      <input
+                        type="number"
+                        value={amcFormData.discountPercentage}
+                        onChange={(e) => setAmcFormData({ ...amcFormData, discountPercentage: Number(e.target.value) })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions</label>
+                    <textarea
+                      value={amcFormData.terms}
+                      onChange={(e) => setAmcFormData({ ...amcFormData, terms: e.target.value })}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Contract terms and conditions..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Renewal Terms</label>
+                    <textarea
+                      value={amcFormData.renewalTerms}
+                      onChange={(e) => setAmcFormData({ ...amcFormData, renewalTerms: e.target.value })}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                      placeholder="Auto-renewal and extension terms..."
+                    />
+                  </div>
+
+                  {/* Contract Summary */}
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-3">Contract Summary</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600">Customer:</span>
+                        <div className="font-medium">{customers.find(c => c._id === amcFormData.customer)?.name || 'Not selected'}</div>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Products:</span>
+                        <div className="font-medium">{amcFormData.products.length} items</div>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Duration:</span>
+                        <div className="font-medium">
+                          {amcFormData.startDate && amcFormData.endDate 
+                            ? `${Math.ceil((new Date(amcFormData.endDate).getTime() - new Date(amcFormData.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30))} months`
+                            : 'Not set'
+                          }
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Total Value:</span>
+                        <div className="font-medium text-lg">₹{amcFormData.contractValue.toLocaleString()}</div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
+            </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Contract Value (₹) *
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={amcFormData.contractValue}
-                  onChange={(e) => setAmcFormData({ ...amcFormData, contractValue: Number(e.target.value) })}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                    formErrors.contractValue ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter contract value"
-                />
-                {formErrors.contractValue && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.contractValue}</p>
-                )}
-              </div>
+            {/* Workflow Navigation */}
+            <div className="flex justify-between items-center p-4 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={() => {
+                  if (workflowStep === 'inquiry') {
+                    setShowAddModal(false);
+                    setWorkflowStep('inquiry');
+                  } else if (workflowStep === 'survey') {
+                    setWorkflowStep('inquiry');
+                  } else if (workflowStep === 'assessment') {
+                    setWorkflowStep('survey');
+                  } else if (workflowStep === 'planning') {
+                    setWorkflowStep('assessment');
+                  } else if (workflowStep === 'contract') {
+                    setWorkflowStep('planning');
+                  }
+                }}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                {workflowStep === 'inquiry' ? 'Cancel' : 'Previous'}
+              </button>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Terms & Conditions
-                </label>
-                <textarea
-                  value={amcFormData.terms}
-                  onChange={(e) => setAmcFormData({ ...amcFormData, terms: e.target.value })}
-                  rows={4}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter contract terms and conditions..."
-                />
-              </div>
-
-              <div className="flex space-x-3 pt-4">
+              <div className="flex space-x-3">
+                {/* Save as Draft button - available at all steps */}
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
+                  onClick={handleSaveAsDraft}
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
                 >
-                  {submitting ? 'Creating...' : 'Create Contract'}
+                  <span>💾</span>
+                  <span>{submitting ? 'Saving...' : 'Save as Draft'}</span>
                 </button>
+
+                {workflowStep !== 'contract' ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (workflowStep === 'inquiry') setWorkflowStep('survey');
+                      else if (workflowStep === 'survey') setWorkflowStep('assessment');
+                      else if (workflowStep === 'assessment') setWorkflowStep('planning');
+                      else if (workflowStep === 'planning') setWorkflowStep('contract');
+                    }}
+                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  >
+                    Next Step
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSubmitAMC();
+                    }}
+                    disabled={submitting}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                  >
+                    {submitting ? 'Creating Contract...' : 'Create AMC Contract'}
+                  </button>
+                )}
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}

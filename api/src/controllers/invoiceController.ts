@@ -174,7 +174,8 @@ export const createInvoice = async (
       totalTax += taxAmount;
     }
 
-    // Create invoice
+    // Create invoice with ALL required schema fields
+    const totalAmount = subtotal + totalTax - discountAmount;
     const invoice = new Invoice({
       invoiceNumber,
       customer,
@@ -184,7 +185,12 @@ export const createInvoice = async (
       subtotal,
       taxAmount: totalTax,
       discountAmount,
-      totalAmount: subtotal + totalTax - discountAmount,
+      totalAmount,
+      // Add missing required schema fields
+      paidAmount: 0,
+      remainingAmount: totalAmount,
+      status: 'draft',
+      paymentStatus: 'pending',
       notes,
       terms,
       invoiceType,

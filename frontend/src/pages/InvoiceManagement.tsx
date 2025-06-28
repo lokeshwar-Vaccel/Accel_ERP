@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
 import { 
   Plus, 
   Search, 
@@ -25,6 +26,7 @@ import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
 import PageHeader from '../components/ui/PageHeader';
 import { apiClient } from '../utils/api';
+import { RootState } from '../redux/store';
 
 // Types
 interface Invoice {
@@ -95,6 +97,9 @@ interface InvoiceStats {
 }
 
 const InvoiceManagement: React.FC = () => {
+  // Get current user from Redux
+  const currentUser = useSelector((state: RootState) => state.auth.user);
+  
   // State management
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -639,15 +644,33 @@ const InvoiceManagement: React.FC = () => {
 
     setSubmitting(true);
     try {
+      const grandTotal = calculateGrandTotal();
+      
+      // Calculate totals for remainingAmount
+      const totalAmount = Number(isNaN(grandTotal) ? 0 : grandTotal);
+      
+      const subtotal = calculateSubtotal();
+      const taxAmount = calculateTotalTax();
+      
+      // Simple payload - backend controller now provides all required fields
       const invoiceData = {
-        ...newInvoice,
+        customer: newInvoice.customer,
         dueDate: new Date(newInvoice.dueDate).toISOString(),
+        invoiceType: newInvoice.invoiceType,
+        location: newInvoice.location,
+        notes: newInvoice.notes,
+        discountAmount: newInvoice.discountAmount || 0,
+        reduceStock: newInvoice.reduceStock,
         items: newInvoice.items.map(item => ({
-          ...item,
-          totalPrice: calculateItemTotal(item),
-          taxAmount: calculateItemTotal(item) * (item.taxRate || 0) / 100
+          product: item.product,
+          description: item.description,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+          taxRate: Number(item.taxRate || 0)
         }))
       };
+
+      console.log('Invoice payload (backend fixed):', JSON.stringify(invoiceData, null, 2));
 
       await apiClient.invoices.create(invoiceData);
       await fetchInvoices();
