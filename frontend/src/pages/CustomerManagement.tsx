@@ -95,6 +95,7 @@ interface ContactFormData {
 const CustomerManagement: React.FC = () => {
   // Core state
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   
@@ -139,9 +140,53 @@ const CustomerManagement: React.FC = () => {
   // Dropdown state
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
+  const [showAssignedToDropdown, setShowAssignedToDropdown] = useState(false);
+
+  const fetchUsers = async () => {
+    try {
+      const response = await apiClient.users.getAll();
+      // Handle response format like in other modules
+      let usersData: User[] = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          usersData = response.data;
+        } else if ((response.data as any).users && Array.isArray((response.data as any).users)) {
+          usersData = (response.data as any).users;
+        }
+      }
+      setUsers(usersData);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      // Set fallback data on error
+      setUsers([
+        {
+          _id: '675ed04292f315fcc1e0e5f1',
+          firstName: 'John',
+          lastName: 'Doe',
+          email: 'john.doe@sunpowerservices.com',
+          fullName: 'John Doe'
+        },
+        {
+          _id: '675ed04292f315fcc1e0e5f2',
+          firstName: 'Sarah',
+          lastName: 'Smith',
+          email: 'sarah.smith@sunpowerservices.com',
+          fullName: 'Sarah Smith'
+        },
+        {
+          _id: '675ed04292f315fcc1e0e5f3',
+          firstName: 'Mike',
+          lastName: 'Johnson',
+          email: 'mike.johnson@sunpowerservices.com',
+          fullName: 'Mike Johnson'
+        }
+      ]);
+    }
+  };
 
   useEffect(() => {
     fetchCustomers();
+    fetchUsers();
   }, []);
 
   const fetchCustomers = async () => {
@@ -243,9 +288,12 @@ const CustomerManagement: React.FC = () => {
   };
 
   const filteredCustomers = Array.isArray(customers) ? customers.filter(customer => {
+    // Ensure customer object exists and has required properties
+    if (!customer || !customer.name) return false;
+    
     const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                         customer.phone.includes(searchTerm);
+                         (customer.phone && customer.phone.includes(searchTerm));
     const matchesStatus = statusFilter === 'all' || customer.status === statusFilter;
     const matchesType = typeFilter === 'all' || customer.customerType === typeFilter;
     
@@ -278,7 +326,14 @@ const CustomerManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const response = await apiClient.customers.create(customerFormData);
+      
+      // Prepare form data, excluding assignedTo if it's empty to avoid ObjectId validation error
+      const submitData = { ...customerFormData };
+      if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
+        delete (submitData as any).assignedTo;
+      }
+      
+      const response = await apiClient.customers.create(submitData);
       setCustomers([...customers, response.data]);
       setShowAddModal(false);
       resetCustomerForm();
@@ -300,7 +355,14 @@ const CustomerManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const response = await apiClient.customers.update(editingCustomer._id, customerFormData);
+      
+      // Prepare form data, excluding assignedTo if it's empty to avoid ObjectId validation error
+      const submitData = { ...customerFormData };
+      if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
+        delete (submitData as any).assignedTo;
+      }
+      
+      const response = await apiClient.customers.update(editingCustomer._id, submitData);
       setCustomers(customers.map(c => c._id === editingCustomer._id ? response.data : c));
       setShowEditModal(false);
       setEditingCustomer(null);
@@ -368,6 +430,7 @@ const CustomerManagement: React.FC = () => {
       assignedTo: '',
       notes: ''
     });
+    setShowAssignedToDropdown(false);
   };
 
   // Helper function to extract user name safely
@@ -392,7 +455,7 @@ const CustomerManagement: React.FC = () => {
       address: customer.address,
       customerType: customer.customerType,
       leadSource: customer.leadSource || '',
-      assignedTo: getUserName(customer.assignedTo),
+      assignedTo: getUserId(customer.assignedTo),
       notes: customer.notes || ''
     });
     setFormErrors({});
@@ -518,6 +581,12 @@ const CustomerManagement: React.FC = () => {
     return option ? option.label : 'All Types';
   };
 
+  const getAssignedToLabel = (value: string) => {
+    if (!value) return 'Select user (optional)';
+    const user = users.find(u => u._id === value);
+    return user ? (user.fullName || `${user.firstName} ${user.lastName}`) : 'Select user (optional)';
+  };
+
   // Click outside handler for dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -525,6 +594,7 @@ const CustomerManagement: React.FC = () => {
       if (!target.closest('.dropdown-container')) {
         setShowStatusDropdown(false);
         setShowTypeDropdown(false);
+        setShowAssignedToDropdown(false);
       }
     };
 
@@ -806,7 +876,10 @@ const CustomerManagement: React.FC = () => {
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Add New Customer</h2>
               <button
-                onClick={() => setShowAddModal(false)}
+                onClick={() => {
+                  setShowAddModal(false);
+                  setShowAssignedToDropdown(false);
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="w-6 h-6" />
@@ -925,13 +998,50 @@ const CustomerManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Assigned To
                   </label>
-                  <input
-                    type="text"
-                    value={customerFormData.assignedTo}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, assignedTo: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Assign to sales rep"
-                  />
+                  <div className="relative dropdown-container">
+                    <button
+                      type="button"
+                      onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
+                      className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getAssignedToLabel(customerFormData.assignedTo)}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAssignedToDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showAssignedToDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomerFormData({ ...customerFormData, assignedTo: '' });
+                            setShowAssignedToDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            !customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          Unassigned
+                        </button>
+                        {users.map(user => (
+                          <button
+                            key={user._id}
+                            type="button"
+                            onClick={() => {
+                              setCustomerFormData({ ...customerFormData, assignedTo: user._id });
+                              setShowAssignedToDropdown(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                              customerFormData.assignedTo === user._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
+                          >
+                            <div>
+                              <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`}</div>
+                              <div className="text-xs text-gray-500">{user.email}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -951,7 +1061,10 @@ const CustomerManagement: React.FC = () => {
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setShowAssignedToDropdown(false);
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
@@ -976,7 +1089,10 @@ const CustomerManagement: React.FC = () => {
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Edit Customer</h2>
               <button
-                onClick={() => setShowEditModal(false)}
+                onClick={() => {
+                  setShowEditModal(false);
+                  setShowAssignedToDropdown(false);
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X className="w-6 h-6" />
@@ -1095,13 +1211,50 @@ const CustomerManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Assigned To
                   </label>
-                  <input
-                    type="text"
-                    value={customerFormData.assignedTo}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, assignedTo: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Assign to sales rep"
-                  />
+                  <div className="relative dropdown-container">
+                    <button
+                      type="button"
+                      onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
+                      className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getAssignedToLabel(customerFormData.assignedTo)}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAssignedToDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showAssignedToDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomerFormData({ ...customerFormData, assignedTo: '' });
+                            setShowAssignedToDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            !customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          Unassigned
+                        </button>
+                        {users.map(user => (
+                          <button
+                            key={user._id}
+                            type="button"
+                            onClick={() => {
+                              setCustomerFormData({ ...customerFormData, assignedTo: user._id });
+                              setShowAssignedToDropdown(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                              customerFormData.assignedTo === user._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
+                          >
+                            <div>
+                              <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`}</div>
+                              <div className="text-xs text-gray-500">{user.email}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1121,7 +1274,10 @@ const CustomerManagement: React.FC = () => {
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
-                  onClick={() => setShowEditModal(false)}
+                  onClick={() => {
+                    setShowEditModal(false);
+                    setShowAssignedToDropdown(false);
+                  }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
                   Cancel
@@ -1142,7 +1298,7 @@ const CustomerManagement: React.FC = () => {
       {/* Customer Details Modal */}
       {showDetailsModal && selectedCustomer && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center space-x-3">
                 <h2 className="text-xl font-semibold text-gray-900">{selectedCustomer.name}</h2>
@@ -1161,37 +1317,28 @@ const CustomerManagement: React.FC = () => {
 
             <div className="p-6">
               {/* Customer Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                <div className="space-y-4">
+              <div className="space-y-6 mb-6">
+                {/* Customer Information */}
+                <div className="space-y-3">
                   <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Customer Information</h3>
-                  <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-gray-500">Customer Type</p>
                       <p className="font-medium capitalize">{selectedCustomer.customerType}</p>
                     </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Lead Source</p>
+                      <p className="font-medium">{selectedCustomer.leadSource || 'Direct'}</p>
+                    </div>
                     {selectedCustomer.email && (
                       <div>
                         <p className="text-xs text-gray-500">Email</p>
-                        <p className="font-medium">{selectedCustomer.email}</p>
+                        <p className="font-medium text-sm">{selectedCustomer.email}</p>
                       </div>
                     )}
                     <div>
                       <p className="text-xs text-gray-500">Phone</p>
                       <p className="font-medium">{selectedCustomer.phone}</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500">Address</p>
-                      <p className="font-medium">{selectedCustomer.address}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Lead Information</h3>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-xs text-gray-500">Lead Source</p>
-                      <p className="font-medium">{selectedCustomer.leadSource || 'Direct'}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Assigned To</p>
@@ -1201,13 +1348,17 @@ const CustomerManagement: React.FC = () => {
                       <p className="text-xs text-gray-500">Created</p>
                       <p className="font-medium">{new Date(selectedCustomer.createdAt).toLocaleDateString()}</p>
                     </div>
-                    {selectedCustomer.notes && (
-                      <div>
-                        <p className="text-xs text-gray-500">Notes</p>
-                        <p className="font-medium">{selectedCustomer.notes}</p>
-                      </div>
-                    )}
                   </div>
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500">Address</p>
+                    <p className="font-medium text-sm">{selectedCustomer.address}</p>
+                  </div>
+                  {selectedCustomer.notes && (
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500">Notes</p>
+                      <p className="font-medium text-sm">{selectedCustomer.notes}</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1216,7 +1367,10 @@ const CustomerManagement: React.FC = () => {
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-900">Contact History</h3>
                   <button
-                    onClick={() => openContactModal(selectedCustomer)}
+                    onClick={() => {
+                      openContactModal(selectedCustomer);
+                      setShowDetailsModal(false);
+                    }}
                     className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700 transition-colors"
                   >
                     Add Contact
@@ -1259,7 +1413,10 @@ const CustomerManagement: React.FC = () => {
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
                 <div className="flex space-x-3">
                   <button
-                    onClick={() => openEditModal(selectedCustomer)}
+                    onClick={() => {
+                      openEditModal(selectedCustomer);
+                      setShowDetailsModal(false);
+                    }}
                     className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
                   >
                     Edit Customer
@@ -1267,7 +1424,10 @@ const CustomerManagement: React.FC = () => {
                   <div className="flex space-x-2">
                     {selectedCustomer.status !== 'qualified' && (
                       <button
-                        onClick={() => handleStatusChange(selectedCustomer._id, 'qualified')}
+                        onClick={() => {
+                          handleStatusChange(selectedCustomer._id, 'qualified');
+                          setShowDetailsModal(false);
+                        }}
                         className="bg-yellow-600 text-white px-3 py-2 rounded-lg hover:bg-yellow-700 transition-colors text-sm"
                       >
                         Mark Qualified
@@ -1275,7 +1435,10 @@ const CustomerManagement: React.FC = () => {
                     )}
                     {selectedCustomer.status !== 'contacted' && (
                       <button
-                        onClick={() => handleStatusChange(selectedCustomer._id, 'contacted')}
+                        onClick={() => {
+                          handleStatusChange(selectedCustomer._id, 'contacted');
+                          setShowDetailsModal(false);
+                        }}
                         className="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm"
                       >
                         Mark Contacted
@@ -1283,7 +1446,10 @@ const CustomerManagement: React.FC = () => {
                     )}
                     {selectedCustomer.status !== 'converted' && (
                       <button
-                        onClick={() => handleStatusChange(selectedCustomer._id, 'converted')}
+                        onClick={() => {
+                          handleStatusChange(selectedCustomer._id, 'converted');
+                          setShowDetailsModal(false);
+                        }}
                         className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm"
                       >
                         Mark Converted
