@@ -858,8 +858,8 @@ const brandOptionsFilter = [
     setTransferFormData({
       product: typeof stockItem.product === 'string' ? stockItem.product : stockItem.product._id,
       fromLocation: typeof stockItem.location === 'string' ? stockItem.location : stockItem.location._id,
-      fromRoom: '',
-      fromRack: '',
+      fromRoom: stockItem.room?._id || '',
+      fromRack: stockItem.rack?._id || '',
       toLocation: '',
       toRoom: '',
       toRack: '',
@@ -1944,19 +1944,19 @@ const brandOptionsFilter = [
                           <div className="flex items-center">
                             <Building className="w-4 h-4 text-blue-500 mr-2" />
                             <span className="text-sm font-medium text-gray-900">
-                              {item.location?.name || 'Main Warehouse'}
+                              {item.location?.name || <span className="text-red-500">Not assigned</span>}
                             </span>
                           </div>
                           <div className="flex items-center">
                             <Archive className="w-4 h-4 text-green-500 mr-2" />
                             <span className="text-sm text-gray-700">
-                              Room: {item.room?.name}
+                              Room: {item.room?.name || <span className="text-red-500">Not assigned</span>}
                             </span>
                           </div>
                           <div className="flex items-center">
                             <MapPin className="w-4 h-4 text-purple-500 mr-2" />
                             <span className="text-sm text-gray-600">
-                              Rack: {item.rack?.name}
+                              Rack: {item.rack?.name || <span className="text-red-500">Not assigned</span>}
                             </span>
                           </div>
                         </div>
@@ -2737,39 +2737,35 @@ const brandOptionsFilter = [
                       <div className="flex items-center p-3 bg-white border border-gray-200 rounded-lg">
                         <Building className="w-4 h-4 text-blue-500 mr-2" />
                         <span className="font-medium text-gray-900">
-                          {locations.find(l => l._id === transferFormData.fromLocation)?.name || 'Source Location'}
+                          {locations.find(l => l._id === transferFormData.fromLocation)?.name || <span className="text-red-500">Not available</span>}
                         </span>
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Room (Optional)</label>
-                      <select
-                        value={transferFormData.fromRoom}
-                        onChange={(e) => setTransferFormData({ ...transferFormData, fromRoom: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">Select current room</option>
-                        {rooms.filter(room => room.location._id === transferFormData.fromLocation).map(room => (
-                          <option key={room._id} value={room._id}>{room.name}</option>
-                        ))}
-                      </select>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                      <div className="flex items-center p-3 bg-white border border-gray-200 rounded-lg">
+                        <Archive className="w-4 h-4 text-green-500 mr-2" />
+                        <span className="font-medium text-gray-700">
+                          {rooms.find(r => r._id === transferFormData.fromRoom)?.name || <span className="text-red-500">Not available</span>}
+                        </span>
+                      </div>
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Rack (Optional)</label>
-                      <select
-                        value={transferFormData.fromRack}
-                        onChange={(e) => setTransferFormData({ ...transferFormData, fromRack: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        disabled={!transferFormData.fromRoom}
-                      >
-                        <option value="">Select current rack</option>
-                        {racks.filter(rack => rack.room._id === transferFormData.fromRoom).map(rack => (
-                          <option key={rack._id} value={rack._id}>{rack.name}</option>
-                        ))}
-                      </select>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Rack</label>
+                      <div className="flex items-center p-3 bg-white border border-gray-200 rounded-lg">
+                        <MapPin className="w-4 h-4 text-purple-500 mr-2" />
+                        <span className="font-medium text-gray-600">
+                          {racks.find(rack => rack._id === transferFormData.fromRack)?.name || <span className="text-red-500">Not available</span>}
+                        </span>
+                      </div>
                     </div>
+                    {(!transferFormData.fromLocation || !transferFormData.fromRoom || !transferFormData.fromRack) && (
+                      <div className="bg-red-100 text-red-700 p-2 rounded mt-2 text-sm">
+                        This item is not fully assigned to a location/room/rack. Please move it into a valid location before transferring.
+                      </div>
+                    )}
                   </div>
                 </div>
 
