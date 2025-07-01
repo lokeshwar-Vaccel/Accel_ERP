@@ -1,24 +1,38 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Package, DollarSign, TrendingDown, TrendingUp, X, ChevronDown } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Package, DollarSign, TrendingDown, TrendingUp, X, ChevronDown, Settings, MapPin, Hash } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
+import { RootState } from 'redux/store';
+import { useSelector } from 'react-redux';
 
-interface Product {
-  _id: string;
+export interface Product {
   name: string;
   description?: string;
-  category: string;
+  category: string; // Should be a value from ProductCategory enum
   brand?: string;
   modelNumber?: string;
-  specifications?: any;
-  price: number;
+  partNo: string;
+  quantity: number;
   minStockLevel: number;
   isActive: boolean;
-  productCode?: string; // Virtual field from backend
+  location: string; // MongoDB ObjectId as string
+  room: string;
+  rack: string;
+  hsnNumber?: string;
+  dept?: string;
+  productType1?: string;
+  productType2?: string;
+  productType3?: string;
+  make?: string;
+  gst?: number;
+  gndp?: number;
+  price?: number;
+  gndpTotal?: number;
   createdAt: string;
   updatedAt: string;
   createdBy?: string;
 }
+
 
 interface ProductFormData {
   name: string;
@@ -37,29 +51,58 @@ const ProductManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const currentUser = useSelector((state: RootState) => state.auth.user?.id);
+  console.log("currentUser-products:",products);
   
+
   // Custom dropdown states
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  
+
   // Modal states
   const [showProductModal, setShowProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
-  
+  const [locations, setLocations] = useState<any[]>([]);
+    const [rooms, setRooms] = useState<any[]>([]);
+    const [racks, setRacks] = useState<any[]>([]);
+
   // Form states
-  const [formData, setFormData] = useState<ProductFormData>({
+  const [formData, setFormData] = useState({
     name: '',
     description: '',
-    category: '',
+    category: '',        
     brand: '',
     modelNumber: '',
-    specifications: {},
+    partNo: '',
+    quantity: 0,
+    minStockLevel: 0,
+    isActive: true,
+    location: '',        
+    room: '',            
+    rack: '',            
+    hsnNumber: '',
+    dept: '',
+    productType1: '',
+    productType2: '',
+    productType3: '',
+    make: '',
+    gst: 0,
+    gndp: 0,
     price: 0,
-    minStockLevel: 0
+    gndpTotal: 0,
+    createdBy: currentUser        
   });
+
+    const departments = [
+    'RETAIL', 'INDUSTRIAL', 'TELECOM', 'EV', 'RET/TEL'
+  ];
+    const category = [
+    'genset', 'spare_part', 'accessory'
+  ];
+
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -86,20 +129,37 @@ const ProductManagement: React.FC = () => {
     setIsEditing(false);
     setSelectedProduct(null);
     setFormData({
-      name: '',
-      description: '',
-      category: '',
-      brand: '',
-      modelNumber: '',
-      specifications: {},
-      price: 0,
-      minStockLevel: 0
+    name: '',
+    description: '',
+    category: '',        
+    brand: '',
+    modelNumber: '',
+    partNo: '',
+    quantity: 0,
+    minStockLevel: 0,
+    isActive: true,
+    location: '',        
+    room: '',            
+    rack: '',            
+    hsnNumber: '',
+    dept: '',
+    productType1: '',
+    productType2: '',
+    productType3: '',
+    make: '',
+    gst: 0,
+    gndp: 0,
+    price: 0,
+    gndpTotal: 0,
+    createdBy: currentUser
     });
     setFormErrors({});
     setShowProductModal(true);
   };
 
   const openEditProductModal = (product: Product) => {
+    console.log("product00000:",product);
+    
     setIsEditing(true);
     setSelectedProduct(product);
     setFormData({
@@ -108,10 +168,26 @@ const ProductManagement: React.FC = () => {
       category: product.category,
       brand: product.brand || '',
       modelNumber: product.modelNumber || '',
-      specifications: product.specifications || {},
-      price: product.price,
-      minStockLevel: product.minStockLevel
+      partNo: product.partNo || '',
+      quantity: product.quantity,
+      minStockLevel: product.minStockLevel,
+      isActive: product.isActive ?? true,
+      location: product.location || '',
+      room: product.room || '',
+      rack: product.rack || '',
+      hsnNumber: product.hsnNumber || '',
+      dept: product.dept || '',
+      productType1: product.productType1 || '',
+      productType2: product.productType2 || '',
+      productType3: product.productType3 || '',
+      make: product.make || '',
+      gst: product.gst || 0,
+      gndp: product.gndp || 0,
+      price: product.price || 0,
+      gndpTotal: product.gndpTotal || 0,
+      createdBy: product.createdBy?._id || ''
     });
+
     setFormErrors({});
     setShowProductModal(true);
   };
@@ -120,14 +196,29 @@ const ProductManagement: React.FC = () => {
     setShowProductModal(false);
     setSelectedProduct(null);
     setFormData({
-      name: '',
-      description: '',
-      category: '',
-      brand: '',
-      modelNumber: '',
-      specifications: {},
-      price: 0,
-      minStockLevel: 0
+          name: '',
+    description: '',
+    category: '',        
+    brand: '',
+    modelNumber: '',
+    partNo: '',
+    quantity: 0,
+    minStockLevel: 0,
+    isActive: true,
+    location: '',        
+    room: '',            
+    rack: '',            
+    hsnNumber: '',
+    dept: '',
+    productType1: '',
+    productType2: '',
+    productType3: '',
+    make: '',
+    gst: 0,
+    gndp: 0,
+    price: 0,
+    gndpTotal: 0,
+    createdBy: ''
     });
     setFormErrors({});
   };
@@ -154,10 +245,6 @@ const ProductManagement: React.FC = () => {
       errors.category = 'Category is required';
     }
 
-    if (formData.price <= 0) {
-      errors.price = 'Price must be greater than 0';
-    }
-
     if (formData.minStockLevel < 0) {
       errors.minStockLevel = 'Minimum stock level cannot be negative';
     }
@@ -169,7 +256,7 @@ const ProductManagement: React.FC = () => {
   // CRUD operations
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -181,7 +268,7 @@ const ProductManagement: React.FC = () => {
       } else {
         await apiClient.products.create(formData);
       }
-      
+
       await fetchProducts();
       closeProductModal();
     } catch (err) {
@@ -214,7 +301,7 @@ const ProductManagement: React.FC = () => {
       ...prev,
       [name]: name === 'price' || name === 'minStockLevel' ? Number(value) : value
     }));
-    
+
     // Clear error for this field
     if (formErrors[name]) {
       setFormErrors(prev => ({
@@ -224,11 +311,90 @@ const ProductManagement: React.FC = () => {
     }
   };
 
+    useEffect(() => {
+      fetchAllData();
+    }, []);
+
+      const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      await Promise.all([
+        // fetchProducts(),
+        fetchLocations(),
+        fetchRooms(),
+        fetchRacks()
+      ]);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchLocations = async () => {
+      try {
+        const response = await apiClient.stock.getLocations();
+        // Handle response format from backend - locations are nested in data.locations
+        let locationsData: any[] = [];
+        if (response.data) {
+          if (Array.isArray(response.data)) {
+            locationsData = response.data;
+          } else if ((response.data as any).locations && Array.isArray((response.data as any).locations)) {
+            locationsData = (response.data as any).locations;
+          }
+        }
+        setLocations(locationsData);
+      } catch (error) {
+        console.error('Error fetching locations:', error);
+        setLocations([]);
+      }
+    };
+  
+    const fetchRooms = async () => {
+      try {
+        const response = await apiClient.stock.getRooms();
+        // Handle response format from backend - locations are nested in data.locations
+        let roomsData: any[] = [];
+        if (response.data) {
+          if (Array.isArray(response.data)) {
+            roomsData = response.data;
+          } else if ((response.data as any).rooms && Array.isArray((response.data as any).rooms)) {
+            roomsData = (response.data as any).rooms;
+          }
+        }
+
+        setRooms(roomsData);
+      } catch (error) {
+        console.error('Error fetching locations:', error);
+        setRooms([]);
+      }
+    };
+  
+  
+    const fetchRacks = async () => {
+      try {
+        const response = await apiClient.stock.getRacks();
+        // Handle response format from backend - locations are nested in data.locations
+        let racksData: any[] = [];
+        if (response.data) {
+          if (Array.isArray(response.data)) {
+            racksData = response.data;
+          } else if ((response.data as any).racks && Array.isArray((response.data as any).racks)) {
+            racksData = (response.data as any).racks;
+          }
+        }
+        setRacks(racksData);
+      } catch (error) {
+        console.error('Error fetching locations:', error);
+        setRacks([]);
+      }
+    };
+
   const fetchProducts = async () => {
     try {
       setLoading(true);
       const response = await apiClient.products.getAll();
-      
+
       // Handle different response formats: { data: { products: [...] } } or { data: [...] }
       let products: any[] = [];
       if (response.data) {
@@ -250,13 +416,13 @@ const ProductManagement: React.FC = () => {
 
   const filteredProducts = Array.isArray(products) ? products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (product.productCode && product.productCode.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                         (product.brand && product.brand.toLowerCase().includes(searchTerm.toLowerCase()));
+      (product.productCode && product.productCode.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (product.brand && product.brand.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-    const matchesStatus = statusFilter === 'all' || 
-                         (statusFilter === 'active' && product.isActive) ||
-                         (statusFilter === 'inactive' && !product.isActive);
-    
+    const matchesStatus = statusFilter === 'all' ||
+      (statusFilter === 'active' && product.isActive) ||
+      (statusFilter === 'inactive' && !product.isActive);
+
     return matchesSearch && matchesCategory && matchesStatus;
   }) : [];
 
@@ -289,11 +455,11 @@ const ProductManagement: React.FC = () => {
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
-      <PageHeader 
+      <PageHeader
         title="Product Management"
         subtitle="Manage your product catalog and inventory"
       >
-        <button 
+        <button
           onClick={openAddProductModal}
           className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
         >
@@ -308,7 +474,7 @@ const ProductManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-600">Total Products</p>
-                              <p className="text-xl font-bold text-gray-900">{Array.isArray(products) ? products.length : 0}</p>
+              <p className="text-xl font-bold text-gray-900">{Array.isArray(products) ? products.length : 0}</p>
             </div>
             <Package className="w-6 h-6 text-blue-600" />
           </div>
@@ -338,7 +504,7 @@ const ProductManagement: React.FC = () => {
             <div>
               <p className="text-xs text-gray-600">Avg Price</p>
               <p className="text-xl font-bold text-orange-600">
-                ₹{Array.isArray(products) && products.length > 0 ? Math.round(products.reduce((acc, p) => acc + (p.price || 0), 0) / products.length).toLocaleString() : 0}
+                {/* ₹{Array.isArray(products) && products.length > 0 ? Math.round(products.reduce((acc, p) => acc + (p.price || 0), 0) / products.length).toLocaleString() : 0} */}
               </p>
             </div>
             <DollarSign className="w-6 h-6 text-orange-600" />
@@ -359,7 +525,7 @@ const ProductManagement: React.FC = () => {
               className="pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          
+
           {/* Category Custom Dropdown */}
           <div className="relative dropdown-container">
             <button
@@ -381,9 +547,8 @@ const ProductManagement: React.FC = () => {
                       setCategoryFilter(option.value);
                       setShowCategoryDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                      categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                    }`}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -391,7 +556,7 @@ const ProductManagement: React.FC = () => {
               </div>
             )}
           </div>
-          
+
           {/* Status Custom Dropdown */}
           <div className="relative dropdown-container">
             <button
@@ -413,9 +578,8 @@ const ProductManagement: React.FC = () => {
                       setStatusFilter(option.value);
                       setShowStatusDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                      statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                    }`}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -456,34 +620,33 @@ const ProductManagement: React.FC = () => {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div>
                         <div className="text-xs font-medium text-gray-900">{product.name}</div>
-                        <div className="text-xs text-gray-500">Code: {product.productCode || 'N/A'}</div>
+                        {/* <div className="text-xs text-gray-500">Code: {product.productCode || 'N/A'}</div> */}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.category}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.brand || 'N/A'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
-                      ₹{product.price.toLocaleString()}
+                      ₹{product?.price?.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {product.minStockLevel}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        product.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                      }`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${product.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
                         {product.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
                       <div className="flex items-center space-x-2">
-                        <button 
+                        <button
                           onClick={() => openEditProductModal(product)}
                           className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
                           title="Edit Product"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button 
+                        <button
                           onClick={() => openDeleteConfirm(product)}
                           className="text-red-600 hover:text-red-900 p-2 rounded-lg hover:bg-red-50 transition-colors"
                           title="Delete Product"
@@ -516,7 +679,7 @@ const ProductManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-4 space-y-3">
+            {/* <form onSubmit={handleSubmit} className="p-4 space-y-3">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -666,6 +829,493 @@ const ProductManagement: React.FC = () => {
                   {submitting ? 'Saving...' : (isEditing ? 'Update Product' : 'Create Product')}
                 </button>
               </div>
+            </form> */}
+            <form onSubmit={handleSubmit}>
+              <div className="p-6">
+                {/* General Error */}
+                {formErrors.general && (
+                  <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-red-600 text-sm font-medium">{formErrors.general}</p>
+                  </div>
+                )}
+
+                {/* Basic Information Section */}
+                <div className="mb-8">
+                  <div className="flex items-center space-x-2 mb-6">
+                    {/* <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Package className="w-4 h-4 text-blue-600" />
+                  </div> */}
+                    <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Product Name *
+                        </label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={formData.name}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                          placeholder="Enter product name"
+                        />
+                        {formErrors.name && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.name}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Part Number *
+                        </label>
+                        <input
+                          type="text"
+                          name="partNo"
+                          value={formData.partNo}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.partNo ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                          placeholder="e.g., BRG-789X"
+                        />
+                        {formErrors.partNo && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.partNo}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Category *
+                        </label>
+                        <select
+                          name="category"
+                          value={formData.category}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.category ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                        >
+                          <option value="">Select Category</option>
+                          {category.map(cat => (
+                            <option key={cat} value={cat}>
+                              {cat.replace('_', ' ').toUpperCase()}
+                            </option>
+                          ))}
+                        </select>
+                        {formErrors.category && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.category}
+                          </p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Department *
+                        </label>
+                        <select
+                          name="dept"
+                          value={formData.dept}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.dept ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                        >
+                          <option value="">Select Department</option>
+                          {departments.map(dept => (
+                            <option key={dept} value={dept}>{dept}</option>
+                          ))}
+                        </select>
+                        {formErrors.dept && (
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.dept}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Brand/Make
+                        </label>
+                        <input
+                          type="text"
+                          name="brand"
+                          value={formData.brand}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                          placeholder="e.g., SKF"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Model Number
+                        </label>
+                        <input
+                          type="text"
+                          name="modelNumber"
+                          value={formData.modelNumber}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                          placeholder="Enter model number"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Description
+                      </label>
+                      <textarea
+                        name="description"
+                        value={formData.description}
+                        onChange={handleInputChange}
+                        rows={3}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200 resize-none"
+                        placeholder="Enter product description"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Product Classification Section */}
+                <div className="mb-8">
+                  <div className="flex items-center space-x-2 mb-6">
+                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                      <Settings className="w-4 h-4 text-green-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900">Product Classification</h3>
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Product Type 1
+                        </label>
+                        {/* <select
+                          name="productType1"
+                          value={formData.productType1}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                        >
+                          <option value="">Select Type 1</option>
+                          {productTypes1.map(type => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </select> */}
+                        <input
+                          type="text"
+                          name="productType1"
+                          value={formData.productType1}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                          placeholder="Enter productType1"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Product Type 2
+                        </label>
+                        {/* <select
+                          name="productType2"
+                          value={formData.productType2}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                        >
+                          <option value="">Select Type 2</option>
+                          {productTypes2.map(type => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </select> */}
+                        <input
+                          type="text"
+                          name="productType2"
+                          value={formData.productType2}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                          placeholder="Enter productType2"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Product Type 3
+                        </label>
+                        {/* <select
+                          name="productType3"
+                          value={formData.productType3}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                        >
+                          <option value="">Select Type 3</option>
+                          {productTypes3.map(type => (
+                            <option key={type} value={type}>{type}</option>
+                          ))}
+                        </select> */}
+                        <input
+                          type="text"
+                          name="productType3"
+                          value={formData.productType3}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                          placeholder="Enter productType3"
+                        />
+                      </div>
+                      <div></div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Location Information Section */}
+                <div className="mb-8">
+                  <div className="flex items-center space-x-2 mb-6">
+                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                      <MapPin className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-gray-900">Location Information</h3>
+                  </div>
+
+                  {/* Location Information Section */}
+                  <div className="mb-8">
+                    <h3 className="text-lg font-semibold text-gray-900">Location Information</h3>
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Location ID</label>
+                          <select
+                            name="location"
+                            value={formData.location}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select Location</option>
+                            {locations.map(location => (
+                              <option key={location._id} value={location._id}>
+                                {location.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Room ID</label>
+                          <select
+                            name="room"
+                            value={formData.room}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select Room</option>
+                            {rooms.map(room => (
+                              <option key={room._id} value={room._id}>
+                                {room.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Rack ID</label>
+                          <select
+                            name="rack"
+                            value={formData.rack}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Select Rack</option>
+                            {racks.map(rack => (
+                              <option key={rack._id} value={rack._id}>
+                                {rack.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Inventory & Pricing Section */}
+                <div className="mb-8">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <DollarSign className="w-5 h-5 text-gray-600" />
+                    <h3 className="text-lg font-semibold text-gray-900">Inventory & Pricing</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Quantity *
+                      </label>
+                      <input
+                        type="number"
+                        name="quantity"
+                        value={formData.quantity}
+                        onChange={handleInputChange}
+                        min="0"
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.quantity ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="0"
+                      />
+                      {formErrors.quantity && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Min Stock Level *
+                      </label>
+                      <input
+                        type="number"
+                        name="minStockLevel"
+                        value={formData.minStockLevel}
+                        onChange={handleInputChange}
+                        min="0"
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.minStockLevel ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="0"
+                      />
+                      {formErrors.minStockLevel && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.minStockLevel}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        GNDP Price (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        name="gndp"
+                        value={formData.gndp}
+                        onChange={handleInputChange}
+                        min="0"
+                        step="0.01"
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.gndp ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="0.00"
+                      />
+                      {formErrors.gndp && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.gndp}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        MRP (₹) *
+                      </label>
+                      <input
+                        type="number"
+                        name="price"
+                        value={formData.price}
+                        onChange={handleInputChange}
+                        min="0"
+                        step="0.01"
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.price ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="0.00"
+                      />
+                      {formErrors.price && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tax Information Section */}
+                <div className="mb-8">
+                  <div className="flex items-center space-x-2 mb-4">
+                    <Hash className="w-5 h-5 text-gray-600" />
+                    <h3 className="text-lg font-semibold text-gray-900">Tax Information</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        HSN Number
+                      </label>
+                      <input
+                        type="text"
+                        name="hsnNumber"
+                        value={formData.hsnNumber}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="e.g., 8482.10.00"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        GST Rate (%)
+                      </label>
+                      <input
+                        type="text"
+                        name="gst"
+                        value={formData.gst}
+                        onChange={handleInputChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        placeholder="e.g., 8482.10.00"
+                      />
+                      {/* <select
+                      name="gst"
+                      value={formData.gst}
+                      onChange={handleInputChange}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <option value="">Select GST Rate</option>
+                      {gstRates.map(rate => (
+                        <option key={rate} value={rate}>{rate}%</option>
+                      ))}
+                    </select> */}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 pt-6 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={closeProductModal}
+                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type='submit'
+                    // onClick={handleSubmit}
+                    disabled={submitting}
+                    className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  >
+                    {submitting ? (
+                      <span className="flex items-center justify-center">
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Saving...
+                      </span>
+                    ) : (
+                      isEditing ? 'Update Product' : 'Create Product'
+                    )}
+                  </button>
+                </div>
+              </div>
             </form>
           </div>
         </div>
@@ -683,7 +1333,7 @@ const ProductManagement: React.FC = () => {
                 Delete Product
               </h3>
               <p className="text-gray-600 text-center mb-6">
-                Are you sure you want to delete <strong>{productToDelete.name}</strong>? 
+                Are you sure you want to delete <strong>{productToDelete.name}</strong>?
                 This action cannot be undone.
               </p>
               <div className="flex space-x-3">

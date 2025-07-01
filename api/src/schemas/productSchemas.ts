@@ -119,13 +119,13 @@ export interface StockAlertInput {
 const baseProductFields = {
   name: Joi.string().min(2).max(200).trim(),
   description: Joi.string().max(1000).allow(''),
-  category: Joi.string().valid(...Object.values(ProductCategory)),
+  category: Joi.string().valid(...Object.values(ProductCategory)).required(),
   brand: Joi.string().max(100).trim().allow(''),
   modelNumber: Joi.string().max(100).trim().allow(''),
-  specifications: Joi.object().unknown(true), // Allow any key-value pairs
+  specifications: Joi.object().unknown(true),
   price: Joi.number().min(0).precision(2),
-  minStockLevel: Joi.number().integer().min(0),
-  isActive: Joi.boolean(),
+  minStockLevel: Joi.number().integer().min(0).required(),
+  isActive: Joi.boolean().default(true),
   tags: Joi.array().items(Joi.string().max(50)).max(10),
   dimensions: Joi.object({
     length: Joi.number().min(0),
@@ -138,27 +138,27 @@ const baseProductFields = {
     duration: Joi.number().integer().min(0),
     unit: Joi.string().valid('days', 'months', 'years'),
     terms: Joi.string().max(500)
-  })
+  }),
+  partNo: Joi.string().max(100).trim().required(),
+  quantity: Joi.number().min(0).required(),
+  location: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required(),
+  room: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required(),
+  rack: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required(),
+  hsnNumber: Joi.string().max(50).allow(''),
+  dept: Joi.string().max(100).allow(''),
+  productType1: Joi.string().max(100).allow(''),
+  productType2: Joi.string().max(100).allow(''),
+  productType3: Joi.string().max(100).allow(''),
+  make: Joi.string().max(100).allow(''),
+  gst: Joi.number().min(0).max(100),
+  gndp: Joi.number().min(0),
+  mrp: Joi.number().min(0),
+  gndpTotal: Joi.number().min(0),
+  createdBy: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required()
 };
 
 // Create product schema
-export const createProductSchema = Joi.object<CreateProductInput>({
-  name: baseProductFields.name.required(),
-  description: baseProductFields.description,
-  category: baseProductFields.category.required(),
-  brand: baseProductFields.brand,
-  modelNumber: baseProductFields.modelNumber,
-  specifications: baseProductFields.specifications,
-  price: baseProductFields.price.required(),
-  minStockLevel: baseProductFields.minStockLevel.required(),
-  isActive: baseProductFields.isActive.default(true),
-  tags: baseProductFields.tags,
-  dimensions: baseProductFields.dimensions,
-  warranty: baseProductFields.warranty
-});
-
-// Update product schema
-export const updateProductSchema = Joi.object<UpdateProductInput>({
+export const createProductSchema = Joi.object({
   name: baseProductFields.name,
   description: baseProductFields.description,
   category: baseProductFields.category,
@@ -170,7 +170,55 @@ export const updateProductSchema = Joi.object<UpdateProductInput>({
   isActive: baseProductFields.isActive,
   tags: baseProductFields.tags,
   dimensions: baseProductFields.dimensions,
-  warranty: baseProductFields.warranty
+  warranty: baseProductFields.warranty,
+  partNo: baseProductFields.partNo,
+  quantity: baseProductFields.quantity,
+  location: baseProductFields.location,
+  room: baseProductFields.room,
+  rack: baseProductFields.rack,
+  hsnNumber: baseProductFields.hsnNumber,
+  dept: baseProductFields.dept,
+  productType1: baseProductFields.productType1,
+  productType2: baseProductFields.productType2,
+  productType3: baseProductFields.productType3,
+  make: baseProductFields.make,
+  gst: baseProductFields.gst,
+  gndp: baseProductFields.gndp,
+  // mrp: baseProductFields.mrp,
+  gndpTotal: baseProductFields.gndpTotal,
+  createdBy: baseProductFields.createdBy
+});
+
+// Update product schema
+export const updateProductSchema = Joi.object({
+  name: baseProductFields.name,
+  description: baseProductFields.description,
+  category: baseProductFields.category,
+  brand: baseProductFields.brand,
+  modelNumber: baseProductFields.modelNumber,
+  specifications: baseProductFields.specifications,
+  // price: baseProductFields.price,
+  minStockLevel: baseProductFields.minStockLevel,
+  isActive: baseProductFields.isActive,
+  tags: baseProductFields.tags,
+  dimensions: baseProductFields.dimensions,
+  warranty: baseProductFields.warranty,
+  partNo: baseProductFields.partNo,
+  quantity: baseProductFields.quantity,
+  location: baseProductFields.location,
+  room: baseProductFields.room,
+  rack: baseProductFields.rack,
+  hsnNumber: baseProductFields.hsnNumber,
+  dept: baseProductFields.dept,
+  productType1: baseProductFields.productType1,
+  productType2: baseProductFields.productType2,
+  productType3: baseProductFields.productType3,
+  make: baseProductFields.make,
+  gst: baseProductFields.gst,
+  gndp: baseProductFields.gndp,
+  mrp: baseProductFields.mrp,
+  gndpTotal: baseProductFields.gndpTotal,
+  createdBy: baseProductFields.createdBy
 });
 
 // Product search/filter schema

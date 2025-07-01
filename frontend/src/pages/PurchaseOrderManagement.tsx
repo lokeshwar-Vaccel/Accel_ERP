@@ -508,7 +508,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const getProductName = (product: string | { name: string }): string => {
     if (typeof product === 'string') return product;
-    return product.name;
+    return product?.name;
   };
 
   const handleCreatePO = async () => {
@@ -564,7 +564,7 @@ const PurchaseOrderManagement: React.FC = () => {
     
     setReceiveData({
       receivedItems: po.items.map(item => ({
-        productId: typeof item.product === 'string' ? item.product : item.product._id,
+        productId: typeof item.product === 'string' ? item.product : item.product?._id,
         quantityReceived: item.quantity,
         condition: 'good',
         batchNumber: '',
@@ -1290,10 +1290,10 @@ const PurchaseOrderManagement: React.FC = () => {
                           </option>
                           {products.map(product => (
                             <option key={product._id} value={product._id}>
-                              {product.name} 
-                              {product.brand && ` - ${product.brand}`}
+                              {/* {product.name}  */}
+                              {product?.brand && ` - ${product?.brand}`}
                               {product.category && ` (${product.category})`}
-                              {product.price && ` - ₹${product.price}`}
+                              {/* {product.price && ` - ₹${product.price}`} */}
                             </option>
                           ))}
                         </select>
@@ -1703,13 +1703,13 @@ const PurchaseOrderManagement: React.FC = () => {
                               <div className="text-xs font-medium text-gray-900">
                                 {getProductName(item.product)}
                               </div>
-                              {typeof item.product === 'object' && item.product.brand && (
-                                <div className="text-xs text-gray-500">Brand: {item.product.brand}</div>
+                              {typeof item.product === 'object' && item.product?.brand && (
+                                <div className="text-xs text-gray-500">Brand: {item.product?.brand}</div>
                               )}
                             </div>
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
-                            {typeof item.product === 'object' ? item.product.category : '-'}
+                            {typeof item.product === 'object' ? item.product?.category : '-'}
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                             {item.quantity}
@@ -1904,8 +1904,8 @@ const PurchaseOrderManagement: React.FC = () => {
                             <div className="text-xs font-medium text-gray-900">
                               {getProductName(item.product)}
                             </div>
-                            {typeof item.product === 'object' && item.product.category && (
-                              <div className="text-xs text-gray-500">Category: {item.product.category}</div>
+                            {typeof item.product === 'object' && item.product?.category && (
+                              <div className="text-xs text-gray-500">Category: {item.product?.category}</div>
                             )}
                           </div>
                           <div className="text-center">

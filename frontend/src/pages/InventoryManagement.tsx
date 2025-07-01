@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Plus, 
-  Search, 
+import {
+  Plus,
+  Search,
   Package,
   AlertTriangle,
   TrendingUp,
@@ -17,7 +17,10 @@ import {
   History,
   ChevronDown,
   X,
-  Eye
+  Eye,
+  Building,
+  Archive,
+  Edit2
 } from 'lucide-react';
 import { Table } from '../components/ui/Table';
 import { Modal } from '../components/ui/Modal';
@@ -26,6 +29,8 @@ import { Button } from '../components/ui/Botton';
 import { Stock, Product, StockLocation, TableColumn, FormField } from '../types';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
+import { Input } from 'components/ui/Input';
+import { Select } from 'components/ui/Select';
 
 // Types
 interface ProductData {
@@ -110,6 +115,8 @@ const InventoryManagement: React.FC = () => {
   const [locationFilter, setLocationFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
+
+  console.log("inventory:",inventory);
   
   // Custom dropdown states
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
@@ -129,7 +136,18 @@ const InventoryManagement: React.FC = () => {
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
-  
+
+  //Location
+  const [activeTab, setActiveTab] = useState<'locations' | 'rooms' | 'racks'>('locations');
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [racks, setRacks] = useState<any[]>([]);
+  const [roomErrors, setRoomErrors] = useState<any>({});
+  const [rackErrors, setRackErrors] = useState<any>({});
+  const [selectedRoom, setSelectedRoom] = useState<any | undefined>();
+  const [selectedRack, setSelectedRack] = useState<any | undefined>();
+    const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
+
+
   // Form states
   const [selectedItem, setSelectedItem] = useState<StockItem | null>(null);
   const [isEditingLocation, setIsEditingLocation] = useState(false);
@@ -161,6 +179,19 @@ const InventoryManagement: React.FC = () => {
     contactPerson: '',
     phone: ''
   });
+  const [roomFormData, setRoomFormData] = useState({
+    name: '',
+    location: '',
+    description: '',
+    isActive: true
+  });
+  const [rackFormData, setRackFormData] = useState({
+    name: '',
+    room: '',
+    location: '',
+    description: '',
+    isActive: true
+  });
   const [adjustmentFormData, setAdjustmentFormData] = useState<StockAdjustmentFormData>({
     product: '',
     location: '',
@@ -180,6 +211,195 @@ const InventoryManagement: React.FC = () => {
     notes: ''
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  const handleRoomModalClose = () => {
+    setRoomFormData({
+      name: '',
+      location: '',
+      description: '',
+      isActive: true
+    });
+    setRoomErrors({});
+    setSelectedRoom(undefined);
+  };
+
+  const handleRackModalClose = () => {
+    setRackFormData({
+      name: '',
+      location: '',
+      room: '',
+      description: '',
+      isActive: true
+    });
+    setRackErrors({});
+    setSelectedRack(undefined);
+  };
+
+  const locationOptions = [
+    { value: '', label: 'Select a location' },
+    ...locations.map(location => ({
+      value: location._id,
+      label: location.name
+    }))
+  ];
+
+    const roomOptions = [
+    { value: '', label: roomFormData.location ? 'Select a room' : 'Select location first' },
+    ...filteredRooms.map(room => ({
+      value: room._id,
+      label: room.name
+    }))
+  ];
+
+  console.log("rackFormData9999999:", rackFormData);
+
+
+  useEffect(() => {
+    if (selectedRoom) {
+      setRoomFormData({
+        name: selectedRoom.name,
+        location: selectedRoom.location._id,
+        description: selectedRoom.description || '',
+        isActive: selectedRoom.isActive
+      });
+    } else {
+      setRoomFormData({
+        name: '',
+        location: '',
+        description: '',
+        isActive: true
+      });
+    }
+  }, [selectedRoom]);
+
+    useEffect(() => {
+    if (selectedRack) {
+      setRackFormData({
+        name: selectedRack.name,
+        room: selectedRack.room._id,
+        location: selectedRack.location._id,
+        description: selectedRack.description || '',
+        isActive: selectedRack.isActive
+      });
+    } else {
+      setRackFormData({
+        name: '',
+        room: '',
+        location: '',
+        description: '',
+        isActive: true
+      });
+    }
+  }, [selectedRack]);
+
+  const validateRoomForm = (): boolean => {
+    const newErrors: any = {};
+
+    if (!roomFormData.name.trim()) {
+      newErrors.name = 'Room name is required';
+    }
+    if (!roomFormData.location) {
+      newErrors.location = 'Location is required';
+    }
+
+    setRoomErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+    const validateRackForm = (): boolean => {
+    const newErrors: any = {};
+
+    if (!rackFormData.name.trim()) {
+      newErrors.name = 'Rack name is required';
+    }
+    if (!rackFormData.location) {
+      newErrors.location = 'Location is required';
+    }
+    if (!rackFormData.room) {
+      newErrors.room = 'Room is required';
+    }
+
+    setRackErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleRoomSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateRoomForm()) return;
+
+    try {
+      setLoading(true);
+      if (selectedRoom) {
+        // Update existing location
+        const response = await apiClient.stock.updateRoom(selectedRoom._id, roomFormData);
+        const updatedRoom = (response.data as any).room || response.data;
+        setRooms(rooms.map(loc =>
+          loc._id === selectedRoom._id ? updatedRoom : loc
+        ));
+      } else {
+        // Create new location
+        const response = await apiClient.stock.createRoom(roomFormData);
+        const newRoom = (response.data as any).room || response.data;
+        setRooms([...rooms, newRoom]);
+      }
+
+      // setShowLocationModal(false);
+      setRoomFormData({
+        name: '',
+        location: '',
+        description: '',
+        isActive: true
+      });
+      // setIsEditingLocation(false);
+      // setEditingLocationId(null);
+    } catch (error) {
+      setRoomErrors({ submit: 'Failed to save room. Please try again.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRackSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!validateRackForm()) return;
+
+    try {
+      setLoading(true);
+      if (selectedRack) {
+        // Update existing location
+        const response = await apiClient.stock.updateRack(selectedRack._id, rackFormData);
+        const updatedRack = (response.data as any).rack || response.data;
+        console.log("updatedRack:",updatedRack);
+        
+        setRacks(racks.map(loc =>
+          loc._id === selectedRack._id ? updatedRack : loc
+        ));
+        fetchRacks();
+      } else {
+        // Create new location
+        const response = await apiClient.stock.createRack(rackFormData);
+        const newRack = (response.data as any).rack || response.data;
+        setRacks([...racks, newRack]);
+      }
+
+      // setShowLocationModal(false);
+      setRackFormData({
+        name: '',
+        location: '',
+        room: '',
+        description: '',
+        isActive: true
+      });
+      // setIsEditingLocation(false);
+      // setEditingLocationId(null);
+    } catch (error) {
+      setRackErrors({ submit: 'Failed to save room. Please try again.' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Initialize data
   useEffect(() => {
@@ -215,7 +435,9 @@ const InventoryManagement: React.FC = () => {
       await Promise.all([
         fetchInventory(),
         fetchProducts(),
-        fetchLocations()
+        fetchLocations(),
+        fetchRooms(),
+        fetchRacks()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -278,6 +500,68 @@ const InventoryManagement: React.FC = () => {
     } catch (error) {
       console.error('Error fetching locations:', error);
       setLocations([]);
+    }
+  };
+
+  const fetchRooms = async () => {
+    try {
+      const response = await apiClient.stock.getRooms();
+      // Handle response format from backend - locations are nested in data.locations
+      let roomsData: any[] = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          roomsData = response.data;
+        } else if ((response.data as any).rooms && Array.isArray((response.data as any).rooms)) {
+          roomsData = (response.data as any).rooms;
+        }
+      }
+
+      console.log("roomsData:",roomsData);
+      
+      // const roomsInLocation = roomsData.filter(room => room.location._id === racks.location._id);
+      // console.log("rackFormData:",roomsInLocation);
+      // setFilteredRooms(roomsInLocation);
+      setRooms(roomsData);
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+      setRooms([]);
+    }
+  };
+
+  console.log("rackFormData111111111:",rackFormData);
+  
+
+    useEffect(() => {
+    if (rackFormData.location) {
+      const roomsInLocation = rooms.filter(room => room.location._id === rackFormData.location);
+      setFilteredRooms(roomsInLocation);
+      
+      // Reset room selection if current room is not in the selected location
+      if (rackFormData.room && !roomsInLocation.find(room => room._id === rackFormData.room)) {
+        setRackFormData(prev => ({ ...prev, room: '' }));
+      }
+    } else {
+      setFilteredRooms([]);
+      setRackFormData(prev => ({ ...prev, room: '' }));
+    }
+  }, [rackFormData.location, rooms]);
+
+  const fetchRacks = async () => {
+    try {
+      const response = await apiClient.stock.getRacks();
+      // Handle response format from backend - locations are nested in data.locations
+      let racksData: any[] = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          racksData = response.data;
+        } else if ((response.data as any).racks && Array.isArray((response.data as any).racks)) {
+          racksData = (response.data as any).racks;
+        }
+      }
+      setRacks(racksData);
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+      setRacks([]);
     }
   };
 
@@ -347,11 +631,11 @@ const InventoryManagement: React.FC = () => {
 
   const handleTransferStock = (stockItem: StockItem) => {
     setSelectedItem(stockItem); // Store the selected item for access to stock details
-    
+
     // Calculate available quantity and set reasonable default
     const availableQty = stockItem.availableQuantity || (stockItem.quantity - (stockItem.reservedQuantity || 0));
     const defaultQty = availableQty <= 10 ? availableQty : 1;
-    
+
     setTransferFormData({
       product: typeof stockItem.product === 'string' ? stockItem.product : stockItem.product._id,
       fromLocation: typeof stockItem.location === 'string' ? stockItem.location : stockItem.location._id,
@@ -387,21 +671,21 @@ const InventoryManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      
+
       if (isEditingLocation && editingLocationId) {
         // Update existing location
         const response = await apiClient.stock.updateLocation(editingLocationId, locationFormData);
         const updatedLocation = (response.data as any).location || response.data;
-        setLocations(locations.map(loc => 
+        setLocations(locations.map(loc =>
           loc._id === editingLocationId ? updatedLocation : loc
         ));
       } else {
         // Create new location
-      const response = await apiClient.stock.createLocation(locationFormData);
+        const response = await apiClient.stock.createLocation(locationFormData);
         const newLocation = (response.data as any).location || response.data;
         setLocations([...locations, newLocation]);
       }
-      
+
       setShowLocationModal(false);
       setLocationFormData({
         name: '',
@@ -436,15 +720,15 @@ const InventoryManagement: React.FC = () => {
     if (!adjustmentFormData.adjustmentType) {
       errors.adjustmentType = 'Adjustment type is required';
     }
-    
+
     // Quantity validation based on adjustment type
     if (adjustmentFormData.adjustmentType === 'set') {
       if (adjustmentFormData.quantity < 0) {
         errors.quantity = 'Stock level cannot be negative';
       }
     } else if (adjustmentFormData.adjustmentType === 'subtract') {
-    if (adjustmentFormData.quantity <= 0) {
-      errors.quantity = 'Quantity must be greater than 0';
+      if (adjustmentFormData.quantity <= 0) {
+        errors.quantity = 'Quantity must be greater than 0';
       } else if (selectedItem && adjustmentFormData.quantity > selectedItem.quantity) {
         errors.quantity = `Cannot subtract more than current stock (${selectedItem.quantity})`;
       }
@@ -473,7 +757,7 @@ const InventoryManagement: React.FC = () => {
         errors.quantity = 'Quantity must be greater than 0';
       }
     }
-    
+
     if (!adjustmentFormData.reason.trim()) {
       errors.reason = 'Reason is required';
     }
@@ -591,14 +875,14 @@ const InventoryManagement: React.FC = () => {
 
       // Get fresh stock data before transfer
       const currentStock = await getCurrentStockStatus(product, fromLocation);
-      
+
       if (currentStock) {
         const availableQuantity = currentStock.availableQuantity || (currentStock.quantity - (currentStock.reservedQuantity || 0));
-        
+
         // Validate available quantity
         if (quantity > availableQuantity) {
-          setFormErrors({ 
-            quantity: `Insufficient stock. Available: ${availableQuantity}, Requested: ${quantity}` 
+          setFormErrors({
+            quantity: `Insufficient stock. Available: ${availableQuantity}, Requested: ${quantity}`
           });
           setSelectedItem(currentStock);
           return;
@@ -616,7 +900,7 @@ const InventoryManagement: React.FC = () => {
         quantity,
         notes
       });
-      
+
       await fetchInventory(); // Refresh inventory
       setShowTransferModal(false);
       setShowToLocationDropdown(false);
@@ -629,7 +913,7 @@ const InventoryManagement: React.FC = () => {
       });
     } catch (error: any) {
       console.error('Error transferring stock:', error);
-      
+
       if (error.response?.data?.errors) {
         setFormErrors(error.response.data.errors);
       } else {
@@ -646,19 +930,19 @@ const InventoryManagement: React.FC = () => {
     try {
       const productId = typeof item.product === 'string' ? item.product : item.product._id;
       const locationId = typeof item.location === 'string' ? item.location : item.location._id;
-      
+
       const response = await apiClient.stockLedger.getByProduct(productId, locationId, {
         sort: '-transactionDate',
         limit: 50
       });
-      
+
       const transactions = response.data.ledgers.map((ledger: any) => ({
         _id: ledger._id,
         type: ledger.transactionType,
         quantity: ledger.quantity,
         date: ledger.transactionDate,
         reason: ledger.reason || getTransactionReason(ledger.referenceType),
-        user: ledger.performedBy?.firstName && ledger.performedBy?.lastName 
+        user: ledger.performedBy?.firstName && ledger.performedBy?.lastName
           ? `${ledger.performedBy.firstName} ${ledger.performedBy.lastName}`
           : 'System',
         reference: ledger.referenceId,
@@ -666,7 +950,7 @@ const InventoryManagement: React.FC = () => {
         notes: ledger.notes,
         resultingQuantity: ledger.resultingQuantity
       }));
-      
+
       setStockTransactions(transactions);
       setShowHistoryModal(true);
     } catch (error) {
@@ -702,7 +986,7 @@ const InventoryManagement: React.FC = () => {
       };
 
       const response = await apiClient.stockLedger.getAll(params);
-      
+
       const formattedLedger = response.data.ledgers.map((ledger: any) => ({
         _id: ledger._id,
         product: ledger.product,
@@ -723,7 +1007,7 @@ const InventoryManagement: React.FC = () => {
       } else {
         setStockLedgerData(prev => [...prev, ...formattedLedger]);
       }
-      
+
       setLedgerPagination({
         page: response.pagination.page,
         limit: response.pagination.limit,
@@ -735,13 +1019,13 @@ const InventoryManagement: React.FC = () => {
       if (resetData) {
         const summary = formattedLedger.reduce((acc, ledger) => {
           const quantity = Math.abs(ledger.quantity);
-          
+
           if (ledger.transactionType === 'inward') {
             acc.totalInward += quantity;
           } else if (ledger.transactionType === 'outward') {
             acc.totalOutward += quantity;
           }
-          
+
           acc.totalTransactions += 1;
           return acc;
         }, {
@@ -750,7 +1034,7 @@ const InventoryManagement: React.FC = () => {
           totalTransactions: 0,
           netMovement: 0
         });
-        
+
         summary.netMovement = summary.totalInward - summary.totalOutward;
         setLedgerSummary(summary);
       }
@@ -770,21 +1054,21 @@ const InventoryManagement: React.FC = () => {
   };
 
   const filteredInventory = Array.isArray(inventory) ? inventory.filter(item => {
-    const productName = typeof item.product === 'string' ? '' : item.product.name;
-    const locationName = typeof item.location === 'string' ? '' : item.location.name;
-    
-    const matchesSearch = productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         locationName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesLocation = locationFilter === 'all' || 
-                          (typeof item.location === 'object' && item.location._id === locationFilter);
-    
+    const productName = typeof item.product === 'string' ? '' : item.product?.name;
+    const locationName = typeof item.location === 'string' ? '' : item.location?.name;
+
+    const matchesSearch = productName?.toLowerCase().includes(searchTerm?.toLowerCase()) ||
+      locationName?.toLowerCase().includes(searchTerm?.toLowerCase());
+    const matchesLocation = locationFilter === 'all' ||
+      (typeof item.location === 'object' && item.location._id === locationFilter);
+
     return matchesSearch && matchesLocation;
   }) : [];
 
   const getStockStatus = (item: StockItem) => {
     const product = typeof item.product === 'object' ? item.product : null;
     if (!product) return 'unknown';
-    
+
     if (item.quantity <= 0) return 'out_of_stock';
     if (item.quantity <= product.minStockLevel) return 'low_stock';
     return 'in_stock';
@@ -838,7 +1122,7 @@ const InventoryManagement: React.FC = () => {
         const status = getStockStatus(record);
         return (
           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
-            {status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+            {/* {status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} */}
           </span>
         );
       }
@@ -982,37 +1266,37 @@ const InventoryManagement: React.FC = () => {
 
   // Adjustment type options with descriptions
   const adjustmentTypeOptions = [
-    { 
-      value: 'add', 
-      label: 'Add Stock', 
+    {
+      value: 'add',
+      label: 'Add Stock',
       description: 'Increase stock quantity',
       icon: '➕',
       color: 'text-green-600'
     },
-    { 
-      value: 'subtract', 
-      label: 'Remove Stock', 
+    {
+      value: 'subtract',
+      label: 'Remove Stock',
       description: 'Decrease stock quantity',
       icon: '➖',
       color: 'text-red-600'
     },
-    { 
-      value: 'set', 
-      label: 'Set Stock Level', 
+    {
+      value: 'set',
+      label: 'Set Stock Level',
       description: 'Set exact stock quantity',
       icon: '🎯',
       color: 'text-blue-600'
     },
-    { 
-      value: 'reserve', 
-      label: 'Reserve Stock', 
+    {
+      value: 'reserve',
+      label: 'Reserve Stock',
       description: 'Reserve stock for orders/services',
       icon: '🔒',
       color: 'text-orange-600'
     },
-    { 
-      value: 'release', 
-      label: 'Release Reserved Stock', 
+    {
+      value: 'release',
+      label: 'Release Reserved Stock',
       description: 'Release previously reserved stock',
       icon: '🔓',
       color: 'text-purple-600'
@@ -1039,11 +1323,11 @@ const InventoryManagement: React.FC = () => {
 
   const calculateResultingQuantity = () => {
     if (!selectedItem || !adjustmentFormData.quantity) return selectedItem?.quantity || 0;
-    
+
     const currentQty = selectedItem.quantity;
     const currentReserved = selectedItem.reservedQuantity;
     const adjustQty = adjustmentFormData.quantity;
-    
+
     switch (adjustmentFormData.adjustmentType) {
       case 'add':
         return currentQty + adjustQty;
@@ -1101,26 +1385,26 @@ const InventoryManagement: React.FC = () => {
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
-      <PageHeader 
+      <PageHeader
         title="Inventory Management"
         subtitle="Track and manage stock across all locations"
       >
         <div className="flex space-x-3">
-          <button 
+          <button
             onClick={handleCreateLocation}
             className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <MapPin className="w-4 h-4" />
             <span className="text-sm">Add Location</span>
           </button>
-          <button 
+          <button
             onClick={handleShowStockLedger}
             className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Package className="w-4 h-4" />
             <span className="text-sm">Stock Ledger</span>
           </button>
-          <button 
+          <button
             onClick={fetchAllData}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
@@ -1179,9 +1463,8 @@ const InventoryManagement: React.FC = () => {
                       setCategoryFilter(option.value);
                       setShowCategoryDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                      categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                    }`}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -1190,7 +1473,7 @@ const InventoryManagement: React.FC = () => {
             )}
           </div>
         </div>
-        
+
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xs text-gray-600">
             Showing {filteredInventory.length} of {inventory.length} items
@@ -1230,8 +1513,8 @@ const InventoryManagement: React.FC = () => {
                     <tr key={item._id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div>
-                          <div className="text-xs font-medium text-gray-900">{item.product.name}</div>
-                          <div className="text-xs text-gray-500">{item.product.category} • {item.product.brand}</div>
+                          <div className="text-xs font-medium text-gray-900">{item.product?.name}</div>
+                          <div className="text-xs text-gray-500">{item.product?.category} • {item.product?.brand}</div>
                         </div>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -1251,29 +1534,29 @@ const InventoryManagement: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(status)}`}>
-                          {status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          {status?.replace('_', ' ').replace(/\b\w/g, l => l?.toUpperCase())}
                         </span>
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                        {new Date(item.lastUpdated).toLocaleDateString()}
+                        {new Date(item?.lastUpdated).toLocaleDateString()}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center space-x-2">
-                          <button 
+                          <button
                             onClick={() => handleUpdateStock(item)}
                             className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
                             title="Adjust Stock"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
-                          <button 
+                          <button
                             onClick={() => viewStockHistory(item)}
                             className="text-green-600 hover:text-green-900 p-2 rounded-lg hover:bg-green-50 transition-colors"
                             title="View History"
                           >
                             <Package className="w-4 h-4" />
                           </button>
-                          <button 
+                          <button
                             onClick={() => handleTransferStock(item)}
                             className="text-purple-600 hover:text-purple-900 p-2 rounded-lg hover:bg-purple-50 transition-colors"
                             title="Transfer Stock"
@@ -1312,163 +1595,287 @@ const InventoryManagement: React.FC = () => {
 
             <div className="flex flex-1">
               {/* Left side - Location Form */}
+
               <div className="w-1/2 border-r border-gray-200 flex flex-col">
-                <div className="p-4 overflow-y-auto flex-1">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">
-                  {isEditingLocation ? 'Edit Location' : 'Add New Location'}
-                </h3>
+                {activeTab === 'locations' && <div className="p-4 overflow-y-auto flex-1">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">
+                    {isEditingLocation ? 'Edit Location' : 'Add New Location'}
+                  </h3>
 
-                <form onSubmit={(e) => { e.preventDefault(); handleSubmitLocation(); }} className="space-y-3">
-              {formErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-red-600 text-sm">{formErrors.general}</p>
-                </div>
-              )}
+                  <form onSubmit={(e) => { e.preventDefault(); handleSubmitLocation(); }} className="space-y-3">
+                    {formErrors.general && (
+                      <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                        <p className="text-red-600 text-sm">{formErrors.general}</p>
+                      </div>
+                    )}
 
-                  <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Location Name *
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={locationFormData.name}
-                    onChange={(e) => setLocationFormData({ ...locationFormData, name: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.name ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="Enter location name"
-                  />
-                  {formErrors.name && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Location Type *
-                  </label>
-                      <div className="relative dropdown-container">
-                        <button
-                          type="button"
-                          onClick={() => setShowLocationTypeDropdown(!showLocationTypeDropdown)}
-                          className={`flex items-center justify-between w-full px-2.5 py-1.5 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      formErrors.type ? 'border-red-500' : 'border-gray-300'
-                          } hover:border-gray-400`}
-                        >
-                          <span className="text-gray-700 truncate mr-1">{getLocationTypeLabel(locationFormData.type)}</span>
-                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationTypeDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showLocationTypeDropdown && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                            {locationTypeOptions.map((option) => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => {
-                                  setLocationFormData({ ...locationFormData, type: option.value });
-                                  setShowLocationTypeDropdown(false);
-                                }}
-                                className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                  locationFormData.type === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                              >
-                                {option.label}
-                              </button>
-                            ))}
-                          </div>
+                    <div className="grid grid-cols-1 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Location Name *
+                        </label>
+                        <input
+                          type="text"
+                          name="name"
+                          value={locationFormData.name}
+                          onChange={(e) => setLocationFormData({ ...locationFormData, name: e.target.value })}
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          placeholder="Enter location name"
+                        />
+                        {formErrors.name && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
                         )}
                       </div>
-                  {formErrors.type && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>
-                  )}
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Address *
-                </label>
-                <textarea
-                  name="address"
-                  value={locationFormData.address}
-                  onChange={(e) => setLocationFormData({ ...locationFormData, address: e.target.value })}
-                        rows={4}
-                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none ${
-                    formErrors.address ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter complete address"
-                />
-                {formErrors.address && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact Person
-                  </label>
-                  <input
-                    type="text"
-                    name="contactPerson"
-                    value={locationFormData.contactPerson}
-                    onChange={(e) => setLocationFormData({ ...locationFormData, contactPerson: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter contact person name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Contact Phone
-                  </label>
-                  <input
-                    type="tel"
-                    name="phone"
-                    value={locationFormData.phone}
-                    onChange={(e) => setLocationFormData({ ...locationFormData, phone: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter phone number"
-                  />
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Location Type *
+                        </label>
+                        <div className="relative dropdown-container">
+                          <button
+                            type="button"
+                            onClick={() => setShowLocationTypeDropdown(!showLocationTypeDropdown)}
+                            className={`flex items-center justify-between w-full px-2.5 py-1.5 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.type ? 'border-red-500' : 'border-gray-300'
+                              } hover:border-gray-400`}
+                          >
+                            <span className="text-gray-700 truncate mr-1">{getLocationTypeLabel(locationFormData.type)}</span>
+                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationTypeDropdown ? 'rotate-180' : ''}`} />
+                          </button>
+                          {showLocationTypeDropdown && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                              {locationTypeOptions.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={() => {
+                                    setLocationFormData({ ...locationFormData, type: option.value });
+                                    setShowLocationTypeDropdown(false);
+                                  }}
+                                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${locationFormData.type === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                    }`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {formErrors.type && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.type}</p>
+                        )}
                       </div>
-                </div>
-              </div>
 
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                      onClick={() => {
-                        if (isEditingLocation) {
-                          setIsEditingLocation(false);
-                          setEditingLocationId(null);
-                          setLocationFormData({
-                            name: '',
-                            address: '',
-                            type: 'warehouse',
-                            contactPerson: '',
-                            phone: ''
-                          });
-                          setFormErrors({});
-                          setShowLocationTypeDropdown(false);
-                        } else {
-                          setShowLocationModal(false);
-                        }
-                      }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                      {isEditingLocation ? 'Cancel Edit' : 'Cancel'}
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
-                >
-                      {submitting ? (isEditingLocation ? 'Updating...' : 'Creating...') : (isEditingLocation ? 'Update Location' : 'Create Location')}
-                </button>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Address *
+                        </label>
+                        <textarea
+                          name="address"
+                          value={locationFormData.address}
+                          onChange={(e) => setLocationFormData({ ...locationFormData, address: e.target.value })}
+                          rows={4}
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none ${formErrors.address ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          placeholder="Enter complete address"
+                        />
+                        {formErrors.address && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Contact Person
+                          </label>
+                          <input
+                            type="text"
+                            name="contactPerson"
+                            value={locationFormData.contactPerson}
+                            onChange={(e) => setLocationFormData({ ...locationFormData, contactPerson: e.target.value })}
+                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Enter contact person name"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Contact Phone
+                          </label>
+                          <input
+                            type="tel"
+                            name="phone"
+                            value={locationFormData.phone}
+                            onChange={(e) => setLocationFormData({ ...locationFormData, phone: e.target.value })}
+                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Enter phone number"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex space-x-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isEditingLocation) {
+                            setIsEditingLocation(false);
+                            setEditingLocationId(null);
+                            setLocationFormData({
+                              name: '',
+                              address: '',
+                              type: 'warehouse',
+                              contactPerson: '',
+                              phone: ''
+                            });
+                            setFormErrors({});
+                            setShowLocationTypeDropdown(false);
+                          } else {
+                            setShowLocationModal(false);
+                          }
+                        }}
+                        className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        {isEditingLocation ? 'Cancel Edit' : 'Cancel'}
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={submitting}
+                        className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                      >
+                        {submitting ? (isEditingLocation ? 'Updating...' : 'Creating...') : (isEditingLocation ? 'Update Location' : 'Create Location')}
+                      </button>
+                    </div>
+                  </form>
+                </div>}
+
+                {activeTab === 'rooms' && <div className="p-4 overflow-y-auto flex-1">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">
+                    {isEditingLocation ? 'Edit Location' : 'Add New Location'}
+                  </h3>
+                  <form onSubmit={handleRoomSubmit} className="space-y-4">
+                    <Select
+                      label="Location"
+                      options={locationOptions}
+                      value={roomFormData.location}
+                      onChange={(e) => setRoomFormData(prev => ({ ...prev, location: e.target.value }))}
+                      error={roomErrors.location}
+                      required
+                    />
+
+                    <Input
+                      label="Room Name"
+                      value={roomFormData.name}
+                      onChange={(e) => setRoomFormData(prev => ({ ...prev, name: e.target.value }))}
+                      error={roomErrors.name}
+                      placeholder="e.g., ROOM 1, GODOWN, STORAGE AREA"
+                      required
+                    />
+
+                    <Input
+                      label="Description (Optional)"
+                      value={roomFormData.description}
+                      onChange={(e) => setRoomFormData(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Brief description of the room"
+                    />
+
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="isActive"
+                        checked={roomFormData.isActive}
+                        onChange={(e) => setRoomFormData(prev => ({ ...prev, isActive: e.target.checked }))}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
+                        Active
+                      </label>
+                    </div>
+
+                    {roomErrors.submit && (
+                      <div className="text-red-600 text-sm">{roomErrors.submit}</div>
+                    )}
+
+                    <div className="flex justify-end space-x-3 pt-4">
+                      <Button type="button" variant="outline" onClick={handleRoomModalClose}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" loading={loading}>
+                        {selectedRoom ? 'Update' : 'Create'} Room
+                      </Button>
+                    </div>
+                  </form>
+                </div>}
+
+                {activeTab === 'racks' && <div className="p-4 overflow-y-auto flex-1">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">
+                    {isEditingLocation ? 'Edit Location' : 'Add New Location'}
+                  </h3>
+                  <form onSubmit={handleRackSubmit} className="space-y-4">
+                    <Select
+                      label="Location"
+                      options={locationOptions}
+                      value={rackFormData.location}
+                      onChange={(e) => setRackFormData(prev => ({ ...prev, location: e.target.value }))}
+                      error={rackErrors.location}
+                      required
+                    />
+
+                    <Select
+                      label="Room"
+                      options={roomOptions}
+                      value={rackFormData.room}
+                      onChange={(e) => setRackFormData(prev => ({ ...prev, room: e.target.value }))}
+                      error={rackErrors.room}
+                      disabled={!rackFormData.location}
+                      required
+                    />
+
+                    <Input
+                      label="Rack Name"
+                      value={rackFormData.name}
+                      onChange={(e) => setRackFormData(prev => ({ ...prev, name: e.target.value }))}
+                      error={rackErrors.name}
+                      placeholder="e.g., A1, E2, GD, P2"
+                      required
+                    />
+
+                    <Input
+                      label="Description (Optional)"
+                      value={rackFormData.description}
+                      onChange={(e) => setRackFormData(prev => ({ ...prev, description: e.target.value }))}
+                      placeholder="Brief description of the rack"
+                    />
+
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="isActive"
+                        checked={rackFormData.isActive}
+                        onChange={(e) => setRackFormData(prev => ({ ...prev, isActive: e.target.checked }))}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
+                        Active
+                      </label>
+                    </div>
+
+                    {rackErrors.submit && (
+                      <div className="text-red-600 text-sm">{rackErrors.submit}</div>
+                    )}
+
+                    <div className="flex justify-end space-x-3 pt-4">
+                      <Button type="button" variant="outline" onClick={handleRackModalClose}>
+                        Cancel
+                      </Button>
+                      <Button type="submit" loading={loading}>
+                        {selectedRack ? 'Update' : 'Create'} Rack
+                      </Button>
+                    </div>
+                  </form>
+                </div>}
+
               </div>
-            </form>
-          </div>
-        </div>
 
               {/* Right side - Existing Locations */}
               <div className="w-1/2 p-4">
@@ -1477,7 +1884,197 @@ const InventoryManagement: React.FC = () => {
                   <span className="text-sm text-gray-500">{locations.length} locations</span>
                 </div>
 
-                <div 
+                <div className="space-y-6">
+                  {/* Tab Navigation */}
+                  <div className="border-b border-gray-200">
+                    <nav className="-mb-px flex space-x-8">
+                      <button
+                        onClick={() => setActiveTab('locations')}
+                        className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'locations'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          }`}
+                      >
+                        <Building className="w-4 h-4 inline mr-2" />
+                        Locations ({locations.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('rooms')}
+                        className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'rooms'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          }`}
+                      >
+                        <Archive className="w-4 h-4 inline mr-2" />
+                        Rooms ({rooms.length})
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('racks')}
+                        className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === 'racks'
+                          ? 'border-blue-500 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          }`}
+                      >
+                        <MapPin className="w-4 h-4 inline mr-2" />
+                        Racks ({racks.length})
+                      </button>
+                    </nav>
+                  </div>
+
+                  {/* Locations Tab */}
+                  {activeTab === 'locations' && (
+                    <div className="space-y-4 max-h-80 overflow-y-auto [&::-webkit-scrollbar]:hidden">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-medium text-gray-900">Manage Locations</h3>
+                      </div>
+
+                      <div className="grid gap-4">
+                        {locations.map((location) => (
+                          <div key={location._id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-2">
+                                  <h4 className="font-medium text-gray-900">{location.name}</h4>
+                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${location.isActive
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-red-100 text-red-800'
+                                    }`}>
+                                    {location.isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-1">{location.address}</p>
+                                <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                                  <span className="capitalize">{location.type.replace('_', ' ')}</span>
+                                  {location.contactPerson && (
+                                    <span>👤 {location.contactPerson}</span>
+                                  )}
+                                  {location.phone && (
+                                    <span>📞 {location.phone}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex items-center space-x-1 ml-2">
+                                <button
+                                  onClick={() => handleEditLocation(location)}
+                                  className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+                                  title="Edit Location"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteLocation(location._id)}
+                                  className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                                  title="Delete Location"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Rooms Tab */}
+                  {activeTab === 'rooms' && (
+                    <div className="space-y-4 max-h-80 overflow-y-auto [&::-webkit-scrollbar]:hidden">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-medium text-gray-900">Manage Rooms</h3>
+                      </div>
+
+                      <div className="grid gap-4">
+                        {rooms.map((room) => (
+                          <div key={room._id} className="border border-gray-200 rounded-lg p-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center">
+                                  <Archive className="w-5 h-5 text-green-500 mr-2" />
+                                  <h4 className="text-lg font-medium text-gray-900">{room.name}</h4>
+                                  <span className={`ml-2 px-2 py-1 text-xs rounded-full ${room.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                    {room.isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {/* Location: {getLocationName(room.locationId)} */}
+                                </p>
+                                {room.description && (
+                                  <p className="text-sm text-gray-500 mt-1">{room.description}</p>
+                                )}
+                                <div className="mt-2">
+                                  <span className="text-sm text-gray-600">
+                                    {/* Racks: {getRacksForRoom(room.id).length} */}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex space-x-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedRoom(room);
+                                    // setShowRoomModal(true);
+                                  }}
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Racks Tab */}
+                  {activeTab === 'racks' && (
+                    <div className="space-y-4 max-h-80 overflow-y-auto [&::-webkit-scrollbar]:hidden">
+                      <div className="flex justify-between items-center">
+                        <h3 className="text-lg font-medium text-gray-900">Manage Racks</h3>
+                      </div>
+
+                      <div className="grid gap-4">
+                        {racks.map((rack) => (
+                          <div key={rack._id} className="border border-gray-200 rounded-lg p-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center">
+                                  <MapPin className="w-5 h-5 text-purple-500 mr-2" />
+                                  <h4 className="text-lg font-medium text-gray-900">{rack.name}</h4>
+                                  <span className={`ml-2 px-2 py-1 text-xs rounded-full ${rack.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                    {rack.isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {/* Location: {getLocationName(rack.locationId)} → Room: {getRoomName(rack.roomId)} */}
+                                </p>
+                                {rack.description && (
+                                  <p className="text-sm text-gray-500 mt-1">{rack.description}</p>
+                                )}
+                              </div>
+                              <div className="flex space-x-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedRack(rack);
+                                    // setShowRackModal(true);
+                                  }}
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* <div 
                   className="space-y-3 max-h-80 overflow-y-auto [&::-webkit-scrollbar]:hidden" 
                   style={{ 
                     scrollbarWidth: 'none', 
@@ -1536,12 +2133,12 @@ const InventoryManagement: React.FC = () => {
                       </div>
                     ))
                   )}
-                </div>
+                </div> */}
 
                 {locations.length > 0 && (
                   <div className="mt-4 p-3 bg-blue-50 rounded-lg">
                     <p className="text-xs text-blue-700">
-                      💡 <strong>Tip:</strong> You can edit any location by clicking the edit icon. 
+                      💡 <strong>Tip:</strong> You can edit any location by clicking the edit icon.
                       Locations with active stock cannot be deleted.
                     </p>
                   </div>
@@ -1576,67 +2173,67 @@ const InventoryManagement: React.FC = () => {
                 </div>
               )}
 
-                             <div className="grid grid-cols-1 gap-4">
-                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                     Product
-                   </label>
-                   <div className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
-                     {products.find(p => p._id === transferFormData.product)?.name || 'Product'}
-                   </div>
-                 </div>
+              <div className="grid grid-cols-1 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Product
+                  </label>
+                  <div className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+                    {products.find(p => p._id === transferFormData.product)?.name || 'Product'}
+                  </div>
+                </div>
 
-                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                     From Location
-                   </label>
-                   <div className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
-                     {locations.find(l => l._id === transferFormData.fromLocation)?.name || 'Source Location'}
-                   </div>
-                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    From Location
+                  </label>
+                  <div className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
+                    {locations.find(l => l._id === transferFormData.fromLocation)?.name || 'Source Location'}
+                  </div>
+                </div>
 
-                 {/* Stock Information */}
-                 {selectedItem && (
-                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                     <div className="flex items-center justify-between mb-2">
-                       <h4 className="text-sm font-medium text-blue-900">Current Stock Status</h4>
-                       <button
-                         type="button"
-                         onClick={async () => {
-                           console.log('Manual refresh triggered');
-                           const freshStock = await getCurrentStockStatus(transferFormData.product, transferFormData.fromLocation);
-                           if (freshStock) {
-                             console.log('Fresh stock data:', freshStock);
-                             setSelectedItem(freshStock);
-                           } else {
-                             console.error('Failed to get fresh stock data');
-                           }
-                         }}
-                         className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
-                       >
-                         Refresh
-                       </button>
-                     </div>
-                     <div className="grid grid-cols-3 gap-4 text-xs">
-                       <div className="text-center">
-                         <p className="font-bold text-gray-900">{selectedItem.quantity}</p>
-                         <p className="text-gray-600">Total Stock</p>
-                       </div>
-                       <div className="text-center">
-                         <p className="font-bold text-yellow-600">{selectedItem.reservedQuantity || 0}</p>
-                         <p className="text-gray-600">Reserved</p>
-                       </div>
-                       <div className="text-center">
-                         <p className="font-bold text-green-600">
-                           {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))}
-                         </p>
-                         <p className="text-gray-600">Available</p>
-                       </div>
-                     </div>
-                     
+                {/* Stock Information */}
+                {selectedItem && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <h4 className="text-sm font-medium text-blue-900">Current Stock Status</h4>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          console.log('Manual refresh triggered');
+                          const freshStock = await getCurrentStockStatus(transferFormData.product, transferFormData.fromLocation);
+                          if (freshStock) {
+                            console.log('Fresh stock data:', freshStock);
+                            setSelectedItem(freshStock);
+                          } else {
+                            console.error('Failed to get fresh stock data');
+                          }
+                        }}
+                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-xs">
+                      <div className="text-center">
+                        <p className="font-bold text-gray-900">{selectedItem.quantity}</p>
+                        <p className="text-gray-600">Total Stock</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-bold text-yellow-600">{selectedItem.reservedQuantity || 0}</p>
+                        <p className="text-gray-600">Reserved</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="font-bold text-green-600">
+                          {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))}
+                        </p>
+                        <p className="text-gray-600">Available</p>
+                      </div>
+                    </div>
 
-                   </div>
-                 )}
+
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1646,9 +2243,8 @@ const InventoryManagement: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowToLocationDropdown(!showToLocationDropdown)}
-                      className={`flex items-center justify-between w-full px-2.5 py-1.5 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                        formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
-                      } hover:border-gray-400`}
+                      className={`flex items-center justify-between w-full px-2.5 py-1.5 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
+                        } hover:border-gray-400`}
                     >
                       <span className="text-gray-700 truncate mr-1">{getToLocationLabel(transferFormData.toLocation)}</span>
                       <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showToLocationDropdown ? 'rotate-180' : ''}`} />
@@ -1665,9 +2261,8 @@ const InventoryManagement: React.FC = () => {
                                 setTransferFormData({ ...transferFormData, toLocation: location._id });
                                 setShowToLocationDropdown(false);
                               }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                transferFormData.toLocation === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                              }`}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${transferFormData.toLocation === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
                             >
                               <div>
                                 <div className="font-medium">{location.name}</div>
@@ -1689,45 +2284,44 @@ const InventoryManagement: React.FC = () => {
                   )}
                 </div>
 
-                                 <div>
-                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                     Quantity *
-                     {selectedItem && (
-                       <span className="text-xs text-gray-500 ml-1">
-                         (Max: {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))})
-                       </span>
-                     )}
-                   </label>
-                   <div className="flex space-x-2">
-                     <input
-                       type="number"
-                       name="quantity"
-                       value={transferFormData.quantity}
-                       onChange={(e) => setTransferFormData({ ...transferFormData, quantity: Number(e.target.value) })}
-                       min="1"
-                       max={selectedItem ? (selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))) : undefined}
-                       className={`flex-1 px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                         formErrors.quantity ? 'border-red-500' : 'border-gray-300'
-                       }`}
-                       placeholder="Enter quantity to transfer"
-                     />
-                     {selectedItem && (
-                       <button
-                         type="button"
-                         onClick={() => {
-                           const maxQty = selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0));
-                           setTransferFormData({ ...transferFormData, quantity: maxQty });
-                         }}
-                         className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
-                       >
-                         Max
-                       </button>
-                     )}
-                   </div>
-                   {formErrors.quantity && (
-                     <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
-                   )}
-                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Quantity *
+                    {selectedItem && (
+                      <span className="text-xs text-gray-500 ml-1">
+                        (Max: {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))})
+                      </span>
+                    )}
+                  </label>
+                  <div className="flex space-x-2">
+                    <input
+                      type="number"
+                      name="quantity"
+                      value={transferFormData.quantity}
+                      onChange={(e) => setTransferFormData({ ...transferFormData, quantity: Number(e.target.value) })}
+                      min="1"
+                      max={selectedItem ? (selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))) : undefined}
+                      className={`flex-1 px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.quantity ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      placeholder="Enter quantity to transfer"
+                    />
+                    {selectedItem && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const maxQty = selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0));
+                          setTransferFormData({ ...transferFormData, quantity: maxQty });
+                        }}
+                        className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+                      >
+                        Max
+                      </button>
+                    )}
+                  </div>
+                  {formErrors.quantity && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
+                  )}
+                </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1774,7 +2368,7 @@ const InventoryManagement: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div>
-              <h2 className="text-xl font-semibold text-gray-900">Adjust Stock</h2>
+                <h2 className="text-xl font-semibold text-gray-900">Adjust Stock</h2>
                 <p className="text-sm text-gray-600">
                   {selectedItem.product.name} @ {selectedItem.location.name}
                 </p>
@@ -1829,9 +2423,8 @@ const InventoryManagement: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setShowAdjustmentTypeDropdown(!showAdjustmentTypeDropdown)}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                        formErrors.adjustmentType ? 'border-red-500' : 'border-gray-300'
-                      } hover:border-gray-400`}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.adjustmentType ? 'border-red-500' : 'border-gray-300'
+                        } hover:border-gray-400`}
                     >
                       <div className="flex items-center space-x-2">
                         <span className="text-lg">
@@ -1840,7 +2433,7 @@ const InventoryManagement: React.FC = () => {
                         <div>
                           <div className="font-medium text-gray-900">
                             {getAdjustmentTypeLabel(adjustmentFormData.adjustmentType)}
-                </div>
+                          </div>
                           <div className="text-xs text-gray-500">
                             {adjustmentTypeOptions.find(opt => opt.value === adjustmentFormData.adjustmentType)?.description}
                           </div>
@@ -1858,9 +2451,8 @@ const InventoryManagement: React.FC = () => {
                               setAdjustmentFormData({ ...adjustmentFormData, adjustmentType: option.value });
                               setShowAdjustmentTypeDropdown(false);
                             }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors ${
-                              adjustmentFormData.adjustmentType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors ${adjustmentFormData.adjustmentType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                              }`}
                           >
                             <div className="flex items-center space-x-3">
                               <span className="text-lg">{option.icon}</span>
@@ -1897,24 +2489,23 @@ const InventoryManagement: React.FC = () => {
                     )}
                   </label>
                   <div className="flex space-x-2">
-                  <input
-                    type="number"
-                    name="quantity"
-                    value={adjustmentFormData.quantity}
-                    onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, quantity: Number(e.target.value) })}
+                    <input
+                      type="number"
+                      name="quantity"
+                      value={adjustmentFormData.quantity}
+                      onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, quantity: Number(e.target.value) })}
                       min={adjustmentFormData.adjustmentType === 'set' ? '0' : '1'}
                       max={adjustmentFormData.adjustmentType === 'subtract' ? selectedItem.quantity : undefined}
-                      className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                        formErrors.quantity ? 'border-red-500' : 'border-gray-300'
-                      }`}
+                      className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.quantity ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       placeholder={
-                        adjustmentFormData.adjustmentType === 'set' 
+                        adjustmentFormData.adjustmentType === 'set'
                           ? 'Enter final stock level'
                           : adjustmentFormData.adjustmentType === 'reserve'
-                          ? 'Enter quantity to reserve'
-                          : adjustmentFormData.adjustmentType === 'release'
-                          ? 'Enter quantity to release'
-                          : `Enter quantity to ${adjustmentFormData.adjustmentType}`
+                            ? 'Enter quantity to reserve'
+                            : adjustmentFormData.adjustmentType === 'release'
+                              ? 'Enter quantity to release'
+                              : `Enter quantity to ${adjustmentFormData.adjustmentType}`
                       }
                     />
                     {adjustmentFormData.adjustmentType === 'subtract' && (
@@ -1956,11 +2547,11 @@ const InventoryManagement: React.FC = () => {
                         All Reserved ({selectedItem.reservedQuantity})
                       </button>
                     )}
-                </div>
+                  </div>
                   {formErrors.quantity && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
                   )}
-              </div>
+                </div>
 
                 {/* Result Preview */}
                 {adjustmentFormData.quantity > 0 && (
@@ -1989,7 +2580,7 @@ const InventoryManagement: React.FC = () => {
                               {getResultDisplayValue()}
                             </span>
                             <span className="text-xs text-blue-600">
-                              ({adjustmentFormData.adjustmentType === 'add' ? '+' : 
+                              ({adjustmentFormData.adjustmentType === 'add' ? '+' :
                                 adjustmentFormData.adjustmentType === 'subtract' ? '-' : '='}{adjustmentFormData.quantity})
                             </span>
                           </div>
@@ -1999,30 +2590,29 @@ const InventoryManagement: React.FC = () => {
                   </div>
                 )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Reason *
-                </label>
-                <input
-                  type="text"
-                  name="reason"
-                  value={adjustmentFormData.reason}
-                  onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, reason: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.reason ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Reason *
+                  </label>
+                  <input
+                    type="text"
+                    name="reason"
+                    value={adjustmentFormData.reason}
+                    onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, reason: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.reason ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder={
-                      adjustmentFormData.adjustmentType === 'reserve' 
+                      adjustmentFormData.adjustmentType === 'reserve'
                         ? "Enter reason for reservation (e.g., 'Service order #123', 'Customer quote')"
                         : adjustmentFormData.adjustmentType === 'release'
-                        ? "Enter reason for release (e.g., 'Service completed', 'Order cancelled')"
-                        : "Enter reason for adjustment (e.g., 'Damaged goods', 'Stock count correction')"
+                          ? "Enter reason for release (e.g., 'Service completed', 'Order cancelled')"
+                          : "Enter reason for adjustment (e.g., 'Damaged goods', 'Stock count correction')"
                     }
                   />
                   {formErrors.reason && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.reason}</p>
                   )}
-              </div>
+                </div>
 
                 {/* Reservation-specific fields */}
                 {adjustmentFormData.adjustmentType === 'reserve' && (
@@ -2035,9 +2625,8 @@ const InventoryManagement: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setShowReservationTypeDropdown(!showReservationTypeDropdown)}
-                          className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                            formErrors.reservationType ? 'border-red-500' : 'border-gray-300'
-                          } hover:border-gray-400`}
+                          className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.reservationType ? 'border-red-500' : 'border-gray-300'
+                            } hover:border-gray-400`}
                         >
                           <span className="text-gray-700 truncate mr-1">{getReservationTypeLabel(adjustmentFormData.reservationType || '')}</span>
                           <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showReservationTypeDropdown ? 'rotate-180' : ''}`} />
@@ -2052,9 +2641,8 @@ const InventoryManagement: React.FC = () => {
                                   setAdjustmentFormData({ ...adjustmentFormData, reservationType: option.value });
                                   setShowReservationTypeDropdown(false);
                                 }}
-                                className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                  adjustmentFormData.reservationType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
+                                className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${adjustmentFormData.reservationType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                  }`}
                               >
                                 {option.label}
                               </button>
@@ -2097,18 +2685,18 @@ const InventoryManagement: React.FC = () => {
                   </>
                 )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  name="notes"
-                  value={adjustmentFormData.notes}
-                  onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, notes: e.target.value })}
-                  rows={3}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Notes
+                  </label>
+                  <textarea
+                    name="notes"
+                    value={adjustmentFormData.notes}
+                    onChange={(e) => setAdjustmentFormData({ ...adjustmentFormData, notes: e.target.value })}
+                    rows={3}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  placeholder="Additional notes (optional)"
-                />
+                    placeholder="Additional notes (optional)"
+                  />
                 </div>
               </div>
 
@@ -2203,24 +2791,22 @@ const InventoryManagement: React.FC = () => {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-xs">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                              transaction.type === 'inward' ? 'bg-green-100 text-green-800' : 
+                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${transaction.type === 'inward' ? 'bg-green-100 text-green-800' :
                               transaction.type === 'outward' ? 'bg-red-100 text-red-800' :
-                              transaction.type === 'reservation' ? 'bg-orange-100 text-orange-800' :
-                              transaction.type === 'release' ? 'bg-purple-100 text-purple-800' :
-                              'bg-blue-100 text-blue-800'
-                            }`}>
-                              {transaction.type === 'inward' ? '↗ Inward' : 
-                               transaction.type === 'outward' ? '↙ Outward' : 
-                               transaction.type === 'reservation' ? '🔒 Reserved' :
-                               transaction.type === 'release' ? '🔓 Released' :
-                               '⚡ Adjustment'}
+                                transaction.type === 'reservation' ? 'bg-orange-100 text-orange-800' :
+                                  transaction.type === 'release' ? 'bg-purple-100 text-purple-800' :
+                                    'bg-blue-100 text-blue-800'
+                              }`}>
+                              {transaction.type === 'inward' ? '↗ Inward' :
+                                transaction.type === 'outward' ? '↙ Outward' :
+                                  transaction.type === 'reservation' ? '🔒 Reserved' :
+                                    transaction.type === 'release' ? '🔓 Released' :
+                                      '⚡ Adjustment'}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-xs font-medium">
-                            <span className={`${
-                              transaction.quantity > 0 ? 'text-green-600' : 'text-red-600'
-                            }`}>
+                            <span className={`${transaction.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                              }`}>
                               {transaction.quantity > 0 ? '+' : ''}{transaction.quantity}
                             </span>
                           </td>
@@ -2270,7 +2856,7 @@ const InventoryManagement: React.FC = () => {
               </button>
             </div>
 
-                        {/* Summary Cards */}
+            {/* Summary Cards */}
             <div className="p-4 bg-white border-b border-gray-200">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
@@ -2284,7 +2870,7 @@ const InventoryManagement: React.FC = () => {
                       <TrendingUp className="w-8 h-8" />
                     </div>
                   </div>
-              </div>
+                </div>
 
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   <div className="flex items-center justify-between">
@@ -2310,9 +2896,9 @@ const InventoryManagement: React.FC = () => {
                     </div>
                     <div className="text-blue-500">
                       <BarChart3 className="w-8 h-8" />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
 
                 <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
                   <div className="flex items-center justify-between">
@@ -2371,9 +2957,8 @@ const InventoryManagement: React.FC = () => {
                             setShowDateRangeDropdown(false);
                             fetchStockLedger(1, true);
                           }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            ledgerFilters.dateRange === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${ledgerFilters.dateRange === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           {option.label}
                         </button>
@@ -2409,9 +2994,8 @@ const InventoryManagement: React.FC = () => {
                             setShowTransactionTypeDropdown(false);
                             fetchStockLedger(1, true);
                           }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            ledgerFilters.transactionType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${ledgerFilters.transactionType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           {option.label}
                         </button>
@@ -2437,9 +3021,8 @@ const InventoryManagement: React.FC = () => {
                           setShowLedgerLocationDropdown(false);
                           fetchStockLedger(1, true);
                         }}
-                        className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                          !ledgerFilters.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                        }`}
+                        className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!ledgerFilters.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
                       >
                         All Locations
                       </button>
@@ -2451,9 +3034,8 @@ const InventoryManagement: React.FC = () => {
                             setShowLedgerLocationDropdown(false);
                             fetchStockLedger(1, true);
                           }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            ledgerFilters.location === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${ledgerFilters.location === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           {location.name}
                         </button>
@@ -2462,7 +3044,7 @@ const InventoryManagement: React.FC = () => {
                   )}
                 </div>
               </div>
-              
+
               <div className="flex items-center justify-between text-xs text-gray-600">
                 <span>Showing {stockLedgerData.length} of {ledgerPagination.total} transactions</span>
                 <span>Page {ledgerPagination.page} of {ledgerPagination.pages}</span>
@@ -2516,24 +3098,22 @@ const InventoryManagement: React.FC = () => {
                           <div className="text-gray-500 capitalize">{ledger.location?.type?.replace('_', ' ')}</div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            ledger.transactionType === 'inward' ? 'bg-green-100 text-green-800' : 
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${ledger.transactionType === 'inward' ? 'bg-green-100 text-green-800' :
                             ledger.transactionType === 'outward' ? 'bg-red-100 text-red-800' :
-                            ledger.transactionType === 'reservation' ? 'bg-orange-100 text-orange-800' :
-                            ledger.transactionType === 'release' ? 'bg-purple-100 text-purple-800' :
-                            'bg-blue-100 text-blue-800'
-                          }`}>
-                            {ledger.transactionType === 'inward' ? '↗ Inward' : 
-                             ledger.transactionType === 'outward' ? '↙ Outward' : 
-                             ledger.transactionType === 'reservation' ? '🔒 Reserved' :
-                             ledger.transactionType === 'release' ? '🔓 Released' :
-                             '⚡ Adjustment'}
+                              ledger.transactionType === 'reservation' ? 'bg-orange-100 text-orange-800' :
+                                ledger.transactionType === 'release' ? 'bg-purple-100 text-purple-800' :
+                                  'bg-blue-100 text-blue-800'
+                            }`}>
+                            {ledger.transactionType === 'inward' ? '↗ Inward' :
+                              ledger.transactionType === 'outward' ? '↙ Outward' :
+                                ledger.transactionType === 'reservation' ? '🔒 Reserved' :
+                                  ledger.transactionType === 'release' ? '🔓 Released' :
+                                    '⚡ Adjustment'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs font-medium">
-                          <span className={`${
-                            ledger.quantity > 0 ? 'text-green-600' : 'text-red-600'
-                          }`}>
+                          <span className={`${ledger.quantity > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}>
                             {ledger.quantity > 0 ? '+' : ''}{ledger.quantity}
                           </span>
                         </td>
@@ -2547,7 +3127,7 @@ const InventoryManagement: React.FC = () => {
                           {ledger.notes && <div className="text-gray-400 mt-1 italic">{ledger.notes}</div>}
                         </td>
                         <td className="px-4 py-3 text-xs text-gray-600">
-                          {ledger.performedBy?.firstName && ledger.performedBy?.lastName 
+                          {ledger.performedBy?.firstName && ledger.performedBy?.lastName
                             ? `${ledger.performedBy.firstName} ${ledger.performedBy.lastName}`
                             : 'System'}
                         </td>

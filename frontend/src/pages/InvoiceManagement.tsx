@@ -804,7 +804,7 @@ const InvoiceManagement: React.FC = () => {
   const getProductLabel = (value: string) => {
     if (!value) return 'Select product';
     const product = products.find(p => p._id === value);
-    return product ? `${product.name} - ₹${product.price.toLocaleString()}` : 'Select product';
+    return product ? `${product?.name} - ₹${product?.price?.toLocaleString()}` : 'Select product';
   };
 
   const getStatusUpdateLabel = (value: string) => {
@@ -1315,8 +1315,8 @@ const InvoiceManagement: React.FC = () => {
                                     }`}
                                   >
                                     <div>
-                                      <div className="font-medium">{product.name}</div>
-                                      <div className="text-xs text-gray-500">₹{product.price.toLocaleString()} • {product.category}</div>
+                                      <div className="font-medium">{product?.name}</div>
+                                      <div className="text-xs text-gray-500">₹{product?.price?.toLocaleString()} • {product?.category}</div>
                                     </div>
                                   </button>
                                 ))}

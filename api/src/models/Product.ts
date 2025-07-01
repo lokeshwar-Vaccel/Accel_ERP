@@ -25,15 +25,6 @@ const productSchema = new Schema({
     type: String,
     maxlength: [100, 'Model number cannot exceed 100 characters']
   },
-  specifications: {
-    type: Schema.Types.Mixed,
-    default: {}
-  },
-  price: {
-    type: Number,
-    required: [true, 'Product price is required'],
-    min: [0, 'Price cannot be negative']
-  },
   minStockLevel: {
     type: Number,
     required: [true, 'Minimum stock level is required'],
@@ -43,6 +34,73 @@ const productSchema = new Schema({
   isActive: {
     type: Boolean,
     default: true
+  },
+  partNo: {
+    type: String,
+    required: [true, 'Part number is required'],
+    trim: true,
+    maxlength: [100, 'Part number cannot exceed 100 characters'],
+  },
+  quantity: {
+    type: Number,
+    required: [true, 'Quantity is required'],
+    min: [0, 'Quantity cannot be negative'],
+  },
+  location: {
+    type: Schema.Types.ObjectId,
+    ref: 'StockLocation',
+    required: [true, 'Location ID is required'],
+  },
+  room: {
+    type: Schema.Types.ObjectId,
+    ref: 'Room',
+    required: [true, 'Room ID is required'],
+  },
+  rack: {
+    type: Schema.Types.ObjectId,
+    ref: 'Rack',
+    required: [true, 'Rack ID is required'],
+  },
+  hsnNumber: {
+    type: String,
+    maxlength: [50, 'HSN number cannot exceed 50 characters'],
+  },
+  dept: {
+    type: String,
+    maxlength: [100, 'Department cannot exceed 100 characters'],
+  },
+  productType1: {
+    type: String,
+    maxlength: [100, 'Product Type 1 cannot exceed 100 characters'],
+  },
+  productType2: {
+    type: String,
+    maxlength: [100, 'Product Type 2 cannot exceed 100 characters'],
+  },
+  productType3: {
+    type: String,
+    maxlength: [100, 'Product Type 3 cannot exceed 100 characters'],
+  },
+  make: {
+    type: String,
+    maxlength: [100, 'Make cannot exceed 100 characters'],
+  },
+  gst: {
+    type: Number,
+    min: [0, 'GST cannot be negative'],
+    max: [100, 'GST cannot exceed 100'],
+  },
+  gndp: {
+    type: Number,
+    min: [0, 'GNDP cannot be negative'],
+  },
+  price: {
+    type: Number,
+    min: [0, 'Price cannot be negative'],
+  },
+  gndpTotal: {
+    type: Number,
+    min: [0, 'GNDP Total cannot be negative'],
   },
   createdBy: {
     type: Schema.Types.ObjectId,
@@ -61,11 +119,11 @@ productSchema.index({ category: 1 });
 productSchema.index({ isActive: 1 });
 
 // Virtual for product code (auto-generated)
-productSchema.virtual('productCode').get(function(this: any) {
-  const categoryCode = this.category.toUpperCase().substring(0, 3);
-  const idCode = this._id.toString().slice(-6).toUpperCase();
-  return `${categoryCode}-${idCode}`;
-});
+// productSchema.virtual('productCode').get(function(this: any) {
+//   const categoryCode = this.category.toUpperCase().substring(0, 3);
+//   const idCode = this._id.toString().slice(-6).toUpperCase();
+//   return `${categoryCode}-${idCode}`;
+// });
 
 // Virtual to get current stock levels (populated from Stock model)
 productSchema.virtual('stockLevels', {

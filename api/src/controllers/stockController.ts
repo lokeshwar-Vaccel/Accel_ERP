@@ -42,8 +42,10 @@ export const getStockLevels = async (
 
     // Execute query with pagination
     let stockQuery = Stock.find(query)
-      .populate('product', 'name category brand modelNumber minStockLevel')
+      .populate('product', 'name partNo brand category hsnNumber dept productType1 productType2 productType3 make gst gndp price')
       .populate('location', 'name address type')
+      .populate('room', 'name ')
+      .populate('rack', 'name ')
       .sort(sort as string);
 
     // Filter by low stock if requested

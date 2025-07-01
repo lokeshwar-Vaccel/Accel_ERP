@@ -1,5 +1,5 @@
 import mongoose, { Schema } from 'mongoose';
-import { IStock, IStockLocation } from '../types';
+import { IRack, IRoom, IStock, IStockLocation } from '../types';
 
 // Stock Location Schema
 const stockLocationSchema = new Schema({
@@ -35,6 +35,81 @@ const stockLocationSchema = new Schema({
   timestamps: true
 });
 
+// Room Schema
+const roomSchema = new Schema(
+  {
+    name: {
+      type: String,
+      required: [true, 'Room name is required'],
+      trim: true,
+      maxlength: [100, 'Room name cannot exceed 100 characters'],
+    },
+    location: {
+      type: Schema.Types.ObjectId,
+      ref: 'StockLocation',
+      required: [true, 'Location is required'],
+    },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Description cannot exceed 500 characters'],
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// Rack Schema
+const rackSchema = new Schema(
+  {
+    name: {
+      type: String,
+      required: [true, 'Rack name is required'],
+      trim: true,
+      maxlength: [100, 'Rack name cannot exceed 100 characters'],
+    },
+    location: {
+      type: Schema.Types.ObjectId,
+      ref: 'StockLocation',
+      required: [true, 'Location is required'],
+    },
+    room: {
+      type: Schema.Types.ObjectId,
+      ref: 'Room',
+      required: [true, 'Room is required'],
+    },
+    description: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Description cannot exceed 500 characters'],
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
+
+// Indexes
+roomSchema.index({ location: 1 });
+rackSchema.index({ location: 1 });
+rackSchema.index({ room: 1 });
+
+// Optional: Add pre-save hooks if needed
+// roomSchema.pre('save', function (next) {
+//   // Example: modify fields or validate relationships
+//   next();
+// });
+
+
 // Stock Schema
 const stockSchema = new Schema({
   product: {
@@ -46,6 +121,16 @@ const stockSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'StockLocation',
     required: [true, 'Location is required']
+  },
+    room: {
+    type: Schema.Types.ObjectId,
+    ref: 'Room',
+    // required: [true, 'Room is required']
+  },
+    rack: {
+    type: Schema.Types.ObjectId,
+    ref: 'Rack',
+    // required: [true, 'Rack is required']
   },
   quantity: {
     type: Number,
@@ -163,4 +248,6 @@ stockSchema.methods.consumeStock = function(quantity: number) {
 };
 
 export const StockLocation = mongoose.model<IStockLocation>('StockLocation', stockLocationSchema);
-export const Stock = mongoose.model<IStock>('Stock', stockSchema); 
+export const Room = mongoose.model<IRoom>('Room', roomSchema);
+export const Rack = mongoose.model<IRack>('Rack', rackSchema);
+export const Stock = mongoose.model<IStock>('Stock', stockSchema);

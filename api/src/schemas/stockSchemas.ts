@@ -24,6 +24,37 @@ export interface UpdateStockLocationInput {
   description?: string;
 }
 
+export interface CreateRoomInput {
+  name: string;
+  location: string; // ObjectId as string
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateRoomInput {
+  name?: string;
+  location?: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface CreateRackInput {
+  name: string;
+  location: string; // ObjectId
+  room: string;     // ObjectId
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateRackInput {
+  name?: string;
+  location?: string;
+  room?: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+
 export interface StockAdjustmentInput {
   product: string;
   location: string;
@@ -180,6 +211,51 @@ export const updateStockLocationSchema = Joi.object<UpdateStockLocationInput>({
   isActive: baseStockLocationFields.isActive,
   capacity: baseStockLocationFields.capacity,
   description: baseStockLocationFields.description
+});
+
+const baseRoomFields = {
+  name: Joi.string().min(2).max(100).trim(),
+  location: Joi.string().length(24).hex(), // MongoDB ObjectId
+  description: Joi.string().max(500).trim().allow(''),
+  isActive: Joi.boolean()
+};
+
+export const createRoomSchema = Joi.object<CreateRoomInput>({
+  name: baseRoomFields.name.required(),
+  location: baseRoomFields.location.required(),
+  description: baseRoomFields.description,
+  isActive: baseRoomFields.isActive.default(true)
+});
+
+export const updateRoomSchema = Joi.object<UpdateRoomInput>({
+  name: baseRoomFields.name,
+  location: baseRoomFields.location,
+  description: baseRoomFields.description,
+  isActive: baseRoomFields.isActive
+});
+
+const baseRackFields = {
+  name: Joi.string().min(2).max(100).trim(),
+  location: Joi.string().length(24).hex(),
+  room: Joi.string().length(24).hex(),
+  description: Joi.string().max(500).trim().allow(''),
+  isActive: Joi.boolean()
+};
+
+export const createRackSchema = Joi.object<CreateRackInput>({
+  name: baseRackFields.name.required(),
+  location: baseRackFields.location.required(),
+  room: baseRackFields.room.required(),
+  description: baseRackFields.description,
+  isActive: baseRackFields.isActive.default(true)
+});
+
+export const updateRackSchema = Joi.object<UpdateRackInput>({
+  name: baseRackFields.name,
+  location: baseRackFields.location,
+  room: baseRackFields.room,
+  description: baseRackFields.description,
+  isActive: baseRackFields.isActive
 });
 
 // Stock adjustment schema

@@ -171,6 +171,23 @@ export interface IStockLocation extends Document {
   isActive: boolean;
 }
 
+// Room Interface
+export interface IRoom extends Document {
+  name: string;
+  description?: string;
+  location: string;
+  isActive: boolean;
+}
+
+// Rack Interface
+export interface IRack extends Document {
+  name: string;
+  description?: string;
+  location: string;
+  room: string;
+  isActive: boolean;
+}
+
 // Stock Interface
 export interface IStock extends Document {
   product: string;
