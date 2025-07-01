@@ -2,7 +2,12 @@ import { TransactionCounter } from '../models/TransactionCounter';
 
 export const generateReferenceId = async (type: string): Promise<string> => {
   const date = new Date().toISOString().slice(2, 10).replace(/-/g, ''); // e.g., "250627"
-  const prefix = type === 'adjustment' ? 'AD' : 'TF';
+  let prefix = 'TF'; // Default for transfer
+  
+  if (type === 'adjustment') prefix = 'AD';
+  else if (type === 'purchase_receipt') prefix = 'PR';
+  else if (type === 'reservation') prefix = 'RS';
+  
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   
   // Find the latest counter for the type and date

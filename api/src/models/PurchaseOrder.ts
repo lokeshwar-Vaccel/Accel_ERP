@@ -6,6 +6,7 @@ interface IPOItemSchema {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  receivedQuantity?: number;
 }
 
 // Main purchase order interface
@@ -14,7 +15,7 @@ interface IPurchaseOrderSchema extends Document {
   supplier: string;
   items: IPOItemSchema[];
   totalAmount: number;
-  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
   orderDate: Date;
   expectedDeliveryDate?: Date;
   actualDeliveryDate?: Date;
@@ -43,6 +44,11 @@ const poItemSchema = new Schema({
     type: Number,
     required: [true, 'Total price is required'],
     min: [0, 'Total price cannot be negative']
+  },
+  receivedQuantity: {
+    type: Number,
+    default: 0,
+    min: [0, 'Received quantity cannot be negative']
   }
 }, { _id: false });
 
@@ -76,7 +82,7 @@ const purchaseOrderSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['draft', 'sent', 'confirmed', 'received', 'cancelled'],
+    enum: ['draft', 'sent', 'confirmed', 'received', 'cancelled', 'partially_received'],
     default: 'draft',
     required: [true, 'Status is required']
   },

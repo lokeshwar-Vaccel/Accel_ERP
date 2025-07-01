@@ -6,6 +6,7 @@ import { RootState } from 'redux/store';
 import { useSelector } from 'react-redux';
 
 export interface Product {
+  _id: string;
   name: string;
   description?: string;
   category: string; // Should be a value from ProductCategory enum
@@ -30,7 +31,7 @@ export interface Product {
   gndpTotal?: number;
   createdAt: string;
   updatedAt: string;
-  createdBy?: string;
+  createdBy?: string | { _id: string; firstName?: string; lastName?: string };
 }
 
 
@@ -185,7 +186,7 @@ const ProductManagement: React.FC = () => {
       gndp: product.gndp || 0,
       price: product.price || 0,
       gndpTotal: product.gndpTotal || 0,
-      createdBy: product.createdBy?._id || ''
+      createdBy: typeof product.createdBy === 'string' ? product.createdBy : product.createdBy?._id || ''
     });
 
     setFormErrors({});
@@ -416,7 +417,7 @@ const ProductManagement: React.FC = () => {
 
   const filteredProducts = Array.isArray(products) ? products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (product.productCode && product.productCode.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (product.partNo && product.partNo.toLowerCase().includes(searchTerm.toLowerCase())) ||
       (product.brand && product.brand.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
     const matchesStatus = statusFilter === 'all' ||

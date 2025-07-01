@@ -1,92 +1,82 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
+import { StockLedger } from '../models/StockLedger';
 import { connectDB } from '../database/connection';
 
 const fixStockLedgerIndexes = async () => {
   try {
-    console.log('🔧 Starting StockLedger index fix...');
+    console.log('🔧 Starting Stock Ledger index fix...');
     
     // Connect to database
     await connectDB();
+    console.log('✅ Connected to database');
+
+    // Get the collection
+    const collection = StockLedger.collection;
     
-    const db = mongoose.connection.db;
-    if (!db) {
-      throw new Error('Database connection not available');
+    // List existing indexes
+    const existingIndexes = await collection.getIndexes();
+    console.log('📋 Existing indexes:', Object.keys(existingIndexes));
+    
+    // Drop the restrictive unique index if it exists
+    const indexName = 'referenceId_1_location_1_transactionType_1';
+    if (existingIndexes[indexName]) {
+      console.log(`🗑️  Dropping restrictive index: ${indexName}`);
+      await collection.dropIndex(indexName);
+      console.log('✅ Index dropped successfully');
+    } else {
+      console.log(`ℹ️  Index ${indexName} not found, skipping drop`);
     }
-    const collection = db.collection('stockledgers');
+
+    // Create new, more flexible indexes for better query performance
+    console.log('🔨 Creating new indexes...');
     
-    console.log('📊 Checking current indexes...');
-    const currentIndexes = await collection.indexes();
-    console.log('Current indexes:', currentIndexes.map(idx => ({ name: idx.name, key: idx.key })));
+    // Index for referenceId queries (not unique)
+    await collection.createIndex({ referenceId: 1 });
+    console.log('✅ Created referenceId index');
     
-    // Drop the problematic unique index on referenceId
-    try {
-      console.log('🗑️ Dropping old unique index on referenceId...');
-      await collection.dropIndex('referenceId_1');
-      console.log('✅ Old index dropped successfully');
-    } catch (error: any) {
-      if (error.code === 27) {
-        console.log('ℹ️ Index referenceId_1 does not exist (already dropped)');
-      } else {
-        console.warn('⚠️ Could not drop old index:', error.message);
-      }
-    }
+    // Index for product and location queries
+    await collection.createIndex({ product: 1, location: 1 });
+    console.log('✅ Created product_location index');
     
-    // Create new compound unique index
-    console.log('🔨 Creating new compound unique index...');
-    try {
-      await collection.createIndex(
-        { 
-          referenceId: 1, 
-          location: 1, 
-          transactionType: 1 
-        }, 
-        { 
-          unique: true,
-          name: 'referenceId_location_transactionType_unique'
-        }
-      );
-      console.log('✅ New compound unique index created successfully');
-    } catch (error: any) {
-      if (error.code === 85) {
-        console.log('ℹ️ Compound index already exists');
-      } else {
-        console.error('❌ Error creating new index:', error.message);
-        throw error;
-      }
-    }
+    // Index for transaction type queries
+    await collection.createIndex({ transactionType: 1 });
+    console.log('✅ Created transactionType index');
     
-    // Verify new indexes
-    console.log('\n📊 Verifying updated indexes...');
-    const updatedIndexes = await collection.indexes();
-    console.log('Updated indexes:');
-    updatedIndexes.forEach(idx => {
-      console.log(`   - ${idx.name}: ${JSON.stringify(idx.key)} ${idx.unique ? '(unique)' : ''}`);
-    });
+    // Index for date-based queries
+    await collection.createIndex({ transactionDate: -1 });
+    console.log('✅ Created transactionDate index');
     
-    console.log('\n✅ StockLedger index fix completed successfully');
-    console.log('📋 Now stock transfers can create paired entries with the same referenceId');
+    // Compound index for common query patterns
+    await collection.createIndex({ product: 1, transactionDate: -1 });
+    console.log('✅ Created product_date index');
+    
+    console.log('🎉 Stock Ledger indexes fixed successfully!');
+    
+    // List final indexes
+    const finalIndexes = await collection.getIndexes();
+    console.log('📋 Final indexes:', Object.keys(finalIndexes));
     
   } catch (error) {
-    console.error('❌ Error fixing StockLedger indexes:', error);
+    console.error('❌ Error fixing Stock Ledger indexes:', error);
     throw error;
   } finally {
-    await mongoose.connection.close();
-    console.log('🔌 Database connection closed');
+    await mongoose.disconnect();
+    console.log('🔌 Disconnected from database');
   }
 };
 
-// Run if called directly
+// Run the script if called directly
 if (require.main === module) {
   fixStockLedgerIndexes()
     .then(() => {
-      console.log('✅ Index fix completed successfully');
+      console.log('✅ Script completed successfully');
       process.exit(0);
     })
     .catch((error) => {
-      console.error('❌ Index fix failed:', error);
+      console.error('❌ Script failed:', error);
       process.exit(1);
     });
 }
 
-export default fixStockLedgerIndexes; 
+export { fixStockLedgerIndexes }; 

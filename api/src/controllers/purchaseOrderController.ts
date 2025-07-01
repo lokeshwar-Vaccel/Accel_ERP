@@ -4,6 +4,7 @@ import { Stock } from '../models/Stock';
 import { StockLedger } from '../models/StockLedger';
 import { AuthenticatedRequest, APIResponse, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import { generateReferenceId } from '../utils/generateReferenceId';
 
 // Purchase Order Status enum for internal use
 enum PurchaseOrderStatus {
@@ -266,11 +267,14 @@ export const receiveItems = async (
       return next(new AppError('Purchase order not found', 404));
     }
 
-    if (order.status !== 'confirmed') {
+    if (!['confirmed', 'partially_received'].includes(order.status)) {
       return next(new AppError('Purchase order must be confirmed before receiving items', 400));
     }
 
     console.log(`Receiving items for PO ${order.poNumber}:`, receivedItems);
+
+    let totalOrderedQuantity = 0;
+    let totalReceivedQuantity = 0;
 
     // Process each received item
     for (const receivedItem of receivedItems) {
@@ -297,6 +301,33 @@ export const receiveItems = async (
         console.warn(`Skipping item ${actualProductId}: invalid quantity ${actualQuantityReceived}`);
         continue; // Skip items with zero or negative quantity
       }
+
+      // Find the corresponding item in the purchase order
+      const poItem = order.items.find(item => 
+        (typeof item.product === 'string' ? item.product : item.product._id).toString() === actualProductId.toString()
+      );
+
+      if (!poItem) {
+        console.warn(`Product ${actualProductId} not found in purchase order ${order.poNumber}`);
+        continue;
+      }
+
+      // Initialize receivedQuantity if it doesn't exist
+      if (!poItem.receivedQuantity) {
+        poItem.receivedQuantity = 0;
+      }
+
+      // Check if receiving more than ordered quantity
+      const newReceivedQuantity = poItem.receivedQuantity + actualQuantityReceived;
+      if (newReceivedQuantity > poItem.quantity) {
+        return next(new AppError(
+          `Cannot receive more than ordered quantity for product ${actualProductId}. Ordered: ${poItem.quantity}, Already received: ${poItem.receivedQuantity}, Trying to receive: ${actualQuantityReceived}`,
+          400
+        ));
+      }
+
+      // Update received quantity in PO
+      poItem.receivedQuantity = newReceivedQuantity;
 
       // Find or create stock record
       let stock = await Stock.findOne({ 
@@ -325,9 +356,11 @@ export const receiveItems = async (
 
       console.log(`Updated stock for product ${actualProductId}: ${previousQuantity} -> ${stock.quantity}`);
 
+      // Generate unique reference ID for this specific receipt transaction
+      const referenceId = await generateReferenceId('purchase_receipt');
+
       // Create StockLedger entry for traceability
       await StockLedger.create({
-        stock: stock._id,
         product: actualProductId,
         location: location,
         transactionType: 'inward',
@@ -335,35 +368,49 @@ export const receiveItems = async (
         resultingQuantity: stock.quantity,
         reason: `Purchase Order Receipt - ${order.poNumber}`,
         referenceType: 'purchase_order',
-        referenceId: order._id,
+        referenceId: referenceId, // Use unique reference ID
         performedBy: req.user!.id,
         transactionDate: receiptDate ? new Date(receiptDate) : new Date(),
-        notes: itemNotes || notes || `Received from supplier: ${order.supplier}`,
-        metadata: {
-          condition,
-          batchNumber,
-          poNumber: order.poNumber,
-          supplier: order.supplier,
-          inspectedBy: inspectedBy || req.user!.id
-        }
+        notes: itemNotes || notes || `Received from supplier: ${order.supplier}. PO: ${order.poNumber}, Product: ${typeof poItem.product === 'object' && 'name' in poItem.product ? poItem.product.name : actualProductId}`,
       });
 
-      console.log(`Created stock ledger entry for ${actualQuantityReceived} units of product ${actualProductId}`);
+      console.log(`Created stock ledger entry for ${actualQuantityReceived} units of product ${actualProductId} with reference ${referenceId}`);
     }
 
-    // Mark purchase order as received
-    order.status = 'received';
-    order.actualDeliveryDate = receiptDate ? new Date(receiptDate) : new Date();
+    // Calculate total quantities to determine PO status
+    for (const item of order.items) {
+      totalOrderedQuantity += item.quantity;
+      totalReceivedQuantity += (item.receivedQuantity || 0);
+    }
+
+    // Update purchase order status based on received quantities
+    if (totalReceivedQuantity === 0) {
+      // No items received yet, keep current status
+    } else if (totalReceivedQuantity >= totalOrderedQuantity) {
+      // All items received
+      order.status = 'received';
+      order.actualDeliveryDate = receiptDate ? new Date(receiptDate) : new Date();
+    } else {
+      // Partial receipt
+      order.status = 'partially_received';
+      if (!order.actualDeliveryDate) {
+        order.actualDeliveryDate = receiptDate ? new Date(receiptDate) : new Date();
+      }
+    }
+
     await order.save();
 
-    console.log(`Purchase order ${order.poNumber} marked as received`);
+    console.log(`Purchase order ${order.poNumber} status updated to ${order.status}. Received: ${totalReceivedQuantity}/${totalOrderedQuantity}`);
 
     const response: APIResponse = {
       success: true,
-      message: 'Items received successfully and stock updated',
+      message: `Items received successfully. ${order.status === 'received' ? 'Purchase order completed.' : `Partial receipt: ${totalReceivedQuantity}/${totalOrderedQuantity} items received.`}`,
       data: { 
         order,
         receivedItems,
+        totalOrderedQuantity,
+        totalReceivedQuantity,
+        status: order.status,
         message: 'Stock levels and ledger have been updated'
       }
     };
@@ -511,7 +558,8 @@ export const updatePurchaseOrderStatus = async (
     const validTransitions: Record<string, string[]> = {
       'draft': ['sent', 'cancelled'],
       'sent': ['confirmed', 'cancelled'],
-      'confirmed': ['received', 'cancelled'],
+      'confirmed': ['received', 'partially_received', 'cancelled'],
+      'partially_received': ['received', 'cancelled'],
       'received': [], // Cannot change from received
       'cancelled': [] // Cannot change from cancelled
     };

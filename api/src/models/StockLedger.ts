@@ -18,12 +18,11 @@ const stockLedgerSchema = new Schema<IStockLedger>(
   { timestamps: true }
 );
 
-// Compound unique index to allow same referenceId for transfer pairs (outward + inward)
-// but prevent true duplicates of the same transaction
-stockLedgerSchema.index({ 
-  referenceId: 1, 
-  location: 1, 
-  transactionType: 1 
-}, { unique: true });
+// Indexes for better query performance
+stockLedgerSchema.index({ referenceId: 1 });
+stockLedgerSchema.index({ product: 1, location: 1 });
+stockLedgerSchema.index({ transactionType: 1 });
+stockLedgerSchema.index({ transactionDate: -1 });
+stockLedgerSchema.index({ product: 1, transactionDate: -1 });
 
 export const StockLedger = model<IStockLedger>('StockLedger', stockLedgerSchema);
