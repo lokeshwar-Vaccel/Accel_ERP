@@ -45,6 +45,14 @@ interface ProductData {
   modelNumber?: string;
   price: number;
   minStockLevel: number;
+  partNo?: string;
+  dept?: string;
+  hsnNumber?: string;
+  productType1?: string;
+  productType2?: string;
+  productType3?: string;
+  make?: string;
+  gst?: number;
 }
 
 interface StockLocationData {
@@ -61,10 +69,13 @@ interface StockItem {
   _id: string;
   product: ProductData;
   location: StockLocationData;
+  room?: any;
+  rack?: any;
   quantity: number;
   reservedQuantity: number;
   availableQuantity: number;
   lastUpdated: string;
+  gndp?: number;
 }
 
 interface StockTransaction {
@@ -101,7 +112,11 @@ interface StockAdjustmentFormData {
 interface StockTransferFormData {
   product: string;
   fromLocation: string;
+  fromRoom: string;
+  fromRack: string;
   toLocation: string;
+  toRoom: string;
+  toRack: string;
   quantity: number;
   notes: string;
 }
@@ -210,7 +225,11 @@ const InventoryManagement: React.FC = () => {
   const [transferFormData, setTransferFormData] = useState<StockTransferFormData>({
     product: '',
     fromLocation: '',
+    fromRoom: '',
+    fromRack: '',
     toLocation: '',
+    toRoom: '',
+    toRack: '',
     quantity: 0,
     notes: ''
   });
@@ -427,7 +446,7 @@ const InventoryManagement: React.FC = () => {
 // Extract unique departments
 const uniqueDepts = Array.from(
   new Set(inventory.map(item => item.product?.dept).filter(Boolean))
-);
+) as string[];
 
 const deptOptionsFilter = [
   { value: '', label: 'Select a department' },
@@ -440,7 +459,7 @@ const deptOptionsFilter = [
 // Extract unique brands
 const uniqueBrands = Array.from(
   new Set(inventory.map(item => item.product?.brand).filter(Boolean))
-);
+) as string[];
 
 const brandOptionsFilter = [
   { value: '', label: 'Select a brand' },
@@ -839,7 +858,11 @@ const brandOptionsFilter = [
     setTransferFormData({
       product: typeof stockItem.product === 'string' ? stockItem.product : stockItem.product._id,
       fromLocation: typeof stockItem.location === 'string' ? stockItem.location : stockItem.location._id,
+      fromRoom: '',
+      fromRack: '',
       toLocation: '',
+      toRoom: '',
+      toRack: '',
       quantity: Math.max(1, defaultQty), // Ensure at least 1
       notes: ''
     });
@@ -978,9 +1001,14 @@ const brandOptionsFilter = [
     if (!transferFormData.toLocation) {
       errors.toLocation = 'Destination location is required';
     }
-    if (transferFormData.fromLocation === transferFormData.toLocation) {
-      errors.toLocation = 'Destination must be different from source location';
+    
+    // Check if transfer is to exact same location/room/rack
+    if (transferFormData.fromLocation === transferFormData.toLocation &&
+        transferFormData.fromRoom === transferFormData.toRoom &&
+        transferFormData.fromRack === transferFormData.toRack) {
+      errors.toLocation = 'Destination must be different from source (location, room, or rack)';
     }
+    
     if (transferFormData.quantity <= 0) {
       errors.quantity = 'Quantity must be greater than 0';
     }
@@ -1071,7 +1099,7 @@ const brandOptionsFilter = [
     setSubmitting(true);
     try {
       setFormErrors({});
-      const { product, fromLocation, toLocation, quantity, notes } = transferFormData;
+      const { product, fromLocation, fromRoom, fromRack, toLocation, toRoom, toRack, quantity, notes } = transferFormData;
 
       // Get fresh stock data before transfer
       const currentStock = await getCurrentStockStatus(product, fromLocation);
@@ -1092,22 +1120,34 @@ const brandOptionsFilter = [
         return;
       }
 
-      // Send transfer request
-      await apiClient.stock.transferStock({
+      // Prepare transfer data with room and rack info
+      const transferData: any = {
         product,
         fromLocation,
         toLocation,
         quantity,
         notes
-      });
+      };
+
+      // Add room and rack data if provided
+      if (fromRoom) transferData.fromRoom = fromRoom;
+      if (fromRack) transferData.fromRack = fromRack;
+      if (toRoom) transferData.toRoom = toRoom;
+      if (toRack) transferData.toRack = toRack;
+
+      // Send transfer request
+      await apiClient.stock.transferStock(transferData);
 
       await fetchInventory(); // Refresh inventory
       setShowTransferModal(false);
-      setShowToLocationDropdown(false);
       setTransferFormData({
         product: '',
         fromLocation: '',
+        fromRoom: '',
+        fromRack: '',
         toLocation: '',
+        toRoom: '',
+        toRack: '',
         quantity: 0,
         notes: ''
       });
@@ -1557,7 +1597,7 @@ const brandOptionsFilter = [
       { value: '', label: 'All Types' },
       { value: 'inward', label: 'Inward (Purchase)' },
       { value: 'outward', label: 'Outward (Sale)' },
-      { value: 'transfer', label: 'Transfer' },
+      { value: 'transfer', label: 'Transfer (Location/Room/Rack)' },
       { value: 'adjustment', label: 'Adjustment' },
       { value: 'reservation', label: 'Reservation' },
       { value: 'release', label: 'Release' }
@@ -2596,12 +2636,17 @@ const brandOptionsFilter = [
         </div>
       )}
 
-      {/* Stock Transfer Modal */}
+      {/* Enhanced Stock Transfer Modal */}
       {showTransferModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Transfer Stock</h2>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Transfer Stock</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Transfer items between different locations, rooms, and racks
+                </p>
+              </div>
               <button
                 onClick={() => {
                   setShowTransferModal(false);
@@ -2613,193 +2658,307 @@ const brandOptionsFilter = [
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitTransfer(); }} className="p-4 space-y-3">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitTransfer(); }} className="p-6 space-y-6">
               {formErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Product
-                  </label>
-                  <div className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
-                    {products.find(p => p._id === transferFormData.product)?.name || 'Product'}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    From Location
-                  </label>
-                  <div className="px-2.5 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-600">
-                    {locations.find(l => l._id === transferFormData.fromLocation)?.name || 'Source Location'}
-                  </div>
-                </div>
-
-                {/* Stock Information */}
-                {selectedItem && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                    <div className="flex items-center justify-between mb-2">
-                      <h4 className="text-sm font-medium text-blue-900">Current Stock Status</h4>
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          console.log('Manual refresh triggered');
-                          const freshStock = await getCurrentStockStatus(transferFormData.product, transferFormData.fromLocation);
-                          if (freshStock) {
-                            console.log('Fresh stock data:', freshStock);
-                            setSelectedItem(freshStock);
-                          } else {
-                            console.error('Failed to get fresh stock data');
-                          }
-                        }}
-                        className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
-                      >
-                        Refresh
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 text-xs">
-                      <div className="text-center">
-                        <p className="font-bold text-gray-900">{selectedItem.quantity}</p>
-                        <p className="text-gray-600">Total Stock</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="font-bold text-yellow-600">{selectedItem.reservedQuantity || 0}</p>
-                        <p className="text-gray-600">Reserved</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="font-bold text-green-600">
-                          {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))}
-                        </p>
-                        <p className="text-gray-600">Available</p>
+              {/* Product Information */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Product Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Product</label>
+                    <div className="flex items-center p-3 bg-white border border-gray-200 rounded-lg">
+                      <Package className="w-5 h-5 text-gray-400 mr-3" />
+                      <div>
+                        <div className="font-medium text-gray-900">
+                          {products.find(p => p._id === transferFormData.product)?.name || 'Product'}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Part: {products.find(p => p._id === transferFormData.product)?.partNo || 'N/A'}
+                        </div>
                       </div>
                     </div>
-
-
                   </div>
-                )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    To Location *
-                  </label>
-                  <div className="relative dropdown-container">
-                    <button
-                      type="button"
-                      onClick={() => setShowToLocationDropdown(!showToLocationDropdown)}
-                      className={`flex items-center justify-between w-full px-2.5 py-1.5 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
-                        } hover:border-gray-400`}
-                    >
-                      <span className="text-gray-700 truncate mr-1">{getToLocationLabel(transferFormData.toLocation)}</span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showToLocationDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showToLocationDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                        {locations
-                          .filter(location => location._id !== transferFormData.fromLocation)
-                          .map((location) => (
-                            <button
-                              key={location._id}
-                              type="button"
-                              onClick={() => {
-                                setTransferFormData({ ...transferFormData, toLocation: location._id });
-                                setShowToLocationDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${transferFormData.toLocation === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              <div>
-                                <div className="font-medium">{location.name}</div>
-                                <div className="text-xs text-gray-500 capitalize">{location.type.replace('_', ' ')}</div>
-                              </div>
-                            </button>
-                          ))
-                        }
-                        {locations.filter(location => location._id !== transferFormData.fromLocation).length === 0 && (
-                          <div className="px-3 py-2 text-sm text-gray-500">
-                            No other locations available
-                          </div>
-                        )}
+                  {/* Current Stock Status */}
+                  {selectedItem && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-blue-900">Current Stock Status</h4>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            const freshStock = await getCurrentStockStatus(transferFormData.product, transferFormData.fromLocation);
+                            if (freshStock) {
+                              setSelectedItem(freshStock);
+                            }
+                          }}
+                          className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded hover:bg-blue-200 transition-colors"
+                        >
+                          Refresh
+                        </button>
                       </div>
-                    )}
-                  </div>
-                  {formErrors.toLocation && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.toLocation}</p>
+                      <div className="grid grid-cols-3 gap-3 text-xs">
+                        <div className="text-center">
+                          <p className="font-bold text-gray-900 text-lg">{selectedItem.quantity}</p>
+                          <p className="text-gray-600">Total Stock</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="font-bold text-yellow-600 text-lg">{selectedItem.reservedQuantity || 0}</p>
+                          <p className="text-gray-600">Reserved</p>
+                        </div>
+                        <div className="text-center">
+                          <p className="font-bold text-green-600 text-lg">
+                            {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))}
+                          </p>
+                          <p className="text-gray-600">Available</p>
+                        </div>
+                      </div>
+                    </div>
                   )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Quantity *
-                    {selectedItem && (
-                      <span className="text-xs text-gray-500 ml-1">
-                        (Max: {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))})
-                      </span>
-                    )}
-                  </label>
-                  <div className="flex space-x-2">
-                    <input
-                      type="number"
-                      name="quantity"
-                      value={transferFormData.quantity}
-                      onChange={(e) => setTransferFormData({ ...transferFormData, quantity: Number(e.target.value) })}
-                      min="1"
-                      max={selectedItem ? (selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))) : undefined}
-                      className={`flex-1 px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.quantity ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                      placeholder="Enter quantity to transfer"
-                    />
-                    {selectedItem && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const maxQty = selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0));
-                          setTransferFormData({ ...transferFormData, quantity: maxQty });
-                        }}
-                        className="px-3 py-1.5 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
-                      >
-                        Max
-                      </button>
-                    )}
-                  </div>
-                  {formErrors.quantity && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    name="notes"
-                    value={transferFormData.notes}
-                    onChange={(e) => setTransferFormData({ ...transferFormData, notes: e.target.value })}
-                    rows={3}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                    placeholder="Additional notes (optional)"
-                  />
                 </div>
               </div>
 
-              <div className="flex space-x-3 pt-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* FROM - Source Location Hierarchy */}
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <h3 className="text-lg font-medium text-red-900 mb-4 flex items-center">
+                    <ArrowUpDown className="w-5 h-5 mr-2" />
+                    From (Source)
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                      <div className="flex items-center p-3 bg-white border border-gray-200 rounded-lg">
+                        <Building className="w-4 h-4 text-blue-500 mr-2" />
+                        <span className="font-medium text-gray-900">
+                          {locations.find(l => l._id === transferFormData.fromLocation)?.name || 'Source Location'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Room (Optional)</label>
+                      <select
+                        value={transferFormData.fromRoom}
+                        onChange={(e) => setTransferFormData({ ...transferFormData, fromRoom: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select current room</option>
+                        {rooms.filter(room => room.location._id === transferFormData.fromLocation).map(room => (
+                          <option key={room._id} value={room._id}>{room.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Rack (Optional)</label>
+                      <select
+                        value={transferFormData.fromRack}
+                        onChange={(e) => setTransferFormData({ ...transferFormData, fromRack: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        disabled={!transferFormData.fromRoom}
+                      >
+                        <option value="">Select current rack</option>
+                        {racks.filter(rack => rack.room._id === transferFormData.fromRoom).map(rack => (
+                          <option key={rack._id} value={rack._id}>{rack.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* TO - Destination Location Hierarchy */}
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <h3 className="text-lg font-medium text-green-900 mb-4 flex items-center">
+                    <MapPin className="w-5 h-5 mr-2" />
+                    To (Destination)
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
+                      <select
+                        value={transferFormData.toLocation}
+                        onChange={(e) => setTransferFormData({ 
+                          ...transferFormData, 
+                          toLocation: e.target.value,
+                          toRoom: '', // Reset room when location changes
+                          toRack: ''  // Reset rack when location changes
+                        })}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      >
+                        <option value="">Select destination location</option>
+                        {locations.map((location) => (
+                          <option key={location._id} value={location._id}>
+                            {location.name} ({location.type.replace('_', ' ')})
+                          </option>
+                        ))}
+                      </select>
+                      {formErrors.toLocation && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.toLocation}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Room (Optional)</label>
+                      <select
+                        value={transferFormData.toRoom}
+                        onChange={(e) => setTransferFormData({ 
+                          ...transferFormData, 
+                          toRoom: e.target.value,
+                          toRack: '' // Reset rack when room changes
+                        })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        disabled={!transferFormData.toLocation}
+                      >
+                        <option value="">Select destination room</option>
+                        {rooms.filter(room => room.location._id === transferFormData.toLocation).map(room => (
+                          <option key={room._id} value={room._id}>{room.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Rack (Optional)</label>
+                      <select
+                        value={transferFormData.toRack}
+                        onChange={(e) => setTransferFormData({ ...transferFormData, toRack: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        disabled={!transferFormData.toRoom}
+                      >
+                        <option value="">Select destination rack</option>
+                        {racks.filter(rack => rack.room._id === transferFormData.toRoom).map(rack => (
+                          <option key={rack._id} value={rack._id}>{rack.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Transfer Details */}
+              <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                <h3 className="text-lg font-medium text-yellow-900 mb-4">Transfer Details</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Quantity to Transfer *
+                      {selectedItem && (
+                        <span className="text-xs text-gray-500 ml-1">
+                          (Max Available: {selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))})
+                        </span>
+                      )}
+                    </label>
+                    <div className="flex space-x-2">
+                      <input
+                        type="number"
+                        name="quantity"
+                        value={transferFormData.quantity}
+                        onChange={(e) => setTransferFormData({ ...transferFormData, quantity: Number(e.target.value) })}
+                        min="1"
+                        max={selectedItem ? (selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))) : undefined}
+                        className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          formErrors.quantity ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                        placeholder="Enter quantity to transfer"
+                      />
+                      {selectedItem && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const maxQty = selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0));
+                            setTransferFormData({ ...transferFormData, quantity: maxQty });
+                          }}
+                          className="px-3 py-2 text-xs bg-gray-100 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-200 transition-colors"
+                        >
+                          Max ({selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))})
+                        </button>
+                      )}
+                    </div>
+                    {formErrors.quantity && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Transfer Notes</label>
+                    <textarea
+                      name="notes"
+                      value={transferFormData.notes}
+                      onChange={(e) => setTransferFormData({ ...transferFormData, notes: e.target.value })}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      placeholder="Reason for transfer (optional)"
+                    />
+                  </div>
+                </div>
+
+                {/* Transfer Summary */}
+                {transferFormData.toLocation && transferFormData.quantity > 0 && (
+                  <div className="mt-4 p-4 bg-white border border-yellow-300 rounded-lg">
+                    <h4 className="font-medium text-gray-900 mb-2">Transfer Summary</h4>
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <p>
+                        <strong>Moving {transferFormData.quantity} units</strong> of{' '}
+                        {products.find(p => p._id === transferFormData.product)?.name}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <span>
+                          From: {locations.find(l => l._id === transferFormData.fromLocation)?.name}
+                          {transferFormData.fromRoom && rooms.find(r => r._id === transferFormData.fromRoom) && 
+                            ` → ${rooms.find(r => r._id === transferFormData.fromRoom)?.name}`}
+                          {transferFormData.fromRack && racks.find(r => r._id === transferFormData.fromRack) && 
+                            ` → ${racks.find(r => r._id === transferFormData.fromRack)?.name}`}
+                        </span>
+                        <ArrowUpDown className="w-4 h-4 text-gray-400" />
+                        <span>
+                          To: {locations.find(l => l._id === transferFormData.toLocation)?.name}
+                          {transferFormData.toRoom && rooms.find(r => r._id === transferFormData.toRoom) && 
+                            ` → ${rooms.find(r => r._id === transferFormData.toRoom)?.name}`}
+                          {transferFormData.toRack && racks.find(r => r._id === transferFormData.toRack) && 
+                            ` → ${racks.find(r => r._id === transferFormData.toRack)?.name}`}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-4 pt-4 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={() => {
                     setShowTransferModal(false);
-                    setShowToLocationDropdown(false);
+                    setTransferFormData({
+                      product: '',
+                      fromLocation: '',
+                      fromRoom: '',
+                      fromRack: '',
+                      toLocation: '',
+                      toRoom: '',
+                      toRack: '',
+                      quantity: 0,
+                      notes: ''
+                    });
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
+                  disabled={submitting || !transferFormData.toLocation || transferFormData.quantity <= 0}
+                  className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                   {submitting ? 'Transferring...' : 'Transfer Stock'}
                 </button>
@@ -3240,15 +3399,17 @@ const brandOptionsFilter = [
                           <td className="px-4 py-3 text-xs">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${transaction.type === 'inward' ? 'bg-green-100 text-green-800' :
                               transaction.type === 'outward' ? 'bg-red-100 text-red-800' :
-                                transaction.type === 'reservation' ? 'bg-orange-100 text-orange-800' :
-                                  transaction.type === 'release' ? 'bg-purple-100 text-purple-800' :
-                                    'bg-blue-100 text-blue-800'
+                                transaction.type === 'transfer' ? 'bg-purple-100 text-purple-800' :
+                                  transaction.type === 'reservation' ? 'bg-orange-100 text-orange-800' :
+                                    transaction.type === 'release' ? 'bg-blue-100 text-blue-800' :
+                                      'bg-gray-100 text-gray-800'
                               }`}>
                               {transaction.type === 'inward' ? '↗ Inward' :
                                 transaction.type === 'outward' ? '↙ Outward' :
-                                  transaction.type === 'reservation' ? '🔒 Reserved' :
-                                    transaction.type === 'release' ? '🔓 Released' :
-                                      '⚡ Adjustment'}
+                                  transaction.type === 'transfer' ? '🔄 Transfer' :
+                                    transaction.type === 'reservation' ? '🔒 Reserved' :
+                                      transaction.type === 'release' ? '🔓 Released' :
+                                        '⚡ Adjustment'}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-xs font-medium">
@@ -3429,7 +3590,7 @@ const brandOptionsFilter = [
                         { value: '', label: 'All Types' },
                         { value: 'inward', label: 'Inward (Purchase)' },
                         { value: 'outward', label: 'Outward (Sale)' },
-                        { value: 'transfer', label: 'Transfer' },
+                        { value: 'transfer', label: 'Transfer (Location/Room/Rack)' },
                         { value: 'adjustment', label: 'Adjustment' },
                         { value: 'reservation', label: 'Reservation' },
                         { value: 'release', label: 'Release' }
@@ -3547,15 +3708,17 @@ const brandOptionsFilter = [
                         <td className="px-4 py-3">
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${ledger.transactionType === 'inward' ? 'bg-green-100 text-green-800' :
                             ledger.transactionType === 'outward' ? 'bg-red-100 text-red-800' :
-                              ledger.transactionType === 'reservation' ? 'bg-orange-100 text-orange-800' :
-                                ledger.transactionType === 'release' ? 'bg-purple-100 text-purple-800' :
-                                  'bg-blue-100 text-blue-800'
+                              ledger.transactionType === 'transfer' ? 'bg-purple-100 text-purple-800' :
+                                ledger.transactionType === 'reservation' ? 'bg-orange-100 text-orange-800' :
+                                  ledger.transactionType === 'release' ? 'bg-blue-100 text-blue-800' :
+                                    'bg-gray-100 text-gray-800'
                             }`}>
                             {ledger.transactionType === 'inward' ? '↗ Inward' :
                               ledger.transactionType === 'outward' ? '↙ Outward' :
-                                ledger.transactionType === 'reservation' ? '🔒 Reserved' :
-                                  ledger.transactionType === 'release' ? '🔓 Released' :
-                                    '⚡ Adjustment'}
+                                ledger.transactionType === 'transfer' ? '🔄 Transfer' :
+                                  ledger.transactionType === 'reservation' ? '🔒 Reserved' :
+                                    ledger.transactionType === 'release' ? '🔓 Released' :
+                                      '⚡ Adjustment'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-xs font-medium">

@@ -428,75 +428,146 @@ export const transferStock = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { product, fromLocation, toLocation, quantity, notes  } = req.body;
+    const { 
+      product, 
+      fromLocation, 
+      fromRoom, 
+      fromRack, 
+      toLocation, 
+      toRoom, 
+      toRack, 
+      quantity, 
+      notes 
+    } = req.body;
 
     const sourceStock = await Stock.findOne({ product, location: fromLocation });
     if (!sourceStock || sourceStock.availableQuantity < quantity) {
       return next(new AppError('Insufficient stock at source location', 400));
     }
 
-    sourceStock.quantity -= quantity;
-    sourceStock.availableQuantity = sourceStock.quantity - sourceStock.reservedQuantity;
-    sourceStock.lastUpdated = new Date();
-    await sourceStock.save();
-
-    let destStock = await Stock.findOne({ product, location: toLocation });
-    if (!destStock) {
-      destStock = new Stock({
-        product,
-        location: toLocation,
-        quantity,
-        reservedQuantity: 0
-      });
-    } else {
-      destStock.quantity += quantity;
-    }
+    // Check if this is a location change (not just room/rack reorganization)
+    const isLocationChange = fromLocation !== toLocation;
     
-    destStock.availableQuantity = destStock.quantity - destStock.reservedQuantity;
-    destStock.lastUpdated = new Date();
-    await destStock.save();
+    if (isLocationChange) {
+      // Update source stock (subtract quantity)
+      sourceStock.quantity -= quantity;
+      sourceStock.availableQuantity = sourceStock.quantity - sourceStock.reservedQuantity;
+      sourceStock.lastUpdated = new Date();
+      await sourceStock.save();
+
+      // Update or create destination stock
+      let destStock = await Stock.findOne({ product, location: toLocation });
+      if (!destStock) {
+        destStock = new Stock({
+          product,
+          location: toLocation,
+          room: toRoom || undefined,
+          rack: toRack || undefined,
+          quantity,
+          reservedQuantity: 0
+        });
+      } else {
+        destStock.quantity += quantity;
+        if (toRoom) destStock.room = toRoom;
+        if (toRack) destStock.rack = toRack;
+      }
+      
+      destStock.availableQuantity = destStock.quantity - destStock.reservedQuantity;
+      destStock.lastUpdated = new Date();
+      await destStock.save();
+    } else {
+      // Same location, just updating room/rack
+      if (toRoom) sourceStock.room = toRoom;
+      if (toRack) sourceStock.rack = toRack;
+      sourceStock.lastUpdated = new Date();
+      await sourceStock.save();
+    }
 
     const referenceId = await generateReferenceId('transfer');
-    await StockLedger.create([
-      {
+    
+    // Create transfer ledger entries - get location names for descriptions
+    const [fromLocationDoc, toLocationDoc] = await Promise.all([
+      Stock.populate(sourceStock, { path: 'location', select: 'name' }),
+      toLocation !== fromLocation ? 
+        require('../models/Stock').StockLocation.findById(toLocation).select('name') : 
+        Stock.populate(sourceStock, { path: 'location', select: 'name' })
+    ]);
+    
+    const fromLocationName = (fromLocationDoc.location as any)?.name || 'Unknown Location';
+    const toLocationName = isLocationChange ? 
+      (toLocationDoc as any)?.name || 'Unknown Location' : 
+      fromLocationName;
+    
+    const fromDesc = `${fromLocationName}${fromRoom ? ` → ${fromRoom}` : ''}${fromRack ? ` → ${fromRack}` : ''}`;
+    const toDesc = `${toLocationName}${toRoom ? ` → ${toRoom}` : ''}${toRack ? ` → ${toRack}` : ''}`;
+
+    if (isLocationChange) {
+      // Create separate ledger entries for location transfers
+      await StockLedger.create([
+        {
+          product,
+          location: fromLocation,
+          transactionType: 'transfer',
+          quantity: -quantity,
+          reason: `Stock transferred from ${fromDesc} to ${toDesc}`,
+          notes,
+          performedBy: req.user!.id,
+          transactionDate: new Date(),
+          resultingQuantity: sourceStock.quantity,
+          referenceId,
+          referenceType: 'transfer'
+        },
+        {
+          product,
+          location: toLocation,
+          transactionType: 'transfer',
+          quantity,
+          reason: `Stock received from ${fromDesc} to ${toDesc}`,
+          notes,
+          performedBy: req.user!.id,
+          transactionDate: new Date(),
+          resultingQuantity: isLocationChange ? (await Stock.findOne({ product, location: toLocation }))?.quantity || quantity : sourceStock.quantity,
+          referenceId,
+          referenceType: 'transfer',
+        }
+      ]);
+    } else {
+      // Single ledger entry for room/rack reorganization
+      await StockLedger.create({
         product,
         location: fromLocation,
-        transactionType: 'outward',
-        quantity: -quantity,
+        transactionType: 'transfer',
+        quantity: 0, // No quantity change for reorganization
+        reason: `Stock relocated from ${fromDesc} to ${toDesc}`,
         notes,
         performedBy: req.user!.id,
         transactionDate: new Date(),
         resultingQuantity: sourceStock.quantity,
         referenceId,
         referenceType: 'transfer'
-      },
-      {
-        product,
-        location: toLocation,
-        transactionType: 'inward',
-        quantity,
-        notes,
-        performedBy: req.user!.id,
-        transactionDate: new Date(),
-        resultingQuantity: destStock.quantity,
-        referenceId,
-        referenceType: 'transfer',
-      }
-    ]);
+      });
+    }
 
     const response: APIResponse = {
       success: true,
-      message: 'Stock transferred successfully',
+      message: isLocationChange ? 'Stock transferred successfully' : 'Stock relocated successfully',
       data: {
         transfer: {
           product,
           fromLocation,
+          fromRoom,
+          fromRack,
           toLocation,
+          toRoom,
+          toRack,
           quantity,
           notes,
           transferredBy: req.user!.id,
           transferredAt: new Date(),
           referenceId,
+          isLocationChange,
+          fromDescription: fromDesc,
+          toDescription: toDesc
         }
       }
     };

@@ -192,6 +192,8 @@ export interface IRack extends Document {
 export interface IStock extends Document {
   product: string;
   location: string;
+  room?: string;
+  rack?: string;
   quantity: number;
   reservedQuantity: number;
   availableQuantity: number;
