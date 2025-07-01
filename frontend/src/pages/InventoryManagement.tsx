@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Plus,
   Search,
@@ -20,7 +20,9 @@ import {
   Eye,
   Building,
   Archive,
-  Edit2
+  Edit2,
+  Filter,
+  Hash
 } from 'lucide-react';
 import { Table } from '../components/ui/Table';
 import { Modal } from '../components/ui/Modal';
@@ -31,6 +33,8 @@ import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 import { Input } from 'components/ui/Input';
 import { Select } from 'components/ui/Select';
+import { Badge } from 'components/ui/Badge';
+import { Pagination } from 'components/ui/Pagination';
 
 // Types
 interface ProductData {
@@ -116,8 +120,8 @@ const InventoryManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
-  console.log("inventory:",inventory);
-  
+  console.log("inventory:", inventory);
+
   // Custom dropdown states
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -145,7 +149,7 @@ const InventoryManagement: React.FC = () => {
   const [rackErrors, setRackErrors] = useState<any>({});
   const [selectedRoom, setSelectedRoom] = useState<any | undefined>();
   const [selectedRack, setSelectedRack] = useState<any | undefined>();
-    const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
+  const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
 
 
   // Form states
@@ -212,6 +216,161 @@ const InventoryManagement: React.FC = () => {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+
+  const [filters, setFilters] = useState<any>({
+    search: '',
+    category: '',
+    location: '',
+    stockStatus: 'all'
+  });
+
+  const onFiltersChange = useCallback((newFilters: Partial<any>) => {
+    setFilters((prev: any) => ({ ...prev, ...newFilters }));
+    setCurrentPage(1);
+  }, []);
+
+  const itemsPerPage = 10;
+
+  const filteredInventory = React.useMemo(() => {
+    let items = [...inventory];
+
+    // Search filter
+    if (filters.search) {
+      items = items.filter(item =>
+        (item.product?.name?.toLowerCase().includes(filters.search.toLowerCase()) ||
+          item.product?.brand?.toLowerCase().includes(filters.search.toLowerCase()) ||
+          item.product?.partNo?.toLowerCase().includes(filters.search.toLowerCase()) ||
+          item.location?.name?.toLowerCase().includes(filters.search.toLowerCase()))
+      );
+    }
+
+
+    // Category filter
+    if (filters.category && filters.category !== 'all') {
+      items = items.filter(item => item.product?.category === filters.category);
+    }
+
+    // Location filter
+    if (filters.location) {
+      items = items.filter(item => item.location?._id === filters.location);
+    }
+    if (filters.room) {
+      items = items.filter(item => item.room?._id === filters.room);
+    }
+    if (filters.rack) {
+      items = items.filter(item => item.rack?._id === filters.rack);
+    }
+
+        if (filters.dept) {
+      items = items.filter(item => item.product?.dept === filters.dept);
+    }
+
+    if (filters.brand) {
+      items = items.filter(item => item.product?.brand === filters.brand);
+    }
+
+    // Stock status filter
+    if (filters.stockStatus && filters.stockStatus !== 'all') {
+      items = items.filter(item => {
+        if (filters.stockStatus === 'low_stock') {
+          return item.quantity <= (item.product?.minStockLevel || 0) && item.quantity > 0;
+        }
+        if (filters.stockStatus === 'out_of_stock') {
+          return item.quantity === 0;
+        }
+        return true;
+      });
+    }
+
+
+    return items;
+  }, [inventory, filters]);
+
+  const paginatedInventory = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredInventory.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredInventory, currentPage]);
+
+  React.useEffect(() => {
+    setTotalPages(Math.max(1, Math.ceil(filteredInventory.length / itemsPerPage)));
+    setTotalItems(filteredInventory.length);
+    if (currentPage > Math.ceil(filteredInventory.length / itemsPerPage)) {
+      setCurrentPage(1);
+    }
+  }, [filteredInventory]);
+
+  // Fix getStockStatusTable: remove maxStockLevel check
+  const getStockStatusTable = (item: StockItem) => {
+    if (item.quantity === 0) {
+      return { label: 'Out of Stock', variant: 'danger' as const, icon: AlertTriangle };
+    }
+    if (item.quantity <= (item.product?.minStockLevel || 0)) {
+      return { label: 'Low Stock', variant: 'warning' as const, icon: TrendingDown };
+    }
+    return { label: 'In Stock', variant: 'success' as const, icon: Package };
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount);
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    if (true) {
+      // fetchStockItems(page);
+    } else {
+      // fetchTransactions(page);
+    }
+  };
+
+  const rackOptions = [
+    { value: '', label: 'All Racks' },
+    { value: 'A2', label: 'Rack A2' },
+    { value: 'D2', label: 'Rack D2' },
+    { value: 'D3', label: 'Rack D3' },
+    { value: 'E1', label: 'Rack E1' },
+    { value: 'E2', label: 'Rack E2' },
+    { value: 'E3', label: 'Rack E3' },
+    { value: 'E6', label: 'Rack E6' },
+    { value: 'E7', label: 'Rack E7' },
+    { value: 'P2', label: 'Rack P2' },
+    { value: 'GD', label: 'Rack GD' }
+  ];
+
+  const stockStatusOptions = [
+    { value: 'all', label: 'All Stock Levels' },
+    { value: 'low_stock', label: 'Low Stock' },
+    { value: 'out_of_stock', label: 'Out of Stock' },
+    { value: 'overstocked', label: 'Overstocked' }
+  ];
+
+  const deptOptions = [
+    { value: '', label: 'All Departments' },
+    { value: 'RETAIL', label: 'Retail' },
+    { value: 'INDUSTRIAL', label: 'Industrial' },
+    { value: 'TELECOM', label: 'Telecom' },
+    { value: 'EV', label: 'EV' },
+    { value: 'RET/TEL', label: 'Retail/Telecom' }
+  ];
+
+  const makeOptions = [
+    { value: '', label: 'All Makes' },
+    { value: 'MAHINDRA', label: 'Mahindra' },
+    { value: 'KOEL', label: 'Koel' },
+    { value: 'CUMMINS', label: 'Cummins' },
+    { value: 'ASHOKLEYLAND', label: 'Ashok Leyland' },
+    { value: 'PHFL', label: 'PHFL' },
+    { value: 'EICHER', label: 'Eicher' }
+  ];
+
   const handleRoomModalClose = () => {
     setRoomFormData({
       name: '',
@@ -243,13 +402,54 @@ const InventoryManagement: React.FC = () => {
     }))
   ];
 
-    const roomOptions = [
+  const roomOptions = [
     { value: '', label: roomFormData.location ? 'Select a room' : 'Select location first' },
     ...filteredRooms.map(room => ({
       value: room._id,
       label: room.name
     }))
   ];
+  const roomOptionsFilter = [
+    { value: '', label: 'Select a room'},
+    ...rooms.map(room => ({
+      value: room._id,
+      label: room.name
+    }))
+  ];
+  const rackOptionsFilter = [
+    { value: '', label: 'Select a rack'},
+    ...racks.map(room => ({
+      value: room._id,
+      label: room.name
+    }))
+  ];
+
+// Extract unique departments
+const uniqueDepts = Array.from(
+  new Set(inventory.map(item => item.product?.dept).filter(Boolean))
+);
+
+const deptOptionsFilter = [
+  { value: '', label: 'Select a department' },
+  ...uniqueDepts.map(dept => ({
+    value: dept,
+    label: dept
+  }))
+];
+
+// Extract unique brands
+const uniqueBrands = Array.from(
+  new Set(inventory.map(item => item.product?.brand).filter(Boolean))
+);
+
+const brandOptionsFilter = [
+  { value: '', label: 'Select a brand' },
+  ...uniqueBrands.map(brand => ({
+    value: brand,
+    label: brand
+  }))
+];
+
 
   console.log("rackFormData9999999:", rackFormData);
 
@@ -272,7 +472,7 @@ const InventoryManagement: React.FC = () => {
     }
   }, [selectedRoom]);
 
-    useEffect(() => {
+  useEffect(() => {
     if (selectedRack) {
       setRackFormData({
         name: selectedRack.name,
@@ -306,7 +506,7 @@ const InventoryManagement: React.FC = () => {
     return Object.keys(newErrors).length === 0;
   };
 
-    const validateRackForm = (): boolean => {
+  const validateRackForm = (): boolean => {
     const newErrors: any = {};
 
     if (!rackFormData.name.trim()) {
@@ -371,8 +571,8 @@ const InventoryManagement: React.FC = () => {
         // Update existing location
         const response = await apiClient.stock.updateRack(selectedRack._id, rackFormData);
         const updatedRack = (response.data as any).rack || response.data;
-        console.log("updatedRack:",updatedRack);
-        
+        console.log("updatedRack:", updatedRack);
+
         setRacks(racks.map(loc =>
           loc._id === selectedRack._id ? updatedRack : loc
         ));
@@ -516,8 +716,8 @@ const InventoryManagement: React.FC = () => {
         }
       }
 
-      console.log("roomsData:",roomsData);
-      
+      console.log("roomsData:", roomsData);
+
       // const roomsInLocation = roomsData.filter(room => room.location._id === racks.location._id);
       // console.log("rackFormData:",roomsInLocation);
       // setFilteredRooms(roomsInLocation);
@@ -528,14 +728,14 @@ const InventoryManagement: React.FC = () => {
     }
   };
 
-  console.log("rackFormData111111111:",rackFormData);
-  
+  console.log("rackFormData111111111:", rackFormData);
 
-    useEffect(() => {
+
+  useEffect(() => {
     if (rackFormData.location) {
       const roomsInLocation = rooms.filter(room => room.location._id === rackFormData.location);
       setFilteredRooms(roomsInLocation);
-      
+
       // Reset room selection if current room is not in the selected location
       if (rackFormData.room && !roomsInLocation.find(room => room._id === rackFormData.room)) {
         setRackFormData(prev => ({ ...prev, room: '' }));
@@ -1053,18 +1253,6 @@ const InventoryManagement: React.FC = () => {
     fetchStockLedger(1, true);
   };
 
-  const filteredInventory = Array.isArray(inventory) ? inventory.filter(item => {
-    const productName = typeof item.product === 'string' ? '' : item.product?.name;
-    const locationName = typeof item.location === 'string' ? '' : item.location?.name;
-
-    const matchesSearch = productName?.toLowerCase().includes(searchTerm?.toLowerCase()) ||
-      locationName?.toLowerCase().includes(searchTerm?.toLowerCase());
-    const matchesLocation = locationFilter === 'all' ||
-      (typeof item.location === 'object' && item.location._id === locationFilter);
-
-    return matchesSearch && matchesLocation;
-  }) : [];
-
   const getStockStatus = (item: StockItem) => {
     const product = typeof item.product === 'object' ? item.product : null;
     if (!product) return 'unknown';
@@ -1432,7 +1620,7 @@ const InventoryManagement: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+      {/* <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
@@ -1445,7 +1633,6 @@ const InventoryManagement: React.FC = () => {
             />
           </div>
 
-          {/* Category Custom Dropdown */}
           <div className="relative dropdown-container">
             <button
               onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
@@ -1479,6 +1666,176 @@ const InventoryManagement: React.FC = () => {
             Showing {filteredInventory.length} of {inventory.length} items
           </span>
         </div>
+      </div> */}
+
+      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
+        <div className="flex items-center gap-2 mb-6">
+          <Filter className="w-5 h-5 text-gray-500" />
+          <h3 className="text-lg font-medium text-gray-900">Search & Filter Inventory</h3>
+        </div>
+
+        {/* Primary Search & Quick Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <Input
+              placeholder="Search by part no, description, make..."
+              value={filters.search}
+              onChange={(e) => onFiltersChange({ search: e.target.value })}
+              className="pl-10"
+            />
+          </div>
+
+          <Select
+            options={categoryOptions}
+            value={filters.category}
+            onChange={(e) => onFiltersChange({ category: e.target.value })}
+          />
+
+          <Select
+            options={stockStatusOptions}
+            value={filters.stockStatus}
+            onChange={(e) => onFiltersChange({ stockStatus: e.target.value as any })}
+          />
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-600">Quick:</span>
+            <button
+              onClick={() => onFiltersChange({ stockStatus: 'out_of_stock' })}
+              className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs hover:bg-red-200 transition-colors"
+            >
+              Out of Stock
+            </button>
+            <button
+              onClick={() => onFiltersChange({ stockStatus: 'low_stock' })}
+              className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs hover:bg-yellow-200 transition-colors"
+            >
+              Low Stock
+            </button>
+          </div>
+        </div>
+
+        {/* Location Hierarchy Filters */}
+        <div className="bg-gray-50 p-4 rounded-lg mb-4">
+          <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
+            <MapPin className="w-4 h-4 mr-2" />
+            Location Hierarchy
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="relative">
+              <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
+              <Select
+                options={locationOptions}
+                value={filters.location}
+                onChange={(e) => onFiltersChange({ location: e.target.value })}
+                className="pl-10"
+              />
+            </div>
+
+            <div className="relative">
+              <Archive className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
+              <Select
+                options={roomOptionsFilter}
+                value={filters.room || ''}
+                onChange={(e) => onFiltersChange({ room: e.target.value })}
+                className="pl-10"
+              />
+            </div>
+
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
+              <Select
+                options={rackOptionsFilter}
+                value={filters.rack || ''}
+                onChange={(e) => onFiltersChange({ rack: e.target.value })}
+                className="pl-10"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Additional Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <Select
+            options={deptOptionsFilter}
+            value={filters.dept || ''}
+            onChange={(e) => onFiltersChange({ dept: e.target.value })}
+          />
+
+          <Select
+            options={brandOptionsFilter}
+            value={filters.brand || ''}
+            onChange={(e) => onFiltersChange({ brand: e.target.value })}
+          />
+        </div>
+
+        {/* Active Filters Display */}
+        {(filters.search || filters.category || filters.room || filters.rack || filters.dept || filters.make || filters.stockStatus !== 'all') && (
+          <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
+            <span className="text-sm font-medium text-gray-600">Active filters:</span>
+            <div className="flex flex-wrap gap-2">
+              {filters.search && (
+                <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                  Search: "{filters.search}"
+                  <button
+                    onClick={() => onFiltersChange({ search: '' })}
+                    className="ml-1 text-blue-600 hover:text-blue-800"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              {filters.category && (
+                <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                  Category: {filters.category}
+                  <button
+                    onClick={() => onFiltersChange({ category: '' })}
+                    className="ml-1 text-green-600 hover:text-green-800"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              {filters.room && (
+                <span className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                  Room: {filters.room}
+                  <button
+                    onClick={() => onFiltersChange({ room: '' })}
+                    className="ml-1 text-purple-600 hover:text-purple-800"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              {filters.rack && (
+                <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
+                  Rack: {filters.rack}
+                  <button
+                    onClick={() => onFiltersChange({ rack: '' })}
+                    className="ml-1 text-indigo-600 hover:text-indigo-800"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              <button
+                onClick={() => onFiltersChange({
+                  search: '',
+                  category: '',
+                  room: '',
+                  rack: '',
+                  dept: '',
+                  make: '',
+                  location: '',
+                  stockStatus: 'all'
+                })}
+                className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full hover:bg-gray-200"
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Inventory Table */}
@@ -1487,13 +1844,24 @@ const InventoryManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reserved</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Available</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Updated</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Product Details
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Location Hierarchy
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Stock Levels
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Pricing
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status & Department
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Technical Info
+                </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -1502,47 +1870,124 @@ const InventoryManagement: React.FC = () => {
                 <tr>
                   <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Loading inventory...</td>
                 </tr>
-              ) : filteredInventory.length === 0 ? (
+              ) : paginatedInventory.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No inventory items found</td>
                 </tr>
               ) : (
-                filteredInventory.map((item) => {
-                  const status = getStockStatus(item);
+                paginatedInventory.map((item, idx) => {
+                  const status = getStockStatusTable(item);
+                  const StatusIcon = status.icon;
                   return (
-                    <tr key={item._id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div>
-                          <div className="text-xs font-medium text-gray-900">{item.product?.name}</div>
-                          <div className="text-xs text-gray-500">{item.product?.category} • {item.product?.brand}</div>
+                    <tr key={item._id || idx} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-start">
+                          <Package className="w-5 h-5 text-gray-400 mr-3 mt-1 flex-shrink-0" />
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm font-medium text-gray-900 truncate">
+                              {item.product?.name}
+                            </div>
+                            <div className="text-sm text-gray-500">
+                              Part: {item.product?.partNo}
+                            </div>
+                            <div className="text-xs text-gray-400 mt-1">
+                              <span className="inline-flex items-center">
+                                {item.product?.brand} • {item.product?.category}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <div>
-                          <div className="text-xs font-medium text-gray-900">{item.location.name}</div>
-                          <div className="text-xs text-gray-500">{item.location.type}</div>
+
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center">
+                            <Building className="w-4 h-4 text-blue-500 mr-2" />
+                            <span className="text-sm font-medium text-gray-900">
+                              {item.location?.name || 'Main Warehouse'}
+                            </span>
+                          </div>
+                          <div className="flex items-center">
+                            <Archive className="w-4 h-4 text-green-500 mr-2" />
+                            <span className="text-sm text-gray-700">
+                              Room: {item.room?.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center">
+                            <MapPin className="w-4 h-4 text-purple-500 mr-2" />
+                            <span className="text-sm text-gray-600">
+                              Rack: {item.rack?.name}
+                            </span>
+                          </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-gray-900">
-                        {item.quantity}
+
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-gray-900">
+                            Current: {item.quantity}
+                          </div>
+                          {item.reservedQuantity > 0 && (
+                            <div className="text-xs text-orange-600">
+                              Reserved: {item.reservedQuantity}
+                            </div>
+                          )}
+                          <div className="text-xs text-green-600">
+                            Available: {item.availableQuantity}
+                          </div>
+                          {/* <div className="text-xs text-gray-400">
+                            Min: {item.product?.minStockLevel}
+                          </div> */}
+                        </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                        {item.reservedQuantity}
+
+                      <td className="px-6 py-4">
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-gray-900">
+                            MRP: {formatCurrency(item.product?.price || 0)}
+                          </div>
+                          {item.gndp && (
+                            <div className="text-xs text-green-600">
+                              Total Value: {formatCurrency(item.gndp)}
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-400">
+                            GST: {item.product?.gst}%
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
-                        {item.availableQuantity || (item.quantity - (item.reservedQuantity || 0))}
+
+                      <td className="px-6 py-4">
+                        <div className="space-y-2">
+                          <Badge variant={status.variant}>
+                            <StatusIcon className="w-3 h-3 mr-1" />
+                            {status.label}
+                          </Badge>
+                          <div>
+                            <Badge variant="default" size="sm">
+                              {item.product?.dept}
+                            </Badge>
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(status)}`}>
-                          {status?.replace('_', ' ').replace(/\b\w/g, l => l?.toUpperCase())}
-                        </span>
+
+                      <td className="px-6 py-4">
+                        <div className="space-y-1 text-xs text-gray-500">
+                          <div className="flex items-center">
+                            <Hash className="w-3 h-3 mr-1" />
+                            HSN: {item.product?.hsnNumber}
+                          </div>
+                          <div>
+                            Updated: {new Date(item?.lastUpdated).toLocaleDateString()}
+                          </div>
+                          <div className="text-xs text-gray-400">
+                            {item.product?.productType2} • {item.product?.productType3}
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
-                        {new Date(item?.lastUpdated).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center space-x-2">
-                          <button
+                         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                         <div className="flex items-center space-x-2">
+                           <button
                             onClick={() => handleUpdateStock(item)}
                             className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
                             title="Adjust Stock"
@@ -1571,6 +2016,8 @@ const InventoryManagement: React.FC = () => {
               )}
             </tbody>
           </table>
+
+
         </div>
       </div>
 
@@ -1800,7 +2247,7 @@ const InventoryManagement: React.FC = () => {
                       <Button type="button" variant="outline" onClick={handleRoomModalClose}>
                         Cancel
                       </Button>
-                      <Button type="submit" loading={loading}>
+                      <Button type="submit" isLoading={loading}>
                         {selectedRoom ? 'Update' : 'Create'} Room
                       </Button>
                     </div>
@@ -1868,7 +2315,7 @@ const InventoryManagement: React.FC = () => {
                       <Button type="button" variant="outline" onClick={handleRackModalClose}>
                         Cancel
                       </Button>
-                      <Button type="submit" loading={loading}>
+                      <Button type="submit" isLoading={loading}>
                         {selectedRack ? 'Update' : 'Create'} Rack
                       </Button>
                     </div>
@@ -1936,8 +2383,8 @@ const InventoryManagement: React.FC = () => {
                                 <div className="flex items-center space-x-2">
                                   <h4 className="font-medium text-gray-900">{location.name}</h4>
                                   <span className={`px-2 py-1 rounded-full text-xs font-medium ${location.isActive
-                                      ? 'bg-green-100 text-green-800'
-                                      : 'bg-red-100 text-red-800'
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-red-100 text-red-800'
                                     }`}>
                                     {location.isActive ? 'Active' : 'Inactive'}
                                   </span>
@@ -3165,6 +3612,12 @@ const InventoryManagement: React.FC = () => {
           </div>
         </div>
       )}
+            <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        onPageChange={handlePageChange}
+      />
     </div>
   );
 };
