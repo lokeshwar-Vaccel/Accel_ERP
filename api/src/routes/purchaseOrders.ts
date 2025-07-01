@@ -21,8 +21,33 @@ import {
   cancelPurchaseOrder,
   getPurchaseOrderStats
 } from '../controllers/purchaseOrderController';
+import { importPurchaseOrders, previewPurchaseOrderImport } from '../controllers/purchaseOrderImportController';
+import multer from 'multer';
 
 const router = Router();
+
+// Configure multer for file uploads
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept Excel and CSV files
+    const allowedMimes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'text/csv', // .csv
+    ];
+    
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only Excel (.xlsx, .xls) and CSV files are allowed.'));
+    }
+  },
+});
 
 // All routes are protected
 router.use(protect);
@@ -51,6 +76,20 @@ const getPendingApprovals = async (req: any, res: any) => {
 router.route('/')
   .get(validate(purchaseOrderQuerySchema, 'query'), checkPermission('read'), getPurchaseOrders)
   .post(validate(createPurchaseOrderSchema), checkPermission('write'), createPurchaseOrder);
+
+// Preview import route for Excel/CSV upload - shows what will be imported without saving
+router.post('/preview-import', 
+  upload.single('file'), 
+  checkPermission('write'), 
+  previewPurchaseOrderImport
+);
+
+// Import route for Excel/CSV upload
+router.post('/import', 
+  upload.single('file'), 
+  checkPermission('write'), 
+  importPurchaseOrders
+);
 
 router.route('/:id')
   .get(checkPermission('read'), getPurchaseOrder)

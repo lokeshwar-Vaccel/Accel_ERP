@@ -1,6 +1,6 @@
 import { forgotPassword } from "redux/auth/authSlice";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 class ApiClient {
   private baseURL: string;
@@ -15,12 +15,17 @@ class ApiClient {
   ): Promise<T> {
     const token = localStorage.getItem('authToken');
 
+    // Don't set Content-Type for FormData - let browser set it automatically
+    const isFormData = options.body instanceof FormData;
+    
+    const headers: HeadersInit = {
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(!isFormData && { 'Content-Type': 'application/json' }),
+      ...(options.headers as Record<string, string>),
+    };
+
     const config: RequestInit = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-        ...options.headers,
-      },
+      headers,
       ...options,
     };
 
@@ -414,6 +419,54 @@ class ApiClient {
         method: 'POST',
         body: JSON.stringify(receiptData),
       }),
+
+    // Preview import from Excel/CSV - shows what will be imported without saving
+    previewImportFromFile: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      return this.makeRequest<{ 
+        success: boolean; 
+        data: {
+          ordersToCreate: any[];
+          productsToCreate: any[];
+          existingProducts: any[];
+          errors: string[];
+          summary: {
+            totalRows: number;
+            uniqueOrders: number;
+            newProducts: number;
+            existingProducts: number;
+          };
+        } 
+      }>('/purchase-orders/preview-import', {
+        method: 'POST',
+        body: formData,
+      });
+    },
+
+    // Import from Excel/CSV
+    importFromFile: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      return this.makeRequest<{ 
+        success: boolean; 
+        data: {
+          summary: {
+            totalRows: number;
+            uniqueOrders: number;
+            successful: number;
+            failed: number;
+          };
+          createdOrders: any[];
+          errors: string[];
+        } 
+      }>('/purchase-orders/import', {
+        method: 'POST',
+        body: formData,
+      });
+    },
   };
 
   // Reports APIs

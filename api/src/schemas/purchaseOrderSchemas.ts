@@ -206,11 +206,21 @@ export interface PurchaseOrderReportInput {
 }
 
 export interface PurchaseOrderImportInput {
-  supplier: string;
-  productName: string;
-  productCode?: string;
-  quantity: number;
-  unitPrice: number;
+  YEAR: string;
+  month: string;
+  DEPT: string;
+  'ORDER NO': string;  // This will be the PO number
+  'Part No': string;
+  'Part Description': string;
+  QTY: number;
+  Price: number;
+  'Ordered Qty': number;
+  'HSN No'?: string;
+  Tax?: string;
+  'GST VALUE'?: number;
+  TOTAL?: number;
+  // Optional fields for processing
+  supplier?: string;
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
@@ -471,17 +481,27 @@ export const purchaseOrderReportSchema = Joi.object<PurchaseOrderReportInput>({
   includeGraphs: Joi.boolean().default(false)
 });
 
-// Purchase order import schema (CSV/Excel)
+// Purchase order import schema (CSV/Excel) - matches Excel column headers exactly
 export const purchaseOrderImportSchema = Joi.object<PurchaseOrderImportInput>({
-  supplier: basePOFields.supplier.required(),
-  productName: Joi.string().required(), // Will be looked up
-  productCode: Joi.string(), // Alternative lookup method
-  quantity: Joi.number().min(1).required(),
-  unitPrice: Joi.number().min(0).precision(2).required(),
+  YEAR: Joi.string().required(),
+  month: Joi.string().required(), 
+  DEPT: Joi.string().required(),
+  'ORDER NO': Joi.string().required(), // PO number
+  'Part No': Joi.string().required(),
+  'Part Description': Joi.string().required(),
+  QTY: Joi.number().min(1).required(),
+  Price: Joi.number().min(0).precision(2).required(),
+  'Ordered Qty': Joi.number().min(1).required(),
+  'HSN No': Joi.string().allow(''),
+  Tax: Joi.string().allow(''),
+  'GST VALUE': Joi.number().min(0).precision(2),
+  TOTAL: Joi.number().min(0).precision(2),
+  // Optional processing fields
+  supplier: Joi.string().allow(''),
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
   priority: basePOFields.priority.default('medium'),
   paymentTerms: basePOFields.paymentTerms.default('net_30'),
-  notes: Joi.string().max(500)
+  notes: Joi.string().max(500).allow('')
 });
 
 // Bulk purchase order import schema

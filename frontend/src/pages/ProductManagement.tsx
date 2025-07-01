@@ -74,7 +74,7 @@ const ProductManagement: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    category: '',        
+    category: '', 
     brand: '',
     modelNumber: '',
     partNo: '',

@@ -181,6 +181,16 @@ const PurchaseOrderManagement: React.FC = () => {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
 
+  // Import state
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Preview state
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -715,6 +725,109 @@ const PurchaseOrderManagement: React.FC = () => {
     }
   };
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'text/csv' // .csv
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      setImportMessage({
+        type: 'error',
+        text: 'Please select a valid Excel (.xlsx, .xls) or CSV file.'
+      });
+      return;
+    }
+
+    setImporting(true);
+    setImportMessage(null);
+
+    try {
+      // First, get preview of what will be imported
+      const response = await apiClient.purchaseOrders.previewImportFromFile(file);
+      
+      if (response.success) {
+        setSelectedFile(file);
+        setPreviewData(response.data);
+        setShowPreviewModal(true);
+      } else {
+        setImportMessage({
+          type: 'error',
+          text: response.data.errors?.[0] || 'Preview failed. Please check your file format.'
+        });
+      }
+    } catch (error: any) {
+      console.error('Preview error:', error);
+      setImportMessage({
+        type: 'error',
+        text: error.message || 'Failed to preview file. Please try again.'
+      });
+    } finally {
+      setImporting(false);
+      // Clear the file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!selectedFile) return;
+
+    setImporting(true);
+    setShowPreviewModal(false);
+
+    try {
+      const response = await apiClient.purchaseOrders.importFromFile(selectedFile);
+      
+      if (response.success) {
+        if (response.data.summary.successful > 0) {
+          setImportMessage({
+            type: 'success',
+            text: `Successfully imported ${response.data.summary.successful} purchase orders from ${response.data.summary.totalRows} total rows!`
+          });
+        } else {
+          // No orders were created - show errors
+          setImportMessage({
+            type: 'error',
+            text: `Import failed! 0 orders created from ${response.data.summary.totalRows} rows. Errors: ${response.data.errors.join('; ')}`
+          });
+        }
+        await fetchPurchaseOrders(); // Refresh the list
+      } else {
+        setImportMessage({
+          type: 'error',
+          text: response.data.errors?.[0] || 'Import failed. Please check your file format.'
+        });
+      }
+    } catch (error: any) {
+      console.error('Import error:', error);
+      setImportMessage({
+        type: 'error',
+        text: error.message || 'Failed to import file. Please try again.'
+      });
+    } finally {
+      setImporting(false);
+      setSelectedFile(null);
+      setPreviewData(null);
+    }
+  };
+
+  const closePreviewModal = () => {
+    setShowPreviewModal(false);
+    setSelectedFile(null);
+    setPreviewData(null);
+  };
+
   const resetPOForm = () => {
     setFormData({
       supplier: '',
@@ -885,6 +998,14 @@ const PurchaseOrderManagement: React.FC = () => {
             <span className="text-sm">Refresh</span>
           </button>
           <button
+            onClick={handleImportClick}
+            disabled={importing}
+            className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileText className={`w-4 h-4 ${importing ? 'animate-pulse' : ''}`} />
+            <span className="text-sm">{importing ? 'Importing...' : 'Import Excel'}</span>
+          </button>
+          <button
             onClick={handleCreatePO}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
           >
@@ -893,6 +1014,34 @@ const PurchaseOrderManagement: React.FC = () => {
           </button>
         </div>
       </PageHeader>
+
+      {/* Hidden file input for import */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        onChange={handleFileUpload}
+        style={{ display: 'none' }}
+      />
+
+      {/* Import message */}
+      {importMessage && (
+        <div className={`p-4 rounded-lg border ${
+          importMessage.type === 'success' 
+            ? 'bg-green-50 border-green-200 text-green-800' 
+            : 'bg-red-50 border-red-200 text-red-800'
+        }`}>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">{importMessage.text}</p>
+            <button
+              onClick={() => setImportMessage(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2050,11 +2199,294 @@ const PurchaseOrderManagement: React.FC = () => {
                 </button>
               </div>
             </div>
+                    </div>
+        </div>
+      )}
+
+      {/* Preview Import Modal */}
+      {showPreviewModal && previewData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900">Preview Excel Import</h2>
+                <p className="text-gray-600 mt-1">
+                  Review what will be imported before confirming
+                </p>
+              </div>
+              <button
+                onClick={closePreviewModal}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-600 font-medium">Purchase Orders</p>
+                      <p className="text-2xl font-bold text-blue-900">{previewData.summary.uniqueOrders}</p>
+                    </div>
+                    <Package className="w-8 h-8 text-blue-600" />
+                  </div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-green-600 font-medium">New Products</p>
+                      <p className="text-2xl font-bold text-green-900">{previewData.summary.newProducts}</p>
+                    </div>
+                    <Plus className="w-8 h-8 text-green-600" />
+                  </div>
+                </div>
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-yellow-600 font-medium">Existing Products</p>
+                      <p className="text-2xl font-bold text-yellow-900">{previewData.summary.existingProducts}</p>
+                    </div>
+                    <CheckCircle className="w-8 h-8 text-yellow-600" />
+                  </div>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-purple-600 font-medium">Total Rows</p>
+                      <p className="text-2xl font-bold text-purple-900">{previewData.summary.totalRows}</p>
+                    </div>
+                    <FileText className="w-8 h-8 text-purple-600" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Errors Section */}
+              {previewData.errors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="w-5 h-5 text-red-600 mr-2 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-medium text-red-800">Import Errors</h3>
+                      <div className="mt-2 text-sm text-red-700">
+                        <ul className="list-disc list-inside space-y-1">
+                          {previewData.errors.map((error: string, index: number) => (
+                            <li key={index}>{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* New Products Section */}
+              {previewData.productsToCreate.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-green-900 mb-4 flex items-center">
+                    <Plus className="w-5 h-5 mr-2" />
+                    Products to be Created ({previewData.productsToCreate.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-green-100 text-green-800">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Part No</th>
+                          <th className="px-3 py-2 text-left font-medium">Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Department</th>
+                          <th className="px-3 py-2 text-left font-medium">HSN</th>
+                          <th className="px-3 py-2 text-left font-medium">Price</th>
+                          <th className="px-3 py-2 text-left font-medium">GST</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-green-200">
+                        {previewData.productsToCreate.slice(0, 10).map((product: any, index: number) => (
+                          <tr key={index} className="hover:bg-green-50">
+                            <td className="px-3 py-2 font-mono text-xs">{product.partNo}</td>
+                            <td className="px-3 py-2">{product.name}</td>
+                            <td className="px-3 py-2">{product.dept}</td>
+                            <td className="px-3 py-2">{product.hsnNumber}</td>
+                            <td className="px-3 py-2">₹{product.price?.toLocaleString()}</td>
+                            <td className="px-3 py-2">{product.gst}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {previewData.productsToCreate.length > 10 && (
+                      <p className="text-sm text-green-600 mt-2 text-center">
+                        ... and {previewData.productsToCreate.length - 10} more products
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Existing Products Section */}
+              {previewData.existingProducts.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-yellow-900 mb-4 flex items-center">
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    Existing Products ({previewData.existingProducts.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-yellow-100 text-yellow-800">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Part No</th>
+                          <th className="px-3 py-2 text-left font-medium">Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Current Price</th>
+                          <th className="px-3 py-2 text-left font-medium">Excel Price</th>
+                          <th className="px-3 py-2 text-left font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-yellow-200">
+                        {previewData.existingProducts.slice(0, 5).map((product: any, index: number) => (
+                          <tr key={index} className="hover:bg-yellow-50">
+                            <td className="px-3 py-2 font-mono text-xs">{product.partNo}</td>
+                            <td className="px-3 py-2">{product.name}</td>
+                            <td className="px-3 py-2">₹{product.currentPrice?.toLocaleString() || 'N/A'}</td>
+                            <td className="px-3 py-2">₹{product.excelPrice?.toLocaleString()}</td>
+                            <td className="px-3 py-2">
+                              <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                                Found
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {previewData.existingProducts.length > 5 && (
+                      <p className="text-sm text-yellow-600 mt-2 text-center">
+                        ... and {previewData.existingProducts.length - 5} more existing products
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Purchase Orders Section */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="text-lg font-medium text-blue-900 mb-4 flex items-center">
+                  <Package className="w-5 h-5 mr-2" />
+                  Purchase Orders to be Created ({previewData.ordersToCreate.length})
+                </h3>
+                <div className="space-y-4">
+                  {previewData.ordersToCreate.slice(0, 5).map((order: any, index: number) => (
+                    <div key={index} className="bg-white p-4 rounded-lg border border-blue-200">
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <h4 className="font-medium text-blue-900">{order.poNumber}</h4>
+                          <p className="text-sm text-blue-700">Supplier: {order.supplier}</p>
+                          <p className="text-sm text-blue-600">
+                            Expected Delivery: {new Date(order.expectedDeliveryDate).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-blue-900">
+                            ₹{order.totalAmount.toLocaleString()}
+                          </p>
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            order.priority === 'high' ? 'bg-red-100 text-red-800' :
+                            order.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-green-100 text-green-800'
+                          }`}>
+                            {order.priority}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="border-t border-blue-200 pt-3">
+                        <h5 className="text-sm font-medium text-blue-800 mb-2">Items ({order.items.length})</h5>
+                        <div className="space-y-2">
+                          {order.items.slice(0, 3).map((item: any, itemIndex: number) => (
+                            <div key={itemIndex} className="flex justify-between items-center text-sm">
+                              <div className="flex items-center">
+                                <span className={`w-2 h-2 rounded-full mr-2 ${
+                                  item.exists ? 'bg-yellow-500' : 'bg-green-500'
+                                }`}></span>
+                                <span className="text-gray-900">{item.productName}</span>
+                                <span className="text-gray-500 ml-2">({item.partNo})</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-gray-900">{item.quantity} × ₹{item.unitPrice.toLocaleString()}</span>
+                                <span className="text-blue-700 font-medium ml-2">
+                                  = ₹{item.totalPrice.toLocaleString()}
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                          {order.items.length > 3 && (
+                            <p className="text-xs text-blue-600 text-center">
+                              ... and {order.items.length - 3} more items
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {order.notes && (
+                        <div className="mt-3 pt-3 border-t border-blue-200">
+                          <p className="text-xs text-blue-600">
+                            <strong>Notes:</strong> {order.notes}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {previewData.ordersToCreate.length > 5 && (
+                    <p className="text-sm text-blue-600 text-center">
+                      ... and {previewData.ordersToCreate.length - 5} more purchase orders
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Legend */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h4 className="text-sm font-medium text-gray-900 mb-3">Legend</h4>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <div className="flex items-center">
+                    <span className="w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+                    <span className="text-gray-600">New Product (will be created)</span>
+                  </div>
+                  <div className="flex items-center">
+                    <span className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></span>
+                    <span className="text-gray-600">Existing Product (will be used)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex space-x-4 p-6 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={closePreviewModal}
+                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Cancel Import
+              </button>
+              <button
+                onClick={handleConfirmImport}
+                disabled={importing || previewData.errors.length > 0}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {importing ? (
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Importing...
+                  </span>
+                ) : (
+                  `Confirm Import (${previewData.summary.uniqueOrders} Orders, ${previewData.summary.newProducts} New Products)`
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
     </div>
   );
-  };
-  
+};
+
 export default PurchaseOrderManagement; 
