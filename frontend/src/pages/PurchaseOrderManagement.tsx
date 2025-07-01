@@ -40,6 +40,7 @@ interface POItem {
     category: string;
     brand?: string;
     modelNumber?: string;
+    partNo?: string;
     price?: number;
   };
   quantity: number;
@@ -99,6 +100,7 @@ interface Product {
   category: string;
   brand?: string;
   modelNumber?: string;
+  partNo?: string;
   price?: number;
   minStockLevel?: number;
   currentStock?: number;
@@ -156,6 +158,10 @@ const PurchaseOrderManagement: React.FC = () => {
   // Selected data
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
+
+  // Modal search states
+  const [detailsSearchTerm, setDetailsSearchTerm] = useState('');
+  const [receiveSearchTerm, setReceiveSearchTerm] = useState('');
 
   // Form data
   const [formData, setFormData] = useState<POFormData>({
@@ -225,6 +231,12 @@ const PurchaseOrderManagement: React.FC = () => {
           ordersData = (response.data as any).orders;
         }
         console.log('Found purchase orders:', ordersData.length);
+        
+        // Debug: Check if products are properly populated
+        if (ordersData.length > 0 && ordersData[0].items.length > 0) {
+          console.log('First item product data:', ordersData[0].items[0].product);
+          console.log('Product type:', typeof ordersData[0].items[0].product);
+        }
       }
 
       // Set fallback data if no real data
@@ -240,7 +252,8 @@ const PurchaseOrderManagement: React.FC = () => {
                   _id: 'p1',
                   name: '250 KVA Generator Parts Kit',
                   category: 'spare_part',
-                  brand: 'Cummins'
+                  brand: 'Cummins',
+                  partNo: 'CUM-GEN-KIT-250'
                 },
                 quantity: 2,
                 unitPrice: 15000,
@@ -251,7 +264,8 @@ const PurchaseOrderManagement: React.FC = () => {
                   _id: 'p2',
                   name: 'Oil Filter Set',
                   category: 'spare_part',
-                  brand: 'Cummins'
+                  brand: 'Cummins',
+                  partNo: 'CUM-OF-SET-001'
                 },
                 quantity: 10,
                 unitPrice: 500,
@@ -287,7 +301,8 @@ const PurchaseOrderManagement: React.FC = () => {
                   _id: 'p3',
                   name: '500 KVA Control Panel',
                   category: 'accessory',
-                  brand: 'Caterpillar'
+                  brand: 'Caterpillar',
+                  partNo: 'CAT-CP-500KVA'
                 },
                 quantity: 1,
                 unitPrice: 45000,
@@ -323,7 +338,8 @@ const PurchaseOrderManagement: React.FC = () => {
                   _id: 'p4',
                   name: 'Fuel Injection System',
                   category: 'spare_part',
-                  brand: 'Perkins'
+                  brand: 'Perkins',
+                  partNo: 'PER-FIS-V8-001'
                 },
                 quantity: 1,
                 unitPrice: 25000,
@@ -382,8 +398,33 @@ const PurchaseOrderManagement: React.FC = () => {
       
       setProducts(productsData);
       
-      // If still no products, show some mock data for development
+      // If still no products, try to fetch them without pagination/limits
       if (productsData.length === 0) {
+        console.log('No products found, trying alternative fetch...');
+        try {
+          const alternativeResponse = await fetch('/api/v1/products?limit=1000', {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          const altData = await alternativeResponse.json();
+          if (altData.success && altData.data) {
+            if (Array.isArray(altData.data)) {
+              productsData = altData.data;
+            } else if (altData.data.products) {
+              productsData = altData.data.products;
+                       }
+           console.log('Found products via alternative fetch:', productsData.length);
+           setProducts(productsData);
+         }
+       } catch (error) {
+         console.warn('Alternative product fetch failed:', error);
+       }
+     }
+
+     // If still no products, show some mock data for development
+     if (productsData.length === 0) {
         console.log('No products found, using mock data for development');
         const mockProducts: Product[] = [
           {
@@ -392,6 +433,7 @@ const PurchaseOrderManagement: React.FC = () => {
             category: 'genset',
             brand: 'Cummins',
             modelNumber: 'C250D5',
+            partNo: 'C250-GEN-001',
             price: 850000,
             minStockLevel: 1,
             currentStock: 3
@@ -402,6 +444,7 @@ const PurchaseOrderManagement: React.FC = () => {
             category: 'spare_part',
             brand: 'Cummins',
             modelNumber: 'LF9009',
+            partNo: 'CUM-OF-LF9009',
             price: 1500,
             minStockLevel: 10,
             currentStock: 25
@@ -412,6 +455,7 @@ const PurchaseOrderManagement: React.FC = () => {
             category: 'spare_part',
             brand: 'Caterpillar',
             modelNumber: 'AF25550',
+            partNo: 'CAT-AF-25550',
             price: 2800,
             minStockLevel: 5,
             currentStock: 12
@@ -422,6 +466,7 @@ const PurchaseOrderManagement: React.FC = () => {
             category: 'accessory',
             brand: 'Comap',
             modelNumber: 'InteliLite NT',
+            partNo: 'COM-CTRL-INT',
             price: 45000,
             minStockLevel: 2,
             currentStock: 4
@@ -432,6 +477,7 @@ const PurchaseOrderManagement: React.FC = () => {
             category: 'spare_part',
             brand: 'Perkins',
             modelNumber: 'DELPHI-9520A',
+            partNo: 'PER-FIP-9520A',
             price: 28000,
             minStockLevel: 1,
             currentStock: 2
@@ -517,9 +563,32 @@ const PurchaseOrderManagement: React.FC = () => {
     }
   };
 
-  const getProductName = (product: string | { name: string }): string => {
-    if (typeof product === 'string') return product;
-    return product?.name;
+  const getProductName = (product: string | { name: string; partNo?: string }): string => {
+    if (typeof product === 'string') {
+      // If it's still a string (ObjectId), it means it wasn't populated
+      console.warn('Product not populated, showing ObjectId:', product);
+      
+      // Try to find product details from our products list
+      const foundProduct = products.find(p => p._id === product);
+      if (foundProduct) {
+        return foundProduct.name;
+      }
+      
+      return `[${product.slice(-8)}]`; // Show last 8 chars of ObjectId
+    }
+    return product?.name || 'Unknown Product';
+  };
+
+  const getProductPartNo = (product: string | { name: string; partNo?: string }): string => {
+    if (typeof product === 'string') {
+      // Try to find product details from our products list
+      const foundProduct = products.find(p => p._id === product);
+      if (foundProduct && foundProduct.partNo) {
+        return foundProduct.partNo;
+      }
+      return '-';
+    }
+    return product?.partNo || '-';
   };
 
   const handleCreatePO = async () => {
@@ -564,11 +633,13 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const openDetailsModal = (po: PurchaseOrder) => {
     setSelectedPO(po);
+    setDetailsSearchTerm(''); // Clear search when opening modal
     setShowDetailsModal(true);
   };
 
   const openReceiveModal = (po: PurchaseOrder) => {
     setSelectedPO(po);
+    setReceiveSearchTerm(''); // Clear search when opening modal
     
     // Use the first available location or a default if none exist
     const defaultLocation = locations.length > 0 ? locations[0]._id : 'loc-main-warehouse';
@@ -689,9 +760,18 @@ const PurchaseOrderManagement: React.FC = () => {
   const handleStatusUpdate = async (poId: string, newStatus: PurchaseOrderStatus) => {
     try {
       const response = await apiClient.purchaseOrders.updateStatus(poId, newStatus);
+      
+      // Use the updated purchase order from the backend response if available
+      const updatedPO = response.data || { status: newStatus };
+      
       setPurchaseOrders(purchaseOrders.map(po =>
-        po._id === poId ? { ...po, status: newStatus } : po
+        po._id === poId ? { ...po, ...updatedPO } : po
       ));
+      
+      // Update selectedPO if it's the one being updated
+      if (selectedPO && selectedPO._id === poId) {
+        setSelectedPO({ ...selectedPO, ...updatedPO });
+      }
     } catch (error) {
       console.error('Error updating PO status:', error);
     }
@@ -703,12 +783,28 @@ const PurchaseOrderManagement: React.FC = () => {
     setSubmitting(true);
     try {
       console.log('Sending receive data:', receiveData);
-      await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
+      const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
+      
+      // Use the updated purchase order from the backend response
+      const updatedPO = response.data.order;
+      console.log('Updated PO from backend:', updatedPO);
+      
       setPurchaseOrders(purchaseOrders.map(po =>
-        po._id === selectedPO._id ? { ...po, status: 'received', actualDeliveryDate: new Date().toISOString() } : po
+        po._id === selectedPO._id ? updatedPO : po
       ));
+      
+      // Update the selected PO as well for modal display
+      setSelectedPO(updatedPO);
+      
+      // Reset receive data for next time
+      setReceiveData({
+        receivedItems: [],
+        location: locations.length > 0 ? locations[0]._id : 'loc-main-warehouse',
+        receiptDate: new Date().toISOString().split('T')[0],
+        inspectedBy: 'Admin'
+      });
+      
       setShowReceiveModal(false);
-      setSelectedPO(null);
     } catch (error: any) {
       console.error('Error receiving items:', error);
       
@@ -870,6 +966,37 @@ const PurchaseOrderManagement: React.FC = () => {
 
     return matchesSearch && matchesStatus && matchesSupplier;
   });
+
+  // Filter items for Details Modal
+  const filteredDetailsItems = selectedPO ? selectedPO.items.filter(item => {
+    const productName = getProductName(item.product);
+    const category = typeof item.product === 'object' ? item.product?.category : '';
+    const brand = typeof item.product === 'object' ? item.product?.brand : '';
+    const partNo = getProductPartNo(item.product);
+    
+    const searchLower = detailsSearchTerm.toLowerCase();
+    return productName.toLowerCase().includes(searchLower) ||
+           (category && category.toLowerCase().includes(searchLower)) ||
+           (brand && brand.toLowerCase().includes(searchLower)) ||
+           (partNo && partNo !== '-' && partNo.toLowerCase().includes(searchLower));
+  }) : [];
+
+  // Filter items for Receive Modal (only items with remaining quantity)
+  const filteredReceiveItems = selectedPO ? selectedPO.items.filter(item => {
+    const remainingQty = item.quantity - (item.receivedQuantity || 0);
+    if (remainingQty <= 0) return false; // Hide fully received items
+    
+    const productName = getProductName(item.product);
+    const category = typeof item.product === 'object' ? item.product?.category : '';
+    const brand = typeof item.product === 'object' ? item.product?.brand : '';
+    const partNo = getProductPartNo(item.product);
+    
+    const searchLower = receiveSearchTerm.toLowerCase();
+    return productName.toLowerCase().includes(searchLower) ||
+           (category && category.toLowerCase().includes(searchLower)) ||
+           (brand && brand.toLowerCase().includes(searchLower)) ||
+           (partNo && partNo !== '-' && partNo.toLowerCase().includes(searchLower));
+  }) : [];
 
   const getStatusColor = (status: PurchaseOrderStatus) => {
     switch (status) {
@@ -1254,11 +1381,11 @@ const PurchaseOrderManagement: React.FC = () => {
                             <Send className="w-4 h-4" />
                           </button>
                         )}
-                        {po.status === 'confirmed' && (
+                        {(po.status === 'confirmed' || po.status === 'partially_received') && (
                           <button
                             onClick={() => openReceiveModal(po)}
                             className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
-                            title="Receive Items"
+                            title={po.status === 'partially_received' ? 'Receive More Items' : 'Receive Items'}
                           >
                             <Package className="w-4 h-4" />
                           </button>
@@ -1442,10 +1569,9 @@ const PurchaseOrderManagement: React.FC = () => {
                           </option>
                           {products.map(product => (
                             <option key={product._id} value={product._id}>
-                              {/* {product.name}  */}
-                              {product?.brand && ` - ${product?.brand}`}
-                              {product.category && ` (${product.category})`}
-                              {/* {product.price && ` - ₹${product.price}`} */}
+                              {product.name} 
+                              {product.partNo && ` - ${product.partNo}`}
+                              {product.brand && ` (${product.brand})`}
                             </option>
                           ))}
                         </select>
@@ -1655,9 +1781,8 @@ const PurchaseOrderManagement: React.FC = () => {
                           {products.map(product => (
                             <option key={product._id} value={product._id}>
                               {product.name} 
-                              {product.brand && ` - ${product.brand}`}
-                              {product.category && ` (${product.category})`}
-                              {product.price && ` - ₹${product.price}`}
+                              {product.partNo && ` - ${product.partNo}`}
+                              {product.brand && ` (${product.brand})`}
                             </option>
                           ))}
                         </select>
@@ -1835,12 +1960,25 @@ const PurchaseOrderManagement: React.FC = () => {
 
               {/* Items Table */}
               <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Items Ordered</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Items Ordered</h3>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      type="text"
+                      placeholder="Search items..."
+                      value={detailsSearchTerm}
+                      onChange={(e) => setDetailsSearchTerm(e.target.value)}
+                      className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-64"
+                    />
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full border border-gray-200 rounded-lg">
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part Number</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ordered</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Received</th>
@@ -1850,11 +1988,18 @@ const PurchaseOrderManagement: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {selectedPO.items.map((item, index) => {
-                        const receivedQty = item.receivedQuantity || 0;
-                        const remainingQty = item.quantity - receivedQty;
-                        return (
-                          <tr key={index}>
+                      {filteredDetailsItems.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                            {detailsSearchTerm ? 'No items match your search' : 'No items found'}
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredDetailsItems.map((item, index) => {
+                          const receivedQty = item.receivedQuantity || 0;
+                          const remainingQty = item.quantity - receivedQty;
+                          return (
+                            <tr key={index}>
                             <td className="px-4 py-4 whitespace-nowrap">
                               <div>
                                 <div className="text-xs font-medium text-gray-900">
@@ -1864,6 +2009,11 @@ const PurchaseOrderManagement: React.FC = () => {
                                   <div className="text-xs text-gray-500">Brand: {item.product?.brand}</div>
                                 )}
                               </div>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
+                              <span className="font-mono font-medium text-blue-600">
+                                {getProductPartNo(item.product)}
+                              </span>
                             </td>
                             <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                               {typeof item.product === 'object' ? item.product?.category : '-'}
@@ -1889,21 +2039,36 @@ const PurchaseOrderManagement: React.FC = () => {
                             </td>
                           </tr>
                         );
-                      })}
+                      }))}
                     </tbody>
                     <tfoot className="bg-gray-50">
                       <tr>
-                        <td colSpan={2} className="px-4 py-3 text-xs font-medium text-gray-600">
+                        <td colSpan={3} className="px-4 py-3 text-xs font-medium text-gray-600">
                           Totals:
                         </td>
                         <td className="px-4 py-3 text-xs font-bold text-gray-900">
                           {selectedPO.items.reduce((sum, item) => sum + item.quantity, 0)}
+                          {detailsSearchTerm && (
+                            <div className="text-xs text-gray-500 font-normal">
+                              ({filteredDetailsItems.reduce((sum, item) => sum + item.quantity, 0)} filtered)
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs font-bold text-green-600">
                           {selectedPO.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0)}
+                          {detailsSearchTerm && (
+                            <div className="text-xs text-gray-500 font-normal">
+                              ({filteredDetailsItems.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0)} filtered)
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-xs font-bold text-orange-600">
                           {selectedPO.items.reduce((sum, item) => sum + (item.quantity - (item.receivedQuantity || 0)), 0)}
+                          {detailsSearchTerm && (
+                            <div className="text-xs text-gray-500 font-normal">
+                              ({filteredDetailsItems.reduce((sum, item) => sum + (item.quantity - (item.receivedQuantity || 0)), 0)} filtered)
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-3 text-right text-xs font-medium text-gray-900">
                           Total Amount:
@@ -2096,7 +2261,19 @@ const PurchaseOrderManagement: React.FC = () => {
 
               {/* Items to Receive */}
               <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Items to Receive</h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Items to Receive</h3>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <input
+                      type="text"
+                      placeholder="Search items..."
+                      value={receiveSearchTerm}
+                      onChange={(e) => setReceiveSearchTerm(e.target.value)}
+                      className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-64"
+                    />
+                  </div>
+                </div>
                 {(() => {
                   const itemsWithRemainingQty = selectedPO.items.filter(item => 
                     (item.quantity - (item.receivedQuantity || 0)) > 0
@@ -2113,25 +2290,39 @@ const PurchaseOrderManagement: React.FC = () => {
                       </div>
                     );
                   }
+
+                  if (filteredReceiveItems.length === 0 && receiveSearchTerm) {
+                    return (
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+                        <div className="flex items-center justify-center mb-2">
+                          <Search className="w-8 h-8 text-gray-400" />
+                        </div>
+                        <h4 className="text-lg font-medium text-gray-600 mb-1">No Items Found</h4>
+                        <p className="text-gray-500">No items match your search criteria.</p>
+                      </div>
+                    );
+                  }
                   
                   return (
                     <div className="space-y-4">
-                      {selectedPO.items.map((item, index) => {
-                        const receivedItem = receiveData.receivedItems[index];
+                      {filteredReceiveItems.map((item, index) => {
+                        // Find the original index in selectedPO.items to maintain consistency with receiveData
+                        const originalIndex = selectedPO.items.findIndex(originalItem => 
+                          originalItem === item
+                        );
+                        const receivedItem = receiveData.receivedItems[originalIndex];
                         const remainingQty = item.quantity - (item.receivedQuantity || 0);
                         
-                        // Skip items that are fully received
-                        if (remainingQty <= 0) {
-                          return null;
-                        }
-                        
-                        return (
-                      <div key={index} className="p-4 bg-gray-50 rounded-lg">
+                                                return (
+                          <div key={originalIndex} className="p-4 bg-gray-50 rounded-lg">
                         <div className="grid grid-cols-1 md:grid-cols-7 gap-4 items-center mb-3">
                           <div className="md:col-span-2">
                             <div className="text-xs font-medium text-gray-900">
                               {getProductName(item.product)}
                             </div>
+                            {getProductPartNo(item.product) !== '-' && (
+                              <div className="text-xs text-blue-600 font-mono font-medium">Part: {getProductPartNo(item.product)}</div>
+                            )}
                             {typeof item.product === 'object' && item.product?.category && (
                               <div className="text-xs text-gray-500">Category: {item.product?.category}</div>
                             )}
@@ -2157,8 +2348,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                 const newReceivedItems = [...receiveData.receivedItems];
                                 
                                 // Ensure we maintain the productId when updating quantity
-                                const existingItem = newReceivedItems[index] || {};
-                                newReceivedItems[index] = {
+                                const existingItem = newReceivedItems[originalIndex] || {};
+                                newReceivedItems[originalIndex] = {
                                   ...existingItem,
                                   productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
                                   quantityReceived: parseInt(e.target.value) || 0,
@@ -2181,8 +2372,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                 const newReceivedItems = [...receiveData.receivedItems];
                                 
                                 // Ensure we maintain the productId when updating condition
-                                const existingItem = newReceivedItems[index] || {};
-                                newReceivedItems[index] = {
+                                const existingItem = newReceivedItems[originalIndex] || {};
+                                newReceivedItems[originalIndex] = {
                                   ...existingItem,
                                   productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
                                   condition: e.target.value as 'good' | 'damaged' | 'defective'
@@ -2211,8 +2402,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                 const newReceivedItems = [...receiveData.receivedItems];
                                 
                                 // Ensure we maintain the productId when updating batch number
-                                const existingItem = newReceivedItems[index] || {};
-                                newReceivedItems[index] = {
+                                const existingItem = newReceivedItems[originalIndex] || {};
+                                newReceivedItems[originalIndex] = {
                                   ...existingItem,
                                   productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
                                   batchNumber: e.target.value
@@ -2232,8 +2423,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                 const newReceivedItems = [...receiveData.receivedItems];
                                 
                                 // Ensure we maintain the productId when updating notes
-                                const existingItem = newReceivedItems[index] || {};
-                                newReceivedItems[index] = {
+                                const existingItem = newReceivedItems[originalIndex] || {};
+                                newReceivedItems[originalIndex] = {
                                   ...existingItem,
                                   productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
                                   notes: e.target.value

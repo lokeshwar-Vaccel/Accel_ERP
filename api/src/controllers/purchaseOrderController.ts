@@ -71,7 +71,7 @@ export const getPurchaseOrders = async (
 
     // Execute query with pagination
     const orders = await PurchaseOrder.find(query)
-      .populate('items.product', 'name category brand modelNumber price')
+      .populate('items.product', 'name category brand modelNumber partNo price')
       .populate('createdBy', 'firstName lastName email')
       .sort(sort as string)
       .limit(Number(limit))
@@ -108,7 +108,7 @@ export const getPurchaseOrder = async (
 ): Promise<void> => {
   try {
     const order = await PurchaseOrder.findById(req.params.id)
-      .populate('items.product', 'name category brand modelNumber specifications price')
+      .populate('items.product', 'name category brand modelNumber partNo specifications price')
       .populate('createdBy', 'firstName lastName email');
 
     if (!order) {
@@ -157,7 +157,7 @@ export const createPurchaseOrder = async (
     const order = await PurchaseOrder.create(orderData);
 
     const populatedOrder = await PurchaseOrder.findById(order._id)
-      .populate('items.product', 'name category brand modelNumber price')
+      .populate('items.product', 'name category brand modelNumber partNo price')
       .populate('createdBy', 'firstName lastName email');
 
     const response: APIResponse = {
@@ -201,7 +201,7 @@ export const updatePurchaseOrder = async (
       req.body,
       { new: true, runValidators: true }
     )
-      .populate('items.product', 'name category brand')
+      .populate('items.product', 'name category brand partNo')
       .populate('createdBy', 'firstName lastName email');
 
     const response: APIResponse = {
@@ -261,7 +261,7 @@ export const receiveItems = async (
     const { receivedItems, location, receiptDate, inspectedBy, notes } = req.body;
 
     const order = await PurchaseOrder.findById(req.params.id)
-      .populate('items.product', 'name category brand');
+      .populate('items.product', 'name category brand partNo');
     
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
@@ -421,6 +421,11 @@ export const receiveItems = async (
 
     await order.save();
 
+    // Populate the order with product details for frontend
+    const populatedOrder = await PurchaseOrder.findById(order._id)
+      .populate('items.product', 'name category brand modelNumber partNo price')
+      .populate('createdBy', 'firstName lastName email');
+
     console.log(`Purchase order ${order.poNumber} status updated to ${order.status}. Received: ${totalReceivedQuantity}/${totalOrderedQuantity}`);
 
     // Check if we had any validation errors but still processed some items
@@ -433,11 +438,11 @@ export const receiveItems = async (
       success: true,
       message,
       data: { 
-        order,
+        order: populatedOrder,
         receivedItems,
         totalOrderedQuantity,
         totalReceivedQuantity,
-        status: order.status,
+        status: populatedOrder!.status,
         message: 'Stock levels and ledger have been updated',
         errors: results.errors.length > 0 ? results.errors : undefined
       }
