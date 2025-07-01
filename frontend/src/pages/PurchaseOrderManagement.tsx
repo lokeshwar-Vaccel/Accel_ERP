@@ -31,7 +31,7 @@ import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 
 // Types matching backend structure
-type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'partially_received' | 'received' | 'cancelled';
 
 interface POItem {
   product: string | {
@@ -45,6 +45,7 @@ interface POItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  receivedQuantity?: number; // Track received quantities
   notes?: string;
 }
 
@@ -575,7 +576,7 @@ const PurchaseOrderManagement: React.FC = () => {
     setReceiveData({
       receivedItems: po.items.map(item => ({
         productId: typeof item.product === 'string' ? item.product : item.product?._id,
-        quantityReceived: item.quantity,
+        quantityReceived: 0, // Start with 0, user must enter quantity
         condition: 'good',
         batchNumber: '',
         notes: ''
@@ -878,6 +879,8 @@ const PurchaseOrderManagement: React.FC = () => {
         return 'bg-blue-100 text-blue-800';
       case 'confirmed':
         return 'bg-yellow-100 text-yellow-800';
+      case 'partially_received':
+        return 'bg-orange-100 text-orange-800';
       case 'received':
         return 'bg-green-100 text-green-800';
       case 'cancelled':
@@ -1839,42 +1842,70 @@ const PurchaseOrderManagement: React.FC = () => {
                       <tr>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ordered</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Received</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Price</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {selectedPO.items.map((item, index) => (
-                        <tr key={index}>
-                          <td className="px-4 py-4 whitespace-nowrap">
-                            <div>
-                              <div className="text-xs font-medium text-gray-900">
-                                {getProductName(item.product)}
+                      {selectedPO.items.map((item, index) => {
+                        const receivedQty = item.receivedQuantity || 0;
+                        const remainingQty = item.quantity - receivedQty;
+                        return (
+                          <tr key={index}>
+                            <td className="px-4 py-4 whitespace-nowrap">
+                              <div>
+                                <div className="text-xs font-medium text-gray-900">
+                                  {getProductName(item.product)}
+                                </div>
+                                {typeof item.product === 'object' && item.product?.brand && (
+                                  <div className="text-xs text-gray-500">Brand: {item.product?.brand}</div>
+                                )}
                               </div>
-                              {typeof item.product === 'object' && item.product?.brand && (
-                                <div className="text-xs text-gray-500">Brand: {item.product?.brand}</div>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
-                            {typeof item.product === 'object' ? item.product?.category : '-'}
-                          </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
-                            {item.quantity}
-                          </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
-                            {formatCurrency(item.unitPrice)}
-                          </td>
-                          <td className="px-4 py-4 whitespace-nowrap text-xs font-medium text-gray-900">
-                            {formatCurrency(item.totalPrice)}
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
+                              {typeof item.product === 'object' ? item.product?.category : '-'}
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
+                              <span className="font-medium">{item.quantity}</span>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-xs">
+                              <span className={`font-medium ${receivedQty > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                {receivedQty}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-xs">
+                              <span className={`font-medium ${remainingQty > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                                {remainingQty}
+                              </span>
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
+                              {formatCurrency(item.unitPrice)}
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-xs font-medium text-gray-900">
+                              {formatCurrency(item.totalPrice)}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                     <tfoot className="bg-gray-50">
                       <tr>
-                        <td colSpan={4} className="px-4 py-3 text-right text-xs font-medium text-gray-900">
+                        <td colSpan={2} className="px-4 py-3 text-xs font-medium text-gray-600">
+                          Totals:
+                        </td>
+                        <td className="px-4 py-3 text-xs font-bold text-gray-900">
+                          {selectedPO.items.reduce((sum, item) => sum + item.quantity, 0)}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-bold text-green-600">
+                          {selectedPO.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0)}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-bold text-orange-600">
+                          {selectedPO.items.reduce((sum, item) => sum + (item.quantity - (item.receivedQuantity || 0)), 0)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-xs font-medium text-gray-900">
                           Total Amount:
                         </td>
                         <td className="px-4 py-3 text-sm font-bold text-gray-900">
@@ -1916,13 +1947,15 @@ const PurchaseOrderManagement: React.FC = () => {
                       <span>Mark as Confirmed</span>
                     </button>
                   )}
-                  {selectedPO.status === 'confirmed' && (
+                  {(selectedPO.status === 'confirmed' || selectedPO.status === 'partially_received') && (
                     <button
                       onClick={() => openReceiveModal(selectedPO)}
                       className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-purple-700 transition-colors"
                     >
                       <Package className="w-4 h-4" />
-                      <span>Receive Items</span>
+                      <span>
+                        {selectedPO.status === 'partially_received' ? 'Receive More Items' : 'Receive Items'}
+                      </span>
                     </button>
                   )}
                   {(selectedPO.status === 'draft' || selectedPO.status === 'sent') && (
@@ -1953,8 +1986,15 @@ const PurchaseOrderManagement: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">Receive Items</h2>
-                <p className="text-gray-600">PO: {selectedPO.poNumber}</p>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {selectedPO.status === 'partially_received' ? 'Receive More Items' : 'Receive Items'}
+                </h2>
+                <p className="text-gray-600">
+                  PO: {selectedPO.poNumber}
+                  {selectedPO.status === 'partially_received' && 
+                    <span className="ml-2 text-orange-600 text-sm">(Partially Received)</span>
+                  }
+                </p>
               </div>
               <button
                 onClick={() => setShowReceiveModal(false)}
@@ -1965,17 +2005,31 @@ const PurchaseOrderManagement: React.FC = () => {
             </div>
 
             <div className="p-4 space-y-3">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div className="flex">
-                  <Package className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
-                  <div>
-                    <h3 className="text-sm font-medium text-blue-800">Receiving Items</h3>
-                    <p className="text-sm text-blue-700 mt-1">
-                      Review the quantities below and confirm receipt. This will update your inventory.
-                    </p>
+              {selectedPO.status === 'partially_received' ? (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex">
+                    <Package className="w-5 h-5 text-orange-600 mr-2 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-medium text-orange-800">Receiving Additional Items</h3>
+                      <p className="text-sm text-orange-700 mt-1">
+                        Some items from this purchase order have already been received. You can receive additional quantities as they arrive.
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex">
+                    <Package className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-medium text-blue-800">Receiving Items</h3>
+                      <p className="text-sm text-blue-700 mt-1">
+                        Review the quantities below and confirm receipt. This will update your inventory.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Receipt Information */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2043,12 +2097,37 @@ const PurchaseOrderManagement: React.FC = () => {
               {/* Items to Receive */}
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Items to Receive</h3>
-                <div className="space-y-4">
-                  {selectedPO.items.map((item, index) => {
-                    const receivedItem = receiveData.receivedItems[index];
+                {(() => {
+                  const itemsWithRemainingQty = selectedPO.items.filter(item => 
+                    (item.quantity - (item.receivedQuantity || 0)) > 0
+                  );
+                  
+                  if (itemsWithRemainingQty.length === 0) {
                     return (
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+                        <div className="flex items-center justify-center mb-2">
+                          <Package className="w-8 h-8 text-green-600" />
+                        </div>
+                        <h4 className="text-lg font-medium text-green-800 mb-1">All Items Received</h4>
+                        <p className="text-green-700">All items from this purchase order have been fully received.</p>
+                      </div>
+                    );
+                  }
+                  
+                  return (
+                    <div className="space-y-4">
+                      {selectedPO.items.map((item, index) => {
+                        const receivedItem = receiveData.receivedItems[index];
+                        const remainingQty = item.quantity - (item.receivedQuantity || 0);
+                        
+                        // Skip items that are fully received
+                        if (remainingQty <= 0) {
+                          return null;
+                        }
+                        
+                        return (
                       <div key={index} className="p-4 bg-gray-50 rounded-lg">
-                        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center mb-3">
+                        <div className="grid grid-cols-1 md:grid-cols-7 gap-4 items-center mb-3">
                           <div className="md:col-span-2">
                             <div className="text-xs font-medium text-gray-900">
                               {getProductName(item.product)}
@@ -2061,22 +2140,37 @@ const PurchaseOrderManagement: React.FC = () => {
                             <div className="text-xs text-gray-600">Ordered</div>
                             <div className="text-sm font-medium">{item.quantity}</div>
                           </div>
+                          <div className="text-center">
+                            <div className="text-xs text-gray-600">Already Received</div>
+                            <div className="text-sm font-medium text-green-600">{item.receivedQuantity || 0}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="text-xs text-gray-600">Remaining</div>
+                            <div className="text-sm font-medium text-orange-600">{item.quantity - (item.receivedQuantity || 0)}</div>
+                          </div>
                           <div>
-                            <label className="block text-xs text-gray-600 mb-1">Received</label>
+                            <label className="block text-xs text-gray-600 mb-1">Receive Now</label>
                             <input
                               type="number"
                               value={receivedItem?.quantityReceived || 0}
                               onChange={(e) => {
                                 const newReceivedItems = [...receiveData.receivedItems];
+                                
+                                // Ensure we maintain the productId when updating quantity
+                                const existingItem = newReceivedItems[index] || {};
                                 newReceivedItems[index] = {
-                                  ...newReceivedItems[index],
-                                  quantityReceived: parseInt(e.target.value) || 0
+                                  ...existingItem,
+                                  productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
+                                  quantityReceived: parseInt(e.target.value) || 0,
+                                  condition: existingItem.condition || 'good',
+                                  batchNumber: existingItem.batchNumber || '',
+                                  notes: existingItem.notes || ''
                                 };
                                 setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
                               }}
                               className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                               min="0"
-                              max={item.quantity}
+                              max={item.quantity - (item.receivedQuantity || 0)}
                             />
                           </div>
                           <div>
@@ -2085,8 +2179,12 @@ const PurchaseOrderManagement: React.FC = () => {
                               value={receivedItem?.condition || 'good'}
                               onChange={(e) => {
                                 const newReceivedItems = [...receiveData.receivedItems];
+                                
+                                // Ensure we maintain the productId when updating condition
+                                const existingItem = newReceivedItems[index] || {};
                                 newReceivedItems[index] = {
-                                  ...newReceivedItems[index],
+                                  ...existingItem,
+                                  productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
                                   condition: e.target.value as 'good' | 'damaged' | 'defective'
                                 };
                                 setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
@@ -2111,8 +2209,12 @@ const PurchaseOrderManagement: React.FC = () => {
                               value={receivedItem?.batchNumber || ''}
                               onChange={(e) => {
                                 const newReceivedItems = [...receiveData.receivedItems];
+                                
+                                // Ensure we maintain the productId when updating batch number
+                                const existingItem = newReceivedItems[index] || {};
                                 newReceivedItems[index] = {
-                                  ...newReceivedItems[index],
+                                  ...existingItem,
+                                  productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
                                   batchNumber: e.target.value
                                 };
                                 setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
@@ -2128,8 +2230,12 @@ const PurchaseOrderManagement: React.FC = () => {
                               value={receivedItem?.notes || ''}
                               onChange={(e) => {
                                 const newReceivedItems = [...receiveData.receivedItems];
+                                
+                                // Ensure we maintain the productId when updating notes
+                                const existingItem = newReceivedItems[index] || {};
                                 newReceivedItems[index] = {
-                                  ...newReceivedItems[index],
+                                  ...existingItem,
+                                  productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
                                   notes: e.target.value
                                 };
                                 setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
@@ -2142,25 +2248,41 @@ const PurchaseOrderManagement: React.FC = () => {
                       </div>
                     );
                   })}
-                </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Summary */}
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h4 className="text-xs font-medium text-gray-900 mb-2">Receipt Summary</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                   <div>
                     <span className="text-gray-600">Items Ordered:</span>
                     <div className="font-medium">{selectedPO.items.reduce((sum, item) => sum + item.quantity, 0)}</div>
                   </div>
                   <div>
-                    <span className="text-gray-600">Items Received:</span>
-                    <div className="font-medium">{receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)}</div>
+                    <span className="text-gray-600">Previously Received:</span>
+                    <div className="font-medium text-green-600">{selectedPO.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0)}</div>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Receiving Now:</span>
+                    <div className="font-medium text-blue-600">{receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)}</div>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Will Remain:</span>
+                    <div className="font-medium text-orange-600">
+                      {selectedPO.items.reduce((sum, item) => sum + item.quantity, 0) - 
+                       selectedPO.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0) - 
+                       receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)}
+                    </div>
                   </div>
                   <div>
                     <span className="text-gray-600">Receipt Date:</span>
                     <div className="font-medium">{receiveData.receiptDate ? new Date(receiveData.receiptDate).toLocaleDateString() : 'Not set'}</div>
                   </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-sm">
                   <div>
                     <span className="text-gray-600">Inspector:</span>
                     <div className="font-medium">{receiveData.inspectedBy || 'Not assigned'}</div>

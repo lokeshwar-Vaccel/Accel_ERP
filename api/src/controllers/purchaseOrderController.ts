@@ -275,6 +275,7 @@ export const receiveItems = async (
 
     let totalOrderedQuantity = 0;
     let totalReceivedQuantity = 0;
+    const results: { errors: string[] } = { errors: [] };
 
     // Process each received item
     for (const receivedItem of receivedItems) {
@@ -292,25 +293,45 @@ export const receiveItems = async (
       const actualProductId = productId || product;
       const actualQuantityReceived = quantityReceived || receivedQuantity;
       
-      if (!actualProductId) {
-        console.warn('Skipping item: missing product ID');
-        continue;
-      }
+      console.log(`Processing received item:`, {
+        productId: actualProductId,
+        quantityReceived: actualQuantityReceived,
+        condition,
+        receivedItem: JSON.stringify(receivedItem)
+      });
       
-      if (actualQuantityReceived <= 0) {
-        console.warn(`Skipping item ${actualProductId}: invalid quantity ${actualQuantityReceived}`);
-        continue; // Skip items with zero or negative quantity
-      }
+             // Validate product ID
+       if (!actualProductId) {
+         console.warn('Skipping item: missing product ID');
+         results.errors.push('Missing product ID for received item');
+         continue;
+       }
+      
+      // Validate and parse quantity
+      let validQuantity: number;
+      try {
+        validQuantity = Number(actualQuantityReceived);
+                 if (isNaN(validQuantity) || validQuantity <= 0) {
+           console.warn(`Skipping item ${actualProductId}: invalid quantity ${actualQuantityReceived} (parsed as ${validQuantity})`);
+           results.errors.push(`Invalid quantity for product ${actualProductId}: ${actualQuantityReceived}`);
+           continue;
+         }
+       } catch (error) {
+         console.warn(`Skipping item ${actualProductId}: could not parse quantity ${actualQuantityReceived}`);
+         results.errors.push(`Could not parse quantity for product ${actualProductId}: ${actualQuantityReceived}`);
+         continue;
+       }
 
       // Find the corresponding item in the purchase order
       const poItem = order.items.find(item => 
         (typeof item.product === 'string' ? item.product : item.product._id).toString() === actualProductId.toString()
       );
 
-      if (!poItem) {
-        console.warn(`Product ${actualProductId} not found in purchase order ${order.poNumber}`);
-        continue;
-      }
+             if (!poItem) {
+         console.warn(`Product ${actualProductId} not found in purchase order ${order.poNumber}`);
+         results.errors.push(`Product ${actualProductId} not found in purchase order`);
+         continue;
+       }
 
       // Initialize receivedQuantity if it doesn't exist
       if (!poItem.receivedQuantity) {
@@ -318,10 +339,10 @@ export const receiveItems = async (
       }
 
       // Check if receiving more than ordered quantity
-      const newReceivedQuantity = poItem.receivedQuantity + actualQuantityReceived;
+      const newReceivedQuantity = poItem.receivedQuantity + validQuantity;
       if (newReceivedQuantity > poItem.quantity) {
         return next(new AppError(
-          `Cannot receive more than ordered quantity for product ${actualProductId}. Ordered: ${poItem.quantity}, Already received: ${poItem.receivedQuantity}, Trying to receive: ${actualQuantityReceived}`,
+          `Cannot receive more than ordered quantity for product ${actualProductId}. Ordered: ${poItem.quantity}, Already received: ${poItem.receivedQuantity}, Trying to receive: ${validQuantity}`,
           400
         ));
       }
@@ -338,7 +359,7 @@ export const receiveItems = async (
       const previousQuantity = stock ? stock.quantity : 0;
 
       if (stock) {
-        stock.quantity += actualQuantityReceived;
+        stock.quantity += validQuantity;
         stock.availableQuantity = stock.quantity - stock.reservedQuantity;
         stock.lastUpdated = new Date();
         await stock.save();
@@ -347,8 +368,8 @@ export const receiveItems = async (
         stock = await Stock.create({
           product: actualProductId,
           location: location,
-          quantity: actualQuantityReceived,
-          availableQuantity: actualQuantityReceived,
+          quantity: validQuantity,
+          availableQuantity: validQuantity,
           reservedQuantity: 0,
           lastUpdated: new Date()
         });
@@ -364,7 +385,7 @@ export const receiveItems = async (
         product: actualProductId,
         location: location,
         transactionType: 'inward',
-        quantity: actualQuantityReceived,
+        quantity: validQuantity, // Use the validated quantity
         resultingQuantity: stock.quantity,
         reason: `Purchase Order Receipt - ${order.poNumber}`,
         referenceType: 'purchase_order',
@@ -374,7 +395,7 @@ export const receiveItems = async (
         notes: itemNotes || notes || `Received from supplier: ${order.supplier}. PO: ${order.poNumber}, Product: ${typeof poItem.product === 'object' && 'name' in poItem.product ? poItem.product.name : actualProductId}`,
       });
 
-      console.log(`Created stock ledger entry for ${actualQuantityReceived} units of product ${actualProductId} with reference ${referenceId}`);
+      console.log(`Created stock ledger entry for ${validQuantity} units of product ${actualProductId} with reference ${referenceId}`);
     }
 
     // Calculate total quantities to determine PO status
@@ -402,16 +423,23 @@ export const receiveItems = async (
 
     console.log(`Purchase order ${order.poNumber} status updated to ${order.status}. Received: ${totalReceivedQuantity}/${totalOrderedQuantity}`);
 
+    // Check if we had any validation errors but still processed some items
+    let message = `Items received successfully. ${order.status === 'received' ? 'Purchase order completed.' : `Partial receipt: ${totalReceivedQuantity}/${totalOrderedQuantity} items received.`}`;
+    if (results.errors.length > 0) {
+      message += ` Note: Some items had errors: ${results.errors.join('; ')}`;
+    }
+
     const response: APIResponse = {
       success: true,
-      message: `Items received successfully. ${order.status === 'received' ? 'Purchase order completed.' : `Partial receipt: ${totalReceivedQuantity}/${totalOrderedQuantity} items received.`}`,
+      message,
       data: { 
         order,
         receivedItems,
         totalOrderedQuantity,
         totalReceivedQuantity,
         status: order.status,
-        message: 'Stock levels and ledger have been updated'
+        message: 'Stock levels and ledger have been updated',
+        errors: results.errors.length > 0 ? results.errors : undefined
       }
     };
 
