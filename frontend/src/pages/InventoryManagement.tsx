@@ -640,6 +640,14 @@ const brandOptionsFilter = [
         setShowDateRangeDropdown(false);
         setShowTransactionTypeDropdown(false);
         setShowLedgerLocationDropdown(false);
+        // Filter dropdowns
+        setShowCategoryFilterDropdown(false);
+        setShowDeptFilterDropdown(false);
+        setShowBrandFilterDropdown(false);
+        setShowLocationFilterDropdown(false);
+        setShowRoomFilterDropdown(false);
+        setShowRackFilterDropdown(false);
+        setShowStockStatusFilterDropdown(false);
       }
     };
 
@@ -1611,6 +1619,17 @@ const brandOptionsFilter = [
     return location ? location.name : 'All Locations';
   };
 
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  
+  // Custom dropdown states for filters
+  const [showCategoryFilterDropdown, setShowCategoryFilterDropdown] = useState(false);
+  const [showDeptFilterDropdown, setShowDeptFilterDropdown] = useState(false);
+  const [showBrandFilterDropdown, setShowBrandFilterDropdown] = useState(false);
+  const [showLocationFilterDropdown, setShowLocationFilterDropdown] = useState(false);
+  const [showRoomFilterDropdown, setShowRoomFilterDropdown] = useState(false);
+  const [showRackFilterDropdown, setShowRackFilterDropdown] = useState(false);
+  const [showStockStatusFilterDropdown, setShowStockStatusFilterDropdown] = useState(false);
+
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader
@@ -1659,220 +1678,437 @@ const brandOptionsFilter = [
         ))}
       </div>
 
-      {/* Filters */}
-      {/* <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search inventory..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
-              className="flex items-center justify-between w-full md:w-40 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-            >
-              <span className="text-gray-700 truncate mr-1">{getCategoryLabel(categoryFilter)}</span>
-              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCategoryDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showCategoryDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                {categoryOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setCategoryFilter(option.value);
-                      setShowCategoryDropdown(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                      }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-xs text-gray-600">
-            Showing {filteredInventory.length} of {inventory.length} items
-          </span>
-        </div>
-      </div> */}
-
-      <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-        <div className="flex items-center gap-2 mb-6">
-          <Filter className="w-5 h-5 text-gray-500" />
-          <h3 className="text-lg font-medium text-gray-900">Search & Filter Inventory</h3>
-        </div>
-
-        {/* Primary Search & Quick Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <Input
-              placeholder="Search by part no, description, make..."
-              value={filters.search}
-              onChange={(e) => onFiltersChange({ search: e.target.value })}
-              className="pl-10"
-            />
-          </div>
-
-          <Select
-            options={categoryOptions}
-            value={filters.category}
-            onChange={(e) => onFiltersChange({ category: e.target.value })}
-          />
-
-          <Select
-            options={stockStatusOptions}
-            value={filters.stockStatus}
-            onChange={(e) => onFiltersChange({ stockStatus: e.target.value as any })}
-          />
-
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-gray-600">Quick:</span>
-            <button
-              onClick={() => onFiltersChange({ stockStatus: 'out_of_stock' })}
-              className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs hover:bg-red-200 transition-colors"
-            >
-              Out of Stock
-            </button>
-            <button
-              onClick={() => onFiltersChange({ stockStatus: 'low_stock' })}
-              className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs hover:bg-yellow-200 transition-colors"
-            >
-              Low Stock
-            </button>
-          </div>
-        </div>
-
-        {/* Location Hierarchy Filters */}
-        <div className="bg-gray-50 p-4 rounded-lg mb-4">
-          <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
-            <MapPin className="w-4 h-4 mr-2" />
-            Location Hierarchy
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="relative">
-              <Building className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
-              <Select
-                options={locationOptions}
-                value={filters.location}
-                onChange={(e) => onFiltersChange({ location: e.target.value })}
-                className="pl-10"
+      {/* Redesigned Search & Filters */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+        {/* Primary Search Bar */}
+        <div className="p-3 border-b border-gray-100">
+          <div className="flex flex-col sm:flex-row gap-3">
+            {/* Main Search */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <Input
+                placeholder="Search by product name, part number, brand, or location..."
+                value={filters.search}
+                onChange={(e) => onFiltersChange({ search: e.target.value })}
+                className="pl-9 text-sm h-9"
               />
             </div>
-
-            <div className="relative">
-              <Archive className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
-              <Select
-                options={roomOptionsFilter}
-                value={filters.room || ''}
-                onChange={(e) => onFiltersChange({ room: e.target.value })}
-                className="pl-10"
-              />
-            </div>
-
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 z-10" />
-              <Select
-                options={rackOptionsFilter}
-                value={filters.rack || ''}
-                onChange={(e) => onFiltersChange({ rack: e.target.value })}
-                className="pl-10"
-              />
+            
+            {/* Quick Actions */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => onFiltersChange({ stockStatus: 'out_of_stock' })}
+                className="px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors border border-red-200 text-xs font-medium"
+              >
+                Out of Stock
+              </button>
+              <button
+                onClick={() => onFiltersChange({ stockStatus: 'low_stock' })}
+                className="px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded-md hover:bg-yellow-100 transition-colors border border-yellow-200 text-xs font-medium"
+              >
+                Low Stock
+              </button>
+              <button
+                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-xs font-medium flex items-center gap-1.5"
+              >
+                <Filter className="w-3.5 h-3.5" />
+                Filters
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Additional Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-          <Select
-            options={deptOptionsFilter}
-            value={filters.dept || ''}
-            onChange={(e) => onFiltersChange({ dept: e.target.value })}
-          />
+        {/* Advanced Filters - Collapsible */}
+        {showAdvancedFilters && (
+          <div className="p-4 bg-gray-50 border-b border-gray-100">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                             {/* Product Filters */}
+               <div className="space-y-3">
+                 <h4 className="text-sm font-semibold text-gray-900 flex items-center">
+                   <Package className="w-4 h-4 mr-2 text-blue-500" />
+                   Product Filters
+                 </h4>
+                 <div className="space-y-3">
+                   {/* Category Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowCategoryFilterDropdown(!showCategoryFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {categoryOptions.find(opt => opt.value === (filters.category || ''))?.label || 'All Categories'}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCategoryFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showCategoryFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {categoryOptions.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ category: option.value === 'all' ? '' : option.value });
+                                 setShowCategoryFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.category || 'all') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
 
-          <Select
-            options={brandOptionsFilter}
-            value={filters.brand || ''}
-            onChange={(e) => onFiltersChange({ brand: e.target.value })}
-          />
-        </div>
+                   {/* Department Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowDeptFilterDropdown(!showDeptFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {deptOptionsFilter.find(opt => opt.value === (filters.dept || ''))?.label || 'Select a department'}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showDeptFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showDeptFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {deptOptionsFilter.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ dept: option.value });
+                                 setShowDeptFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.dept || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
 
-        {/* Active Filters Display */}
-        {(filters.search || filters.category || filters.room || filters.rack || filters.dept || filters.make || filters.stockStatus !== 'all') && (
-          <div className="flex items-center gap-2 pt-4 border-t border-gray-200">
-            <span className="text-sm font-medium text-gray-600">Active filters:</span>
-            <div className="flex flex-wrap gap-2">
+                   {/* Brand Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowBrandFilterDropdown(!showBrandFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {brandOptionsFilter.find(opt => opt.value === (filters.brand || ''))?.label || 'Select a brand'}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showBrandFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showBrandFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {brandOptionsFilter.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ brand: option.value });
+                                 setShowBrandFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.brand || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
+                 </div>
+               </div>
+
+                             {/* Location Filters */}
+               <div className="space-y-3">
+                 <h4 className="text-sm font-semibold text-gray-900 flex items-center">
+                   <MapPin className="w-4 h-4 mr-2 text-green-500" />
+                   Location Hierarchy
+                 </h4>
+                 <div className="space-y-3">
+                   {/* Location Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowLocationFilterDropdown(!showLocationFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {locationOptions.find(opt => opt.value === (filters.location || ''))?.label || 'Select a location'}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showLocationFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {locationOptions.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ location: option.value, room: '', rack: '' }); // Reset dependent filters
+                                 setShowLocationFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.location || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
+
+                   {/* Room Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => !filters.location ? null : setShowRoomFilterDropdown(!showRoomFilterDropdown)}
+                         disabled={!filters.location}
+                         className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${
+                           !filters.location 
+                             ? 'cursor-not-allowed bg-gray-50 text-gray-400' 
+                             : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                         }`}
+                       >
+                         <span className="truncate mr-1">
+                           {!filters.location 
+                             ? 'Select location first'
+                             : roomOptionsFilter.find(opt => opt.value === (filters.room || ''))?.label || 'Select a room'
+                           }
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showRoomFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showRoomFilterDropdown && filters.location && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {roomOptionsFilter.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ room: option.value, rack: '' }); // Reset dependent filter
+                                 setShowRoomFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.room || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
+
+                   {/* Rack Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Rack</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => !filters.room ? null : setShowRackFilterDropdown(!showRackFilterDropdown)}
+                         disabled={!filters.room}
+                         className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${
+                           !filters.room 
+                             ? 'cursor-not-allowed bg-gray-50 text-gray-400' 
+                             : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                         }`}
+                       >
+                         <span className="truncate mr-1">
+                           {!filters.room 
+                             ? 'Select room first'
+                             : rackOptionsFilter.find(opt => opt.value === (filters.rack || ''))?.label || 'Select a rack'
+                           }
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showRackFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showRackFilterDropdown && filters.room && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {rackOptionsFilter.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ rack: option.value });
+                                 setShowRackFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.rack || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
+                 </div>
+               </div>
+
+                             {/* Stock Status & Actions */}
+               <div className="space-y-3">
+                 <h4 className="text-sm font-semibold text-gray-900 flex items-center">
+                   <BarChart3 className="w-4 h-4 mr-2 text-purple-500" />
+                   Stock Status
+                 </h4>
+                 <div className="space-y-3">
+                   {/* Stock Level Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Stock Level</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowStockStatusFilterDropdown(!showStockStatusFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {stockStatusOptions.find(opt => opt.value === filters.stockStatus)?.label || 'All Stock Levels'}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStockStatusFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showStockStatusFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {stockStatusOptions.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ stockStatus: option.value });
+                                 setShowStockStatusFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 filters.stockStatus === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
+
+                   <div className="pt-2">
+                     <button
+                       onClick={() => {
+                         onFiltersChange({
+                           search: '',
+                           category: '',
+                           dept: '',
+                           brand: '',
+                           location: '',
+                           room: '',
+                           rack: '',
+                           stockStatus: 'all'
+                         });
+                         setShowAdvancedFilters(false);
+                         // Close all filter dropdowns
+                         setShowCategoryFilterDropdown(false);
+                         setShowDeptFilterDropdown(false);
+                         setShowBrandFilterDropdown(false);
+                         setShowLocationFilterDropdown(false);
+                         setShowRoomFilterDropdown(false);
+                         setShowRackFilterDropdown(false);
+                         setShowStockStatusFilterDropdown(false);
+                       }}
+                       className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                     >
+                       Clear All Filters
+                     </button>
+                   </div>
+                 </div>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Active Filters & Results Summary - Only show when filters are active */}
+        {(filters.search || filters.category || filters.dept || filters.brand || filters.location || filters.room || filters.rack || filters.stockStatus !== 'all') && (
+          <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-100">
+            <div className="flex items-center text-sm text-gray-600">
+              <span className="font-medium">{filteredInventory.length}</span>
+              <span className="mx-1">of</span>
+              <span>{inventory.length}</span>
+              <span className="ml-1">items found</span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-gray-500 font-medium">Active filters:</span>
+              
               {filters.search && (
                 <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                  Search: "{filters.search}"
+                  "{filters.search}"
                   <button
                     onClick={() => onFiltersChange({ search: '' })}
-                    className="ml-1 text-blue-600 hover:text-blue-800"
+                    className="ml-1 text-blue-600 hover:text-blue-800 font-bold"
                   >
                     ×
                   </button>
                 </span>
               )}
+              
               {filters.category && (
                 <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
-                  Category: {filters.category}
+                  {filters.category}
                   <button
                     onClick={() => onFiltersChange({ category: '' })}
-                    className="ml-1 text-green-600 hover:text-green-800"
+                    className="ml-1 text-green-600 hover:text-green-800 font-bold"
                   >
                     ×
                   </button>
                 </span>
               )}
-              {filters.room && (
+              
+              {filters.dept && (
                 <span className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
-                  Room: {filters.room}
+                  {filters.dept}
                   <button
-                    onClick={() => onFiltersChange({ room: '' })}
-                    className="ml-1 text-purple-600 hover:text-purple-800"
+                    onClick={() => onFiltersChange({ dept: '' })}
+                    className="ml-1 text-purple-600 hover:text-purple-800 font-bold"
                   >
                     ×
                   </button>
                 </span>
               )}
-              {filters.rack && (
+              
+              {filters.location && (
                 <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
-                  Rack: {filters.rack}
+                  {locations.find(l => l._id === filters.location)?.name}
                   <button
-                    onClick={() => onFiltersChange({ rack: '' })}
-                    className="ml-1 text-indigo-600 hover:text-indigo-800"
+                    onClick={() => onFiltersChange({ location: '' })}
+                    className="ml-1 text-indigo-600 hover:text-indigo-800 font-bold"
                   >
                     ×
                   </button>
                 </span>
               )}
-              <button
-                onClick={() => onFiltersChange({
-                  search: '',
-                  category: '',
-                  room: '',
-                  rack: '',
-                  dept: '',
-                  make: '',
-                  location: '',
-                  stockStatus: 'all'
-                })}
-                className="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded-full hover:bg-gray-200"
-              >
-                Clear all
-              </button>
+              
+              {filters.stockStatus !== 'all' && (
+                <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
+                  {stockStatusOptions.find(s => s.value === filters.stockStatus)?.label}
+                  <button
+                    onClick={() => onFiltersChange({ stockStatus: 'all' })}
+                    className="ml-1 text-orange-600 hover:text-orange-800 font-bold"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
             </div>
           </div>
         )}
@@ -1881,28 +2117,28 @@ const brandOptionsFilter = [
       {/* Inventory Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full table-fixed min-w-[1100px]">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-72">
                   Product Details
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Location Hierarchy
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
+                  Location
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">
                   Stock Levels
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
                   Pricing
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">
                   Status & Department
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
                   Technical Info
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -1920,84 +2156,75 @@ const brandOptionsFilter = [
                   const StatusIcon = status.icon;
                   return (
                     <tr key={item._id || idx} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-4 w-72">
                         <div className="flex items-start">
-                          <Package className="w-5 h-5 text-gray-400 mr-3 mt-1 flex-shrink-0" />
+                          <Package className="w-4 h-4 text-gray-400 mr-2 mt-1 flex-shrink-0" />
                           <div className="min-w-0 flex-1">
                             <div className="text-sm font-medium text-gray-900 truncate">
                               {item.product?.name}
                             </div>
-                            <div className="text-sm text-gray-500">
-                              Part: {item.product?.partNo}
+                            <div className="text-xs text-gray-500">
+                              {item.product?.partNo}
                             </div>
                             <div className="text-xs text-gray-400 mt-1">
-                              <span className="inline-flex items-center">
-                                {item.product?.brand} • {item.product?.category}
-                              </span>
+                              {item.product?.brand} • {item.product?.category}
                             </div>
                           </div>
                         </div>
                       </td>
 
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-4 w-40">
                         <div className="space-y-1">
                           <div className="flex items-center">
-                            <Building className="w-4 h-4 text-blue-500 mr-2" />
-                            <span className="text-sm font-medium text-gray-900">
-                              {item.location?.name || <span className="text-red-500">Not assigned</span>}
+                            <Building className="w-3 h-3 text-blue-500 mr-1" />
+                            <span className="text-sm font-medium text-gray-900 truncate">
+                              {item.location?.name || <span className="text-red-500">Unassigned</span>}
                             </span>
                           </div>
                           <div className="flex items-center">
-                            <Archive className="w-4 h-4 text-green-500 mr-2" />
-                            <span className="text-sm text-gray-700">
-                              Room: {item.room?.name || <span className="text-red-500">Not assigned</span>}
+                            <Archive className="w-3 h-3 text-green-500 mr-1" />
+                            <span className="text-xs text-gray-700 truncate">
+                              {item.room?.name || <span className="text-red-500">Unassigned</span>}
                             </span>
                           </div>
                           <div className="flex items-center">
-                            <MapPin className="w-4 h-4 text-purple-500 mr-2" />
-                            <span className="text-sm text-gray-600">
-                              Rack: {item.rack?.name || <span className="text-red-500">Not assigned</span>}
+                            <MapPin className="w-3 h-3 text-purple-500 mr-1" />
+                            <span className="text-xs text-gray-600 truncate">
+                              {item.rack?.name || <span className="text-red-500">Unassigned</span>}
                             </span>
                           </div>
                         </div>
                       </td>
 
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-4 w-36">
                         <div className="space-y-1">
-                          <div className="text-sm font-medium text-gray-900">
-                            Current: {item.quantity}
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Current:</span>
+                            <span className="text-sm font-bold text-gray-900">{item.quantity}</span>
                           </div>
-                          {item.reservedQuantity > 0 && (
-                            <div className="text-xs text-orange-600">
-                              Reserved: {item.reservedQuantity}
-                            </div>
-                          )}
-                          <div className="text-xs text-green-600">
-                            Available: {item.availableQuantity}
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Reserved:</span>
+                            <span className="text-xs text-orange-600 font-medium">{item.reservedQuantity || 0}</span>
                           </div>
-                          {/* <div className="text-xs text-gray-400">
-                            Min: {item.product?.minStockLevel}
-                          </div> */}
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Available:</span>
+                            <span className="text-xs text-green-600 font-medium">{item.availableQuantity}</span>
+                          </div>
                         </div>
                       </td>
 
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-4 w-28">
                         <div className="space-y-1">
                           <div className="text-sm font-medium text-gray-900">
-                            MRP: {formatCurrency(item.product?.price || 0)}
+                            ₹{item.product?.price || 0}
                           </div>
-                          {item.gndp && (
-                            <div className="text-xs text-green-600">
-                              Total Value: {formatCurrency(item.gndp)}
-                            </div>
-                          )}
                           <div className="text-xs text-gray-400">
                             GST: {item.product?.gst}%
                           </div>
                         </div>
                       </td>
 
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-4 w-36">
                         <div className="space-y-2">
                           <Badge variant={status.variant}>
                             <StatusIcon className="w-3 h-3 mr-1" />
@@ -2011,42 +2238,41 @@ const brandOptionsFilter = [
                         </div>
                       </td>
 
-                      <td className="px-6 py-4">
+                      <td className="px-4 py-4 w-32">
                         <div className="space-y-1 text-xs text-gray-500">
-                          <div className="flex items-center">
-                            <Hash className="w-3 h-3 mr-1" />
+                          <div>
                             HSN: {item.product?.hsnNumber}
                           </div>
                           <div>
-                            Updated: {new Date(item?.lastUpdated).toLocaleDateString()}
+                            {new Date(item?.lastUpdated).toLocaleDateString()}
                           </div>
-                          <div className="text-xs text-gray-400">
-                            {item.product?.productType2} • {item.product?.productType3}
+                          <div className="text-xs text-gray-400 truncate">
+                            {item.product?.productType2}
                           </div>
                         </div>
                       </td>
-                         <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                         <div className="flex items-center space-x-2">
+                         <td className="px-4 py-4 w-20 whitespace-nowrap text-sm font-medium">
+                         <div className="flex items-center justify-center space-x-1">
                            <button
                             onClick={() => handleUpdateStock(item)}
-                            className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                            className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
                             title="Adjust Stock"
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-3 h-3" />
                           </button>
                           <button
                             onClick={() => viewStockHistory(item)}
-                            className="text-green-600 hover:text-green-900 p-2 rounded-lg hover:bg-green-50 transition-colors"
+                            className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
                             title="View History"
                           >
-                            <Package className="w-4 h-4" />
+                            <Package className="w-3 h-3" />
                           </button>
                           <button
                             onClick={() => handleTransferStock(item)}
-                            className="text-purple-600 hover:text-purple-900 p-2 rounded-lg hover:bg-purple-50 transition-colors"
+                            className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
                             title="Transfer Stock"
                           >
-                            <ArrowUpDown className="w-4 h-4" />
+                            <ArrowUpDown className="w-3 h-3" />
                           </button>
                         </div>
                       </td>
