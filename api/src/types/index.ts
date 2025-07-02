@@ -159,6 +159,7 @@ export interface IProduct extends Document {
   minStockLevel: number;
   isActive: boolean;
   createdBy: string;
+  stockUnit?: string; // Allowed: 'pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'
 }
 
 // Stock Location Interface

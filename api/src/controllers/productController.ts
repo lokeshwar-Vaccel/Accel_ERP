@@ -128,34 +128,18 @@ export const createProduct = async (
       ...req.body,
       createdBy: req.user!.id
     };
-console.log("req.body:",req.body);
+  
 
     const product = await Product.create(productData);
-
-    let stock = null;
-
-    if (product) {
-      const stockData = {
-        product: product._id,
-        location: req.body.location,
-        room: req.body.room,
-        rack: req.body.rack,
-        quantity: req.body.quantity,
-        availableQuantity:  req.body.quantity
-      };
-
-      stock = await Stock.create(stockData);
-    }
 
     const populatedProduct = await Product.findById(product._id)
       .populate('createdBy', 'firstName lastName email');
 
     const response: APIResponse = {
       success: true,
-      message: 'Product and stock created successfully',
+      message: 'Product created successfully',
       data: {
-        product: populatedProduct,
-        stock
+        product: populatedProduct
       }
     };
 
