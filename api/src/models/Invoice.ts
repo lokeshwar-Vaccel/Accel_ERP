@@ -36,6 +36,8 @@ export interface IInvoice extends mongoose.Document {
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
+  externalInvoiceNumber?: string; // External/hardcopy invoice number
+  externalInvoiceTotal?: number;  // External/hardcopy invoice total
 }
 
 // Invoice Item Schema
@@ -176,6 +178,16 @@ const invoiceSchema = new Schema<IInvoice>({
     type: Schema.Types.ObjectId,
     ref: 'User',
     required: true
+  },
+  externalInvoiceNumber: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  externalInvoiceTotal: {
+    type: Number,
+    required: false,
+    min: 0
   }
 }, {
   timestamps: true
