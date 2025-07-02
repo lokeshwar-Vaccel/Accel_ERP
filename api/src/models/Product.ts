@@ -102,6 +102,11 @@ const productSchema = new Schema({
     type: Number,
     min: [0, 'GNDP Total cannot be negative'],
   },
+  stockUnit: {
+    type: String,
+    enum: ['pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'],
+    default: null
+  },
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',

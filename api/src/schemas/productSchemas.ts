@@ -25,6 +25,7 @@ export interface CreateProductInput {
     unit?: 'days' | 'months' | 'years';
     terms?: string;
   };
+  stockUnit?: string;
 }
 
 export interface UpdateProductInput {
@@ -50,6 +51,7 @@ export interface UpdateProductInput {
     unit?: 'days' | 'months' | 'years';
     terms?: string;
   };
+  stockUnit?: string;
 }
 
 export interface ProductQueryInput {
@@ -157,6 +159,8 @@ const baseProductFields = {
   createdBy: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required()
 };
 
+const allowedStockUnits = ['pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'];
+
 // Create product schema
 export const createProductSchema = Joi.object({
   name: baseProductFields.name,
@@ -186,7 +190,8 @@ export const createProductSchema = Joi.object({
   gndp: baseProductFields.gndp,
   // mrp: baseProductFields.mrp,
   gndpTotal: baseProductFields.gndpTotal,
-  createdBy: baseProductFields.createdBy
+  createdBy: baseProductFields.createdBy,
+  stockUnit: Joi.string().valid(...allowedStockUnits).allow(null)
 });
 
 // Update product schema
@@ -218,7 +223,8 @@ export const updateProductSchema = Joi.object({
   gndp: baseProductFields.gndp,
   mrp: baseProductFields.mrp,
   gndpTotal: baseProductFields.gndpTotal,
-  createdBy: baseProductFields.createdBy
+  createdBy: baseProductFields.createdBy,
+  stockUnit: Joi.string().valid(...allowedStockUnits).allow(null)
 });
 
 // Product search/filter schema
