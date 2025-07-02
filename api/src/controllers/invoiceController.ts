@@ -140,7 +140,9 @@ export const createInvoice = async (
       invoiceType,
       referenceId,
       location,
-      reduceStock = true
+      reduceStock = true,
+      externalInvoiceNumber,
+      externalInvoiceTotal
     } = req.body;
 
     // Generate invoice number
@@ -186,7 +188,6 @@ export const createInvoice = async (
       taxAmount: totalTax,
       discountAmount,
       totalAmount,
-      // Add missing required schema fields
       paidAmount: 0,
       remainingAmount: totalAmount,
       status: 'draft',
@@ -196,7 +197,9 @@ export const createInvoice = async (
       invoiceType,
       referenceId,
       location,
-      createdBy: req.user!.id
+      createdBy: req.user!.id,
+      externalInvoiceNumber,
+      externalInvoiceTotal
     });
 
     await invoice.save();
@@ -253,7 +256,7 @@ export const updateInvoice = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { status, paymentStatus, paymentMethod, paymentDate, paidAmount, notes } = req.body;
+    const { status, paymentStatus, paymentMethod, paymentDate, paidAmount, notes, externalInvoiceNumber, externalInvoiceTotal } = req.body;
 
     const invoice = await Invoice.findById(req.params.id);
     if (!invoice) {
@@ -276,6 +279,8 @@ export const updateInvoice = async (
       invoice.paidAmount = paidAmount;
     }
     if (notes) invoice.notes = notes;
+    if (externalInvoiceNumber !== undefined) invoice.externalInvoiceNumber = externalInvoiceNumber;
+    if (externalInvoiceTotal !== undefined) invoice.externalInvoiceTotal = externalInvoiceTotal;
 
     await invoice.save();
 
