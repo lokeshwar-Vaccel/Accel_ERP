@@ -75,6 +75,19 @@ export enum ProductCategory {
   ACCESSORY = 'accessory'
 }
 
+// Stock Unit Type
+export type StockUnit =
+  | 'pcs'
+  | 'kg'
+  | 'litre'
+  | 'meter'
+  | 'sq.ft'
+  | 'hour'
+  | 'set'
+  | 'box'
+  | 'can'
+  | 'roll';
+
 // User Interface
 export interface IUser extends Document {
   firstName: string;
@@ -159,7 +172,7 @@ export interface IProduct extends Document {
   minStockLevel: number;
   isActive: boolean;
   createdBy: string;
-  stockUnit?: string; // Allowed: 'pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'
+  stockUnit?: StockUnit;
 }
 
 // Stock Location Interface
