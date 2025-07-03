@@ -127,8 +127,10 @@ class ApiClient {
 
   // Customer Management APIs
   customers = {
-    getAll: (params?: any) =>
-      this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/customers${params ? `?${new URLSearchParams(params)}` : ''}`),
+    getAll: (params: any) => {
+
+      return this.makeRequest<{ success: boolean; data:{customers:any[],counts:any}; pagination: any }>(`/customers${params ? `?${new URLSearchParams(params)}` : ''}`);
+    },
 
     create: (customerData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/customers', {
@@ -151,7 +153,7 @@ class ApiClient {
       }),
 
     addContact: (id: string, contactData: any) =>
-      this.makeRequest<{ success: boolean; data: any }>(`/customers/${id}/contact`, {
+      this.makeRequest<{ success: boolean; data: any }>(`/customers/${id}/contact-history`, {
         method: 'POST',
         body: JSON.stringify(contactData),
       }),
