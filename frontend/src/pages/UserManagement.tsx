@@ -135,6 +135,7 @@ export const UserManagement: React.FC = () => {
       'user_management',
       'inventory_management',
       'purchase_orders',
+      'customer_management',
     ],
     manager: allModules.filter(m => m !== 'admin_settings'),
     viewer: ['dashboard'],
@@ -246,7 +247,11 @@ export const UserManagement: React.FC = () => {
       password: '', // Password not required for editing
       role: user.role as UserRole,
       phone: user.phone || '', // Ensure phone is filled
-      moduleAccess: user.moduleAccess || [] // Populate module access with existing permissions
+      moduleAccess: user.moduleAccess ? Object.entries(user.moduleAccess).map(([module, config]) => ({
+        module: module as ModuleKey,
+        access: config.access,
+        permission: config.permission as 'read' | 'write' | 'admin'
+      })) : [] // Convert object to array format
     });
     setFormErrors({});
     setShowUserModal(true);

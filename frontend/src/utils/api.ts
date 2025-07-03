@@ -91,7 +91,7 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/users${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     create: (userData: any) =>
-      this.makeRequest<{ success: boolean; data: any }>('/users', {
+      this.makeRequest<{ success: boolean; data: any , message:string}>('/users', {
         method: 'POST',
         body: JSON.stringify(userData),
       }),
@@ -99,14 +99,14 @@ class ApiClient {
     getById: (id: string) =>
       this.makeRequest<{ success: boolean; data: any }>(`/users/${id}`),
 
-    update: (id: string, data: any) =>
-      this.makeRequest<{ success: boolean; data: any }>(`/users/${id}`, {
+    update: (id: string, data: any  ) =>
+      this.makeRequest<{ success: boolean; data: any, message:string }>(`/users/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
 
     delete: (id: string) =>
-      this.makeRequest<{ success: boolean }>(`/users/${id}`, {
+      this.makeRequest<{ success: boolean, message:string }>(`/users/${id}`, {
         method: 'DELETE',
       }),
 
