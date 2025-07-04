@@ -192,6 +192,7 @@ const CustomerManagement: React.FC = () => {
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showAssignedToDropdown, setShowAssignedToDropdown] = useState(false);
   const [showCustomerTypeDropdown, setShowCustomerTypeDropdown] = useState(false);
+  const [showContactTypeDropdown, setShowContactTypeDropdown] = useState(false);
 
   const user = useSelector((state: RootState) => state.auth.user);
 
@@ -669,6 +670,18 @@ const CustomerManagement: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+  const contactTypeOptions = [
+    { value: 'call', label: 'Call' },
+    { value: 'meeting', label: 'Meeting' },
+    { value: 'email', label: 'Email' },
+    { value: 'whatsapp', label: 'WhatsApp' },
+  ];
+
+  const getContactTypeLabel = (value: string) => {
+    const found = contactTypeOptions.find(opt => opt.value === value);
+    return found ? found.label : 'Select Contact Type';
+  };
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
@@ -1608,20 +1621,39 @@ const CustomerManagement: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="relative dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Contact Type *
                   </label>
-                  <select
-                    value={contactFormData.type}
-                    onChange={(e) => setContactFormData({ ...contactFormData, type: e.target.value as ContactType })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <button
+                    type="button"
+                    onClick={() => setShowContactTypeDropdown((v) => !v)}
+                    className="flex items-center justify-between w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                   >
-                    <option value="call">Phone Call</option>
-                    <option value="meeting">Meeting</option>
-                    <option value="email">Email</option>
-                    <option value="whatsapp">WhatsApp</option>
-                  </select>
+                    <span className="text-gray-700 truncate mr-1">
+                      {getContactTypeLabel(contactFormData.type)}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showContactTypeDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showContactTypeDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {contactTypeOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setContactFormData({ ...contactFormData, type: option.value as ContactType });
+                            setShowContactTypeDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            contactFormData.type === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1734,7 +1766,7 @@ const CustomerManagement: React.FC = () => {
                           {statusCustomers.length}
                         </span>
                       </div>
-                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                      <div className="space-y-2 h-96 overflow-y-auto">
                         {statusCustomers.map((customer) => {
                           const isBeingDragged = draggedCustomer === customer._id;
                           const isUpdatingThis = isUpdating === customer._id;
