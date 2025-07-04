@@ -36,7 +36,6 @@ import PageHeader from '../components/ui/PageHeader';
 import { RootState } from 'store';
 import { useSelector } from 'react-redux';
 import { Pagination } from 'components/ui/Pagination';
-// import { DragDropContext, Droppable, Draggable, DropResult, DroppableProvided, DraggableProvided } from 'react-beautiful-dnd';
 
 
 // Customer types matching backend enums
@@ -428,50 +427,6 @@ const [isUpdating, setIsUpdating] = useState<string | null>(null); // For loadin
     }
   };
 
-  // const handleDragEnd = (result: DropResult) => {
-  //   const { source, destination, draggableId } = result;
-  //   if (!destination) return;
-  //   const sourceStatus = source.droppableId;
-  //   const destStatus = destination.droppableId;
-  //   if (sourceStatus === destStatus) return;
-
-  //   handleStatusChange(String(draggableId), destStatus as LeadStatus);
-  // };
-
-
-  const handleStatusChangeDragDrop = async (customerId: string, newStatus: LeadStatus) => {
-    try {
-      setIsUpdating(customerId);
-      
-      // Optimistic update - update UI immediately
-      setCustomers(prevCustomers => 
-        prevCustomers.map(customer => 
-          customer._id === customerId 
-            ? { ...customer, status: newStatus }
-            : customer
-        )
-      );
-  
-      // Call API to update backend
-      await handleStatusChange(customerId, newStatus);
-      
-      // Fetch fresh data to ensure consistency
-      fetchCustomers();
-    
-      
-    } catch (error) {
-      console.error('Failed to update customer status:', error);
-      
-      // Revert optimistic update on error
-       fetchCustomers();
-    
-      
-      // Show error to user (you can add toast notification here)
-      alert('Failed to update customer status. Please try again.');
-    } finally {
-      setIsUpdating(null);
-    }
-  };
 
 
   const resetCustomerForm = () => {
@@ -1675,123 +1630,6 @@ const [isUpdating, setIsUpdating] = useState<string | null>(null); // For loadin
       )}
 
 
-{/* darg and drop pipeline */}
-{/* {showPipelineModal && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-900">Sales Pipeline Overview</h2>
-        <button
-          onClick={() => setShowPipelineModal(false)}
-          className="text-gray-400 hover:text-gray-600"
-        >
-          <X className="w-6 h-6" />
-        </button>
-      </div>
-
-      <div className="p-6">
-        <DragDropContext onDragEnd={handleDragEnd}>
-          <div className="grid grid-cols-5 gap-4">
-            {(['new', 'qualified', 'contacted', 'converted', 'lost'] as LeadStatus[]).map((status) => {
-              const statusCustomers = customers.filter(c => c.status === status);
-              const getColumnColor = (s: LeadStatus) => {
-                switch (s) {
-                  case 'new': return 'bg-blue-50 border-blue-200';
-                  case 'qualified': return 'bg-yellow-50 border-yellow-200';
-                  case 'contacted': return 'bg-purple-50 border-purple-200';
-                  case 'converted': return 'bg-green-50 border-green-200';
-                  case 'lost': return 'bg-red-50 border-red-200';
-                }
-              };
-
-              return (
-                <Droppable droppableId={status} key={status}>
-                  {(provided: DroppableProvided) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.droppableProps}
-                      className={`rounded-lg border-2 ${getColumnColor(status)} p-4`}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-medium text-gray-900 capitalize flex items-center">
-                          {getStatusIcon(status)}
-                          <span className="ml-2">{status}</span>
-                        </h3>
-                        <span className="text-sm font-medium text-gray-600">
-                          {statusCustomers.length}
-                        </span>
-                      </div>
-                      <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {statusCustomers.map((customer, index) => (
-                          <Draggable draggableId={String(customer._id)} index={index} key={String(customer._id)}>
-                            {(provided: DraggableProvided) => (
-                              <div
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className="bg-white rounded p-3 shadow-sm border cursor-pointer hover:shadow-md transition-shadow"
-                                // onClick={() => openDetailsModal(customer)}
-                              >
-                                <div className="font-medium text-xs text-gray-900 truncate">
-                                  {customer.name}
-                                </div>
-                                <div className="text-xs text-gray-500 mt-1">
-                                  {customer.customerType} • {customer.leadSource || 'Direct'}
-                                </div>
-                                {customer.contactHistory.length > 0 && (
-                                  <div className="text-xs text-blue-600 mt-1">
-                                    Last: {customer.contactHistory[customer.contactHistory.length - 1].type}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </Draggable>
-                        ))}
-                        {provided.placeholder}
-                        {statusCustomers.length === 0 && (
-                          <div className="text-center text-gray-400 py-8">
-                            <Users className="w-6 h-6 mx-auto mb-2" />
-                            <p className="text-sm">No customers</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </Droppable>
-              );
-            })}
-          </div>
-        </DragDropContext>
-
-        <div className="mt-8 bg-gray-50 rounded-lg p-4">
-          <h3 className="font-medium text-gray-900 mb-3">Pipeline Metrics</h3>
-          <div className="grid grid-cols-5 gap-4 text-center">
-            <div>
-              <p className="text-xl font-bold text-blue-600">{counts.newLeads}</p>
-              <p className="text-xs text-gray-600">New Leads</p>
-            </div>
-            <div>
-              <p className="text-xl font-bold text-yellow-600">{counts.qualified}</p>
-              <p className="text-xs text-gray-600">Qualified</p>
-            </div>
-            <div>
-              <p className="text-xl font-bold text-purple-600">{counts.contacted}</p>
-              <p className="text-xs text-gray-600">Contacted</p>
-            </div>
-            <div>
-              <p className="text-xl font-bold text-green-600">{counts.converted}</p>
-              <p className="text-xs text-gray-600">Converted</p>
-            </div>
-            <div>
-              <p className="text-xl font-bold text-red-600">{counts.lost}</p>
-              <p className="text-xs text-gray-600">Lost</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-)} */}
 
 {/* darg n drop native html5*/}
 {showPipelineModal && (
