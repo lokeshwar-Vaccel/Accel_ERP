@@ -1,4 +1,4 @@
-import { Response, NextFunction } from 'express';
+import { Request, Response, NextFunction } from 'express';
 import { Customer } from '../models/Customer';
 import { AuthenticatedRequest, APIResponse, LeadStatus, CustomerType, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
@@ -31,6 +31,8 @@ export const getCustomers = async (
       dateFrom?: string;
       dateTo?: string;
     };
+
+    
 
     // Build query
     const query: any = {};
@@ -76,10 +78,30 @@ export const getCustomers = async (
     const total = await Customer.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));
 
+    // Calculate counts for different statuses
+    const [totalCustomers, newLeads, qualified, converted, lost, contacted] = await Promise.all([
+      Customer.countDocuments({ ...query }),
+      Customer.countDocuments({ ...query, status: 'new' }),
+      Customer.countDocuments({ ...query, status: 'qualified' }),
+      Customer.countDocuments({ ...query, status: 'converted' }),
+      Customer.countDocuments({ ...query, status: 'lost' }),
+      Customer.countDocuments({ ...query, status: 'contacted' })
+    ]);
+
     const response: APIResponse = {
       success: true,
       message: 'Customers retrieved successfully',
-      data: { customers },
+      data: {
+        customers,
+        counts: {
+          totalCustomers,
+          newLeads,
+          qualified,
+          converted,
+          lost,
+          contacted
+        }
+      },
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -87,6 +109,8 @@ export const getCustomers = async (
         pages
       }
     };
+
+    
 
     res.status(200).json(response);
   } catch (error) {
@@ -406,4 +430,5 @@ export const scheduleFollowUp = async (
   } catch (error) {
     next(error);
   }
-}; 
+};
+
