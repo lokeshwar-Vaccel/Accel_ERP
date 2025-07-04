@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Plus, 
-  Search, 
-  Filter, 
-  Edit, 
-  Trash2, 
-  Phone, 
-  Mail, 
+import {
+  Plus,
+  Search,
+  Filter,
+  Edit,
+  Trash2,
+  Phone,
+  Mail,
   MapPin,
   Building,
   Calendar,
@@ -33,6 +33,10 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
+import { RootState } from 'store';
+import { useSelector } from 'react-redux';
+import { Pagination } from 'components/ui/Pagination';
+
 
 // Customer types matching backend enums
 type CustomerType = 'retail' | 'telecom';
@@ -48,7 +52,21 @@ interface ContactHistory {
   createdBy: string | User;
 }
 
+export interface CustomerCounts {
+  totalCustomers: number;
+  newLeads: number;
+  qualified: number;
+  converted: number;
+  lost: number;
+  contacted: number;
+
+
+}
+
+
+
 interface User {
+  id: string;
   _id: string;
   firstName: string;
   lastName: string;
@@ -92,29 +110,61 @@ interface ContactFormData {
   followUpDate: string;
 }
 
+interface AddContactHistoryInput {
+  type: string;
+  date: string;
+  notes: string;
+  followUpDate?: string; // <-- make it optional
+  createdBy: string;
+}
+
 const CustomerManagement: React.FC = () => {
   // Core state
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  
+
+  const [draggedCustomer, setDraggedCustomer] = useState<string | null>(null);
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState<string | null>(null); // For loading state
+
+  const [counts, setCounts] = useState<CustomerCounts>({
+    totalCustomers: 0,
+    newLeads: 0,
+    qualified: 0,
+    converted: 0,
+    lost: 0,
+    contacted: 0,
+  });
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<CustomerType | 'all'>('all');
-  
+  // const [leadSourceFilter, setLeadSourceFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalDatas, setTotalDatas] = useState(0);
+
+
+  const [sort, setSort] = useState('-createdAt');
+  const [dateFrom, setDateFrom] = useState<string | undefined>(undefined);
+  const [dateTo, setDateTo] = useState<string | undefined>(undefined);
+  const [assignedToFilter, setAssignedToFilter] = useState<string | undefined>(undefined);
+
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
-  
+
   // Selected data
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
-  
+
   // Form data
   const [customerFormData, setCustomerFormData] = useState<CustomerFormData>({
     name: '',
@@ -126,14 +176,14 @@ const CustomerManagement: React.FC = () => {
     assignedTo: '',
     notes: ''
   });
-  
+
   const [contactFormData, setContactFormData] = useState<ContactFormData>({
     type: 'call',
     date: new Date().toISOString().split('T')[0],
     notes: '',
     followUpDate: ''
   });
-  
+
   // Form errors
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
@@ -141,10 +191,22 @@ const CustomerManagement: React.FC = () => {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showTypeDropdown, setShowTypeDropdown] = useState(false);
   const [showAssignedToDropdown, setShowAssignedToDropdown] = useState(false);
+  const [showCustomerTypeDropdown, setShowCustomerTypeDropdown] = useState(false);
+  const [showContactTypeDropdown, setShowContactTypeDropdown] = useState(false);
+
+  const user = useSelector((state: RootState) => state.auth.user);
+
+  useEffect(() => {
+    if (user?.role === 'hr') {
+
+
+      setAssignedToFilter(user.id);
+    }
+  }, [user]);
 
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.users.getAll();
+      const response = await apiClient.users.getAll({ role: 'hr' });
       // Handle response format like in other modules
       let usersData: User[] = [];
       if (response.data) {
@@ -158,147 +220,93 @@ const CustomerManagement: React.FC = () => {
     } catch (error) {
       console.error('Error fetching users:', error);
       // Set fallback data on error
-      setUsers([
-        {
-          _id: '675ed04292f315fcc1e0e5f1',
-          firstName: 'John',
-          lastName: 'Doe',
-          email: 'john.doe@sunpowerservices.com',
-          fullName: 'John Doe'
-        },
-        {
-          _id: '675ed04292f315fcc1e0e5f2',
-          firstName: 'Sarah',
-          lastName: 'Smith',
-          email: 'sarah.smith@sunpowerservices.com',
-          fullName: 'Sarah Smith'
-        },
-        {
-          _id: '675ed04292f315fcc1e0e5f3',
-          firstName: 'Mike',
-          lastName: 'Johnson',
-          email: 'mike.johnson@sunpowerservices.com',
-          fullName: 'Mike Johnson'
-        }
-      ]);
+      setUsers([]);
     }
   };
 
-  useEffect(() => {
-    fetchCustomers();
-    fetchUsers();
-  }, []);
-
   const fetchCustomers = async () => {
+    let assignedToParam = assignedToFilter;
+
+    // If HR, always use their own ID for assignedTo
+    if (user?.role === 'hr' && user?.id) {
+      assignedToParam = user.id;
+      if (assignedToFilter !== user.id) setAssignedToFilter(user.id);
+    }
+
+    // Only fetch when assignedTo is set for HR
+    if (user?.role === 'hr' && !assignedToParam) return;
+
+    const params: any = {
+      page: currentPage,
+      limit,
+      sort,
+      search: searchTerm,
+      ...(typeFilter !== 'all' && { customerType: typeFilter }),
+      ...(statusFilter !== 'all' && { status: statusFilter }),
+      // ...(leadSourceFilter && { leadSource: leadSourceFilter }),
+      ...(dateFrom && { dateFrom }),
+      ...(dateTo && { dateTo }),
+      ...(assignedToParam && { assignedTo: assignedToParam }),
+    };
+
     try {
       setLoading(true);
-      const response = await apiClient.customers.getAll();
-      // Handle response format like in other modules
+      const response = await apiClient.customers.getAll(params);
+      setCounts(response.data.counts);
+      setCurrentPage(response.pagination.page);
+      setLimit(response.pagination.limit);
+      setTotalDatas(response.pagination.total);
+      setTotalPages(response.pagination.pages);
       let customersData: Customer[] = [];
-      if (response.data) {
+      if (response && response.data) {
         if (Array.isArray(response.data)) {
-          customersData = response.data;
-        } else if ((response.data as any).customers && Array.isArray((response.data as any).customers)) {
-          customersData = (response.data as any).customers;
+
+          customersData = response.data as Customer[];
+        } else if (typeof response.data === 'object' && Array.isArray((response.data as any).customers)) {
+          customersData = (response.data as { customers: Customer[] }).customers;
         }
       }
+
       setCustomers(customersData);
     } catch (error) {
       console.error('Error fetching customers:', error);
-      // Set fallback data on error
-      setCustomers([
-        {
-          _id: '1',
-          name: 'Rajesh Kumar',
-          email: 'rajesh@techcorp.com',
-          phone: '+91 9876543210',
-          address: '123 Business Park, Sector 62, Noida, UP 201301',
-          customerType: 'telecom',
-          status: 'qualified',
-          leadSource: 'Website Inquiry',
-          assignedTo: 'John Doe (Sales)',
-          notes: 'Interested in 500 KVA generator for telecom tower backup',
-          contactHistory: [
-            {
-              _id: 'c1',
-              type: 'call',
-              date: new Date().toISOString(),
-              notes: 'Initial qualification call. Customer confirmed requirement.',
-              createdBy: 'John Doe'
-            }
-          ],
-          createdBy: 'Admin User',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        {
-          _id: '2',
-          name: 'Priya Sharma',
-          email: 'priya.sharma@gmail.com',
-          phone: '+91 8765432109',
-          address: '45 Green Valley, Pune, Maharashtra 411028',
-          customerType: 'retail',
-          status: 'new',
-          leadSource: 'Referral',
-          notes: 'Home backup power solution needed',
-          contactHistory: [],
-          createdBy: 'Admin User',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        },
-        {
-          _id: '3',
-          name: 'Mumbai Industries Ltd',
-          email: 'purchase@mumbaiind.com',
-          phone: '+91 7654321098',
-          address: 'Plot 15, Industrial Area, Mumbai, Maharashtra 400086',
-          customerType: 'retail',
-          status: 'converted',
-          leadSource: 'Trade Show',
-          assignedTo: 'Sarah Smith (Sales)',
-          notes: 'Converted customer. Purchased 250 KVA genset with AMC.',
-          contactHistory: [
-            {
-              _id: 'c2',
-              type: 'meeting',
-              date: new Date(Date.now() - 86400000).toISOString(),
-              notes: 'Site visit completed. Order confirmed.',
-              createdBy: 'Sarah Smith'
-            }
-          ],
-          createdBy: 'Admin User',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        }
-      ]);
+      setCustomers([]);
     } finally {
       setLoading(false);
     }
   };
 
+  useEffect(() => {
+    fetchCustomers();
+    if (user?.role !== 'hr') {
+      fetchUsers();
+    }
+  }, [user, currentPage, limit, sort, searchTerm, typeFilter, statusFilter, dateFrom, dateTo, assignedToFilter]);
+
   const handleDeleteCustomer = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this customer?')) {
       try {
         await apiClient.customers.delete(id);
-        setCustomers(customers.filter(customer => customer._id !== id));
+        fetchCustomers()
+        // setCustomers(customers.filter(customer => customer._id !== id));
       } catch (error) {
         console.error('Error deleting customer:', error);
       }
     }
   };
 
-  const filteredCustomers = Array.isArray(customers) ? customers.filter(customer => {
-    // Ensure customer object exists and has required properties
-    if (!customer || !customer.name) return false;
-    
-    const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
-                         (customer.phone && customer.phone.includes(searchTerm));
-    const matchesStatus = statusFilter === 'all' || customer.status === statusFilter;
-    const matchesType = typeFilter === 'all' || customer.customerType === typeFilter;
-    
-    return matchesSearch && matchesStatus && matchesType;
-  }) : [];
+  // const filteredCustomers = Array.isArray(customers) ? customers.filter(customer => {
+  //   // Ensure customer object exists and has required properties
+  //   if (!customer || !customer.name) return false;
+
+  //   const matchesSearch = customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  //                        (customer.email && customer.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+  //                        (customer.phone && customer.phone.includes(searchTerm));
+  //   const matchesStatus = statusFilter === 'all' || customer.status === statusFilter;
+  //   const matchesType = typeFilter === 'all' || customer.customerType === typeFilter;
+
+  //   return matchesSearch && matchesStatus && matchesType;
+  // }) : [];
 
   const validateCustomerForm = (): boolean => {
     const errors: Record<string, string> = {};
@@ -326,15 +334,18 @@ const CustomerManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      
+
       // Prepare form data, excluding assignedTo if it's empty to avoid ObjectId validation error
       const submitData = { ...customerFormData };
       if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
         delete (submitData as any).assignedTo;
       }
-      
+
       const response = await apiClient.customers.create(submitData);
-      setCustomers([...customers, response.data]);
+
+      console.log(response.data, "response");
+      fetchCustomers()
+      // setCustomers([...customers, response.data]);
       setShowAddModal(false);
       resetCustomerForm();
     } catch (error: any) {
@@ -355,15 +366,16 @@ const CustomerManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      
+
       // Prepare form data, excluding assignedTo if it's empty to avoid ObjectId validation error
       const submitData = { ...customerFormData };
       if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
         delete (submitData as any).assignedTo;
       }
-      
+
       const response = await apiClient.customers.update(editingCustomer._id, submitData);
-      setCustomers(customers.map(c => c._id === editingCustomer._id ? response.data : c));
+      // setCustomers(customers.map(c => c._id === editingCustomer._id ? response.data : c));
+      fetchCustomers()
       setShowEditModal(false);
       setEditingCustomer(null);
       resetCustomerForm();
@@ -388,12 +400,17 @@ const CustomerManagement: React.FC = () => {
         ...contactFormData,
         createdBy: 'current-user-id' // This should be the current user's ID from auth context
       };
+      // Remove followUpDate if it's empty or falsy
+      if (!contactData.followUpDate) {
+        delete (contactData as any).followUpDate;
+      }
       const response = await apiClient.customers.addContact(selectedCustomer._id, contactData);
-      setCustomers(customers.map(c => 
-        c._id === selectedCustomer._id 
-          ? { ...c, contactHistory: [...c.contactHistory, response.data] }
-          : c
-      ));
+      fetchCustomers()
+      // setCustomers(customers.map(c => 
+      //   c._id === selectedCustomer._id 
+      //     ? { ...c, contactHistory: [...c.contactHistory, response.data] }
+      //     : c
+      // ));
       setShowContactModal(false);
       setContactFormData({
         type: 'call',
@@ -409,15 +426,22 @@ const CustomerManagement: React.FC = () => {
   };
 
   const handleStatusChange = async (customerId: string, newStatus: LeadStatus) => {
+    // Optimistically update local state
+    setCustomers(prev =>
+      prev.map(c =>
+        c._id === customerId ? { ...c, status: newStatus } : c
+      )
+    );
     try {
       await apiClient.customers.update(customerId, { status: newStatus });
-      setCustomers(customers.map(c => 
-        c._id === customerId ? { ...c, status: newStatus } : c
-      ));
+      // Fetch from server after drop is complete
+      fetchCustomers();
     } catch (error) {
       console.error('Error updating status:', error);
     }
   };
+
+
 
   const resetCustomerForm = () => {
     setCustomerFormData({
@@ -478,6 +502,45 @@ const CustomerManagement: React.FC = () => {
     setShowContactModal(true);
   };
 
+
+  const handleDragStart = (e: React.DragEvent, customerId: string) => {
+    setDraggedCustomer(customerId);
+    e.dataTransfer.setData('text/plain', customerId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, status: LeadStatus) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverColumn(status);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverColumn(null);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, newStatus: LeadStatus) => {
+    e.preventDefault();
+    const customerId = e.dataTransfer.getData('text/plain');
+
+    if (customerId && draggedCustomer) {
+      const currentCustomer = customers.find(c => c._id === customerId);
+      if (currentCustomer && currentCustomer.status !== newStatus) {
+        handleStatusChange(customerId, newStatus);
+      }
+    }
+
+    setDraggedCustomer(null);
+    setDragOverColumn(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedCustomer(null);
+    setDragOverColumn(null);
+  };
+
   const getStatusColor = (status: LeadStatus) => {
     switch (status) {
       case 'new':
@@ -530,25 +593,25 @@ const CustomerManagement: React.FC = () => {
   const stats = [
     {
       title: 'Total Customers',
-      value: Array.isArray(customers) ? customers.length.toString() : '0',
+      value: counts.totalCustomers ? counts.totalCustomers.toString() : '0',
       icon: <Users className="w-6 h-6" />,
       color: 'blue'
     },
     {
       title: 'New Leads',
-      value: Array.isArray(customers) ? customers.filter(c => c.status === 'new').length.toString() : '0',
+      value: counts.newLeads ? counts.newLeads.toString() : '0',
       icon: <UserPlus className="w-6 h-6" />,
       color: 'blue'
     },
     {
       title: 'Qualified',
-      value: Array.isArray(customers) ? customers.filter(c => c.status === 'qualified').length.toString() : '0',
+      value: counts.qualified ? counts.qualified.toString() : '0',
       icon: <Target className="w-6 h-6" />,
       color: 'yellow'
     },
     {
       title: 'Converted',
-      value: Array.isArray(customers) ? customers.filter(c => c.status === 'converted').length.toString() : '0',
+      value: counts.converted ? counts.converted.toString() : '0',
       icon: <CheckCircle className="w-6 h-6" />,
       color: 'green'
     }
@@ -566,10 +629,13 @@ const CustomerManagement: React.FC = () => {
 
   // Type options with labels
   const typeOptions = [
-    { value: 'all', label: 'All Types' },
     { value: 'retail', label: 'Retail' },
-    { value: 'telecom', label: 'Telecom' }
+    { value: 'telecom', label: 'Telecom' },
   ];
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   const getStatusLabel = (value: string) => {
     const option = statusOptions.find(opt => opt.value === value);
@@ -577,13 +643,14 @@ const CustomerManagement: React.FC = () => {
   };
 
   const getTypeLabel = (value: string) => {
-    const option = typeOptions.find(opt => opt.value === value);
-    return option ? option.label : 'All Types';
+    const found = typeOptions.find(opt => opt.value === value);
+    return found ? found.label : 'Retail';
   };
 
   const getAssignedToLabel = (value: string) => {
     if (!value) return 'Select user (optional)';
-    const user = users.find(u => u._id === value);
+    const user = users.find(u => u.id === value);
+
     return user ? (user.fullName || `${user.firstName} ${user.lastName}`) : 'Select user (optional)';
   };
 
@@ -604,10 +671,22 @@ const CustomerManagement: React.FC = () => {
     };
   }, []);
 
+  const contactTypeOptions = [
+    { value: 'call', label: 'Call' },
+    { value: 'meeting', label: 'Meeting' },
+    { value: 'email', label: 'Email' },
+    { value: 'whatsapp', label: 'WhatsApp' },
+  ];
+
+  const getContactTypeLabel = (value: string) => {
+    const found = contactTypeOptions.find(opt => opt.value === value);
+    return found ? found.label : 'Select Contact Type';
+  };
+
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       {/* Header */}
-      <PageHeader 
+      <PageHeader
         title="Customer Relationship Management"
         subtitle="Manage leads, customers, and track interactions"
       >
@@ -619,13 +698,18 @@ const CustomerManagement: React.FC = () => {
             <TrendingUp className="w-4 h-4" />
             <span className="text-sm">Sales Pipeline</span>
           </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm">Add Customer</span>
-          </button>
+
+          {user?.role !== 'hr' &&
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="text-sm">Add Customer</span>
+            </button>
+          }
+
+
         </div>
       </PageHeader>
 
@@ -681,9 +765,8 @@ const CustomerManagement: React.FC = () => {
                       setStatusFilter(option.value as LeadStatus | 'all');
                       setShowStatusDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                      statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                    }`}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -713,9 +796,8 @@ const CustomerManagement: React.FC = () => {
                       setTypeFilter(option.value as CustomerType | 'all');
                       setShowTypeDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                      typeFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                    }`}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${typeFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -727,7 +809,7 @@ const CustomerManagement: React.FC = () => {
 
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xs text-gray-600">
-            Showing {filteredCustomers.length} of {customers.length} customers
+            Showing {customers.length} customers
           </span>
         </div>
       </div>
@@ -765,14 +847,8 @@ const CustomerManagement: React.FC = () => {
                     Loading customers...
                   </td>
                 </tr>
-              ) : filteredCustomers.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
-                    No customers found
-                  </td>
-                </tr>
               ) : (
-                filteredCustomers.map((customer) => (
+                customers.map((customer) => (
                   <tr key={customer._id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div>
@@ -852,13 +928,15 @@ const CustomerManagement: React.FC = () => {
                         >
                           <Edit className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => handleDeleteCustomer(customer._id)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                          title="Delete Customer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {user?.role !== 'hr' &&
+                          <button
+                            onClick={() => handleDeleteCustomer(customer._id)}
+                            className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                            title="Delete Customer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        }
                       </div>
                     </td>
                   </tr>
@@ -868,6 +946,14 @@ const CustomerManagement: React.FC = () => {
           </table>
         </div>
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
+        totalItems={totalDatas}
+        itemsPerPage={limit}
+      />
 
       {/* Add Customer Modal */}
       {showAddModal && (
@@ -902,27 +988,47 @@ const CustomerManagement: React.FC = () => {
                     type="text"
                     value={customerFormData.name}
                     onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.name ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter customer name"
                   />
                   {formErrors.name && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
                   )}
                 </div>
-                <div>
+                <div className="relative dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Customer Type *
                   </label>
-                  <select
-                    value={customerFormData.customerType}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, customerType: e.target.value as CustomerType })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomerTypeDropdown((v) => !v)}
+                    className="flex items-center justify-between w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                   >
-                    <option value="retail">Retail</option>
-                    <option value="telecom">Telecom</option>
-                  </select>
+                    <span className="text-gray-700 truncate mr-1">
+                      {getTypeLabel(customerFormData.customerType)}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerTypeDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showCustomerTypeDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {typeOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setCustomerFormData({ ...customerFormData, customerType: option.value as CustomerType });
+                            setShowCustomerTypeDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -935,9 +1041,8 @@ const CustomerManagement: React.FC = () => {
                     type="email"
                     value={customerFormData.email}
                     onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.email ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.email ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter email address"
                   />
                   {formErrors.email && (
@@ -952,9 +1057,8 @@ const CustomerManagement: React.FC = () => {
                     type="tel"
                     value={customerFormData.phone}
                     onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.phone ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter phone number"
                   />
                   {formErrors.phone && (
@@ -971,9 +1075,8 @@ const CustomerManagement: React.FC = () => {
                   value={customerFormData.address}
                   onChange={(e) => setCustomerFormData({ ...customerFormData, address: e.target.value })}
                   rows={3}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                    formErrors.address ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.address ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   placeholder="Enter complete address"
                 />
                 {formErrors.address && (
@@ -1000,11 +1103,14 @@ const CustomerManagement: React.FC = () => {
                   </label>
                   <div className="relative dropdown-container">
                     <button
+
                       type="button"
                       onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
                       className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     >
-                      <span className="text-gray-700 truncate mr-1">{getAssignedToLabel(customerFormData.assignedTo)}</span>
+                      <span className="text-gray-700 truncate mr-1">
+                        {getAssignedToLabel(customerFormData.assignedTo)}
+                      </span>
                       <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAssignedToDropdown ? 'rotate-180' : ''}`} />
                     </button>
                     {showAssignedToDropdown && (
@@ -1015,23 +1121,21 @@ const CustomerManagement: React.FC = () => {
                             setCustomerFormData({ ...customerFormData, assignedTo: '' });
                             setShowAssignedToDropdown(false);
                           }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            !customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           Unassigned
                         </button>
                         {users.map(user => (
                           <button
-                            key={user._id}
+                            key={user.id}
                             type="button"
                             onClick={() => {
-                              setCustomerFormData({ ...customerFormData, assignedTo: user._id });
+                              setCustomerFormData({ ...customerFormData, assignedTo: user.id });
                               setShowAssignedToDropdown(false);
                             }}
-                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                              customerFormData.assignedTo === user._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
+                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.assignedTo === user.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                              }`}
                           >
                             <div>
                               <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`}</div>
@@ -1091,6 +1195,7 @@ const CustomerManagement: React.FC = () => {
               <button
                 onClick={() => {
                   setShowEditModal(false);
+                  resetCustomerForm()
                   setShowAssignedToDropdown(false);
                 }}
                 className="text-gray-400 hover:text-gray-600"
@@ -1115,27 +1220,47 @@ const CustomerManagement: React.FC = () => {
                     type="text"
                     value={customerFormData.name}
                     onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.name ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter customer name"
                   />
                   {formErrors.name && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
                   )}
                 </div>
-                <div>
+                <div className="relative dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Customer Type *
                   </label>
-                  <select
-                    value={customerFormData.customerType}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, customerType: e.target.value as CustomerType })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <button
+                    type="button"
+                    onClick={() => setShowCustomerTypeDropdown((v) => !v)}
+                    className="flex items-center justify-between w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                   >
-                    <option value="retail">Retail</option>
-                    <option value="telecom">Telecom</option>
-                  </select>
+                    <span className="text-gray-700 truncate mr-1">
+                      {getTypeLabel(customerFormData.customerType)}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerTypeDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showCustomerTypeDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {typeOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setCustomerFormData({ ...customerFormData, customerType: option.value as CustomerType });
+                            setShowCustomerTypeDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1148,9 +1273,8 @@ const CustomerManagement: React.FC = () => {
                     type="email"
                     value={customerFormData.email}
                     onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.email ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.email ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter email address"
                   />
                   {formErrors.email && (
@@ -1165,9 +1289,8 @@ const CustomerManagement: React.FC = () => {
                     type="tel"
                     value={customerFormData.phone}
                     onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.phone ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     placeholder="Enter phone number"
                   />
                   {formErrors.phone && (
@@ -1184,9 +1307,8 @@ const CustomerManagement: React.FC = () => {
                   value={customerFormData.address}
                   onChange={(e) => setCustomerFormData({ ...customerFormData, address: e.target.value })}
                   rows={3}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                    formErrors.address ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.address ? 'border-red-500' : 'border-gray-300'
+                    }`}
                   placeholder="Enter complete address"
                 />
                 {formErrors.address && (
@@ -1213,11 +1335,14 @@ const CustomerManagement: React.FC = () => {
                   </label>
                   <div className="relative dropdown-container">
                     <button
+                      disabled={user?.role === 'hr'}
                       type="button"
                       onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
                       className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     >
-                      <span className="text-gray-700 truncate mr-1">{getAssignedToLabel(customerFormData.assignedTo)}</span>
+                      <span className="text-gray-700 truncate mr-1">
+                        {getAssignedToLabel(customerFormData.assignedTo)}
+                      </span>
                       <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAssignedToDropdown ? 'rotate-180' : ''}`} />
                     </button>
                     {showAssignedToDropdown && (
@@ -1228,23 +1353,21 @@ const CustomerManagement: React.FC = () => {
                             setCustomerFormData({ ...customerFormData, assignedTo: '' });
                             setShowAssignedToDropdown(false);
                           }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            !customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           Unassigned
                         </button>
                         {users.map(user => (
                           <button
-                            key={user._id}
+                            key={user.id}
                             type="button"
                             onClick={() => {
-                              setCustomerFormData({ ...customerFormData, assignedTo: user._id });
+                              setCustomerFormData({ ...customerFormData, assignedTo: user.id });
                               setShowAssignedToDropdown(false);
                             }}
-                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                              customerFormData.assignedTo === user._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
+                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.assignedTo === user.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                              }`}
                           >
                             <div>
                               <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`}</div>
@@ -1276,6 +1399,7 @@ const CustomerManagement: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setShowEditModal(false);
+                    resetCustomerForm()
                     setShowAssignedToDropdown(false);
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -1455,6 +1579,18 @@ const CustomerManagement: React.FC = () => {
                         Mark Converted
                       </button>
                     )}
+
+                    {selectedCustomer.status !== 'lost' && (
+                      <button
+                        onClick={() => {
+                          handleStatusChange(selectedCustomer._id, 'lost');
+                          setShowDetailsModal(false);
+                        }}
+                        className="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm"
+                      >
+                        Mark Lost
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1485,20 +1621,39 @@ const CustomerManagement: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div className="relative dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Contact Type *
                   </label>
-                  <select
-                    value={contactFormData.type}
-                    onChange={(e) => setContactFormData({ ...contactFormData, type: e.target.value as ContactType })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <button
+                    type="button"
+                    onClick={() => setShowContactTypeDropdown((v) => !v)}
+                    className="flex items-center justify-between w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                   >
-                    <option value="call">Phone Call</option>
-                    <option value="meeting">Meeting</option>
-                    <option value="email">Email</option>
-                    <option value="whatsapp">WhatsApp</option>
-                  </select>
+                    <span className="text-gray-700 truncate mr-1">
+                      {getContactTypeLabel(contactFormData.type)}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showContactTypeDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showContactTypeDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {contactTypeOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setContactFormData({ ...contactFormData, type: option.value as ContactType });
+                            setShowContactTypeDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
+                            contactFormData.type === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1560,8 +1715,136 @@ const CustomerManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Sales Pipeline Modal */}
+
+
+      {/* darg n drop native html5*/}
       {showPipelineModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Sales Pipeline Overview</h2>
+              <button
+                onClick={() => setShowPipelineModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-5 gap-4">
+                {(['new', 'qualified', 'contacted', 'converted', 'lost'] as LeadStatus[]).map((status) => {
+                  const statusCustomers = customers.filter(c => c.status === status);
+                  const getColumnColor = (s: LeadStatus) => {
+                    switch (s) {
+                      case 'new': return 'bg-blue-50 border-blue-200';
+                      case 'qualified': return 'bg-yellow-50 border-yellow-200';
+                      case 'contacted': return 'bg-purple-50 border-purple-200';
+                      case 'converted': return 'bg-green-50 border-green-200';
+                      case 'lost': return 'bg-red-50 border-red-200';
+                    }
+                  };
+
+                  const isBeingDraggedOver = dragOverColumn === status;
+                  const columnClasses = `rounded-lg border-2 ${getColumnColor(status)} p-4 transition-all duration-200 ${isBeingDraggedOver ? 'border-blue-400 bg-blue-100 shadow-lg' : ''
+                    }`;
+
+                  return (
+                    <div
+                      key={status}
+                      className={columnClasses}
+                      onDragOver={(e) => handleDragOver(e, status)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, status)}
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="font-medium text-gray-900 capitalize flex items-center">
+                          {getStatusIcon(status)}
+                          <span className="ml-2">{status}</span>
+                        </h3>
+                        <span className="text-sm font-medium text-gray-600">
+                          {statusCustomers.length}
+                        </span>
+                      </div>
+                      <div className="space-y-2 h-96 overflow-y-auto">
+                        {statusCustomers.map((customer) => {
+                          const isBeingDragged = draggedCustomer === customer._id;
+                          const isUpdatingThis = isUpdating === customer._id;
+                          const cardClasses = `bg-white rounded p-3 shadow-sm border cursor-move hover:shadow-md transition-all duration-200 relative ${isBeingDragged ? 'opacity-50 scale-95' : ''
+                            } ${isUpdatingThis ? 'opacity-75' : ''}`;
+
+                          return (
+                            <div
+                              key={customer._id}
+                              className={cardClasses}
+                              draggable={!isUpdatingThis}
+                              onDragStart={(e) => handleDragStart(e, customer._id)}
+                              onDragEnd={handleDragEnd}
+                            // onClick={() => openDetailsModal(customer)}
+                            >
+                              {isUpdatingThis && (
+                                <div className="absolute inset-0 bg-white bg-opacity-50 flex items-center justify-center rounded">
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                                </div>
+                              )}
+                              <div className="font-medium text-xs text-gray-900 truncate">
+                                {customer.name}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-1">
+                                {customer.customerType} • {customer.leadSource || 'Direct'}
+                              </div>
+                              {customer.contactHistory.length > 0 && (
+                                <div className="text-xs text-blue-600 mt-1">
+                                  Last: {customer.contactHistory[customer.contactHistory.length - 1].type}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {statusCustomers.length === 0 && (
+                          <div className="text-center text-gray-400 py-8">
+                            <Users className="w-6 h-6 mx-auto mb-2" />
+                            <p className="text-sm">No customers</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-8 bg-gray-50 rounded-lg p-4">
+                <h3 className="font-medium text-gray-900 mb-3">Pipeline Metrics</h3>
+                <div className="grid grid-cols-5 gap-4 text-center">
+                  <div>
+                    <p className="text-xl font-bold text-blue-600">{counts.newLeads}</p>
+                    <p className="text-xs text-gray-600">New Leads</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-yellow-600">{counts.qualified}</p>
+                    <p className="text-xs text-gray-600">Qualified</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-purple-600">{counts.contacted}</p>
+                    <p className="text-xs text-gray-600">Contacted</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-green-600">{counts.converted}</p>
+                    <p className="text-xs text-gray-600">Converted</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold text-red-600">{counts.lost}</p>
+                    <p className="text-xs text-gray-600">Lost</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sales Pipeline Modal */}
+      {/* {showPipelineModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
@@ -1635,23 +1918,23 @@ const CustomerManagement: React.FC = () => {
                 <h3 className="font-medium text-gray-900 mb-3">Pipeline Metrics</h3>
                 <div className="grid grid-cols-5 gap-4 text-center">
                   <div>
-                    <p className="text-xl font-bold text-blue-600">{customers.filter(c => c.status === 'new').length}</p>
+                    <p className="text-xl font-bold text-blue-600">{counts.newLeads}</p>
                     <p className="text-xs text-gray-600">New Leads</p>
                   </div>
                   <div>
-                    <p className="text-xl font-bold text-yellow-600">{customers.filter(c => c.status === 'qualified').length}</p>
+                    <p className="text-xl font-bold text-yellow-600">{counts.qualified}</p>
                     <p className="text-xs text-gray-600">Qualified</p>
                   </div>
                   <div>
-                    <p className="text-xl font-bold text-purple-600">{customers.filter(c => c.status === 'contacted').length}</p>
+                    <p className="text-xl font-bold text-purple-600">{counts.contacted}</p>
                     <p className="text-xs text-gray-600">Contacted</p>
                   </div>
                   <div>
-                    <p className="text-xl font-bold text-green-600">{customers.filter(c => c.status === 'converted').length}</p>
+                    <p className="text-xl font-bold text-green-600">{counts.converted}</p>
                     <p className="text-xs text-gray-600">Converted</p>
                   </div>
                   <div>
-                    <p className="text-xl font-bold text-red-600">{customers.filter(c => c.status === 'lost').length}</p>
+                    <p className="text-xl font-bold text-red-600">{counts.lost}</p>
                     <p className="text-xs text-gray-600">Lost</p>
                   </div>
                 </div>
@@ -1659,7 +1942,7 @@ const CustomerManagement: React.FC = () => {
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 };

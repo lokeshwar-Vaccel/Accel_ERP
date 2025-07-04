@@ -21,7 +21,7 @@ import {
   updateContactHistory,
   deleteContactHistory,
   convertLead,
-  scheduleFollowUp
+  scheduleFollowUp,
 } from '../controllers/customerController';
 
 const router = Router();
@@ -73,5 +73,7 @@ router.post('/:id/follow-up',
   checkPermission('write'),
   scheduleFollowUp
 );
+
+
 
 export default router; 
