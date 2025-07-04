@@ -1157,6 +1157,7 @@ const [isUpdating, setIsUpdating] = useState<string | null>(null); // For loadin
               <button
                 onClick={() => {
                   setShowEditModal(false);
+                  resetCustomerForm()
                   setShowAssignedToDropdown(false);
                 }}
                 className="text-gray-400 hover:text-gray-600"
@@ -1345,6 +1346,7 @@ const [isUpdating, setIsUpdating] = useState<string | null>(null); // For loadin
                   type="button"
                   onClick={() => {
                     setShowEditModal(false);
+                    resetCustomerForm()
                     setShowAssignedToDropdown(false);
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
