@@ -7,8 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { generateReferenceId } from '../utils/generateReferenceId';
 import { Product } from '../models/Product';
 import { Invoice } from '../models/Invoice';
-import { Types } from 'mongoose';
-import { log } from 'console';
+import mongoose, { Types } from 'mongoose';
 
 // Purchase Order Status enum for internal use
 enum PurchaseOrderStatus {
@@ -149,9 +148,6 @@ export const createPurchaseOrder = async (
 ): Promise<void> => {
   try {
     // Calculate total amount from items
-
-    console.log("________req.body.items",req.body);
-    
     let totalAmount = 0;
     if (req.body.items && Array.isArray(req.body.items)) {
       for (const item of req.body.items) {
@@ -212,7 +208,6 @@ export const updatePurchaseOrder = async (
       }
       req.body.totalAmount = totalAmount;
     }
-// console.log("______totalAmount",totalAmount);
 
     const updatedOrder = await PurchaseOrder.findByIdAndUpdate(
       req.params.id,
@@ -276,15 +271,14 @@ export const receiveItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { receivedItems, location, receiptDate, inspectedBy, notes,externalInvoiceNumber,externalInvoiceTotal } = req.body;
-
+    const { receivedItems, location, receiptDate, inspectedBy, notes, externalInvoiceNumber, externalInvoiceTotal, items } = req.body;
+    console.log("recivedIterms-items", receivedItems, location, items)
     const order = await PurchaseOrder.findById(req.params.id)
       .populate('items.product', 'name category brand partNo');
 
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
     }
-console.log("_______order",order);
 
     if (!['confirmed', 'partially_received'].includes(order.status)) {
       return next(new AppError('Purchase order must be confirmed before receiving items', 400));
@@ -298,14 +292,14 @@ console.log("_______order",order);
 
     // Process each received item
     for (const receivedItem of receivedItems) {
-      const { 
-        productId, 
-        product, 
-        quantityReceived, 
-        receivedQuantity, 
-        condition = 'good', 
-        batchNumber, 
-        notes: itemNotes 
+      const {
+        productId,
+        product,
+        quantityReceived,
+        receivedQuantity,
+        condition = 'good',
+        batchNumber,
+        notes: itemNotes
       } = receivedItem;
 
       // Handle both field name formats for compatibility
@@ -318,39 +312,39 @@ console.log("_______order",order);
         condition,
         receivedItem: JSON.stringify(receivedItem)
       });
-      
-             // Validate product ID
-       if (!actualProductId) {
-         console.warn('Skipping item: missing product ID');
-         results.errors.push('Missing product ID for received item');
-         continue;
-       }
-      
+
+      // Validate product ID
+      if (!actualProductId) {
+        console.warn('Skipping item: missing product ID');
+        results.errors.push('Missing product ID for received item');
+        continue;
+      }
+
       // Validate and parse quantity
       let validQuantity: number;
       try {
         validQuantity = Number(actualQuantityReceived);
-                 if (isNaN(validQuantity) || validQuantity <= 0) {
-           console.warn(`Skipping item ${actualProductId}: invalid quantity ${actualQuantityReceived} (parsed as ${validQuantity})`);
-           results.errors.push(`Invalid quantity for product ${actualProductId}: ${actualQuantityReceived}`);
-           continue;
-         }
-       } catch (error) {
-         console.warn(`Skipping item ${actualProductId}: could not parse quantity ${actualQuantityReceived}`);
-         results.errors.push(`Could not parse quantity for product ${actualProductId}: ${actualQuantityReceived}`);
-         continue;
-       }
+        if (isNaN(validQuantity) || validQuantity <= 0) {
+          console.warn(`Skipping item ${actualProductId}: invalid quantity ${actualQuantityReceived} (parsed as ${validQuantity})`);
+          results.errors.push(`Invalid quantity for product ${actualProductId}: ${actualQuantityReceived}`);
+          continue;
+        }
+      } catch (error) {
+        console.warn(`Skipping item ${actualProductId}: could not parse quantity ${actualQuantityReceived}`);
+        results.errors.push(`Could not parse quantity for product ${actualProductId}: ${actualQuantityReceived}`);
+        continue;
+      }
 
       // Find the corresponding item in the purchase order
-      const poItem = order.items.find(item => 
+      const poItem = order.items.find(item =>
         (typeof item.product === 'string' ? item.product : item.product._id).toString() === actualProductId.toString()
       );
 
-             if (!poItem) {
-         console.warn(`Product ${actualProductId} not found in purchase order ${order.poNumber}`);
-         results.errors.push(`Product ${actualProductId} not found in purchase order`);
-         continue;
-       }
+      if (!poItem) {
+        console.warn(`Product ${actualProductId} not found in purchase order ${order.poNumber}`);
+        results.errors.push(`Product ${actualProductId} not found in purchase order`);
+        continue;
+      }
 
       // Initialize receivedQuantity if it doesn't exist
       if (!poItem.receivedQuantity) {
@@ -371,31 +365,36 @@ console.log("_______order",order);
 
       // Find or create stock record
       let stock = await Stock.findOne({
-        product: actualProductId,
-        location: location
+        product: new mongoose.Types.ObjectId(actualProductId),
+        location: new mongoose.Types.ObjectId(location)
       });
 
-      const previousQuantity = stock ? stock.quantity : 0;
-console.log("__previousQuantity",previousQuantity);
+      console.log("stock-------:",actualProductId,stock,validQuantity);
+      
+
+      const currentTime = new Date();
 
       if (stock) {
         stock.quantity += validQuantity;
+        stock.reservedQuantity = stock.reservedQuantity || 0;
         stock.availableQuantity = stock.quantity - stock.reservedQuantity;
-        stock.lastUpdated = new Date();
-        await stock.save();
+        stock.lastUpdated = currentTime;
+        console.log("stock======:",validQuantity,stock);
+        
+       const res = await stock.save();
+       console.log("res---:",res);
+       
       } else {
-        // Create new stock record if doesn't exist
         stock = await Stock.create({
           product: actualProductId,
           location: location,
           quantity: validQuantity,
-          availableQuantity: validQuantity,
           reservedQuantity: 0,
-          lastUpdated: new Date()
+          availableQuantity: validQuantity,
+          lastUpdated: currentTime
         });
       }
 
-      console.log(`Updated stock for product ${actualProductId}: ${previousQuantity} -> ${stock.quantity}`);
 
       // Generate unique reference ID for this specific receipt transaction
       const referenceId = await generateReferenceId('purchase_receipt');
@@ -446,7 +445,7 @@ console.log("__previousQuantity",previousQuantity);
       .populate('items.product', 'name category brand modelNumber partNo price gst description ')
       .populate('createdBy', 'firstName lastName email');
 
-    console.log("invoiceNumber1234567:", JSON.stringify(populatedOrder));
+    console.log("invoiceNumber1234567:", populatedOrder);
     const transformedItems = (populatedOrder?.items || []).map((item: any) => ({
       product: item.product._id, // or item.product.id
       quantity: item.receivedQuantity ?? item.quantity, // use receivedQuantity if available
@@ -455,8 +454,11 @@ console.log("__previousQuantity",previousQuantity);
       taxRate: item.product.gst ?? 0
     }));
 
+    console.log(transformedItems, "ddd");
+
+
     const invoice = await createInvoiceFromPO({
-      items: transformedItems,
+      items: items,
       user: populatedOrder?.createdBy?.id,
       dueDate: receiptDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       discountAmount: req.body.discountAmount || 0,
@@ -464,12 +466,12 @@ console.log("__previousQuantity",previousQuantity);
       terms: req.body.terms || "",
       invoiceType: 'sale',
       location: location,
-      externalInvoiceNumber:externalInvoiceNumber,
-      externalInvoiceTotal:externalInvoiceTotal
+      externalInvoiceNumber: externalInvoiceNumber,
+      externalInvoiceTotal: externalInvoiceTotal
     });
 
-    console.log("invoice345:",invoice,populatedOrder?.createdBy);
-    
+    console.log("invoice345:", invoice, populatedOrder?.createdBy);
+
 
 
     //  const invoice = await createInvoiceFromPO({
@@ -711,10 +713,7 @@ const createInvoiceFromPO = async ({
   let totalTax = 0;
 
   for (const item of items) {
-    const product = await Product.findOne({ _id: item.product }, { createdAt: 1 });
-console.log("_________product",product);
-console.log("________items",items);
-
+    const product = await Product.findById(item.product);
     if (!product) {
       throw new Error(`Product not found: ${item.product}`);
     }

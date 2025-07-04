@@ -376,3 +376,100 @@ export const getInvoiceStats = async (
     next(error);
   }
 }; 
+
+
+// @desc    Update price and GST of a product in an invoice
+// @route   PUT /api/v1/invoices/:invoiceId/products/:productId
+// @access  Private
+export const updateInvoiceProductPriceAndGST = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { invoiceId } = req.params;
+    const { products } = req.body;
+
+    if (!Array.isArray(products) || products.length === 0) {
+      return next(new AppError('Products array is required and cannot be empty', 400));
+    }
+
+    // Validate invoice
+    const invoice = await Invoice.findById(invoiceId);
+    if (!invoice) {
+      return next(new AppError('Invoice not found', 404));
+    }
+
+    let updated = false;
+    let subtotal = 0;
+    let totalTax = 0;
+
+    for (const { product: productId, price, gst } of products) {
+      if (price < 0 || gst < 0) {
+        return next(new AppError('Price and GST must be non-negative', 400));
+      }
+
+      const product = await Product.findById(productId);
+      if (!product) {
+        return next(new AppError(`Product not found: ${productId}`, 404));
+      }
+
+      // Update product price and gst
+      product.price = price;
+      product.gst = gst;
+      await product.save();
+
+      // Update matching invoice item
+      invoice.items = invoice.items.map(item => {
+        if (item.product.toString() === productId) {
+          const totalPrice = item.quantity * price;
+          const taxAmount = (gst * totalPrice) / 100;
+
+          item.unitPrice = price;
+          item.taxRate = gst;
+          item.totalPrice = totalPrice;
+          item.taxAmount = taxAmount;
+
+          updated = true;
+        }
+
+        return item;
+      });
+
+      // Optionally update stock metadata
+      const stock = await Stock.findOne({ product: productId, location: invoice.location });
+      if (stock) {
+        stock.lastUpdated = price; // Optional: adjust as per schema
+        await stock.save();
+      }
+    }
+
+    // Recalculate totals
+    for (const item of invoice.items) {
+      subtotal += item.totalPrice;
+      totalTax += item.taxAmount ?? 0;
+    }
+
+    invoice.subtotal = subtotal;
+    invoice.taxAmount = totalTax;
+    invoice.totalAmount = subtotal + totalTax - invoice.discountAmount;
+    invoice.remainingAmount = invoice.totalAmount - invoice.paidAmount;
+
+    await invoice.save();
+
+    if (!updated) {
+      return next(new AppError('No matching products found in invoice items', 404));
+    }
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Product prices and GST updated successfully in invoice',
+      data: { invoice }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+

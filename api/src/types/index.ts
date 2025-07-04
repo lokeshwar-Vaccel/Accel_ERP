@@ -169,6 +169,7 @@ export interface IProduct extends Document {
   modelNumber?: string;
   specifications?: Record<string, any>;
   price: number;
+  gst: number;
   minStockLevel: number;
   isActive: boolean;
   createdBy: string;

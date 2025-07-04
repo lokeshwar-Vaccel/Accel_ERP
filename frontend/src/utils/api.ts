@@ -276,6 +276,11 @@ class ApiClient {
         method: 'PUT',
         body: JSON.stringify(data),
       }),
+    priceUpdate: (id: string, data: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/invoices/${id}/products`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
 
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/invoices/stats'),

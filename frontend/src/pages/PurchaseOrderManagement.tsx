@@ -50,6 +50,15 @@ interface POItem {
   receivedQuantity?: number; // Track received quantities
   notes?: string;
 }
+interface POItem1 {
+
+  product: string,
+  description: string,
+  quantity: number,
+  unitPrice: number,
+  taxRate: number
+
+}
 
 interface Supplier {
   _id: string;
@@ -117,6 +126,7 @@ interface ReceiveItemsData {
     batchNumber?: string;
     notes?: string;
   }>;
+  items: POItem1[]; // <-- Add this line
   location: string;
   receiptDate: string;
   inspectedBy: string;
@@ -171,18 +181,18 @@ const PurchaseOrderManagement: React.FC = () => {
     // invoiceType: 'sale',
     // location: '',
     // notes: '',
-    // items: [
-    //   {
-    //     product: '',
-    //     description: '',
-    //     quantity: 1,
-    //     unitPrice: 0,
-    //     taxRate: 18
-    //   }
-    // ],
+    items: [
+      {
+        product: '',
+        description: '',
+        quantity: 1,
+        unitPrice: 0,
+        taxRate: 18
+      }
+    ],
     // discountAmount: 0,
-    externalInvoiceNumber: '',
-    externalInvoiceTotal: 0,
+    // externalInvoiceNumber: '',
+    // externalInvoiceTotal: 0,
     // reduceStock: true
   });
 
@@ -218,12 +228,17 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const [receiveData, setReceiveData] = useState<ReceiveItemsData>({
     receivedItems: [],
+    items: [], // <-- Add this line
     location: 'main-warehouse',
     receiptDate: '',
     inspectedBy: '',
     externalInvoiceNumber: '',
     externalInvoiceTotal: 0,
+    notes: '',
   });
+
+  console.log("receiveData--------:", receiveData);
+
 
   // Form errors
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -669,6 +684,8 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const openReceiveModal = (po: PurchaseOrder) => {
+    console.log("po-------:", po);
+
     setSelectedPO(po);
     setReceiveSearchTerm(''); // Clear search when opening modal
 
@@ -678,17 +695,33 @@ const PurchaseOrderManagement: React.FC = () => {
     setReceiveData({
       receivedItems: po.items.map(item => ({
         productId: typeof item.product === 'string' ? item.product : item.product?._id,
-        quantityReceived: 0, // Start with 0, user must enter quantity
+        quantityReceived: 0,
         condition: 'good',
         batchNumber: '',
         notes: ''
       })),
+      items: po.items.map(item => {
+        const product = item.product;
+        const productId = typeof product === 'string' ? product : product?._id;
+        const unitPrice = typeof product === 'object' && product?.price ? product.price : 0;
+        const taxRate = typeof product === 'object' && product?.gst ? product.gst : 0;
+
+        return {
+          product: productId,
+          description: '',
+          quantity: 0,
+          unitPrice,
+          taxRate
+        };
+      }),
       location: defaultLocation,
-      receiptDate: new Date().toISOString().split('T')[0], // Set today's date
-      inspectedBy: 'Admin', // Default inspector
+      receiptDate: new Date().toISOString().split('T')[0],
+      inspectedBy: 'Admin',
       externalInvoiceNumber: '',
       externalInvoiceTotal: 0,
+      notes: '',
     });
+
     setShowReceiveModal(true);
   };
 
@@ -832,9 +865,13 @@ const PurchaseOrderManagement: React.FC = () => {
       // Reset receive data for next time
       setReceiveData({
         receivedItems: [],
+        items: [],
         location: locations.length > 0 ? locations[0]._id : 'loc-main-warehouse',
         receiptDate: new Date().toISOString().split('T')[0],
-        inspectedBy: 'Admin'
+        inspectedBy: 'Admin',
+        externalInvoiceNumber: '',
+        externalInvoiceTotal: 0,
+        notes: '',
       });
 
       setShowReceiveModal(false);
@@ -2460,18 +2497,36 @@ const PurchaseOrderManagement: React.FC = () => {
                                     type="number"
                                     value={receivedItem?.quantityReceived || 0}
                                     onChange={(e) => {
+                                      const qty = parseInt(e.target.value) || 0;
+
+                                      // Update receivedItems
                                       const newReceivedItems = [...receiveData.receivedItems];
                                       const existingItem = newReceivedItems[originalIndex] || {};
                                       newReceivedItems[originalIndex] = {
                                         ...existingItem,
                                         productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
-                                        quantityReceived: parseInt(e.target.value) || 0,
+                                        quantityReceived: qty,
                                         condition: existingItem.condition || 'good',
                                         batchNumber: existingItem.batchNumber || '',
                                         notes: existingItem.notes || ''
                                       };
-                                      setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
+
+                                      // Update items (quantity)
+                                      const newItems = [...receiveData.items];
+                                      if (newItems[originalIndex]) {
+                                        newItems[originalIndex] = {
+                                          ...newItems[originalIndex],
+                                          quantity: qty
+                                        };
+                                      }
+
+                                      setReceiveData({
+                                        ...receiveData,
+                                        receivedItems: newReceivedItems,
+                                        items: newItems
+                                      });
                                     }}
+
                                     className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                     min="0"
                                     max={remainingQty}

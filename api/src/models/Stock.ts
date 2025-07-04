@@ -135,7 +135,7 @@ const stockSchema = new Schema({
   quantity: {
     type: Number,
     required: [true, 'Quantity is required'],
-    min: [0, 'Quantity cannot be negative'],
+    // min: [0, 'Quantity cannot be negative'],
     default: 0
   },
   reservedQuantity: {
@@ -145,7 +145,7 @@ const stockSchema = new Schema({
   },
   availableQuantity: {
     type: Number,
-    min: [0, 'Available quantity cannot be negative'],
+    // min: [0, 'Available quantity cannot be negative'],
     default: 0
   },
   lastUpdated: {
@@ -168,6 +168,8 @@ stockSchema.pre('save', function(this: any, next) {
   
   // Validate that reserved quantity doesn't exceed total quantity
   if (this.reservedQuantity > this.quantity) {
+    console.log("this.reservedQuantity:",this.reservedQuantity,this.quantity);
+    
     throw new Error('Reserved quantity cannot exceed total quantity');
   }
   

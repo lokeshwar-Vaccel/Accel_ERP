@@ -27,6 +27,8 @@ import { Modal } from '../components/ui/Modal';
 import PageHeader from '../components/ui/PageHeader';
 import { apiClient } from '../utils/api';
 import { RootState } from '../redux/store';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // Types
 interface Invoice {
@@ -37,6 +39,10 @@ interface Invoice {
     name: string;
     email: string;
     phone: string;
+  };
+  user?: {
+    firstName?: string;
+    email?: string;
   };
   issueDate: string;
   dueDate: string;
@@ -166,7 +172,7 @@ const InvoiceManagement: React.FC = () => {
   const [showViewModal, setShowViewModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
 
   // Status update states
   const [statusUpdate, setStatusUpdate] = useState<StatusUpdate>({
@@ -181,8 +187,8 @@ const InvoiceManagement: React.FC = () => {
     notes: ''
   });
 
-  console.log("paymentUpdate:",paymentUpdate);
-  
+  console.log("paymentUpdate:", paymentUpdate);
+
 
   // Form states
   const [newInvoice, setNewInvoice] = useState<NewInvoice>({
@@ -217,45 +223,67 @@ const InvoiceManagement: React.FC = () => {
 
 
   const [editMode, setEditMode] = useState(false);
+  const [editModeChanges, setEditModeChanges] = useState(true);
 
-const handleItemEdit = (index: number, field: string, value: any) => {
-  if (!selectedInvoice) return;
-  const updatedItems = [...selectedInvoice.items];
-  updatedItems[index] = { ...updatedItems[index], [field]: value };
-  // Recalculate total price for the item
-  const item = updatedItems[index] as any;
-  const subtotal = item.quantity * item.unitPrice;
-  const taxAmount = subtotal * (item.taxRate / 100);
-  // Add totalPrice property for calculation
-  item.totalPrice = subtotal + taxAmount;
-  updatedItems[index] = item;
-  setSelectedInvoice({
-    ...selectedInvoice,
-    items: updatedItems,
-    totalAmount: updatedItems.reduce((sum, item: any) => sum + (item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)), 0)
-  });
-};
+  const handleItemEdit = (index: number, field: string, value: any) => {
+    if (!selectedInvoice) return;
+    const updatedItems = [...selectedInvoice.items];
+    updatedItems[index] = { ...updatedItems[index], [field]: value };
+    // Recalculate total price for the item
+    const item = updatedItems[index] as any;
+    const subtotal = item.quantity * item.unitPrice;
+    const taxAmount = subtotal * (item.taxRate / 100);
+    // Add totalPrice property for calculation
+    item.totalPrice = subtotal + taxAmount;
+    updatedItems[index] = item;
+    setSelectedInvoice({
+      ...selectedInvoice,
+      items: updatedItems,
+      totalAmount: updatedItems.reduce((sum, item: any) => sum + (item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)), 0)
+    });
+  };
 
-const recalculateItem = (index: number) => {
-  if (!selectedInvoice) return;
-  const updatedItems = [...selectedInvoice.items];
-  const item = updatedItems[index] as any;
-  const subtotal = item.quantity * item.unitPrice;
-  const taxAmount = subtotal * (item.taxRate / 100);
-  item.totalPrice = subtotal + taxAmount;
-  updatedItems[index] = item;
-  setSelectedInvoice({
-    ...selectedInvoice,
-    items: updatedItems,
-    totalAmount: updatedItems.reduce((sum, item: any) => sum + (item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)), 0)
-  });
-};
+  const recalculateItem = (index: number) => {
+    if (!selectedInvoice) return;
+    const updatedItems = [...selectedInvoice.items];
+    const item = updatedItems[index] as any;
+    const subtotal = item.quantity * item.unitPrice;
+    const taxAmount = subtotal * (item.taxRate / 100);
+    item.totalPrice = subtotal + taxAmount;
+    updatedItems[index] = item;
+    setSelectedInvoice({
+      ...selectedInvoice,
+      items: updatedItems,
+      totalAmount: updatedItems.reduce((sum, item: any) => sum + (item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)), 0)
+    });
+  };
+  console.log("selectedInvoice:", selectedInvoice);
 
-const handleSaveChanges = () => {
-  // Save the changes to your backend/state
-  setEditMode(false);
-  // Add your save logic here
-};
+
+  const handleSaveChanges = async () => {
+    try {
+      if (!selectedInvoice) return;
+
+      const payload = {
+        products: selectedInvoice.items.map((item) => ({
+          product: item.product._id || item.product, // Handles populated or plain ID
+          price: item.unitPrice,
+          gst: item.taxRate,
+        })),
+      };
+
+      const res = await apiClient.invoices.priceUpdate(selectedInvoice._id, payload);
+
+      // setEditMode(false);
+      // Optionally show toast or refresh invoice list
+    } catch (error) {
+      console.error('Error updating invoice items:', error);
+    } finally {
+      setEditMode(false);
+      // setEditModeChanges(true);
+    }
+  };
+
 
 
   // Initialize data
@@ -409,7 +437,7 @@ const handleSaveChanges = () => {
   const handleUpdatePayment = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
     console.log("check---");
-    
+
 
     // Smart defaults based on current payment status
     let defaultPaymentStatus = 'paid';
@@ -928,6 +956,185 @@ const handleSaveChanges = () => {
     return options.find(opt => opt.value === value)?.label || 'Select payment method';
   };
 
+          // Add this import at the top of your file
+// import jsPDF from 'jspdf';
+// import 'jspdf-autotable';
+
+// PDF Generation Function
+const generatePDF = () => {
+  if (!selectedInvoice) return;
+
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.width;
+  const pageHeight = doc.internal.pageSize.height;
+
+  // Company Header
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text('INVOICE', pageWidth / 2, 20, { align: 'center' });
+
+  // Invoice Details
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Invoice #: ${selectedInvoice.invoiceNumber}`, 20, 40);
+  doc.text(`Issue Date: ${new Date(selectedInvoice.issueDate).toLocaleDateString()}`, 20, 50);
+  doc.text(`Due Date: ${new Date(selectedInvoice.dueDate).toLocaleDateString()}`, 20, 60);
+
+  // Status badges
+  doc.text(`Status: ${selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}`, 140, 40);
+  doc.text(`Payment: ${selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}`, 140, 50);
+
+  // Customer Info
+  doc.setFont('helvetica', 'bold');
+  doc.text('Bill To:', 20, 80);
+  doc.setFont('helvetica', 'normal');
+  doc.text(selectedInvoice.customer ? selectedInvoice.customer.name : selectedInvoice.user?.firstName || '', 20, 90);
+  doc.text(selectedInvoice.customer ? selectedInvoice.customer.email : selectedInvoice.user?.email || '', 20, 100);
+  if (selectedInvoice.customer?.phone) {
+    doc.text(selectedInvoice.customer.phone, 20, 110);
+  }
+
+  // Items Table
+  const tableStartY = 130;
+  const tableData = selectedInvoice.items.map(item => [
+    item.description,
+    item.quantity.toString(),
+    `₹${item.unitPrice.toLocaleString()}`,
+    `${item.taxRate}%`,
+    `₹${(item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)).toLocaleString()}`
+  ]);
+
+  autoTable(doc, {
+    head: [['Description', 'Qty', 'Unit Price', 'Tax', 'Total']],
+    body: tableData,
+    startY: tableStartY,
+    theme: 'grid',
+    styles: { fontSize: 10 },
+    headStyles: { fillColor: [71, 85, 105], textColor: 255 },
+    alternateRowStyles: { fillColor: [249, 250, 251] },
+  });
+
+  // Calculate totals
+  const subtotal = selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+  const totalTax = selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice * item.taxRate / 100), 0);
+  const finalY = doc.lastAutoTable.finalY + 20;
+
+  // Summary
+  doc.setFont('helvetica', 'normal');
+  doc.text('Subtotal:', 140, finalY);
+  doc.text(`₹${subtotal.toLocaleString()}`, 170, finalY);
+  doc.text('Total Tax:', 140, finalY + 10);
+  doc.text(`₹${totalTax.toLocaleString()}`, 170, finalY + 10);
+  doc.text('Items Count:', 140, finalY + 20);
+  doc.text(selectedInvoice.items.length.toString(), 170, finalY + 20);
+
+  // Total Amount
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('Total Amount:', 140, finalY + 35);
+  doc.text(`₹${selectedInvoice.totalAmount.toLocaleString()}`, 170, finalY + 35);
+
+  // Amount mismatch warning
+  if (selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal) {
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(255, 0, 0);
+    doc.text(`External Total: ₹${selectedInvoice.externalInvoiceTotal?.toLocaleString()}`, 140, finalY + 45);
+    doc.setTextColor(0, 0, 0);
+  }
+
+  // Save PDF
+  doc.save(`Invoice_${selectedInvoice.invoiceNumber}.pdf`);
+};
+
+// Alternative: Print-friendly HTML version
+const printInvoice = () => {
+  const printContent = `
+    <html>
+      <head>
+        <title>Invoice ${selectedInvoice.invoiceNumber}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 20px; }
+          .header { text-align: center; margin-bottom: 30px; }
+          .invoice-details { display: flex; justify-content: space-between; margin-bottom: 20px; }
+          .customer-info { margin-bottom: 20px; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+          th { background-color: #f2f2f2; }
+          .total-section { text-align: right; margin-top: 20px; }
+          .mismatch-warning { color: red; font-weight: bold; margin-top: 10px; }
+          @media print { 
+            body { margin: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>INVOICE</h1>
+          <h2>Invoice #${selectedInvoice.invoiceNumber}</h2>
+        </div>
+        
+        <div class="invoice-details">
+          <div>
+            <p><strong>Issue Date:</strong> ${new Date(selectedInvoice.issueDate).toLocaleDateString()}</p>
+            <p><strong>Due Date:</strong> ${new Date(selectedInvoice.dueDate).toLocaleDateString()}</p>
+          </div>
+          <div>
+            <p><strong>Status:</strong> ${selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}</p>
+            <p><strong>Payment:</strong> ${selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}</p>
+          </div>
+        </div>
+
+        <div class="customer-info">
+          <h3>Bill To:</h3>
+          <p><strong>${selectedInvoice.customer ? selectedInvoice.customer.name : selectedInvoice.user?.firstName || ''}</strong></p>
+          <p>${selectedInvoice.customer ? selectedInvoice.customer.email : selectedInvoice.user?.email || ''}</p>
+          ${selectedInvoice.customer?.phone ? `<p>${selectedInvoice.customer.phone}</p>` : ''}
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th>Qty</th>
+              <th>Unit Price</th>
+              <th>Tax</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${selectedInvoice.items.map(item => `
+              <tr>
+                <td>${item.description}</td>
+                <td>${item.quantity}</td>
+                <td>₹${item.unitPrice.toLocaleString()}</td>
+                <td>${item.taxRate}%</td>
+                <td>₹${(item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)).toLocaleString()}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="total-section">
+          <p><strong>Subtotal:</strong> ₹${selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0).toLocaleString()}</p>
+          <p><strong>Total Tax:</strong> ₹${selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice * item.taxRate / 100), 0).toLocaleString()}</p>
+          <p><strong>Items Count:</strong> ${selectedInvoice.items.length}</p>
+          <p><strong>Total Quantity:</strong> ${selectedInvoice.items.reduce((sum, item) => sum + item.quantity, 0)}</p>
+          <h2><strong>Total Amount: ₹${selectedInvoice.totalAmount.toLocaleString()}</strong></h2>
+          ${selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ? 
+            `<p class="mismatch-warning">External Total: ₹${selectedInvoice.externalInvoiceTotal?.toLocaleString()}</p>` : ''}
+        </div>
+      </body>
+    </html>
+  `;
+
+  const printWindow = window.open('', '_blank');
+  printWindow.document.write(printContent);
+  printWindow.document.close();
+  printWindow.print();
+};
+
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader
@@ -1085,8 +1292,8 @@ const handleSaveChanges = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{invoice.customer?invoice.customer.name:invoice.user?.firstName}</div>
-                        <div className="text-xs text-gray-500">{invoice.customer?invoice.customer.email:invoice.user?.email}</div>
+                        <div className="text-sm font-medium text-gray-900">{invoice.customer ? invoice.customer.name : invoice.user?.firstName}</div>
+                        <div className="text-xs text-gray-500">{invoice.customer ? invoice.customer.email : invoice.user?.email}</div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
@@ -1547,7 +1754,7 @@ const handleSaveChanges = () => {
                           type="text"
                           value={newInvoice.externalInvoiceNumber}
                           onChange={(e) => setNewInvoice({ ...newInvoice, externalInvoiceNumber: e.target.value })}
-                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.externalInvoiceNumber ? 'border-red-500' : 'border-gray-300'
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.externalInvoiceNumber ? 'border-red-500' : 'border-gray-300'
                             }`}
                           placeholder="External Invoice No"
                         />
@@ -1643,217 +1850,246 @@ const handleSaveChanges = () => {
       )}
 
       {/* View Invoice Modal */}
-{showViewModal && selectedInvoice && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-      <div className="flex items-center justify-between p-4 border-b border-gray-200">
-        <h2 className="text-xl font-semibold text-gray-900">Invoice {selectedInvoice.invoiceNumber}</h2>
+      {showViewModal && selectedInvoice && (
+
+
+// Updated Modal Component with Print Options
+<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+  <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+    <div className="flex items-center justify-between p-4 border-b border-gray-200">
+      <h2 className="text-xl font-semibold text-gray-900">Invoice {selectedInvoice.invoiceNumber ?? ''}</h2>
+      <div className="flex items-center space-x-2">
+        {/* Print Options */}
         <button
-          onClick={() => setShowViewModal(false)}
+          onClick={generatePDF}
+          className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+        >
+          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          Download PDF
+        </button>
+        <button
+          onClick={printInvoice}
+          className="flex items-center px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
+        >
+          <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          Print
+        </button>
+        <button
+          onClick={() => { setShowViewModal(false); setEditMode(false) }}
           className="text-gray-400 hover:text-gray-600"
         >
           <X className="w-6 h-6" />
         </button>
       </div>
+    </div>
 
-      <div className="p-6 space-y-6">
-        {/* Invoice Header */}
-        <div className="border-b border-gray-200 pb-4">
-          <div className="flex justify-between items-start">
-            <div>
-              <h3 className="text-xl font-bold text-gray-900">
-                Invoice #{selectedInvoice.invoiceNumber}
-              </h3>
-              <p className="text-sm text-gray-600 mt-1">
-                Issue Date: {new Date(selectedInvoice.issueDate).toLocaleDateString()}
-              </p>
-              <p className="text-sm text-gray-600">
-                Due Date: {new Date(selectedInvoice.dueDate).toLocaleDateString()}
-              </p>
-            </div>
-            <div className="text-right">
-              <div className="flex space-x-2 mb-2">
-                <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedInvoice.status)}`}>
-                  {selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}
-                </span>
-                <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getPaymentStatusColor(selectedInvoice.paymentStatus)}`}>
-                  {selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}
-                </span>
-              </div>
+    <div className="p-6 space-y-6">
+      {/* Rest of your existing modal content remains the same */}
+      {/* Invoice Header */}
+      <div className="border-b border-gray-200 pb-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <h3 className="text-xl font-bold text-gray-900">
+              Invoice #{selectedInvoice.invoiceNumber ?? ''}
+            </h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Issue Date: {selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : ''}
+            </p>
+            <p className="text-sm text-gray-600">
+              Due Date: {selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : ''}
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="flex space-x-2 mb-2">
+              <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedInvoice.status ?? '')}`}>
+                {(selectedInvoice.status ?? '').charAt(0).toUpperCase() + (selectedInvoice.status ?? '').slice(1)}
+              </span>
+              <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getPaymentStatusColor(selectedInvoice.paymentStatus ?? '')}`}>
+                {(selectedInvoice.paymentStatus ?? '').charAt(0).toUpperCase() + (selectedInvoice.paymentStatus ?? '').slice(1)}
+              </span>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Customer Info */}
-        <div>
-          <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
-          <div className="text-sm text-gray-600">
-            <p className="font-medium">{selectedInvoice.customer?selectedInvoice.customer.name:selectedInvoice.user?.firstName}</p>
-            <p>{selectedInvoice.customer?selectedInvoice.customer.email:selectedInvoice.user?.email}</p>
-            <p>{selectedInvoice.customer?selectedInvoice.customer.phone:""}</p>
+      {/* Customer Info */}
+      <div>
+        <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
+        <div className="text-sm text-gray-600">
+          <p className="font-medium">{selectedInvoice.customer ? selectedInvoice.customer.name : selectedInvoice.user?.firstName ?? ''}</p>
+          <p>{selectedInvoice.customer ? selectedInvoice.customer.email : selectedInvoice.user?.email ?? ''}</p>
+          <p>{selectedInvoice.customer ? selectedInvoice.customer.phone : ''}</p>
+        </div>
+      </div>
+
+      {/* Total Amount Mismatch Warning */}
+      {selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center">
+            <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+            <div className="flex-1">
+              <h4 className="text-sm font-medium text-yellow-800">Amount Mismatch Detected</h4>
+              <p className="text-sm text-yellow-700 mt-1">
+                Calculated Total: ₹{(selectedInvoice?.totalAmount ?? 0).toLocaleString()} |
+                External Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toLocaleString()}
+              </p>
+            </div>
+            <button
+              onClick={() => setEditMode(true)}
+              className="ml-3 bg-yellow-600 text-white px-3 py-1 rounded-md text-sm hover:bg-yellow-700"
+            >
+              Edit Items
+            </button>
           </div>
         </div>
+      )}
 
-        {/* Total Amount Mismatch Warning */}
-        {selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-            <div className="flex items-center">
-              <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
-              <div className="flex-1">
-                <h4 className="text-sm font-medium text-yellow-800">Amount Mismatch Detected</h4>
-                <p className="text-sm text-yellow-700 mt-1">
-                  Calculated Total: ₹{selectedInvoice?.totalAmount?.toLocaleString()} | 
-                  External Total: ₹{selectedInvoice?.externalInvoiceTotal?.toLocaleString()}
-                </p>
-              </div>
+      {/* Invoice Items */}
+      <div>
+        <h4 className="font-medium text-gray-900 mb-3">Items:</h4>
+        <div className="overflow-x-auto">
+          <table className="w-full border border-gray-200 rounded-lg">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                {editMode && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {(selectedInvoice.items || []).map((item, index) => (
+                <tr key={index}>
+                  <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
+                  <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
+                  <td className="px-4 py-2 text-sm text-gray-900">
+                    {editMode ? (
+                      <input
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={(e) => handleItemEdit(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                        onBlur={() => recalculateItem(index)}
+                        className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        step="0.01"
+                      />
+                    ) : (
+                      `₹${(item.unitPrice ?? 0).toLocaleString()}`
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-sm text-gray-900">
+                    {editMode ? (
+                      <input
+                        type="number"
+                        value={item.taxRate}
+                        onChange={(e) => handleItemEdit(index, 'taxRate', parseFloat(e.target.value) || 0)}
+                        onBlur={() => recalculateItem(index)}
+                        className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        step="0.01"
+                        min="0"
+                        max="100"
+                      />
+                    ) : (
+                      `${item.taxRate ?? 0}%`
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{((item.quantity ?? 0) * (item.unitPrice ?? 0) + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate || 0) / 100)).toLocaleString()}</td>
+                  {editMode && (
+                    <td className="px-4 py-2 text-sm">
+                      <button
+                        onClick={() => recalculateItem(index)}
+                        className="text-blue-600 hover:text-blue-800 text-xs"
+                      >
+                        Recalc
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Edit Mode Actions */}
+      {editMode && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-600">
+              <p>Make adjustments to unit prices and tax rates to match the external total.</p>
+              <p className="font-medium mt-1">Target Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toLocaleString()}</p>
+            </div>
+            <div className="flex space-x-2">
               <button
-                onClick={() => setEditMode(true)}
-                className="ml-3 bg-yellow-600 text-white px-3 py-1 rounded-md text-sm hover:bg-yellow-700"
+                onClick={() => setEditMode(false)}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
               >
-                Edit Items
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  handleSaveChanges();
+                  setEditMode(false);
+                }}
+                className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+              >
+                Save Changes
               </button>
             </div>
           </div>
-        )}
-
-        {/* Invoice Items */}
-        <div>
-          <h4 className="font-medium text-gray-900 mb-3">Items:</h4>
-          <div className="overflow-x-auto">
-            <table className="w-full border border-gray-200 rounded-lg">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                  {editMode && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                  )}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {selectedInvoice.items.map((item, index) => (
-                  <tr key={index}>
-                    <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                    <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
-                    <td className="px-4 py-2 text-sm text-gray-900">
-                      {editMode && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ? (
-                        <input
-                          type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => handleItemEdit(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          step="0.01"
-                        />
-                      ) : (
-                        `₹${item.unitPrice.toLocaleString()}`
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-sm text-gray-900">
-                      {editMode && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ? (
-                        <input
-                          type="number"
-                          value={item.taxRate}
-                          onChange={(e) => handleItemEdit(index, 'taxRate', parseFloat(e.target.value) || 0)}
-                          className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          step="0.01"
-                          min="0"
-                          max="100"
-                        />
-                      ) : (
-                        `${item.taxRate}%`
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{(item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)).toLocaleString()}</td>
-                    {editMode && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
-                      <td className="px-4 py-2 text-sm">
-                        <button
-                          onClick={() => recalculateItem(index)}
-                          className="text-blue-600 hover:text-blue-800 text-xs"
-                        >
-                          Recalc
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
         </div>
+      )}
 
-        {/* Edit Mode Actions */}
-        {editMode && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600">
-                <p>Make adjustments to unit prices and tax rates to match the external total.</p>
-                <p className="font-medium mt-1">Target Total: ₹{selectedInvoice?.externalInvoiceTotal?.toLocaleString()}</p>
+      {/* Invoice Total */}
+      <div className="border-t border-gray-200 pt-4">
+        <div className="flex justify-end">
+          <div className="w-64 space-y-2 text-right">
+            <div className="text-sm text-gray-600 space-y-1">
+              <div className="flex justify-between">
+                <span>Subtotal:</span>
+                <span>₹{(selectedInvoice.items || []).reduce((sum, item) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toLocaleString()}</span>
               </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setEditMode(false)}
-                  className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveChanges}
-                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                >
-                  Save Changes
-                </button>
+              <div className="flex justify-between">
+                <span>Total Tax:</span>
+                <span>₹{(selectedInvoice.items || []).reduce((sum, item) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Items Count:</span>
+                <span>{(selectedInvoice.items || []).length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Quantity:</span>
+                <span>{(selectedInvoice.items || []).reduce((sum, item) => sum + (item.quantity ?? 0), 0)}</span>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Invoice Total */}
-       <div className="border-t border-gray-200 pt-4">
-          <div className="flex justify-end">
-            <div className="w-64 space-y-2 text-right">
-              {/* Brief Details */}
-              <div className="text-sm text-gray-600 space-y-1">
-                <div className="flex justify-between">
-                  <span>Subtotal:</span>
-                  <span>₹{selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Total Tax:</span>
-                  <span>₹{selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice * item.taxRate / 100), 0).toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Items Count:</span>
-                  <span>{selectedInvoice.items.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Total Quantity:</span>
-                  <span>{selectedInvoice.items.reduce((sum, item) => sum + item.quantity, 0)}</span>
-                </div>
+            <div className="border-t pt-2">
+              <div className="flex justify-between text-lg font-bold">
+                <span>Total Amount:</span>
+                <span className={selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ? 'text-red-600' : 'text-gray-900'}>
+                  ₹{(selectedInvoice.totalAmount ?? 0).toLocaleString()}
+                </span>
               </div>
-              <div className="border-t pt-2">
-                <div className="flex justify-between text-lg font-bold">
-                  <span>Total Amount:</span>
-                  <span className={selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ? 'text-red-600' : 'text-gray-900'}>
-                     ₹{selectedInvoice.totalAmount.toLocaleString()}
-                  </span>
+              {selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
+                <div className="flex justify-between text-sm text-gray-600 mt-1">
+                  <span>External Total:</span>
+                  <span>₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toLocaleString()}</span>
                 </div>
-                {selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
-                  <div className="flex justify-between text-sm text-gray-600 mt-1">
-                    <span>External Total:</span>
-                    <span>₹{selectedInvoice?.externalInvoiceTotal?.toLocaleString()}</span>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </div>
       </div>
     </div>
   </div>
-)}
+</div>
+      )}
 
       {/* Status Update Modal */}
       {showStatusModal && selectedInvoice && (

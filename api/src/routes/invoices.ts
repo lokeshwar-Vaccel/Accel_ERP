@@ -4,7 +4,8 @@ import {
   getInvoices, 
   createInvoice, 
   updateInvoice, 
-  getInvoiceStats 
+  getInvoiceStats, 
+  updateInvoiceProductPriceAndGST
 } from '../controllers/invoiceController';
 
 const router = Router();
@@ -23,5 +24,10 @@ router.route('/stats')
 
 router.route('/:id')
   .put(checkPermission('write'), updateInvoice);
+
+  router.put(
+  '/:invoiceId/products',
+  updateInvoiceProductPriceAndGST
+);
 
 export default router; 
