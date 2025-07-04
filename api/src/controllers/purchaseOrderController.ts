@@ -5,6 +5,10 @@ import { StockLedger } from '../models/StockLedger';
 import { AuthenticatedRequest, APIResponse, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { generateReferenceId } from '../utils/generateReferenceId';
+import { Product } from '../models/Product';
+import { Invoice } from '../models/Invoice';
+import { Types } from 'mongoose';
+import { log } from 'console';
 
 // Purchase Order Status enum for internal use
 enum PurchaseOrderStatus {
@@ -19,6 +23,14 @@ enum PurchaseOrderStatus {
   COMPLETED = 'completed'
 }
 
+type InvoiceItemInput = {
+  product: string;
+  quantity: number;
+  unitPrice: number;
+  description?: string;
+  taxRate?: number;
+};
+
 // @desc    Get all purchase orders
 // @route   GET /api/v1/purchase-orders
 // @access  Private
@@ -28,10 +40,10 @@ export const getPurchaseOrders = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      sort = '-createdAt', 
+    const {
+      page = 1,
+      limit = 10,
+      sort = '-createdAt',
       search,
       status,
       supplier,
@@ -46,7 +58,7 @@ export const getPurchaseOrders = async (
 
     // Build query
     const query: any = {};
-    
+
     if (search) {
       query.$or = [
         { poNumber: { $regex: search, $options: 'i' } },
@@ -54,15 +66,15 @@ export const getPurchaseOrders = async (
         { notes: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     if (status) {
       query.status = status;
     }
-    
+
     if (supplier) {
       query.supplier = { $regex: supplier, $options: 'i' };
     }
-    
+
     if (dateFrom || dateTo) {
       query.orderDate = {};
       if (dateFrom) query.orderDate.$gte = new Date(dateFrom);
@@ -71,7 +83,7 @@ export const getPurchaseOrders = async (
 
     // Execute query with pagination
     const orders = await PurchaseOrder.find(query)
-      .populate('items.product', 'name category brand modelNumber partNo price')
+      .populate('items.product', 'name category brand modelNumber partNo price gst')
       .populate('createdBy', 'firstName lastName email')
       .sort(sort as string)
       .limit(Number(limit))
@@ -108,7 +120,7 @@ export const getPurchaseOrder = async (
 ): Promise<void> => {
   try {
     const order = await PurchaseOrder.findById(req.params.id)
-      .populate('items.product', 'name category brand modelNumber partNo specifications price')
+      .populate('items.product', 'name category brand modelNumber partNo specifications price gst')
       .populate('createdBy', 'firstName lastName email');
 
     if (!order) {
@@ -137,6 +149,9 @@ export const createPurchaseOrder = async (
 ): Promise<void> => {
   try {
     // Calculate total amount from items
+
+    console.log("________req.body.items",req.body);
+    
     let totalAmount = 0;
     if (req.body.items && Array.isArray(req.body.items)) {
       for (const item of req.body.items) {
@@ -156,8 +171,10 @@ export const createPurchaseOrder = async (
 
     const order = await PurchaseOrder.create(orderData);
 
+
+
     const populatedOrder = await PurchaseOrder.findById(order._id)
-      .populate('items.product', 'name category brand modelNumber partNo price')
+      .populate('items.product', 'name category brand modelNumber partNo price gst')
       .populate('createdBy', 'firstName lastName email');
 
     const response: APIResponse = {
@@ -195,6 +212,7 @@ export const updatePurchaseOrder = async (
       }
       req.body.totalAmount = totalAmount;
     }
+// console.log("______totalAmount",totalAmount);
 
     const updatedOrder = await PurchaseOrder.findByIdAndUpdate(
       req.params.id,
@@ -258,14 +276,15 @@ export const receiveItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { receivedItems, location, receiptDate, inspectedBy, notes } = req.body;
+    const { receivedItems, location, receiptDate, inspectedBy, notes,externalInvoiceNumber,externalInvoiceTotal } = req.body;
 
     const order = await PurchaseOrder.findById(req.params.id)
       .populate('items.product', 'name category brand partNo');
-    
+
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
     }
+console.log("_______order",order);
 
     if (!['confirmed', 'partially_received'].includes(order.status)) {
       return next(new AppError('Purchase order must be confirmed before receiving items', 400));
@@ -288,11 +307,11 @@ export const receiveItems = async (
         batchNumber, 
         notes: itemNotes 
       } = receivedItem;
-      
+
       // Handle both field name formats for compatibility
       const actualProductId = productId || product;
       const actualQuantityReceived = quantityReceived || receivedQuantity;
-      
+
       console.log(`Processing received item:`, {
         productId: actualProductId,
         quantityReceived: actualQuantityReceived,
@@ -351,12 +370,13 @@ export const receiveItems = async (
       poItem.receivedQuantity = newReceivedQuantity;
 
       // Find or create stock record
-      let stock = await Stock.findOne({ 
-        product: actualProductId, 
+      let stock = await Stock.findOne({
+        product: actualProductId,
         location: location
       });
 
       const previousQuantity = stock ? stock.quantity : 0;
+console.log("__previousQuantity",previousQuantity);
 
       if (stock) {
         stock.quantity += validQuantity;
@@ -423,8 +443,45 @@ export const receiveItems = async (
 
     // Populate the order with product details for frontend
     const populatedOrder = await PurchaseOrder.findById(order._id)
-      .populate('items.product', 'name category brand modelNumber partNo price')
+      .populate('items.product', 'name category brand modelNumber partNo price gst description ')
       .populate('createdBy', 'firstName lastName email');
+
+    console.log("invoiceNumber1234567:", JSON.stringify(populatedOrder));
+    const transformedItems = (populatedOrder?.items || []).map((item: any) => ({
+      product: item.product._id, // or item.product.id
+      quantity: item.receivedQuantity ?? item.quantity, // use receivedQuantity if available
+      unitPrice: item.unitPrice,
+      description: item.product.name,
+      taxRate: item.product.gst ?? 0
+    }));
+
+    const invoice = await createInvoiceFromPO({
+      items: transformedItems,
+      user: populatedOrder?.createdBy?.id,
+      dueDate: receiptDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      discountAmount: req.body.discountAmount || 0,
+      notes: req.body.notes || "",
+      terms: req.body.terms || "",
+      invoiceType: 'sale',
+      location: location,
+      externalInvoiceNumber:externalInvoiceNumber,
+      externalInvoiceTotal:externalInvoiceTotal
+    });
+
+    console.log("invoice345:",invoice,populatedOrder?.createdBy);
+    
+
+
+    //  const invoice = await createInvoiceFromPO({
+    //   items: populatedOrder?.items,
+    //   customer: populatedOrder?.createdBy?.id,  // ensure customer field is passed
+    //   dueDate: receiptDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // default 7 days
+    //   discountAmount: req.body.discountAmount  || 0,
+    //   notes: req.body.notes || "",
+    //   terms: req.body.terms || "",
+    //   invoiceType: 'purchase',
+    //   location: location,
+    // });
 
     console.log(`Purchase order ${order.poNumber} status updated to ${order.status}. Received: ${totalReceivedQuantity}/${totalOrderedQuantity}`);
 
@@ -437,14 +494,15 @@ export const receiveItems = async (
     const response: APIResponse = {
       success: true,
       message,
-      data: { 
+      data: {
         order: populatedOrder,
         receivedItems,
         totalOrderedQuantity,
         totalReceivedQuantity,
         status: populatedOrder!.status,
         message: 'Stock levels and ledger have been updated',
-        errors: results.errors.length > 0 ? results.errors : undefined
+        errors: results.errors.length > 0 ? results.errors : undefined,
+        invoice
       }
     };
 
@@ -581,7 +639,7 @@ export const updatePurchaseOrderStatus = async (
 ): Promise<void> => {
   try {
     const { status } = req.body;
-    
+
     const order = await PurchaseOrder.findById(req.params.id);
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
@@ -614,4 +672,120 @@ export const updatePurchaseOrderStatus = async (
   } catch (error) {
     next(error);
   }
-}; 
+};
+
+// helper functions to create invoice
+
+
+const createInvoiceFromPO = async ({
+  items,
+  user,
+  dueDate,
+  discountAmount = 0,
+  notes,
+  terms,
+  invoiceType,
+  location,
+  reduceStock = true,
+  externalInvoiceNumber,
+  externalInvoiceTotal
+}: {
+  items: InvoiceItemInput[],
+  user: any,
+  dueDate: string,
+  discountAmount?: number,
+  notes?: string,
+  terms?: string,
+  invoiceType?: string,
+  location: any,
+  reduceStock?: boolean,
+  externalInvoiceNumber?: string,
+  externalInvoiceTotal?: number
+}) => {
+  const invoiceNumber = externalInvoiceNumber;
+  console.log("invoiceNumber:", invoiceNumber);
+
+
+  let calculatedItems = [];
+  let subtotal = 0;
+  let totalTax = 0;
+
+  for (const item of items) {
+    const product = await Product.findOne({ _id: item.product }, { createdAt: 1 });
+console.log("_________product",product);
+console.log("________items",items);
+
+    if (!product) {
+      throw new Error(`Product not found: ${item.product}`);
+    }
+
+    const itemTotal = item.quantity * item.unitPrice;
+    const taxAmount = (item.taxRate || 0) * itemTotal / 100;
+
+    calculatedItems.push({
+      product: item.product,
+      description: item.description || product.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: itemTotal,
+      taxRate: item.taxRate || 0,
+      taxAmount: taxAmount
+    });
+
+    subtotal += itemTotal;
+    totalTax += taxAmount;
+  }
+
+  const totalAmount = subtotal + totalTax - discountAmount;
+
+  const invoice = new Invoice({
+    invoiceNumber,
+    user,
+    issueDate: new Date(),
+    dueDate: new Date(dueDate),
+    items: calculatedItems,
+    subtotal,
+    taxAmount: totalTax,
+    discountAmount,
+    totalAmount,
+    paidAmount: 0,
+    remainingAmount: totalAmount,
+    status: 'draft',
+    paymentStatus: 'pending',
+    notes,
+    terms,
+    invoiceType,
+    location,
+    externalInvoiceNumber,
+    externalInvoiceTotal
+  });
+
+  await invoice.save();
+
+  if (reduceStock) {
+    for (const item of calculatedItems) {
+      const stock = await Stock.findOne({ product: item.product, location });
+
+      if (stock) {
+        stock.quantity -= item.quantity;
+        stock.availableQuantity = stock.quantity - stock.reservedQuantity;
+        await stock.save();
+
+        await StockLedger.create({
+          product: item.product,
+          location,
+          transactionType: 'outward',
+          quantity: -item.quantity,
+          reason: `Invoice sale - ${invoiceNumber}`,
+          notes: `Invoice created`,
+          transactionDate: new Date(),
+          resultingQuantity: stock.quantity,
+          referenceId: invoiceNumber,
+          referenceType: 'sale'
+        });
+      }
+    }
+  }
+
+  return invoice;
+};

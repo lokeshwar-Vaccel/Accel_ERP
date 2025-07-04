@@ -105,7 +105,7 @@ router.post('/:id/send',
   sendPurchaseOrder
 );
 
-router.post('/:id/receive', validate(receivePOSchema), checkPermission('write'), receiveItems);
+router.post('/:id/receive', checkPermission('write'), receiveItems); // validate(receivePOSchema) 
 router.post('/:id/cancel', validate(cancelPOSchema), checkPermission('write'), cancelPurchaseOrder);
 
 // Special queries

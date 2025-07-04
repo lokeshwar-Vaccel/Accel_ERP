@@ -14,6 +14,7 @@ export interface IInvoiceItem {
 // Invoice Interface
 export interface IInvoice extends mongoose.Document {
   invoiceNumber: string;
+  user: mongoose.Types.ObjectId;
   customer: mongoose.Types.ObjectId;
   issueDate: Date;
   dueDate: Date;
@@ -84,14 +85,21 @@ const invoiceItemSchema = new Schema({
 const invoiceSchema = new Schema<IInvoice>({
   invoiceNumber: {
     type: String,
-    required: true,
+    // required: true,
     unique: true,
     trim: true
   },
   customer: {
     type: Schema.Types.ObjectId,
     ref: 'Customer',
-    required: true
+    default:null
+    // required: true
+  },
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    default:null
+    // required: true
   },
   issueDate: {
     type: Date,
@@ -177,7 +185,7 @@ const invoiceSchema = new Schema<IInvoice>({
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',
-    required: true
+    // required: true
   },
   externalInvoiceNumber: {
     type: String,

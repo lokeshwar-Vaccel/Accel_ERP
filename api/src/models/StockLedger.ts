@@ -9,10 +9,10 @@ const stockLedgerSchema = new Schema<IStockLedger>(
     quantity: { type: Number, required: true },
     reason: { type: String, trim: true },
     notes: { type: String, trim: true },
-    performedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    performedBy: { type: Schema.Types.ObjectId, ref: 'User'},//, required: true 
     transactionDate: { type: Date, default: Date.now },
     resultingQuantity: { type: Number, required: true },
-    referenceId: { type: String, required: true }, // e.g., "AD250627-A-123456"
+    referenceId: { type: String}, // e.g., "AD250627-A-123456"   //, required: true 
     referenceType: { type: String, enum: ['purchase_order', 'service_ticket', 'adjustment', 'transfer', 'sale', 'reservation'] },
   },
   { timestamps: true }

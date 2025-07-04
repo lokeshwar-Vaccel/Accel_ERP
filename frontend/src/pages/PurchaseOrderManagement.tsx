@@ -42,6 +42,7 @@ interface POItem {
     modelNumber?: string;
     partNo?: string;
     price?: number;
+    gst?: number;
   };
   quantity: number;
   unitPrice: number;
@@ -102,6 +103,7 @@ interface Product {
   modelNumber?: string;
   partNo?: string;
   price?: number;
+  gst?: number; // GST rate in percent
   minStockLevel?: number;
   currentStock?: number;
   specifications?: Record<string, any>;
@@ -119,6 +121,8 @@ interface ReceiveItemsData {
   receiptDate: string;
   inspectedBy: string;
   notes?: string;
+  externalInvoiceNumber?: string;
+  externalInvoiceTotal?: number;
 }
 
 interface POFormData {
@@ -159,6 +163,44 @@ const PurchaseOrderManagement: React.FC = () => {
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
 
+  console.log("selectedPO:", selectedPO);
+
+  const [newInvoice, setNewInvoice] = useState({
+    // customer: '',
+    // dueDate: '',
+    // invoiceType: 'sale',
+    // location: '',
+    // notes: '',
+    // items: [
+    //   {
+    //     product: '',
+    //     description: '',
+    //     quantity: 1,
+    //     unitPrice: 0,
+    //     taxRate: 18
+    //   }
+    // ],
+    // discountAmount: 0,
+    externalInvoiceNumber: '',
+    externalInvoiceTotal: 0,
+    // reduceStock: true
+  });
+
+
+  // Add these state variables and refs at the top of your component
+  const [debouncedExternalTotal, setDebouncedExternalTotal] = useState('');
+  const debounceTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Add cleanup effect
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
+
+
   // Modal search states
   const [detailsSearchTerm, setDetailsSearchTerm] = useState('');
   const [receiveSearchTerm, setReceiveSearchTerm] = useState('');
@@ -178,7 +220,9 @@ const PurchaseOrderManagement: React.FC = () => {
     receivedItems: [],
     location: 'main-warehouse',
     receiptDate: '',
-    inspectedBy: ''
+    inspectedBy: '',
+    externalInvoiceNumber: '',
+    externalInvoiceTotal: 0,
   });
 
   // Form errors
@@ -192,7 +236,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   // Preview state
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewData, setPreviewData] = useState<any>(null);
@@ -230,8 +274,8 @@ const PurchaseOrderManagement: React.FC = () => {
         } else if ((response.data as any).orders && Array.isArray((response.data as any).orders)) {
           ordersData = (response.data as any).orders;
         }
-        console.log('Found purchase orders:', ordersData.length);
-        
+        console.log('Found purchase orders:', ordersData);
+
         // Debug: Check if products are properly populated
         if (ordersData.length > 0 && ordersData[0].items.length > 0) {
           console.log('First item product data:', ordersData[0].items[0].product);
@@ -379,52 +423,34 @@ const PurchaseOrderManagement: React.FC = () => {
       console.log('Fetching products from API...');
       const response = await apiClient.products.getAll();
       console.log('Products API Response:', response);
-      
+
       let productsData: Product[] = [];
       if (response.success && response.data) {
         if (Array.isArray(response.data)) {
-          productsData = response.data;
+          productsData = response.data.map((product: any) => ({
+            ...product,
+            gst: typeof product.gst === 'number' ? product.gst : 0
+          }));
         } else if ((response.data as any).products && Array.isArray((response.data as any).products)) {
-          productsData = (response.data as any).products;
+          productsData = (response.data as any).products.map((product: any) => ({
+            ...product,
+            gst: typeof product.gst === 'number' ? product.gst : 0
+          }));
         }
         console.log('Found products:', productsData.length);
       } else if (Array.isArray(response.data)) {
-        // Fallback for different response format
-        productsData = response.data;
+        productsData = response.data.map((product: any) => ({
+          ...product,
+          gst: typeof product.gst === 'number' ? product.gst : 0
+        }));
         console.log('Found products (fallback format):', productsData.length);
       } else {
         console.log('No product data found in response');
       }
-      
-      setProducts(productsData);
-      
-      // If still no products, try to fetch them without pagination/limits
-      if (productsData.length === 0) {
-        console.log('No products found, trying alternative fetch...');
-        try {
-          const alternativeResponse = await fetch('/api/v1/products?limit=1000', {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`,
-              'Content-Type': 'application/json'
-            }
-          });
-          const altData = await alternativeResponse.json();
-          if (altData.success && altData.data) {
-            if (Array.isArray(altData.data)) {
-              productsData = altData.data;
-            } else if (altData.data.products) {
-              productsData = altData.data.products;
-                       }
-           console.log('Found products via alternative fetch:', productsData.length);
-           setProducts(productsData);
-         }
-       } catch (error) {
-         console.warn('Alternative product fetch failed:', error);
-       }
-     }
 
-     // If still no products, show some mock data for development
-     if (productsData.length === 0) {
+      setProducts(productsData);
+
+      if (productsData.length === 0) {
         console.log('No products found, using mock data for development');
         const mockProducts: Product[] = [
           {
@@ -435,6 +461,7 @@ const PurchaseOrderManagement: React.FC = () => {
             modelNumber: 'C250D5',
             partNo: 'C250-GEN-001',
             price: 850000,
+            gst: 18,
             minStockLevel: 1,
             currentStock: 3
           },
@@ -446,6 +473,7 @@ const PurchaseOrderManagement: React.FC = () => {
             modelNumber: 'LF9009',
             partNo: 'CUM-OF-LF9009',
             price: 1500,
+            gst: 12,
             minStockLevel: 10,
             currentStock: 25
           },
@@ -457,6 +485,7 @@ const PurchaseOrderManagement: React.FC = () => {
             modelNumber: 'AF25550',
             partNo: 'CAT-AF-25550',
             price: 2800,
+            gst: 12,
             minStockLevel: 5,
             currentStock: 12
           },
@@ -468,6 +497,7 @@ const PurchaseOrderManagement: React.FC = () => {
             modelNumber: 'InteliLite NT',
             partNo: 'COM-CTRL-INT',
             price: 45000,
+            gst: 18,
             minStockLevel: 2,
             currentStock: 4
           },
@@ -479,6 +509,7 @@ const PurchaseOrderManagement: React.FC = () => {
             modelNumber: 'DELPHI-9520A',
             partNo: 'PER-FIP-9520A',
             price: 28000,
+            gst: 18,
             minStockLevel: 1,
             currentStock: 2
           }
@@ -496,7 +527,7 @@ const PurchaseOrderManagement: React.FC = () => {
       console.log('Fetching locations from API...');
       const response = await apiClient.stock.getLocations();
       console.log('Locations API Response:', response);
-      
+
       let locationsData: StockLocation[] = [];
       if (response.data) {
         if (Array.isArray(response.data)) {
@@ -506,9 +537,9 @@ const PurchaseOrderManagement: React.FC = () => {
         }
         console.log('Found locations:', locationsData.length);
       }
-      
+
       setLocations(locationsData);
-      
+
       // If no locations found, create some mock data
       if (locationsData.length === 0) {
         console.log('No locations found, using fallback data');
@@ -520,7 +551,7 @@ const PurchaseOrderManagement: React.FC = () => {
           },
           {
             _id: 'loc-secondary-warehouse',
-            name: 'Secondary Warehouse', 
+            name: 'Secondary Warehouse',
             type: 'warehouse'
           },
           {
@@ -567,13 +598,13 @@ const PurchaseOrderManagement: React.FC = () => {
     if (typeof product === 'string') {
       // If it's still a string (ObjectId), it means it wasn't populated
       console.warn('Product not populated, showing ObjectId:', product);
-      
+
       // Try to find product details from our products list
       const foundProduct = products.find(p => p._id === product);
       if (foundProduct) {
         return foundProduct.name;
       }
-      
+
       return `[${product.slice(-8)}]`; // Show last 8 chars of ObjectId
     }
     return product?.name || 'Unknown Product';
@@ -602,31 +633,31 @@ const PurchaseOrderManagement: React.FC = () => {
       items: [{ product: '', quantity: 1, unitPrice: 0 }]
     });
     setFormErrors({});
-    
+
     // Ensure products are loaded when modal opens
     if (products.length === 0) {
       console.log('No products loaded, fetching products...');
       await fetchProducts();
     }
-    
+
     setShowCreateModal(true);
   };
 
   const handleEditPO = (po: PurchaseOrder) => {
     setEditingPO(po);
-          setFormData({
-        supplier: typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)._id,
-        expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : '',
-        priority: po.priority || 'low',
-        sourceType: po.sourceType || 'manual',
-        sourceId: po.sourceId || '',
-        notes: po.notes || '',
-        items: po.items.map(item => ({
-          product: typeof item.product === 'string' ? item.product : item.product._id,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice
-        }))
-      });
+    setFormData({
+      supplier: typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)._id,
+      expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : '',
+      priority: po.priority || 'low',
+      sourceType: po.sourceType || 'manual',
+      sourceId: po.sourceId || '',
+      notes: po.notes || '',
+      items: po.items.map(item => ({
+        product: typeof item.product === 'string' ? item.product : item.product._id,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice
+      }))
+    });
     setFormErrors({});
     setShowEditModal(true);
   };
@@ -640,10 +671,10 @@ const PurchaseOrderManagement: React.FC = () => {
   const openReceiveModal = (po: PurchaseOrder) => {
     setSelectedPO(po);
     setReceiveSearchTerm(''); // Clear search when opening modal
-    
+
     // Use the first available location or a default if none exist
     const defaultLocation = locations.length > 0 ? locations[0]._id : 'loc-main-warehouse';
-    
+
     setReceiveData({
       receivedItems: po.items.map(item => ({
         productId: typeof item.product === 'string' ? item.product : item.product?._id,
@@ -654,7 +685,9 @@ const PurchaseOrderManagement: React.FC = () => {
       })),
       location: defaultLocation,
       receiptDate: new Date().toISOString().split('T')[0], // Set today's date
-      inspectedBy: 'Admin' // Default inspector
+      inspectedBy: 'Admin', // Default inspector
+      externalInvoiceNumber: '',
+      externalInvoiceTotal: 0,
     });
     setShowReceiveModal(true);
   };
@@ -760,14 +793,14 @@ const PurchaseOrderManagement: React.FC = () => {
   const handleStatusUpdate = async (poId: string, newStatus: PurchaseOrderStatus) => {
     try {
       const response = await apiClient.purchaseOrders.updateStatus(poId, newStatus);
-      
+
       // Use the updated purchase order from the backend response if available
       const updatedPO = response.data || { status: newStatus };
-      
+
       setPurchaseOrders(purchaseOrders.map(po =>
         po._id === poId ? { ...po, ...updatedPO } : po
       ));
-      
+
       // Update selectedPO if it's the one being updated
       if (selectedPO && selectedPO._id === poId) {
         setSelectedPO({ ...selectedPO, ...updatedPO });
@@ -784,18 +817,18 @@ const PurchaseOrderManagement: React.FC = () => {
     try {
       console.log('Sending receive data:', receiveData);
       const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
-      
+
       // Use the updated purchase order from the backend response
       const updatedPO = response.data.order;
       console.log('Updated PO from backend:', updatedPO);
-      
+
       setPurchaseOrders(purchaseOrders.map(po =>
         po._id === selectedPO._id ? updatedPO : po
       ));
-      
+
       // Update the selected PO as well for modal display
       setSelectedPO(updatedPO);
-      
+
       // Reset receive data for next time
       setReceiveData({
         receivedItems: [],
@@ -803,18 +836,18 @@ const PurchaseOrderManagement: React.FC = () => {
         receiptDate: new Date().toISOString().split('T')[0],
         inspectedBy: 'Admin'
       });
-      
+
       setShowReceiveModal(false);
     } catch (error: any) {
       console.error('Error receiving items:', error);
-      
+
       let errorMessage = 'Failed to receive items';
       if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
       } else if (error.message) {
         errorMessage = error.message;
       }
-      
+
       // Display error to user
       alert(`Error: ${errorMessage}`);
     } finally {
@@ -851,7 +884,7 @@ const PurchaseOrderManagement: React.FC = () => {
     try {
       // First, get preview of what will be imported
       const response = await apiClient.purchaseOrders.previewImportFromFile(file);
-      
+
       if (response.success) {
         setSelectedFile(file);
         setPreviewData(response.data);
@@ -885,7 +918,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
     try {
       const response = await apiClient.purchaseOrders.importFromFile(selectedFile);
-      
+
       if (response.success) {
         if (response.data.summary.successful > 0) {
           setImportMessage({
@@ -973,30 +1006,33 @@ const PurchaseOrderManagement: React.FC = () => {
     const category = typeof item.product === 'object' ? item.product?.category : '';
     const brand = typeof item.product === 'object' ? item.product?.brand : '';
     const partNo = getProductPartNo(item.product);
-    
+
     const searchLower = detailsSearchTerm.toLowerCase();
     return productName.toLowerCase().includes(searchLower) ||
-           (category && category.toLowerCase().includes(searchLower)) ||
-           (brand && brand.toLowerCase().includes(searchLower)) ||
-           (partNo && partNo !== '-' && partNo.toLowerCase().includes(searchLower));
+      (category && category.toLowerCase().includes(searchLower)) ||
+      (brand && brand.toLowerCase().includes(searchLower)) ||
+      (partNo && partNo !== '-' && partNo.toLowerCase().includes(searchLower));
   }) : [];
 
   // Filter items for Receive Modal (only items with remaining quantity)
   const filteredReceiveItems = selectedPO ? selectedPO.items.filter(item => {
     const remainingQty = item.quantity - (item.receivedQuantity || 0);
     if (remainingQty <= 0) return false; // Hide fully received items
-    
+
     const productName = getProductName(item.product);
     const category = typeof item.product === 'object' ? item.product?.category : '';
     const brand = typeof item.product === 'object' ? item.product?.brand : '';
     const partNo = getProductPartNo(item.product);
-    
+
     const searchLower = receiveSearchTerm.toLowerCase();
     return productName.toLowerCase().includes(searchLower) ||
-           (category && category.toLowerCase().includes(searchLower)) ||
-           (brand && brand.toLowerCase().includes(searchLower)) ||
-           (partNo && partNo !== '-' && partNo.toLowerCase().includes(searchLower));
+      (category && category.toLowerCase().includes(searchLower)) ||
+      (brand && brand.toLowerCase().includes(searchLower)) ||
+      (partNo && partNo !== '-' && partNo.toLowerCase().includes(searchLower));
   }) : [];
+
+  console.log("filteredReceiveItems:", filteredReceiveItems);
+
 
   const getStatusColor = (status: PurchaseOrderStatus) => {
     switch (status) {
@@ -1112,6 +1148,27 @@ const PurchaseOrderManagement: React.FC = () => {
     };
   }, []);
 
+  // Helper to get GST for a product or productId
+  const getProductGST = (product: Product | string): number => {
+    if (typeof product === 'string') {
+      const foundProduct = products.find(p => p._id === product);
+      return foundProduct?.gst || 0;
+    }
+    return product.gst || 0;
+  };
+
+  // Helper to calculate GST amount and total for an item
+  const calculateItemTotal = (item: { quantity: number; unitPrice: number; gst?: number }) => {
+    const subtotal = item.quantity * item.unitPrice;
+    const gstRate = item.gst || 0;
+    const gstAmount = subtotal * (gstRate / 100);
+    return {
+      subtotal,
+      gstAmount,
+      total: subtotal + gstAmount
+    };
+  };
+
   return (
     <div className="p-4 space-y-3">
       {/* Header */}
@@ -1156,11 +1213,10 @@ const PurchaseOrderManagement: React.FC = () => {
 
       {/* Import message */}
       {importMessage && (
-        <div className={`p-4 rounded-lg border ${
-          importMessage.type === 'success' 
-            ? 'bg-green-50 border-green-200 text-green-800' 
-            : 'bg-red-50 border-red-200 text-red-800'
-        }`}>
+        <div className={`p-4 rounded-lg border ${importMessage.type === 'success'
+          ? 'bg-green-50 border-green-200 text-green-800'
+          : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
           <div className="flex items-center justify-between">
             <p className="text-sm font-medium">{importMessage.text}</p>
             <button
@@ -1500,9 +1556,9 @@ const PurchaseOrderManagement: React.FC = () => {
                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     placeholder={
                       formData.sourceType === 'amc' ? 'AMC Contract Number' :
-                      formData.sourceType === 'service' ? 'Service Ticket Number' :
-                      formData.sourceType === 'inventory' ? 'Stock Request ID' :
-                      'Reference ID (optional)'
+                        formData.sourceType === 'service' ? 'Service Ticket Number' :
+                          formData.sourceType === 'inventory' ? 'Stock Request ID' :
+                            'Reference ID (optional)'
                     }
                   />
                 </div>
@@ -1569,7 +1625,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           </option>
                           {products.map(product => (
                             <option key={product._id} value={product._id}>
-                              {product.name} 
+                              {product.name}
                               {product.partNo && ` - ${product.partNo}`}
                               {product.brand && ` (${product.brand})`}
                             </option>
@@ -1780,7 +1836,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           </option>
                           {products.map(product => (
                             <option key={product._id} value={product._id}>
-                              {product.name} 
+                              {product.name}
                               {product.partNo && ` - ${product.partNo}`}
                               {product.brand && ` (${product.brand})`}
                             </option>
@@ -2000,46 +2056,46 @@ const PurchaseOrderManagement: React.FC = () => {
                           const remainingQty = item.quantity - receivedQty;
                           return (
                             <tr key={index}>
-                            <td className="px-4 py-4 whitespace-nowrap">
-                              <div>
-                                <div className="text-xs font-medium text-gray-900">
-                                  {getProductName(item.product)}
+                              <td className="px-4 py-4 whitespace-nowrap">
+                                <div>
+                                  <div className="text-xs font-medium text-gray-900">
+                                    {getProductName(item.product)}
+                                  </div>
+                                  {typeof item.product === 'object' && item.product?.brand && (
+                                    <div className="text-xs text-gray-500">Brand: {item.product?.brand}</div>
+                                  )}
                                 </div>
-                                {typeof item.product === 'object' && item.product?.brand && (
-                                  <div className="text-xs text-gray-500">Brand: {item.product?.brand}</div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
-                              <span className="font-mono font-medium text-blue-600">
-                                {getProductPartNo(item.product)}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
-                              {typeof item.product === 'object' ? item.product?.category : '-'}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
-                              <span className="font-medium">{item.quantity}</span>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-xs">
-                              <span className={`font-medium ${receivedQty > 0 ? 'text-green-600' : 'text-gray-400'}`}>
-                                {receivedQty}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-xs">
-                              <span className={`font-medium ${remainingQty > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
-                                {remainingQty}
-                              </span>
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
-                              {formatCurrency(item.unitPrice)}
-                            </td>
-                            <td className="px-4 py-4 whitespace-nowrap text-xs font-medium text-gray-900">
-                              {formatCurrency(item.totalPrice)}
-                            </td>
-                          </tr>
-                        );
-                      }))}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
+                                <span className="font-mono font-medium text-blue-600">
+                                  {getProductPartNo(item.product)}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
+                                {typeof item.product === 'object' ? item.product?.category : '-'}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
+                                <span className="font-medium">{item.quantity}</span>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs">
+                                <span className={`font-medium ${receivedQty > 0 ? 'text-green-600' : 'text-gray-400'}`}>
+                                  {receivedQty}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs">
+                                <span className={`font-medium ${remainingQty > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
+                                  {remainingQty}
+                                </span>
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
+                                {formatCurrency(item.unitPrice)}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs font-medium text-gray-900">
+                                {formatCurrency(item.totalPrice)}
+                              </td>
+                            </tr>
+                          );
+                        }))}
                     </tbody>
                     <tfoot className="bg-gray-50">
                       <tr>
@@ -2148,34 +2204,37 @@ const PurchaseOrderManagement: React.FC = () => {
       {/* Receive Items Modal */}
       {showReceiveModal && selectedPO && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">
+                <h2 className="text-2xl font-bold text-gray-900">
                   {selectedPO.status === 'partially_received' ? 'Receive More Items' : 'Receive Items'}
                 </h2>
-                <p className="text-gray-600">
-                  PO: {selectedPO.poNumber}
-                  {selectedPO.status === 'partially_received' && 
-                    <span className="ml-2 text-orange-600 text-sm">(Partially Received)</span>
-                  }
+                <p className="text-gray-600 mt-1">
+                  PO: <span className="font-semibold">{selectedPO.poNumber}</span>
+                  {selectedPO.status === 'partially_received' && (
+                    <span className="ml-2 px-2 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                      Partially Received
+                    </span>
+                  )}
                 </p>
               </div>
               <button
                 onClick={() => setShowReceiveModal(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <div className="p-4 space-y-3">
+            <div className="p-6 space-y-6">
+              {/* Status Alert */}
               {selectedPO.status === 'partially_received' ? (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <div className="flex">
-                    <Package className="w-5 h-5 text-orange-600 mr-2 mt-0.5" />
+                <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <Package className="w-5 h-5 text-orange-600 mr-3 mt-0.5 flex-shrink-0" />
                     <div>
-                      <h3 className="text-sm font-medium text-orange-800">Receiving Additional Items</h3>
+                      <h3 className="text-sm font-semibold text-orange-800">Receiving Additional Items</h3>
                       <p className="text-sm text-orange-700 mt-1">
                         Some items from this purchase order have already been received. You can receive additional quantities as they arrive.
                       </p>
@@ -2183,11 +2242,11 @@ const PurchaseOrderManagement: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex">
-                    <Package className="w-5 h-5 text-blue-600 mr-2 mt-0.5" />
+                <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <Package className="w-5 h-5 text-blue-600 mr-3 mt-0.5 flex-shrink-0" />
                     <div>
-                      <h3 className="text-sm font-medium text-blue-800">Receiving Items</h3>
+                      <h3 className="text-sm font-semibold text-blue-800">Receiving Items</h3>
                       <p className="text-sm text-blue-700 mt-1">
                         Review the quantities below and confirm receipt. This will update your inventory.
                       </p>
@@ -2197,72 +2256,92 @@ const PurchaseOrderManagement: React.FC = () => {
               )}
 
               {/* Receipt Information */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Delivery Location *
-                  </label>
-                  <select
-                    value={receiveData.location}
-                    onChange={(e) => setReceiveData({ ...receiveData, location: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {locations.length === 0 ? (
-                      <option value="">Loading locations...</option>
-                    ) : (
-                      locations.map(location => (
-                        <option key={location._id} value={location._id}>
-                          {location.name} ({location.type})
-                        </option>
-                      ))
+              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Receipt Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Delivery Location <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={receiveData.location}
+                      onChange={(e) => setReceiveData({ ...receiveData, location: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    >
+                      <option value="">Select location...</option>
+                      {locations.length === 0 ? (
+                        <option value="" disabled>Loading locations...</option>
+                      ) : (
+                        locations.map(location => (
+                          <option key={location._id} value={location._id}>
+                            {location.name} ({location.type})
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Receipt Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={receiveData.receiptDate}
+                      onChange={(e) => setReceiveData({ ...receiveData, receiptDate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Inspected By
+                    </label>
+                    <input
+                      type="text"
+                      value={receiveData.inspectedBy}
+                      onChange={(e) => setReceiveData({ ...receiveData, inspectedBy: e.target.value })}
+                      placeholder="Inspector name"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      External Invoice No
+                    </label>
+                    <input
+                      type="text"
+                      value={receiveData.externalInvoiceNumber}
+                      onChange={(e) => setReceiveData({ ...receiveData, externalInvoiceNumber: e.target.value })}
+
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.externalInvoiceNumber ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      placeholder="External Invoice No"
+                    />
+                    {formErrors.externalInvoiceNumber && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.externalInvoiceNumber}</p>
                     )}
-                  </select>
-                </div>
-                
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Receipt Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={receiveData.receiptDate}
-                    onChange={(e) => setReceiveData({ ...receiveData, receiptDate: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                  </div>
                 </div>
 
-                <div>
+                <div className="mt-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Inspected By
+                    Receipt Notes
                   </label>
-                  <input
-                    type="text"
-                    value={receiveData.inspectedBy}
-                    onChange={(e) => setReceiveData({ ...receiveData, inspectedBy: e.target.value })}
-                    placeholder="Inspector name"
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  <textarea
+                    value={receiveData.notes || ''}
+                    onChange={(e) => setReceiveData({ ...receiveData, notes: e.target.value })}
+                    rows={3}
+                    placeholder="Any additional notes about the delivery..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
                   />
                 </div>
-              </div>
-
-              {/* Receipt Notes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Receipt Notes
-                </label>
-                <textarea
-                  value={receiveData.notes || ''}
-                  onChange={(e) => setReceiveData({ ...receiveData, notes: e.target.value })}
-                  rows={2}
-                  placeholder="Any additional notes about the delivery..."
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                />
               </div>
 
               {/* Items to Receive */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Items to Receive</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Items to Receive</h3>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <input
@@ -2270,22 +2349,23 @@ const PurchaseOrderManagement: React.FC = () => {
                       placeholder="Search items..."
                       value={receiveSearchTerm}
                       onChange={(e) => setReceiveSearchTerm(e.target.value)}
-                      className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-64"
+                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm w-64 transition-colors"
                     />
                   </div>
                 </div>
+
                 {(() => {
-                  const itemsWithRemainingQty = selectedPO.items.filter(item => 
+                  const itemsWithRemainingQty = selectedPO.items.filter(item =>
                     (item.quantity - (item.receivedQuantity || 0)) > 0
                   );
-                  
+
                   if (itemsWithRemainingQty.length === 0) {
                     return (
-                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
-                        <div className="flex items-center justify-center mb-2">
-                          <Package className="w-8 h-8 text-green-600" />
+                      <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg p-6 text-center">
+                        <div className="flex items-center justify-center mb-3">
+                          <Package className="w-12 h-12 text-green-600" />
                         </div>
-                        <h4 className="text-lg font-medium text-green-800 mb-1">All Items Received</h4>
+                        <h4 className="text-xl font-semibold text-green-800 mb-2">All Items Received</h4>
                         <p className="text-green-700">All items from this purchase order have been fully received.</p>
                       </div>
                     );
@@ -2293,226 +2373,496 @@ const PurchaseOrderManagement: React.FC = () => {
 
                   if (filteredReceiveItems.length === 0 && receiveSearchTerm) {
                     return (
-                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
-                        <div className="flex items-center justify-center mb-2">
-                          <Search className="w-8 h-8 text-gray-400" />
+                      <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+                        <div className="flex items-center justify-center mb-3">
+                          <Search className="w-12 h-12 text-gray-400" />
                         </div>
-                        <h4 className="text-lg font-medium text-gray-600 mb-1">No Items Found</h4>
+                        <h4 className="text-xl font-semibold text-gray-600 mb-2">No Items Found</h4>
                         <p className="text-gray-500">No items match your search criteria.</p>
                       </div>
                     );
                   }
-                  
+
+                  // Calculate comprehensive totals
+                  const calculateTotals = () => {
+                    let totalSubtotal = 0;
+                    let totalGST = 0;
+                    let totalAmount = 0;
+
+                    selectedPO.items.forEach((item, index) => {
+                      const receivedItem = receiveData.receivedItems[index];
+                      const quantityToReceive = receivedItem?.quantityReceived || 0;
+
+                      if (quantityToReceive > 0) {
+                        const gstRate = getProductGST(item.product);
+                        const itemCalculation = calculateItemTotal({
+                          quantity: quantityToReceive,
+                          unitPrice: item.unitPrice,
+                          gst: gstRate
+                        });
+
+                        totalSubtotal += itemCalculation.subtotal;
+                        totalGST += itemCalculation.gstAmount;
+                        totalAmount += itemCalculation.total;
+                      }
+                    });
+
+                    return { totalSubtotal, totalGST, totalAmount };
+                  };
+
+                  const { totalSubtotal, totalGST, totalAmount } = calculateTotals();
+                  const hasSelectedItems = receiveData.receivedItems.some(item => item?.quantityReceived > 0);
+
                   return (
                     <div className="space-y-4">
                       {filteredReceiveItems.map((item, index) => {
                         // Find the original index in selectedPO.items to maintain consistency with receiveData
-                        const originalIndex = selectedPO.items.findIndex(originalItem => 
+                        const originalIndex = selectedPO.items.findIndex(originalItem =>
                           originalItem === item
                         );
                         const receivedItem = receiveData.receivedItems[originalIndex];
                         const remainingQty = item.quantity - (item.receivedQuantity || 0);
-                        
-                                                return (
-                          <div key={originalIndex} className="p-4 bg-gray-50 rounded-lg">
-                        <div className="grid grid-cols-1 md:grid-cols-7 gap-4 items-center mb-3">
-                          <div className="md:col-span-2">
-                            <div className="text-xs font-medium text-gray-900">
-                              {getProductName(item.product)}
+
+                        return (
+                          <div key={originalIndex} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="grid grid-cols-1 md:grid-cols-7 gap-4 items-center mb-4">
+                              <div className="md:col-span-2">
+                                <div className="text-sm font-semibold text-gray-900">
+                                  {getProductName(item.product)}
+                                </div>
+                                {getProductPartNo(item.product) !== '-' && (
+                                  <div className="text-xs text-blue-600 font-mono font-medium mt-1">
+                                    Part: {getProductPartNo(item.product)}
+                                  </div>
+                                )}
+                                {typeof item.product === 'object' && item.product?.category && (
+                                  <div className="text-xs text-gray-500 mt-1">
+                                    Category: {item.product?.category}
+                                  </div>
+                                )}
+                              </div>
+                              <div className="text-center">
+                                <div className="text-xs text-gray-500 mb-1">Ordered</div>
+                                <div className="text-sm font-semibold text-gray-900">{item.quantity}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-xs text-gray-500 mb-1">Already Received</div>
+                                <div className="text-sm font-semibold text-green-600">{item.receivedQuantity || 0}</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-xs text-gray-500 mb-1">Remaining</div>
+                                <div className="text-sm font-semibold text-orange-600">{remainingQty}</div>
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1 font-medium">Receive Now</label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="number"
+                                    value={receivedItem?.quantityReceived || 0}
+                                    onChange={(e) => {
+                                      const newReceivedItems = [...receiveData.receivedItems];
+                                      const existingItem = newReceivedItems[originalIndex] || {};
+                                      newReceivedItems[originalIndex] = {
+                                        ...existingItem,
+                                        productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
+                                        quantityReceived: parseInt(e.target.value) || 0,
+                                        condition: existingItem.condition || 'good',
+                                        batchNumber: existingItem.batchNumber || '',
+                                        notes: existingItem.notes || ''
+                                      };
+                                      setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
+                                    }}
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                    min="0"
+                                    max={remainingQty}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const newReceivedItems = [...receiveData.receivedItems];
+                                      const existingItem = newReceivedItems[originalIndex] || {};
+                                      newReceivedItems[originalIndex] = {
+                                        ...existingItem,
+                                        productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
+                                        quantityReceived: remainingQty,
+                                        condition: existingItem.condition || 'good',
+                                        batchNumber: existingItem.batchNumber || '',
+                                        notes: existingItem.notes || ''
+                                      };
+                                      setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
+                                    }}
+                                    className="px-3 py-2 bg-blue-500 text-white text-xs font-medium rounded-lg hover:bg-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 transition-colors"
+                                  >
+                                    Max
+                                  </button>
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1 font-medium">Condition</label>
+                                <select
+                                  value={receivedItem?.condition || 'good'}
+                                  onChange={(e) => {
+                                    const newReceivedItems = [...receiveData.receivedItems];
+                                    const existingItem = newReceivedItems[originalIndex] || {};
+                                    newReceivedItems[originalIndex] = {
+                                      ...existingItem,
+                                      productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
+                                      condition: e.target.value as 'good' | 'damaged' | 'defective'
+                                    };
+                                    setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
+                                  }}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs transition-colors"
+                                >
+                                  <option value="good">Good</option>
+                                  <option value="damaged">Damaged</option>
+                                  <option value="defective">Defective</option>
+                                </select>
+                              </div>
                             </div>
-                            {getProductPartNo(item.product) !== '-' && (
-                              <div className="text-xs text-blue-600 font-mono font-medium">Part: {getProductPartNo(item.product)}</div>
-                            )}
-                            {typeof item.product === 'object' && item.product?.category && (
-                              <div className="text-xs text-gray-500">Category: {item.product?.category}</div>
-                            )}
+
+                            {/* Item Financial Details */}
+                            <div className="bg-gray-50 rounded-lg p-3 mb-4">
+                              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                                <div>
+                                  <div className="text-xs text-gray-500 mb-1">Unit Price</div>
+                                  <div className="text-sm font-semibold text-gray-900">{formatCurrency(item.unitPrice)}</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-gray-500 mb-1">GST (%)</div>
+                                  <div className="text-sm font-semibold text-gray-900">{getProductGST(item.product)}%</div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-gray-500 mb-1">GST Amount</div>
+                                  <div className="text-sm font-semibold text-green-600">
+                                    {formatCurrency(calculateItemTotal({
+                                      quantity: receivedItem?.quantityReceived || 0,
+                                      unitPrice: item.unitPrice,
+                                      gst: getProductGST(item.product)
+                                    }).gstAmount)}
+                                  </div>
+                                </div>
+                                <div>
+                                  <div className="text-xs text-gray-500 mb-1">Item Total</div>
+                                  <div className="text-sm font-bold text-indigo-600">
+                                    {formatCurrency(calculateItemTotal({
+                                      quantity: receivedItem?.quantityReceived || 0,
+                                      unitPrice: item.unitPrice,
+                                      gst: getProductGST(item.product)
+                                    }).total)}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Additional Item Details */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1 font-medium">Batch Number</label>
+                                <input
+                                  type="text"
+                                  value={receivedItem?.batchNumber || ''}
+                                  onChange={(e) => {
+                                    const newReceivedItems = [...receiveData.receivedItems];
+                                    const existingItem = newReceivedItems[originalIndex] || {};
+                                    newReceivedItems[originalIndex] = {
+                                      ...existingItem,
+                                      productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
+                                      batchNumber: e.target.value
+                                    };
+                                    setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
+                                  }}
+                                  placeholder="Optional batch/lot number"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs transition-colors"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs text-gray-500 mb-1 font-medium">Item Notes</label>
+                                <input
+                                  type="text"
+                                  value={receivedItem?.notes || ''}
+                                  onChange={(e) => {
+                                    const newReceivedItems = [...receiveData.receivedItems];
+                                    const existingItem = newReceivedItems[originalIndex] || {};
+                                    newReceivedItems[originalIndex] = {
+                                      ...existingItem,
+                                      productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
+                                      notes: e.target.value
+                                    };
+                                    setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
+                                  }}
+                                  placeholder="Notes about this item"
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs transition-colors"
+                                />
+                              </div>
+                            </div>
                           </div>
-                          <div className="text-center">
-                            <div className="text-xs text-gray-600">Ordered</div>
-                            <div className="text-sm font-medium">{item.quantity}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-xs text-gray-600">Already Received</div>
-                            <div className="text-sm font-medium text-green-600">{item.receivedQuantity || 0}</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-xs text-gray-600">Remaining</div>
-                            <div className="text-sm font-medium text-orange-600">{item.quantity - (item.receivedQuantity || 0)}</div>
-                          </div>
-                          <div>
-                            <label className="block text-xs text-gray-600 mb-1">Receive Now</label>
-                            <input
-                              type="number"
-                              value={receivedItem?.quantityReceived || 0}
-                              onChange={(e) => {
-                                const newReceivedItems = [...receiveData.receivedItems];
-                                
-                                // Ensure we maintain the productId when updating quantity
-                                const existingItem = newReceivedItems[originalIndex] || {};
-                                newReceivedItems[originalIndex] = {
-                                  ...existingItem,
-                                  productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
-                                  quantityReceived: parseInt(e.target.value) || 0,
-                                  condition: existingItem.condition || 'good',
-                                  batchNumber: existingItem.batchNumber || '',
-                                  notes: existingItem.notes || ''
-                                };
-                                setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
-                              }}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                              min="0"
-                              max={item.quantity - (item.receivedQuantity || 0)}
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-gray-600 mb-1">Condition</label>
-                            <select
-                              value={receivedItem?.condition || 'good'}
-                              onChange={(e) => {
-                                const newReceivedItems = [...receiveData.receivedItems];
-                                
-                                // Ensure we maintain the productId when updating condition
-                                const existingItem = newReceivedItems[originalIndex] || {};
-                                newReceivedItems[originalIndex] = {
-                                  ...existingItem,
-                                  productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
-                                  condition: e.target.value as 'good' | 'damaged' | 'defective'
-                                };
-                                setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
-                              }}
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs"
-                            >
-                              <option value="good">Good</option>
-                              <option value="damaged">Damaged</option>
-                              <option value="defective">Defective</option>
-                            </select>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-xs text-gray-600">Unit Price</div>
-                            <div className="text-sm font-medium">{formatCurrency(item.unitPrice)}</div>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-xs text-gray-600 mb-1">Batch Number</label>
-                            <input
-                              type="text"
-                              value={receivedItem?.batchNumber || ''}
-                              onChange={(e) => {
-                                const newReceivedItems = [...receiveData.receivedItems];
-                                
-                                // Ensure we maintain the productId when updating batch number
-                                const existingItem = newReceivedItems[originalIndex] || {};
-                                newReceivedItems[originalIndex] = {
-                                  ...existingItem,
-                                  productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
-                                  batchNumber: e.target.value
-                                };
-                                setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
-                              }}
-                              placeholder="Optional batch/lot number"
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-xs text-gray-600 mb-1">Item Notes</label>
-                            <input
-                              type="text"
-                              value={receivedItem?.notes || ''}
-                              onChange={(e) => {
-                                const newReceivedItems = [...receiveData.receivedItems];
-                                
-                                // Ensure we maintain the productId when updating notes
-                                const existingItem = newReceivedItems[originalIndex] || {};
-                                newReceivedItems[originalIndex] = {
-                                  ...existingItem,
-                                  productId: existingItem.productId || (typeof item.product === 'string' ? item.product : item.product?._id),
-                                  notes: e.target.value
-                                };
-                                setReceiveData({ ...receiveData, receivedItems: newReceivedItems });
-                              }}
-                              placeholder="Notes about this item"
-                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-xs"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
                     </div>
                   );
                 })()}
               </div>
 
-              {/* Summary */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h4 className="text-xs font-medium text-gray-900 mb-2">Receipt Summary</h4>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-600">Items Ordered:</span>
-                    <div className="font-medium">{selectedPO.items.reduce((sum, item) => sum + item.quantity, 0)}</div>
+              {/* Enhanced Summary Cards */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Items Ordered Card (Left Side) */}
+                <div className="bg-gradient-to-br from-slate-50 to-gray-100 border border-gray-200 rounded-lg p-6 shadow-sm">
+                  <h4 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <Package className="w-5 h-5 mr-2 text-gray-600" />
+                    Order Summary
+                  </h4>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Items Ordered:</span>
+                      <span className="font-semibold text-gray-900 text-lg">
+                        {selectedPO.items.reduce((sum, item) => sum + item.quantity, 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Previously Received:</span>
+                      <span className="font-semibold text-green-600 text-lg">
+                        {selectedPO.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Receiving Now:</span>
+                      <span className="font-semibold text-blue-600 text-lg">
+                        {receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-600">Will Remain:</span>
+                      <span className="font-semibold text-orange-600 text-lg">
+                        {selectedPO.items.reduce((sum, item) => sum + item.quantity, 0) -
+                          selectedPO.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0) -
+                          receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)}
+                      </span>
+                    </div>
+
+                    <div className="border-t border-gray-300 pt-4 mt-4">
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-gray-600">Receipt Date:</span>
+                        <span className="font-semibold text-gray-900">
+                          {receiveData.receiptDate
+                            ? new Date(receiveData.receiptDate).toLocaleDateString()
+                            : 'Not set'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center mb-3">
+                        <span className="text-gray-600">Inspector:</span>
+                        <span className="font-semibold text-gray-900">
+                          {receiveData.inspectedBy || 'Not assigned'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Location:</span>
+                        <span className="font-semibold text-gray-900">
+                          {(() => {
+                            const location = locations.find(loc => loc._id === receiveData.location);
+                            return location ? `${location.name} (${location.type})` : 'Not selected';
+                          })()}
+                        </span>
+                      </div>
+                    </div>
+
+                    {receiveData.notes && (
+                      <div className="border-t border-gray-300 pt-4">
+                        <span className="text-gray-600 text-sm">Notes:</span>
+                        <div className="font-medium text-gray-900 text-sm italic mt-1">
+                          {receiveData.notes}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <span className="text-gray-600">Previously Received:</span>
-                    <div className="font-medium text-green-600">{selectedPO.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0)}</div>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Receiving Now:</span>
-                    <div className="font-medium text-blue-600">{receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)}</div>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Will Remain:</span>
-                    <div className="font-medium text-orange-600">
-                      {selectedPO.items.reduce((sum, item) => sum + item.quantity, 0) - 
-                       selectedPO.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0) - 
-                       receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)}
+                </div>
+
+                {/* Receipt Summary Card (Right Side) */}
+
+
+                {/* Receipt Summary Card (Right Side) */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 rounded-lg p-6 shadow-sm">
+                  <div className='pb-4'>
+                    <div className="flex items-center space-x-2 mb-4">
+                      {/* <DollarSign className="w-5 h-5 text-gray-600" /> */}
+                      <h3 className="text-lg font-semibold text-gray-900">External Invoice details</h3>
+                    </div>
+                    <div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          External Invoice Total
+                        </label>
+                        <input
+                          type="number"
+                          value={receiveData.externalInvoiceTotal}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setReceiveData({ ...receiveData, externalInvoiceTotal: value });
+
+                            // Clear existing timeout
+                            if (debounceTimeoutRef.current) {
+                              clearTimeout(debounceTimeoutRef.current);
+                            }
+
+                            debounceTimeoutRef.current = setTimeout(() => {
+                              setDebouncedExternalTotal(value);
+                            }, 500); // 500ms delay
+                          }}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.externalInvoiceTotal ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          placeholder="External Invoice Total"
+                        />
+                        {formErrors.externalInvoiceTotal && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.externalInvoiceTotal}</p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Receipt Date:</span>
-                    <div className="font-medium">{receiveData.receiptDate ? new Date(receiveData.receiptDate).toLocaleDateString() : 'Not set'}</div>
+
+                  <h4 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+                    <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                    Receipt Summary
+                  </h4>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="text-center bg-white rounded-lg p-3 shadow-sm">
+                      <div className="text-xs text-gray-600 mb-1">Items Count</div>
+                      <div className="font-bold text-gray-900 text-xl">
+                        {receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)}
+                      </div>
+                    </div>
+                    <div className="text-center bg-white rounded-lg p-3 shadow-sm">
+                      <div className="text-xs text-gray-600 mb-1">Total GST</div>
+                      <div className="font-bold text-green-700 text-lg">
+                        {formatCurrency((() => {
+                          let total = 0;
+                          selectedPO.items.forEach((item, index) => {
+                            const receivedItem = receiveData.receivedItems[index];
+                            const quantityToReceive = receivedItem?.quantityReceived || 0;
+                            if (quantityToReceive > 0) {
+                              const gstRate = getProductGST(item.product);
+                              const itemCalculation = calculateItemTotal({
+                                quantity: quantityToReceive,
+                                unitPrice: item.unitPrice,
+                                gst: gstRate
+                              });
+                              total += itemCalculation.gstAmount;
+                            }
+                          });
+                          return total;
+                        })())}
+                      </div>
+                    </div>
+                    <div className="text-center bg-white rounded-lg p-3 shadow-sm">
+                      <div className="text-xs text-gray-600 mb-1">Subtotal</div>
+                      <div className="font-bold text-blue-900 text-lg">
+                        {formatCurrency((() => {
+                          let total = 0;
+                          selectedPO.items.forEach((item, index) => {
+                            const receivedItem = receiveData.receivedItems[index];
+                            const quantityToReceive = receivedItem?.quantityReceived || 0;
+                            if (quantityToReceive > 0) {
+                              total += quantityToReceive * item.unitPrice;
+                            }
+                          });
+                          return total;
+                        })())}
+                      </div>
+                    </div>
                   </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-sm">
-                  <div>
-                    <span className="text-gray-600">Inspector:</span>
-                    <div className="font-medium">{receiveData.inspectedBy || 'Not assigned'}</div>
+
+                  <div className="text-center w-full mt-4 bg-white rounded-lg p-3 shadow-sm">
+                    <div className="text-xs text-gray-600 mb-1">Grand Total</div>
+                    <div className="font-bold text-indigo-900 text-xl">
+                      {formatCurrency((() => {
+                        let total = 0;
+                        selectedPO.items.forEach((item, index) => {
+                          const receivedItem = receiveData.receivedItems[index];
+                          const quantityToReceive = receivedItem?.quantityReceived || 0;
+                          if (quantityToReceive > 0) {
+                            const gstRate = getProductGST(item.product);
+                            const itemCalculation = calculateItemTotal({
+                              quantity: quantityToReceive,
+                              unitPrice: item.unitPrice,
+                              gst: gstRate
+                            });
+                            total += itemCalculation.total;
+                          }
+                        });
+                        return total;
+                      })())}
+                    </div>
                   </div>
+
+                  {/* Amount Comparison Message */}
+                  {debouncedExternalTotal && (
+                    <div className="mt-4 rounded-lg border">
+                      {(() => {
+                        // Calculate Grand Total
+                        let grandTotal = 0;
+                        selectedPO.items.forEach((item, index) => {
+                          const receivedItem = receiveData.receivedItems[index];
+                          const quantityToReceive = receivedItem?.quantityReceived || 0;
+                          if (quantityToReceive > 0) {
+                            const gstRate = getProductGST(item.product);
+                            const itemCalculation = calculateItemTotal({
+                              quantity: quantityToReceive,
+                              unitPrice: item.unitPrice,
+                              gst: gstRate
+                            });
+                            grandTotal += itemCalculation.total;
+                          }
+                        });
+
+                        // Compare amounts using debounced value
+                        const externalTotal = parseFloat(debouncedExternalTotal);
+                        const isMatching = Math.abs(externalTotal - grandTotal) < 0.01; // Allow small floating point differences
+
+                        return isMatching ? (
+                          <div className="flex items-center text-green-700 bg-green-50 p-2 rounded border border-green-300">
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                            <span className="font-medium">Amounts match - Invoice is correct</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center text-red-700 p-2 rounded bg-gradient-to-r from-red-50 to-red-50 border border-red-300 ">
+                            <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16c-.77.833.192 2.5 1.732 2.5z" />
+                            </svg>
+                            <div>
+                              <span className="font-medium">Amount mismatch detected</span>
+                              <div className="text-sm mt-1">
+                                External Invoice: {formatCurrency(externalTotal)} | Grand Total: {formatCurrency(grandTotal)}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
-                <div className="mt-2">
-                  <span className="text-gray-600">Location:</span>
-                  <span className="ml-2 font-medium">
-                    {(() => {
-                      const location = locations.find(loc => loc._id === receiveData.location);
-                      return location ? `${location.name} (${location.type})` : receiveData.location;
-                    })()}
-                  </span>
-                </div>
-                {receiveData.notes && (
-                  <div className="mt-2">
-                    <span className="text-gray-600">Notes:</span>
-                    <div className="font-medium italic">{receiveData.notes}</div>
-                  </div>
-                )}
               </div>
 
-              <div className="flex space-x-3 pt-4">
+              {/* Action Buttons */}
+              <div className="flex space-x-4 pt-6 border-t border-gray-200">
                 <button
                   onClick={() => setShowReceiveModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleReceiveItems}
                   disabled={submitting || receiveData.receivedItems.every(item => (item.quantityReceived || 0) === 0)}
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                  className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                   {submitting ? 'Receiving...' : 'Confirm Receipt'}
                 </button>
               </div>
             </div>
-                    </div>
+          </div>
         </div>
       )}
 
@@ -2700,11 +3050,10 @@ const PurchaseOrderManagement: React.FC = () => {
                           <p className="text-lg font-bold text-blue-900">
                             ₹{order.totalAmount.toLocaleString()}
                           </p>
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                            order.priority === 'high' ? 'bg-red-100 text-red-800' :
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${order.priority === 'high' ? 'bg-red-100 text-red-800' :
                             order.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-green-100 text-green-800'
-                          }`}>
+                              'bg-green-100 text-green-800'
+                            }`}>
                             {order.priority}
                           </span>
                         </div>
@@ -2715,9 +3064,8 @@ const PurchaseOrderManagement: React.FC = () => {
                           {order.items.slice(0, 3).map((item: any, itemIndex: number) => (
                             <div key={itemIndex} className="flex justify-between items-center text-sm">
                               <div className="flex items-center">
-                                <span className={`w-2 h-2 rounded-full mr-2 ${
-                                  item.exists ? 'bg-yellow-500' : 'bg-green-500'
-                                }`}></span>
+                                <span className={`w-2 h-2 rounded-full mr-2 ${item.exists ? 'bg-yellow-500' : 'bg-green-500'
+                                  }`}></span>
                                 <span className="text-gray-900">{item.productName}</span>
                                 <span className="text-gray-500 ml-2">({item.partNo})</span>
                               </div>

@@ -28,6 +28,7 @@ export interface Product {
   gst?: number;
   gndp?: number;
   price?: number;
+  stockUnit?: string;
   gndpTotal?: number;
   createdAt: string;
   updatedAt: string;
@@ -53,8 +54,8 @@ const ProductManagement: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const currentUser = useSelector((state: RootState) => state.auth.user?.id);
-  console.log("currentUser-products:",products);
-  
+  console.log("currentUser-products:", products);
+
 
   // Custom dropdown states
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -67,23 +68,25 @@ const ProductManagement: React.FC = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [productToDelete, setProductToDelete] = useState<Product | null>(null);
   const [locations, setLocations] = useState<any[]>([]);
-    const [rooms, setRooms] = useState<any[]>([]);
-    const [racks, setRacks] = useState<any[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [racks, setRacks] = useState<any[]>([]);
+  const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
+  const [filteredRacks, setFilteredRacks] = useState<any[]>([]);
 
   // Form states
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    category: '', 
+    category: '',
     brand: '',
     modelNumber: '',
     partNo: '',
     quantity: 0,
     minStockLevel: 0,
     isActive: true,
-    location: '',        
-    room: '',            
-    rack: '',            
+    location: '',
+    room: '',
+    rack: '',
     hsnNumber: '',
     dept: '',
     productType1: '',
@@ -93,14 +96,56 @@ const ProductManagement: React.FC = () => {
     gst: 0,
     gndp: 0,
     price: 0,
+    stockUnit: 'pcs',
     gndpTotal: 0,
-    createdBy: currentUser        
+    createdBy: currentUser
   });
 
-    const departments = [
+  useEffect(() => {
+    if (formData.location && Array.isArray(rooms)) {
+      const roomsInLocation = rooms.filter(room =>
+        (typeof room.location === 'string' ? room.location : room.location?._id) === formData.location
+      );
+      setFilteredRooms(roomsInLocation);
+
+      // Reset room & rack if current room doesn't belong to selected location
+      if (!roomsInLocation.find(r => r._id === formData.room)) {
+        setFormData(prev => ({ ...prev, room: '', rack: '' }));
+      }
+    } else {
+      setFilteredRooms([]);
+      setFormData(prev => ({ ...prev, room: '', rack: '' }));
+    }
+  }, [formData.location, rooms]);
+
+
+
+  useEffect(() => {
+    if (formData.room && Array.isArray(racks)) {
+      const racksInRoom = racks.filter(rack =>
+        (typeof rack.room === 'string' ? rack.room : rack.room?._id) === formData.room
+      );
+      setFilteredRacks(racksInRoom);
+
+      // Reset rack if it doesn't belong to selected room
+      if (!racksInRoom.find(r => r._id === formData.rack)) {
+        setFormData(prev => ({ ...prev, rack: '' }));
+      }
+    } else {
+      setFilteredRacks([]);
+      setFormData(prev => ({ ...prev, rack: '' }));
+    }
+  }, [formData.room, racks]);
+
+  const departments = [
     'RETAIL', 'INDUSTRIAL', 'TELECOM', 'EV', 'RET/TEL'
   ];
-    const category = [
+
+  const stockUnit = [
+    'pcs','kg','litre','meter','sq.ft','hour','set','box','can','roll'
+  ];
+
+  const category = [
     'genset', 'spare_part', 'accessory'
   ];
 
@@ -130,37 +175,38 @@ const ProductManagement: React.FC = () => {
     setIsEditing(false);
     setSelectedProduct(null);
     setFormData({
-    name: '',
-    description: '',
-    category: '',        
-    brand: '',
-    modelNumber: '',
-    partNo: '',
-    quantity: 0,
-    minStockLevel: 0,
-    isActive: true,
-    location: '',        
-    room: '',            
-    rack: '',            
-    hsnNumber: '',
-    dept: '',
-    productType1: '',
-    productType2: '',
-    productType3: '',
-    make: '',
-    gst: 0,
-    gndp: 0,
-    price: 0,
-    gndpTotal: 0,
-    createdBy: currentUser
+      name: '',
+      description: '',
+      category: '',
+      brand: '',
+      modelNumber: '',
+      partNo: '',
+      quantity: 0,
+      minStockLevel: 0,
+      isActive: true,
+      location: '',
+      room: '',
+      rack: '',
+      hsnNumber: '',
+      dept: '',
+      productType1: '',
+      productType2: '',
+      productType3: '',
+      make: '',
+      gst: 0,
+      gndp: 0,
+      price: 0,
+      stockUnit: 'pcs',
+      gndpTotal: 0,
+      createdBy: currentUser
     });
     setFormErrors({});
     setShowProductModal(true);
   };
 
   const openEditProductModal = (product: Product) => {
-    console.log("product00000:",product);
-    
+    console.log("product00000:", product);
+
     setIsEditing(true);
     setSelectedProduct(product);
     setFormData({
@@ -185,6 +231,7 @@ const ProductManagement: React.FC = () => {
       gst: product.gst || 0,
       gndp: product.gndp || 0,
       price: product.price || 0,
+      stockUnit: product.stockUnit || 'pcs',
       gndpTotal: product.gndpTotal || 0,
       createdBy: typeof product.createdBy === 'string' ? product.createdBy : product.createdBy?._id || ''
     });
@@ -197,29 +244,30 @@ const ProductManagement: React.FC = () => {
     setShowProductModal(false);
     setSelectedProduct(null);
     setFormData({
-          name: '',
-    description: '',
-    category: '',        
-    brand: '',
-    modelNumber: '',
-    partNo: '',
-    quantity: 0,
-    minStockLevel: 0,
-    isActive: true,
-    location: '',        
-    room: '',            
-    rack: '',            
-    hsnNumber: '',
-    dept: '',
-    productType1: '',
-    productType2: '',
-    productType3: '',
-    make: '',
-    gst: 0,
-    gndp: 0,
-    price: 0,
-    gndpTotal: 0,
-    createdBy: ''
+      name: '',
+      description: '',
+      category: '',
+      brand: '',
+      modelNumber: '',
+      partNo: '',
+      quantity: 0,
+      minStockLevel: 0,
+      isActive: true,
+      location: '',
+      room: '',
+      rack: '',
+      hsnNumber: '',
+      dept: '',
+      productType1: '',
+      productType2: '',
+      productType3: '',
+      make: '',
+      gst: 0,
+      gndp: 0,
+      price: 0,
+      stockUnit: 'pcs',
+      gndpTotal: 0,
+      createdBy: ''
     });
     setFormErrors({});
   };
@@ -312,11 +360,11 @@ const ProductManagement: React.FC = () => {
     }
   };
 
-    useEffect(() => {
-      fetchAllData();
-    }, []);
+  useEffect(() => {
+    fetchAllData();
+  }, []);
 
-      const fetchAllData = async () => {
+  const fetchAllData = async () => {
     setLoading(true);
     try {
       await Promise.all([
@@ -333,63 +381,63 @@ const ProductManagement: React.FC = () => {
   };
 
   const fetchLocations = async () => {
-      try {
-        const response = await apiClient.stock.getLocations();
-        // Handle response format from backend - locations are nested in data.locations
-        let locationsData: any[] = [];
-        if (response.data) {
-          if (Array.isArray(response.data)) {
-            locationsData = response.data;
-          } else if ((response.data as any).locations && Array.isArray((response.data as any).locations)) {
-            locationsData = (response.data as any).locations;
-          }
+    try {
+      const response = await apiClient.stock.getLocations();
+      // Handle response format from backend - locations are nested in data.locations
+      let locationsData: any[] = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          locationsData = response.data;
+        } else if ((response.data as any).locations && Array.isArray((response.data as any).locations)) {
+          locationsData = (response.data as any).locations;
         }
-        setLocations(locationsData);
-      } catch (error) {
-        console.error('Error fetching locations:', error);
-        setLocations([]);
       }
-    };
-  
-    const fetchRooms = async () => {
-      try {
-        const response = await apiClient.stock.getRooms();
-        // Handle response format from backend - locations are nested in data.locations
-        let roomsData: any[] = [];
-        if (response.data) {
-          if (Array.isArray(response.data)) {
-            roomsData = response.data;
-          } else if ((response.data as any).rooms && Array.isArray((response.data as any).rooms)) {
-            roomsData = (response.data as any).rooms;
-          }
-        }
+      setLocations(locationsData);
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+      setLocations([]);
+    }
+  };
 
-        setRooms(roomsData);
-      } catch (error) {
-        console.error('Error fetching locations:', error);
-        setRooms([]);
-      }
-    };
-  
-  
-    const fetchRacks = async () => {
-      try {
-        const response = await apiClient.stock.getRacks();
-        // Handle response format from backend - locations are nested in data.locations
-        let racksData: any[] = [];
-        if (response.data) {
-          if (Array.isArray(response.data)) {
-            racksData = response.data;
-          } else if ((response.data as any).racks && Array.isArray((response.data as any).racks)) {
-            racksData = (response.data as any).racks;
-          }
+  const fetchRooms = async () => {
+    try {
+      const response = await apiClient.stock.getRooms();
+      // Handle response format from backend - locations are nested in data.locations
+      let roomsData: any[] = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          roomsData = response.data;
+        } else if ((response.data as any).rooms && Array.isArray((response.data as any).rooms)) {
+          roomsData = (response.data as any).rooms;
         }
-        setRacks(racksData);
-      } catch (error) {
-        console.error('Error fetching locations:', error);
-        setRacks([]);
       }
-    };
+
+      setRooms(roomsData);
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+      setRooms([]);
+    }
+  };
+
+
+  const fetchRacks = async () => {
+    try {
+      const response = await apiClient.stock.getRacks();
+      // Handle response format from backend - locations are nested in data.locations
+      let racksData: any[] = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          racksData = response.data;
+        } else if ((response.data as any).racks && Array.isArray((response.data as any).racks)) {
+          racksData = (response.data as any).racks;
+        }
+      }
+      setRacks(racksData);
+    } catch (error) {
+      console.error('Error fetching locations:', error);
+      setRacks([]);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -602,6 +650,7 @@ const ProductManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Unit</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -631,6 +680,9 @@ const ProductManagement: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {product.minStockLevel}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                      {product?.stockUnit}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${product.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -667,7 +719,7 @@ const ProductManagement: React.FC = () => {
       {/* Product Form Modal */}
       {showProductModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-[1200px] h-[600px] m-4 overflow-y-auto flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">
                 {isEditing ? 'Edit Product' : 'Add New Product'}
@@ -680,334 +732,404 @@ const ProductManagement: React.FC = () => {
               </button>
             </div>
 
-            {/* <form onSubmit={handleSubmit} className="p-4 space-y-3">
-              {formErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-red-600 text-sm">{formErrors.general}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Product Name *
-                  </label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.name ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="Enter product name"
-                  />
-                  {formErrors.name && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
+            <form onSubmit={handleSubmit} className="flex flex-col">
+              {/* First Row: Basic Information on Left and Right */}
+              <div className="flex flex-row space-x-4">
+                <div className="w-1/2 border-r border-gray-200 flex flex-col">
+                  {/* General Error */}
+                  {formErrors.general && (
+                    <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                      <p className="text-red-600 text-sm font-medium">{formErrors.general}</p>
+                    </div>
                   )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Category *
-                  </label>
-                  <select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleInputChange}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.category ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Select Category</option>
-                    <option value="genset">Generator Set</option>
-                    <option value="spare_part">Spare Part</option>
-                    <option value="accessory">Accessory</option>
-                  </select>
-                  {formErrors.category && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.category}</p>
-                  )}
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Brand
-                  </label>
-                  <input
-                    type="text"
-                    name="brand"
-                    value={formData.brand}
-                    onChange={handleInputChange}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter brand name"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Model Number
-                  </label>
-                  <input
-                    type="text"
-                    name="modelNumber"
-                    value={formData.modelNumber}
-                    onChange={handleInputChange}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Enter model number"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleInputChange}
-                  rows={3}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter product description"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Price (₹) *
-                  </label>
-                  <input
-                    type="number"
-                    name="price"
-                    value={formData.price}
-                    onChange={handleInputChange}
-                    min="0"
-                    step="0.01"
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.price ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="0.00"
-                  />
-                  {formErrors.price && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Min Stock Level *
-                  </label>
-                  <input
-                    type="number"
-                    name="minStockLevel"
-                    value={formData.minStockLevel}
-                    onChange={handleInputChange}
-                    min="0"
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.minStockLevel ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                    placeholder="0"
-                  />
-                  {formErrors.minStockLevel && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.minStockLevel}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={closeProductModal}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : (isEditing ? 'Update Product' : 'Create Product')}
-                </button>
-              </div>
-            </form> */}
-            <form onSubmit={handleSubmit}>
-              <div className="p-6">
-                {/* General Error */}
-                {formErrors.general && (
-                  <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
-                    <p className="text-red-600 text-sm font-medium">{formErrors.general}</p>
-                  </div>
-                )}
-
-                {/* Basic Information Section */}
-                <div className="mb-8">
-                  <div className="flex items-center space-x-2 mb-6">
-                    {/* <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                  {/* Basic Information Section */}
+                  <div className="flex-1 space-y-6 border-r border-gray-200 p-6">
+                    <div className="flex items-center space-x-2 mb-6">
+                      {/* <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
                     <Package className="w-4 h-4 text-blue-600" />
                   </div> */}
-                    <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
-                  </div>
-
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Product Name *
-                        </label>
-                        <input
-                          type="text"
-                          name="name"
-                          value={formData.name}
-                          onChange={handleInputChange}
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
-                            }`}
-                          placeholder="Enter product name"
-                        />
-                        {formErrors.name && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
-                            {formErrors.name}
-                          </p>
-                        )}
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Part Number *
-                        </label>
-                        <input
-                          type="text"
-                          name="partNo"
-                          value={formData.partNo}
-                          onChange={handleInputChange}
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.partNo ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
-                            }`}
-                          placeholder="e.g., BRG-789X"
-                        />
-                        {formErrors.partNo && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
-                            {formErrors.partNo}
-                          </p>
-                        )}
-                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Category *
-                        </label>
-                        <select
-                          name="category"
-                          value={formData.category}
-                          onChange={handleInputChange}
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.category ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
-                            }`}
-                        >
-                          <option value="">Select Category</option>
-                          {category.map(cat => (
-                            <option key={cat} value={cat}>
-                              {cat.replace('_', ' ').toUpperCase()}
-                            </option>
-                          ))}
-                        </select>
-                        {formErrors.category && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
-                            {formErrors.category}
-                          </p>
-                        )}
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Product Name *
+                          </label>
+                          <input
+                            type="text"
+                            name="name"
+                            value={formData.name}
+                            onChange={handleInputChange}
+                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                              }`}
+                            placeholder="Enter product name"
+                          />
+                          {formErrors.name && (
+                            <p className="text-red-500 text-xs mt-1 flex items-center">
+                              <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                              {formErrors.name}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Part Number *
+                          </label>
+                          <input
+                            type="text"
+                            name="partNo"
+                            value={formData.partNo}
+                            onChange={handleInputChange}
+                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.partNo ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                              }`}
+                            placeholder="e.g., BRG-789X"
+                          />
+                          {formErrors.partNo && (
+                            <p className="text-red-500 text-xs mt-1 flex items-center">
+                              <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                              {formErrors.partNo}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Category *
+                          </label>
+                          <select
+                            name="category"
+                            value={formData.category}
+                            onChange={handleInputChange}
+                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.category ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                              }`}
+                          >
+                            <option value="">Select Category</option>
+                            {category.map(cat => (
+                              <option key={cat} value={cat}>
+                                {cat.replace('_', ' ').toUpperCase()}
+                              </option>
+                            ))}
+                          </select>
+                          {formErrors.category && (
+                            <p className="text-red-500 text-xs mt-1 flex items-center">
+                              <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                              {formErrors.category}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Department *
+                          </label>
+                          <select
+                            name="dept"
+                            value={formData.dept}
+                            onChange={handleInputChange}
+                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.dept ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                              }`}
+                          >
+                            <option value="">Select Department</option>
+                            {departments.map(dept => (
+                              <option key={dept} value={dept}>{dept}</option>
+                            ))}
+                          </select>
+                          {formErrors.dept && (
+                            <p className="text-red-500 text-xs mt-1 flex items-center">
+                              <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                              {formErrors.dept}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Brand/Make
+                          </label>
+                          <input
+                            type="text"
+                            name="brand"
+                            value={formData.brand}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                            placeholder="e.g., SKF"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Model Number
+                          </label>
+                          <input
+                            type="text"
+                            name="modelNumber"
+                            value={formData.modelNumber}
+                            onChange={handleInputChange}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                            placeholder="Enter model number"
+                          />
+                        </div>
                       </div>
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Department *
+                          Description
                         </label>
-                        <select
-                          name="dept"
-                          value={formData.dept}
+                        <textarea
+                          name="description"
+                          value={formData.description}
                           onChange={handleInputChange}
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.dept ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
-                            }`}
-                        >
-                          <option value="">Select Department</option>
-                          {departments.map(dept => (
-                            <option key={dept} value={dept}>{dept}</option>
-                          ))}
-                        </select>
-                        {formErrors.dept && (
-                          <p className="text-red-500 text-xs mt-1 flex items-center">
-                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
-                            {formErrors.dept}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Brand/Make
-                        </label>
-                        <input
-                          type="text"
-                          name="brand"
-                          value={formData.brand}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                          placeholder="e.g., SKF"
+                          rows={2}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200 resize-none"
+                          placeholder="Enter product description"
                         />
                       </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Model Number
-                        </label>
-                        <input
-                          type="text"
-                          name="modelNumber"
-                          value={formData.modelNumber}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                          placeholder="Enter model number"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Description
-                      </label>
-                      <textarea
-                        name="description"
-                        value={formData.description}
-                        onChange={handleInputChange}
-                        rows={3}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200 resize-none"
-                        placeholder="Enter product description"
-                      />
                     </div>
                   </div>
                 </div>
 
-                {/* Product Classification Section */}
-                <div className="mb-8">
-                  <div className="flex items-center space-x-2 mb-6">
-                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                      <Settings className="w-4 h-4 text-green-600" />
+                <div className="w-1/2 flex flex-col">
+                  {/* Duplicate Basic Information Section for Right Side */}
+                  <div className="flex-1 space-y-6 p-6">
+                    <div className="flex items-center space-x-2 mb-4">
+                      <DollarSign className="w-5 h-5 text-gray-600" />
+                      <h3 className="text-lg font-semibold text-gray-900">Inventory & Pricing</h3>
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-900">Product Classification</h3>
-                  </div>
-
-                  <div className="space-y-6">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Product Type 1
+                          Min Stock Level *
                         </label>
-                        {/* <select
+                        <input
+                          type="number"
+                          name="minStockLevel"
+                          value={formData.minStockLevel}
+                          onChange={handleInputChange}
+                          min="0"
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.minStockLevel ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          placeholder="0"
+                        />
+                        {formErrors.minStockLevel && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.minStockLevel}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          GNDP Price (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          name="gndp"
+                          value={formData.gndp}
+                          onChange={handleInputChange}
+                          min="0"
+                          step="0.01"
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.gndp ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          placeholder="0.00"
+                        />
+                        {formErrors.gndp && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.gndp}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          MRP (₹) *
+                        </label>
+                        <input
+                          type="number"
+                          name="price"
+                          value={formData.price}
+                          onChange={handleInputChange}
+                          min="0"
+                          step="0.01"
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.price ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          placeholder="0.00"
+                        />
+                        {formErrors.price && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>
+                        )}
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Stock Unit *
+                        </label>
+                        <select
+                          name="stockUnit"
+                          value={formData.stockUnit}
+                          onChange={handleInputChange}
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.stockUnit ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                            }`}
+                        >
+                          <option value="">Select Unit</option>
+                          {stockUnit.map(unit => (
+                            <option key={unit} value={unit}>{unit}</option>
+                          ))}
+                        </select>
+                        {formErrors.quantity && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
+                        )}
+                      </div>
+                    </div>
+                    {/* Tax Information Section */}
+                    <div className="mb-8">
+                      <div className="flex items-center space-x-2 mb-4">
+                        <Hash className="w-5 h-5 text-gray-600" />
+                        <h3 className="text-lg font-semibold text-gray-900">Tax Information</h3>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            HSN Number
+                          </label>
+                          <input
+                            type="text"
+                            name="hsnNumber"
+                            value={formData.hsnNumber}
+                            onChange={handleInputChange}
+                            className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                            placeholder="e.g., 8482.10.00"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            GST Rate (%)
+                          </label>
+                          <input
+                            type="text"
+                            name="gst"
+                            value={formData.gst}
+                            onChange={handleInputChange}
+                            className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                            placeholder="e.g., 8482.10.00"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Second Row: Basic Information on Left and Inventory & Pricing, Tax Information on Right */}
+              <div className="flex flex-row space-x-4">
+                <div className="w-1/2 border-r border-gray-200 flex flex-col">
+                  {/* Basic Information Section (Left Side) */}
+                  <div className="flex-1 space-y-6 border-r border-gray-200 p-6">
+                    <div className="flex items-center space-x-2 mb-6">
+                      <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
+                        <MapPin className="w-4 h-4 text-purple-600" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-gray-900">Location Information</h3>
+                    </div>
+
+                    {/* Location Information Section */}
+                    <div className="mb-8">
+                      {/* <h3 className="text-lg font-semibold text-gray-900">Location Information</h3> */}
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Location ID</label>
+                            <select
+                              name="location"
+                              value={formData.location}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select Location</option>
+                              {locations.map(location => (
+                                <option key={location._id} value={location._id}>
+                                  {location.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Room ID</label>
+                            <select
+                              name="room"
+                              value={formData.room}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              disabled={!formData.location}
+                            >
+                              <option value="">Select Room</option>
+                              {filteredRooms.length > 0 ? filteredRooms.map(room =>
+                                typeof room === 'object' && room._id && room.name ? (
+                                  <option key={room._id} value={room._id}>
+                                    {room.name}
+                                  </option>
+                                ) : null
+                              ) : <option disabled value="">No rooms </option>}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Rack ID</label>
+                            <select
+                              name="rack"
+                              value={formData.rack}
+                              onChange={handleInputChange}
+                              disabled={!formData.room}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="">Select Rack</option>
+                              {filteredRacks.length > 0 ? (
+                                filteredRacks.map(rack => (
+                                  <option key={rack._id} value={rack._id}>
+                                    {rack.name}
+                                  </option>
+                                ))
+                              ) : (
+                                <option disabled value="">
+                                  No racks
+                                </option>
+                              )}
+                            </select>
+
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="w-1/2 flex flex-col">
+                  {/* Inventory & Pricing Section */}
+                  <div className="space-y-6">
+                    {/* Input Fields for Inventory & Pricing */}
+                    {/* Product Classification Section */}
+                    <div className="flex-1 space-y-6 p-6">
+                      <div className="flex items-center space-x-2 mb-6">
+                        <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                          <Settings className="w-4 h-4 text-green-600" />
+                        </div>
+                        <h3 className="text-lg font-semibold text-gray-900">Product Classification</h3>
+                      </div>
+
+                      <div className="space-y-6">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Product Type 1
+                            </label>
+                            {/* <select
                           name="productType1"
                           value={formData.productType1}
                           onChange={handleInputChange}
@@ -1018,21 +1140,21 @@ const ProductManagement: React.FC = () => {
                             <option key={type} value={type}>{type}</option>
                           ))}
                         </select> */}
-                        <input
-                          type="text"
-                          name="productType1"
-                          value={formData.productType1}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                          placeholder="Enter productType1"
-                        />
-                      </div>
+                            <input
+                              type="text"
+                              name="productType1"
+                              value={formData.productType1}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                              placeholder="Enter productType1"
+                            />
+                          </div>
 
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Product Type 2
-                        </label>
-                        {/* <select
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Product Type 2
+                            </label>
+                            {/* <select
                           name="productType2"
                           value={formData.productType2}
                           onChange={handleInputChange}
@@ -1043,23 +1165,23 @@ const ProductManagement: React.FC = () => {
                             <option key={type} value={type}>{type}</option>
                           ))}
                         </select> */}
-                        <input
-                          type="text"
-                          name="productType2"
-                          value={formData.productType2}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                          placeholder="Enter productType2"
-                        />
-                      </div>
-                    </div>
+                            <input
+                              type="text"
+                              name="productType2"
+                              value={formData.productType2}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                              placeholder="Enter productType2"
+                            />
+                          </div>
+                        </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Product Type 3
-                        </label>
-                        {/* <select
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Product Type 3
+                            </label>
+                            {/* <select
                           name="productType3"
                           value={formData.productType3}
                           onChange={handleInputChange}
@@ -1070,253 +1192,68 @@ const ProductManagement: React.FC = () => {
                             <option key={type} value={type}>{type}</option>
                           ))}
                         </select> */}
-                        <input
-                          type="text"
-                          name="productType3"
-                          value={formData.productType3}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                          placeholder="Enter productType3"
-                        />
-                      </div>
-                      <div></div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Location Information Section */}
-                <div className="mb-8">
-                  <div className="flex items-center space-x-2 mb-6">
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                      <MapPin className="w-4 h-4 text-purple-600" />
-                    </div>
-                    <h3 className="text-lg font-semibold text-gray-900">Location Information</h3>
-                  </div>
-
-                  {/* Location Information Section */}
-                  <div className="mb-8">
-                    <h3 className="text-lg font-semibold text-gray-900">Location Information</h3>
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Location ID</label>
-                          <select
-                            name="location"
-                            value={formData.location}
-                            onChange={handleInputChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="">Select Location</option>
-                            {locations.map(location => (
-                              <option key={location._id} value={location._id}>
-                                {location.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Room ID</label>
-                          <select
-                            name="room"
-                            value={formData.room}
-                            onChange={handleInputChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="">Select Room</option>
-                            {rooms.map(room => (
-                              <option key={room._id} value={room._id}>
-                                {room.name}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Rack ID</label>
-                          <select
-                            name="rack"
-                            value={formData.rack}
-                            onChange={handleInputChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="">Select Rack</option>
-                            {racks.map(rack => (
-                              <option key={rack._id} value={rack._id}>
-                                {rack.name}
-                              </option>
-                            ))}
-                          </select>
+                            <input
+                              type="text"
+                              name="productType3"
+                              value={formData.productType3}
+                              onChange={handleInputChange}
+                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                              placeholder="Enter productType3"
+                            />
+                          </div>
+                          <div></div>
                         </div>
                       </div>
                     </div>
                   </div>
-                </div>
-
-                {/* Inventory & Pricing Section */}
-                <div className="mb-8">
-                  <div className="flex items-center space-x-2 mb-4">
-                    <DollarSign className="w-5 h-5 text-gray-600" />
-                    <h3 className="text-lg font-semibold text-gray-900">Inventory & Pricing</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Quantity *
-                      </label>
-                      <input
-                        type="number"
-                        name="quantity"
-                        value={formData.quantity}
-                        onChange={handleInputChange}
-                        min="0"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.quantity ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                        placeholder="0"
-                      />
-                      {formErrors.quantity && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Min Stock Level *
-                      </label>
-                      <input
-                        type="number"
-                        name="minStockLevel"
-                        value={formData.minStockLevel}
-                        onChange={handleInputChange}
-                        min="0"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.minStockLevel ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                        placeholder="0"
-                      />
-                      {formErrors.minStockLevel && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.minStockLevel}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        GNDP Price (₹) *
-                      </label>
-                      <input
-                        type="number"
-                        name="gndp"
-                        value={formData.gndp}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.gndp ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                        placeholder="0.00"
-                      />
-                      {formErrors.gndp && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.gndp}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        MRP (₹) *
-                      </label>
-                      <input
-                        type="number"
-                        name="price"
-                        value={formData.price}
-                        onChange={handleInputChange}
-                        min="0"
-                        step="0.01"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.price ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                        placeholder="0.00"
-                      />
-                      {formErrors.price && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.price}</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Tax Information Section */}
-                <div className="mb-8">
-                  <div className="flex items-center space-x-2 mb-4">
-                    <Hash className="w-5 h-5 text-gray-600" />
-                    <h3 className="text-lg font-semibold text-gray-900">Tax Information</h3>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        HSN Number
-                      </label>
-                      <input
-                        type="text"
-                        name="hsnNumber"
-                        value={formData.hsnNumber}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="e.g., 8482.10.00"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        GST Rate (%)
-                      </label>
-                      <input
-                        type="text"
-                        name="gst"
-                        value={formData.gst}
-                        onChange={handleInputChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        placeholder="e.g., 8482.10.00"
-                      />
-                      {/* <select
-                      name="gst"
-                      value={formData.gst}
-                      onChange={handleInputChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    >
-                      <option value="">Select GST Rate</option>
-                      {gstRates.map(rate => (
-                        <option key={rate} value={rate}>{rate}%</option>
-                      ))}
-                    </select> */}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Action Buttons */}
-                <div className="flex flex-col sm:flex-row space-y-3 sm:space-y-0 sm:space-x-4 pt-6 border-t border-gray-200">
-                  <button
-                    type="button"
-                    onClick={closeProductModal}
-                    className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type='submit'
-                    // onClick={handleSubmit}
-                    disabled={submitting}
-                    className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                  >
-                    {submitting ? (
-                      <span className="flex items-center justify-center">
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Saving...
-                      </span>
-                    ) : (
-                      isEditing ? 'Update Product' : 'Create Product'
-                    )}
-                  </button>
                 </div>
               </div>
+
+              {/* Footer with Action Buttons */}
+              <div className="flex justify-end gap-4 items-center p-4  border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={closeProductModal}
+                  className="px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {submitting ? (
+                    <span className="flex items-center justify-center">
+                      <svg
+                        className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        ></circle>
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        ></path>
+                      </svg>
+                      Saving...
+                    </span>
+                  ) : (
+                    isEditing ? 'Update Product' : 'Create Product'
+                  )}
+                </button>
+              </div>
+
             </form>
           </div>
         </div>

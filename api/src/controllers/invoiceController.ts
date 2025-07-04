@@ -60,6 +60,7 @@ export const getInvoices = async (
     const skip = (Number(page) - 1) * Number(limit);
     
     const invoices = await Invoice.find(query)
+      .populate('user', 'firstName lastName email')
       .populate('customer', 'name email phone address')
       .populate('location', 'name address')
       .populate('createdBy', 'firstName lastName')
@@ -145,6 +146,8 @@ export const createInvoice = async (
       externalInvoiceTotal
     } = req.body;
 
+    console.log("req.body:",req.body);
+    
     // Generate invoice number
     const invoiceNumber = await generateReferenceId('invoice');
 

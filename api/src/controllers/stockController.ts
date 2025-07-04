@@ -42,7 +42,7 @@ export const getStockLevels = async (
 
     // Execute query with pagination
     let stockQuery = Stock.find(query)
-      .populate('product', 'name partNo brand category hsnNumber dept productType1 productType2 productType3 make gst gndp price')
+      .populate('product', 'name partNo brand category hsnNumber dept productType1 productType2 productType3 make gst gndp price stockUnit')
       .populate('location', 'name address type')
       .populate('room', 'name ')
       .populate('rack', 'name ')

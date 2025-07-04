@@ -44,6 +44,7 @@ interface ProductData {
   brand?: string;
   modelNumber?: string;
   price: number;
+  stockUnit: string;
   minStockLevel: number;
   partNo?: string;
   dept?: string;
@@ -2209,6 +2210,10 @@ const brandOptionsFilter = [
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-gray-500">Available:</span>
                             <span className="text-xs text-green-600 font-medium">{item.availableQuantity}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Stock Unit:</span>
+                            <span className="text-xs text-green-600 font-medium">{item.product?.stockUnit}</span>
                           </div>
                         </div>
                       </td>

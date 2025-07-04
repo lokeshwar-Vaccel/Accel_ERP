@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
-import { 
-  Plus, 
-  Search, 
+import {
+  Plus,
+  Search,
   FileText,
   DollarSign,
   Clock,
@@ -40,6 +40,8 @@ interface Invoice {
   };
   issueDate: string;
   dueDate: string;
+  externalInvoiceNumber: string;
+  externalInvoiceTotal: number;
   totalAmount: number;
   paidAmount: number;
   remainingAmount: number;
@@ -50,17 +52,12 @@ interface Invoice {
 }
 
 interface InvoiceItem {
-  product: {
-    _id: string;
-    name: string;
-    price: number;
-  };
+  product: string; // Use string for product id in form state
   description: string;
   quantity: number;
   unitPrice: number;
-  totalPrice: number;
   taxRate: number;
-  taxAmount: number;
+  // totalPrice and taxAmount are calculated, not needed in form state
 }
 
 interface Customer {
@@ -96,10 +93,44 @@ interface InvoiceStats {
   totalRevenue: number;
 }
 
+interface NewInvoiceItem {
+  product: string;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  taxRate: number;
+}
+
+interface NewInvoice {
+  customer: string;
+  dueDate: string;
+  invoiceType: 'sale' | 'service' | 'amc' | 'other';
+  location: string;
+  notes: string;
+  items: NewInvoiceItem[];
+  discountAmount: number;
+  externalInvoiceNumber: string;
+  externalInvoiceTotal: number;
+  reduceStock: boolean;
+}
+
+interface StatusUpdate {
+  status: string;
+  notes: string;
+}
+
+interface PaymentUpdate {
+  paymentStatus: string;
+  paymentMethod: string;
+  paymentDate: string;
+  paidAmount: number;
+  notes: string;
+}
+
 const InvoiceManagement: React.FC = () => {
   // Get current user from Redux
   const currentUser = useSelector((state: RootState) => state.auth.user);
-  
+
   // State management
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -138,11 +169,11 @@ const InvoiceManagement: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
 
   // Status update states
-  const [statusUpdate, setStatusUpdate] = useState({
+  const [statusUpdate, setStatusUpdate] = useState<StatusUpdate>({
     status: '',
     notes: ''
   });
-  const [paymentUpdate, setPaymentUpdate] = useState({
+  const [paymentUpdate, setPaymentUpdate] = useState<PaymentUpdate>({
     paymentStatus: '',
     paymentMethod: '',
     paymentDate: '',
@@ -150,8 +181,11 @@ const InvoiceManagement: React.FC = () => {
     notes: ''
   });
 
+  console.log("paymentUpdate:",paymentUpdate);
+  
+
   // Form states
-  const [newInvoice, setNewInvoice] = useState({
+  const [newInvoice, setNewInvoice] = useState<NewInvoice>({
     customer: '',
     dueDate: '',
     invoiceType: 'sale',
@@ -167,6 +201,8 @@ const InvoiceManagement: React.FC = () => {
       }
     ],
     discountAmount: 0,
+    externalInvoiceNumber: '',
+    externalInvoiceTotal: 0,
     reduceStock: true
   });
 
@@ -177,6 +213,50 @@ const InvoiceManagement: React.FC = () => {
     message: string;
   }>>({});
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+
+
+  const [editMode, setEditMode] = useState(false);
+
+const handleItemEdit = (index: number, field: string, value: any) => {
+  if (!selectedInvoice) return;
+  const updatedItems = [...selectedInvoice.items];
+  updatedItems[index] = { ...updatedItems[index], [field]: value };
+  // Recalculate total price for the item
+  const item = updatedItems[index] as any;
+  const subtotal = item.quantity * item.unitPrice;
+  const taxAmount = subtotal * (item.taxRate / 100);
+  // Add totalPrice property for calculation
+  item.totalPrice = subtotal + taxAmount;
+  updatedItems[index] = item;
+  setSelectedInvoice({
+    ...selectedInvoice,
+    items: updatedItems,
+    totalAmount: updatedItems.reduce((sum, item: any) => sum + (item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)), 0)
+  });
+};
+
+const recalculateItem = (index: number) => {
+  if (!selectedInvoice) return;
+  const updatedItems = [...selectedInvoice.items];
+  const item = updatedItems[index] as any;
+  const subtotal = item.quantity * item.unitPrice;
+  const taxAmount = subtotal * (item.taxRate / 100);
+  item.totalPrice = subtotal + taxAmount;
+  updatedItems[index] = item;
+  setSelectedInvoice({
+    ...selectedInvoice,
+    items: updatedItems,
+    totalAmount: updatedItems.reduce((sum, item: any) => sum + (item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)), 0)
+  });
+};
+
+const handleSaveChanges = () => {
+  // Save the changes to your backend/state
+  setEditMode(false);
+  // Add your save logic here
+};
+
 
   // Initialize data
   useEffect(() => {
@@ -299,7 +379,9 @@ const InvoiceManagement: React.FC = () => {
         }
       ],
       discountAmount: 0,
-      reduceStock: true
+      reduceStock: true,
+      externalInvoiceNumber: '',
+      externalInvoiceTotal: 0,
     });
     setStockValidation({});
     setFormErrors({});
@@ -326,11 +408,13 @@ const InvoiceManagement: React.FC = () => {
 
   const handleUpdatePayment = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
+    console.log("check---");
     
+
     // Smart defaults based on current payment status
     let defaultPaymentStatus = 'paid';
     let defaultPaidAmount = invoice.totalAmount;
-    
+
     if (invoice.paymentStatus === 'pending') {
       defaultPaymentStatus = 'partial';
       defaultPaidAmount = Math.round(invoice.totalAmount * 0.5); // Default to 50% for partial
@@ -430,7 +514,7 @@ const InvoiceManagement: React.FC = () => {
   // Get available actions for an invoice
   const getAvailableActions = (invoice: Invoice) => {
     const actions = [];
-    
+
     // Always available
     actions.push({
       icon: <Eye className="w-4 h-4" />,
@@ -492,10 +576,10 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const addInvoiceItem = () => {
-    setNewInvoice({
-      ...newInvoice,
+    setNewInvoice(prev => ({
+      ...prev,
       items: [
-        ...newInvoice.items,
+        ...prev.items,
         {
           product: '',
           description: '',
@@ -504,35 +588,36 @@ const InvoiceManagement: React.FC = () => {
           taxRate: 18
         }
       ]
-    });
+    }));
   };
 
   const removeInvoiceItem = (index: number) => {
-    const updatedItems = newInvoice.items.filter((_, i) => i !== index);
-    setNewInvoice({ ...newInvoice, items: updatedItems });
+    setNewInvoice(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
   };
 
-  const updateInvoiceItem = (index: number, field: string, value: any) => {
-    const updatedItems = [...newInvoice.items];
-    updatedItems[index] = { ...updatedItems[index], [field]: value };
-
-    // Auto-populate price when product is selected
-    if (field === 'product') {
-      const product = products.find(p => p._id === value);
-      if (product) {
-        updatedItems[index].unitPrice = product.price;
-        updatedItems[index].description = product.name;
+  const updateInvoiceItem = (index: number, field: keyof NewInvoiceItem, value: any) => {
+    setNewInvoice(prev => {
+      const updatedItems = [...prev.items];
+      updatedItems[index] = { ...updatedItems[index], [field]: value };
+      // Auto-populate price when product is selected
+      if (field === 'product') {
+        const productObj = products.find(p => p._id === value);
+        if (productObj) {
+          updatedItems[index].unitPrice = productObj.price;
+          updatedItems[index].description = productObj.name;
+        }
+        // Validate stock when product or quantity changes
+        validateStockForItem(index, value, updatedItems[index].quantity);
       }
-      // Validate stock when product or quantity changes
-      validateStockForItem(index, value, updatedItems[index].quantity);
-    }
-
-    // Validate stock when quantity changes
-    if (field === 'quantity') {
-      validateStockForItem(index, updatedItems[index].product, value);
-    }
-
-    setNewInvoice({ ...newInvoice, items: updatedItems });
+      // Validate stock when quantity changes
+      if (field === 'quantity') {
+        validateStockForItem(index, updatedItems[index].product, value);
+      }
+      return { ...prev, items: updatedItems };
+    });
   };
 
   // Validate stock availability for a specific item
@@ -546,11 +631,11 @@ const InvoiceManagement: React.FC = () => {
     }
 
     try {
-      const response = await apiClient.stock.getStock({ 
-        product: productId, 
-        location: newInvoice.location 
+      const response = await apiClient.stock.getStock({
+        product: productId,
+        location: newInvoice.location
       });
-      
+
       let stockData: any[] = [];
       if (response.data) {
         if (Array.isArray(response.data)) {
@@ -562,10 +647,10 @@ const InvoiceManagement: React.FC = () => {
 
       const stockItem = stockData.length > 0 ? stockData[0] : null;
       const available = stockItem ? (stockItem.availableQuantity || (stockItem.quantity - (stockItem.reservedQuantity || 0))) : 0;
-      
+
       const isValid = quantity <= available;
-      const message = !isValid 
-        ? `Only ${available} units available` 
+      const message = !isValid
+        ? `Only ${available} units available`
         : `${available} units available`;
 
       setStockValidation(prev => ({
@@ -645,19 +730,21 @@ const InvoiceManagement: React.FC = () => {
     setSubmitting(true);
     try {
       const grandTotal = calculateGrandTotal();
-      
+
       // Calculate totals for remainingAmount
       const totalAmount = Number(isNaN(grandTotal) ? 0 : grandTotal);
-      
+
       const subtotal = calculateSubtotal();
       const taxAmount = calculateTotalTax();
-      
+
       // Simple payload - backend controller now provides all required fields
       const invoiceData = {
         customer: newInvoice.customer,
         dueDate: new Date(newInvoice.dueDate).toISOString(),
         invoiceType: newInvoice.invoiceType,
         location: newInvoice.location,
+        externalInvoiceNumber: newInvoice.externalInvoiceNumber,
+        externalInvoiceTotal: newInvoice.externalInvoiceTotal,
         notes: newInvoice.notes,
         discountAmount: newInvoice.discountAmount || 0,
         reduceStock: newInvoice.reduceStock,
@@ -719,12 +806,12 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const filteredInvoices = invoices.filter(invoice => {
-    const matchesSearch = 
-      invoice.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice.customer.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch =
+      invoice?.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      invoice?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
     const matchesPayment = paymentFilter === 'all' || invoice.paymentStatus === paymentFilter;
-    
+
     return matchesSearch && matchesStatus && matchesPayment;
   });
 
@@ -843,7 +930,7 @@ const InvoiceManagement: React.FC = () => {
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
-      <PageHeader 
+      <PageHeader
         title="Invoice Management"
         subtitle="Create and manage customer invoices"
       >
@@ -912,9 +999,8 @@ const InvoiceManagement: React.FC = () => {
                       setStatusFilter(option.value);
                       setShowStatusFilterDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                      statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                    }`}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -947,9 +1033,8 @@ const InvoiceManagement: React.FC = () => {
                       setPaymentFilter(option.value);
                       setShowPaymentFilterDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                      paymentFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                    }`}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${paymentFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
                   >
                     {option.label}
                   </button>
@@ -958,7 +1043,7 @@ const InvoiceManagement: React.FC = () => {
             )}
           </div>
         </div>
-        
+
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xs text-gray-600">
             Showing {filteredInvoices.length} of {invoices.length} invoices
@@ -1000,8 +1085,8 @@ const InvoiceManagement: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{invoice.customer.name}</div>
-                        <div className="text-xs text-gray-500">{invoice.customer.email}</div>
+                        <div className="text-sm font-medium text-gray-900">{invoice.customer?invoice.customer.name:invoice.user?.firstName}</div>
+                        <div className="text-xs text-gray-500">{invoice.customer?invoice.customer.email:invoice.user?.email}</div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
@@ -1027,18 +1112,18 @@ const InvoiceManagement: React.FC = () => {
                       {new Date(invoice.dueDate).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3">
-                                              <div className="flex items-center space-x-2">
-                          {getAvailableActions(invoice).map((action, index) => (
-                            <button
-                              key={index}
-                              onClick={action.action}
-                              className={`${action.color} p-1 rounded transition-colors`}
-                              title={action.label}
-                            >
-                              {action.icon}
-                            </button>
-                          ))}
-                        </div>
+                      <div className="flex items-center space-x-2">
+                        {getAvailableActions(invoice).map((action, index) => (
+                          <button
+                            key={index}
+                            onClick={action.action}
+                            className={`${action.color} p-1 rounded transition-colors`}
+                            title={action.label}
+                          >
+                            {action.icon}
+                          </button>
+                        ))}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -1079,9 +1164,8 @@ const InvoiceManagement: React.FC = () => {
                   <div className="relative dropdown-container">
                     <button
                       onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                        formErrors.customer ? 'border-red-500' : 'border-gray-300'
-                      } hover:border-gray-400`}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.customer ? 'border-red-500' : 'border-gray-300'
+                        } hover:border-gray-400`}
                     >
                       <span className="text-gray-700 truncate mr-1">{getCustomerLabel(newInvoice.customer)}</span>
                       <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCustomerDropdown ? 'rotate-180' : ''}`} />
@@ -1093,9 +1177,8 @@ const InvoiceManagement: React.FC = () => {
                             setNewInvoice({ ...newInvoice, customer: '' });
                             setShowCustomerDropdown(false);
                           }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            !newInvoice.customer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!newInvoice.customer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           Select customer
                         </button>
@@ -1106,9 +1189,8 @@ const InvoiceManagement: React.FC = () => {
                               setNewInvoice({ ...newInvoice, customer: customer._id });
                               setShowCustomerDropdown(false);
                             }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                              newInvoice.customer === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.customer === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                              }`}
                           >
                             <div>
                               <div className="font-medium">{customer.name}</div>
@@ -1131,9 +1213,8 @@ const InvoiceManagement: React.FC = () => {
                   <div className="relative dropdown-container">
                     <button
                       onClick={() => setShowLocationDropdown(!showLocationDropdown)}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                        formErrors.location ? 'border-red-500' : 'border-gray-300'
-                      } hover:border-gray-400`}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.location ? 'border-red-500' : 'border-gray-300'
+                        } hover:border-gray-400`}
                     >
                       <span className="text-gray-700 truncate mr-1">{getLocationLabel(newInvoice.location)}</span>
                       <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationDropdown ? 'rotate-180' : ''}`} />
@@ -1145,9 +1226,8 @@ const InvoiceManagement: React.FC = () => {
                             setNewInvoice({ ...newInvoice, location: '' });
                             setShowLocationDropdown(false);
                           }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            !newInvoice.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!newInvoice.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           Select location
                         </button>
@@ -1164,9 +1244,8 @@ const InvoiceManagement: React.FC = () => {
                                 }
                               });
                             }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                              newInvoice.location === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.location === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                              }`}
                           >
                             <div>
                               <div className="font-medium">{location.name}</div>
@@ -1190,9 +1269,8 @@ const InvoiceManagement: React.FC = () => {
                     type="date"
                     value={newInvoice.dueDate}
                     onChange={(e) => setNewInvoice({ ...newInvoice, dueDate: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      formErrors.dueDate ? 'border-red-500' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dueDate ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     required
                   />
                   {formErrors.dueDate && (
@@ -1223,12 +1301,11 @@ const InvoiceManagement: React.FC = () => {
                           <button
                             key={option.value}
                             onClick={() => {
-                              setNewInvoice({ ...newInvoice, invoiceType: option.value });
+                              setNewInvoice({ ...newInvoice, invoiceType: option.value as 'sale' | 'service' | 'amc' | 'other' });
                               setShowInvoiceTypeDropdown(false);
                             }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                              newInvoice.invoiceType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.invoiceType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                              }`}
                           >
                             {option.label}
                           </button>
@@ -1279,13 +1356,12 @@ const InvoiceManagement: React.FC = () => {
                           </label>
                           <div className="relative dropdown-container">
                             <button
-                              onClick={() => setShowProductDropdowns({ 
-                                ...showProductDropdowns, 
-                                [index]: !showProductDropdowns[index] 
+                              onClick={() => setShowProductDropdowns({
+                                ...showProductDropdowns,
+                                [index]: !showProductDropdowns[index]
                               })}
-                              className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                formErrors[`item_${index}_product`] ? 'border-red-500' : 'border-gray-300'
-                              } hover:border-gray-400`}
+                              className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors[`item_${index}_product`] ? 'border-red-500' : 'border-gray-300'
+                                } hover:border-gray-400`}
                             >
                               <span className="text-gray-700 truncate mr-1">{getProductLabel(item.product)}</span>
                               <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showProductDropdowns[index] ? 'rotate-180' : ''}`} />
@@ -1297,9 +1373,8 @@ const InvoiceManagement: React.FC = () => {
                                     updateInvoiceItem(index, 'product', '');
                                     setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
                                   }}
-                                  className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                    !item.product ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                  }`}
+                                  className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!item.product ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                    }`}
                                 >
                                   Select product
                                 </button>
@@ -1310,9 +1385,8 @@ const InvoiceManagement: React.FC = () => {
                                       updateInvoiceItem(index, 'product', product._id);
                                       setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
                                     }}
-                                    className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                      item.product === product._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                    }`}
+                                    className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${item.product === product._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                      }`}
                                   >
                                     <div>
                                       <div className="font-medium">{product?.name}</div>
@@ -1337,10 +1411,9 @@ const InvoiceManagement: React.FC = () => {
                             min="1"
                             value={item.quantity}
                             onChange={(e) => updateInvoiceItem(index, 'quantity', parseInt(e.target.value) || 1)}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                              formErrors[`item_${index}_quantity`] || formErrors[`item_${index}_stock`] ? 'border-red-500' : 
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_quantity`] || formErrors[`item_${index}_stock`] ? 'border-red-500' :
                               stockValidation[index] && !stockValidation[index].isValid ? 'border-red-500' : 'border-gray-300'
-                            }`}
+                              }`}
                           />
                           {formErrors[`item_${index}_quantity`] && (
                             <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_quantity`]}</p>
@@ -1360,9 +1433,8 @@ const InvoiceManagement: React.FC = () => {
                             step="0.01"
                             value={item.unitPrice}
                             onChange={(e) => updateInvoiceItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                              formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'
-                            }`}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'
+                              }`}
                           />
                           {formErrors[`item_${index}_price`] && (
                             <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
@@ -1406,13 +1478,12 @@ const InvoiceManagement: React.FC = () => {
 
                       {/* Stock Status Display */}
                       {newInvoice.reduceStock && newInvoice.location && item.product && (
-                        <div className={`mt-3 p-3 rounded-lg border ${
-                          stockValidation[index] 
-                            ? stockValidation[index].isValid 
-                              ? 'bg-green-50 border-green-200' 
-                              : 'bg-red-50 border-red-200'
-                            : 'bg-gray-50 border-gray-200'
-                        }`}>
+                        <div className={`mt-3 p-3 rounded-lg border ${stockValidation[index]
+                          ? stockValidation[index].isValid
+                            ? 'bg-green-50 border-green-200'
+                            : 'bg-red-50 border-red-200'
+                          : 'bg-gray-50 border-gray-200'
+                          }`}>
                           <div className="flex items-center space-x-2 text-sm">
                             <Package className="w-4 h-4" />
                             <span className="font-medium">Stock Status:</span>
@@ -1460,7 +1531,49 @@ const InvoiceManagement: React.FC = () => {
 
               {/* Totals */}
               <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-end">
+                <div className="flex justify-between">
+
+                  <div className=''>
+                    <div className="flex items-center space-x-2 mb-4">
+                      {/* <DollarSign className="w-5 h-5 text-gray-600" /> */}
+                      <h3 className="text-lg font-semibold text-gray-900">External Invoice details</h3>
+                    </div>
+                    <div className='flex gap-4'>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          External Invoice No
+                        </label>
+                        <input
+                          type="text"
+                          value={newInvoice.externalInvoiceNumber}
+                          onChange={(e) => setNewInvoice({ ...newInvoice, externalInvoiceNumber: e.target.value })}
+                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.externalInvoiceNumber ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          placeholder="External Invoice No"
+                        />
+                        {formErrors.externalInvoiceNumber && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.externalInvoiceNumber}</p>
+                        )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          External Invoice Total
+                        </label>
+                        <input
+                          type="text"
+                          value={newInvoice.externalInvoiceTotal}
+                          onChange={(e) => setNewInvoice({ ...newInvoice, externalInvoiceTotal: Number(e.target.value) })}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.externalInvoiceTotal ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          placeholder="External Invoice Total"
+                        />
+                        {formErrors.externalInvoiceTotal && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.externalInvoiceTotal}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="w-80 space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal:</span>
@@ -1530,103 +1643,217 @@ const InvoiceManagement: React.FC = () => {
       )}
 
       {/* View Invoice Modal */}
-      {showViewModal && selectedInvoice && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Invoice {selectedInvoice.invoiceNumber}</h2>
-              <button
-                onClick={() => setShowViewModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
+{showViewModal && selectedInvoice && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+      <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <h2 className="text-xl font-semibold text-gray-900">Invoice {selectedInvoice.invoiceNumber}</h2>
+        <button
+          onClick={() => setShowViewModal(false)}
+          className="text-gray-400 hover:text-gray-600"
+        >
+          <X className="w-6 h-6" />
+        </button>
+      </div>
+
+      <div className="p-6 space-y-6">
+        {/* Invoice Header */}
+        <div className="border-b border-gray-200 pb-4">
+          <div className="flex justify-between items-start">
+            <div>
+              <h3 className="text-xl font-bold text-gray-900">
+                Invoice #{selectedInvoice.invoiceNumber}
+              </h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Issue Date: {new Date(selectedInvoice.issueDate).toLocaleDateString()}
+              </p>
+              <p className="text-sm text-gray-600">
+                Due Date: {new Date(selectedInvoice.dueDate).toLocaleDateString()}
+              </p>
             </div>
-
-            <div className="p-6 space-y-6">
-              {/* Invoice Header */}
-              <div className="border-b border-gray-200 pb-4">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-900">
-                      Invoice #{selectedInvoice.invoiceNumber}
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Issue Date: {new Date(selectedInvoice.issueDate).toLocaleDateString()}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Due Date: {new Date(selectedInvoice.dueDate).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <div className="flex space-x-2 mb-2">
-                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedInvoice.status)}`}>
-                        {selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}
-                      </span>
-                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getPaymentStatusColor(selectedInvoice.paymentStatus)}`}>
-                        {selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Customer Info */}
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
-                <div className="text-sm text-gray-600">
-                  <p className="font-medium">{selectedInvoice.customer.name}</p>
-                  <p>{selectedInvoice.customer.email}</p>
-                  <p>{selectedInvoice.customer.phone}</p>
-                </div>
-              </div>
-
-              {/* Invoice Items */}
-              <div>
-                <h4 className="font-medium text-gray-900 mb-3">Items:</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full border border-gray-200 rounded-lg">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                      {selectedInvoice.items.map((item, index) => (
-                        <tr key={index}>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">₹{item.unitPrice.toLocaleString()}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.taxRate}%</td>
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{item.totalPrice.toLocaleString()}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Invoice Total */}
-              <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-end">
-                  <div className="w-64 space-y-2 text-right">
-                    <div className="flex justify-between text-lg font-bold">
-                      <span>Total Amount:</span>
-                      <span>₹{selectedInvoice.totalAmount.toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
+            <div className="text-right">
+              <div className="flex space-x-2 mb-2">
+                <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getStatusColor(selectedInvoice.status)}`}>
+                  {selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}
+                </span>
+                <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${getPaymentStatusColor(selectedInvoice.paymentStatus)}`}>
+                  {selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}
+                </span>
               </div>
             </div>
-
-
           </div>
         </div>
-      )}
+
+        {/* Customer Info */}
+        <div>
+          <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
+          <div className="text-sm text-gray-600">
+            <p className="font-medium">{selectedInvoice.customer?selectedInvoice.customer.name:selectedInvoice.user?.firstName}</p>
+            <p>{selectedInvoice.customer?selectedInvoice.customer.email:selectedInvoice.user?.email}</p>
+            <p>{selectedInvoice.customer?selectedInvoice.customer.phone:""}</p>
+          </div>
+        </div>
+
+        {/* Total Amount Mismatch Warning */}
+        {selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
+              <div className="flex-1">
+                <h4 className="text-sm font-medium text-yellow-800">Amount Mismatch Detected</h4>
+                <p className="text-sm text-yellow-700 mt-1">
+                  Calculated Total: ₹{selectedInvoice?.totalAmount?.toLocaleString()} | 
+                  External Total: ₹{selectedInvoice?.externalInvoiceTotal?.toLocaleString()}
+                </p>
+              </div>
+              <button
+                onClick={() => setEditMode(true)}
+                className="ml-3 bg-yellow-600 text-white px-3 py-1 rounded-md text-sm hover:bg-yellow-700"
+              >
+                Edit Items
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Invoice Items */}
+        <div>
+          <h4 className="font-medium text-gray-900 mb-3">Items:</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full border border-gray-200 rounded-lg">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                  {editMode && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                  )}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {selectedInvoice.items.map((item, index) => (
+                  <tr key={index}>
+                    <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
+                    <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {editMode && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ? (
+                        <input
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => handleItemEdit(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          step="0.01"
+                        />
+                      ) : (
+                        `₹${item.unitPrice.toLocaleString()}`
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {editMode && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ? (
+                        <input
+                          type="number"
+                          value={item.taxRate}
+                          onChange={(e) => handleItemEdit(index, 'taxRate', parseFloat(e.target.value) || 0)}
+                          className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          step="0.01"
+                          min="0"
+                          max="100"
+                        />
+                      ) : (
+                        `${item.taxRate}%`
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{(item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)).toLocaleString()}</td>
+                    {editMode && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
+                      <td className="px-4 py-2 text-sm">
+                        <button
+                          onClick={() => recalculateItem(index)}
+                          className="text-blue-600 hover:text-blue-800 text-xs"
+                        >
+                          Recalc
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Edit Mode Actions */}
+        {editMode && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                <p>Make adjustments to unit prices and tax rates to match the external total.</p>
+                <p className="font-medium mt-1">Target Total: ₹{selectedInvoice?.externalInvoiceTotal?.toLocaleString()}</p>
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setEditMode(false)}
+                  className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveChanges}
+                  className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Invoice Total */}
+       <div className="border-t border-gray-200 pt-4">
+          <div className="flex justify-end">
+            <div className="w-64 space-y-2 text-right">
+              {/* Brief Details */}
+              <div className="text-sm text-gray-600 space-y-1">
+                <div className="flex justify-between">
+                  <span>Subtotal:</span>
+                  <span>₹{selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total Tax:</span>
+                  <span>₹{selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice * item.taxRate / 100), 0).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Items Count:</span>
+                  <span>{selectedInvoice.items.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total Quantity:</span>
+                  <span>{selectedInvoice.items.reduce((sum, item) => sum + item.quantity, 0)}</span>
+                </div>
+              </div>
+              <div className="border-t pt-2">
+                <div className="flex justify-between text-lg font-bold">
+                  <span>Total Amount:</span>
+                  <span className={selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ? 'text-red-600' : 'text-gray-900'}>
+                     ₹{selectedInvoice.totalAmount.toLocaleString()}
+                  </span>
+                </div>
+                {selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
+                  <div className="flex justify-between text-sm text-gray-600 mt-1">
+                    <span>External Total:</span>
+                    <span>₹{selectedInvoice?.externalInvoiceTotal?.toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Status Update Modal */}
       {showStatusModal && selectedInvoice && (
@@ -1662,7 +1889,7 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Change Status To
@@ -1690,9 +1917,8 @@ const InvoiceManagement: React.FC = () => {
                             setStatusUpdate({ ...statusUpdate, status: option.value });
                             setShowStatusUpdateDropdown(false);
                           }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            statusUpdate.status === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${statusUpdate.status === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           {option.label}
                         </button>
@@ -1700,7 +1926,7 @@ const InvoiceManagement: React.FC = () => {
                     </div>
                   )}
                 </div>
-                
+
                 {/* Status change guidance */}
                 {statusUpdate.status !== selectedInvoice.status && (
                   <div className="mt-2 p-3 rounded-lg bg-blue-50 border border-blue-200">
@@ -1779,10 +2005,10 @@ const InvoiceManagement: React.FC = () => {
                     <span className="text-gray-500">Already Paid:</span>
                     <div className="text-lg font-bold text-green-600">₹{(selectedInvoice.paidAmount || 0).toLocaleString()}</div>
                   </div>
-                                      <div>
-                      <span className="text-gray-500">Remaining:</span>
-                      <div className="text-lg font-bold text-red-600">₹{(selectedInvoice.remainingAmount || selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0)).toLocaleString()}</div>
-                    </div>
+                  <div>
+                    <span className="text-gray-500">Remaining:</span>
+                    <div className="text-lg font-bold text-red-600">₹{(selectedInvoice.remainingAmount || selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0)).toLocaleString()}</div>
+                  </div>
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <span className="text-xs text-gray-500">Payment Status:</span>
@@ -1800,13 +2026,13 @@ const InvoiceManagement: React.FC = () => {
                 <input
                   type="number"
                   min="0"
-                  max={selectedInvoice.totalAmount}
-                  step="0.01"
+                  max={selectedInvoice.remainingAmount}
+                  step="1"
                   value={paymentUpdate.paidAmount}
                   onChange={(e) => {
                     const amount = parseFloat(e.target.value) || 0;
-                    setPaymentUpdate({ 
-                      ...paymentUpdate, 
+                    setPaymentUpdate({
+                      ...paymentUpdate,
                       paidAmount: amount,
                       // Auto-update payment status based on amount
                       paymentStatus: amount >= selectedInvoice.totalAmount ? 'paid' : amount > 0 ? 'partial' : 'pending'
@@ -1820,8 +2046,8 @@ const InvoiceManagement: React.FC = () => {
                     <>
                       <button
                         type="button"
-                        onClick={() => setPaymentUpdate({ 
-                          ...paymentUpdate, 
+                        onClick={() => setPaymentUpdate({
+                          ...paymentUpdate,
                           paidAmount: (selectedInvoice.paidAmount || 0) + Math.round((selectedInvoice.remainingAmount || selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0)) * 0.5),
                           paymentStatus: 'partial'
                         })}
@@ -1831,8 +2057,8 @@ const InvoiceManagement: React.FC = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setPaymentUpdate({ 
-                          ...paymentUpdate, 
+                        onClick={() => setPaymentUpdate({
+                          ...paymentUpdate,
                           paidAmount: selectedInvoice.totalAmount,
                           paymentStatus: 'paid'
                         })}
@@ -1845,8 +2071,8 @@ const InvoiceManagement: React.FC = () => {
                     <>
                       <button
                         type="button"
-                        onClick={() => setPaymentUpdate({ 
-                          ...paymentUpdate, 
+                        onClick={() => setPaymentUpdate({
+                          ...paymentUpdate,
                           paidAmount: Math.round(selectedInvoice.totalAmount * 0.5),
                           paymentStatus: 'partial'
                         })}
@@ -1856,8 +2082,8 @@ const InvoiceManagement: React.FC = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={() => setPaymentUpdate({ 
-                          ...paymentUpdate, 
+                        onClick={() => setPaymentUpdate({
+                          ...paymentUpdate,
                           paidAmount: selectedInvoice.totalAmount,
                           paymentStatus: 'paid'
                         })}
@@ -1933,9 +2159,8 @@ const InvoiceManagement: React.FC = () => {
                             setPaymentUpdate({ ...paymentUpdate, paymentStatus: option.value });
                             setShowPaymentStatusDropdown(false);
                           }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            paymentUpdate.paymentStatus === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${paymentUpdate.paymentStatus === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           {option.label}
                         </button>
@@ -1974,9 +2199,8 @@ const InvoiceManagement: React.FC = () => {
                             setPaymentUpdate({ ...paymentUpdate, paymentMethod: option.value });
                             setShowPaymentMethodDropdown(false);
                           }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            paymentUpdate.paymentMethod === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${paymentUpdate.paymentMethod === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           {option.label}
                         </button>
