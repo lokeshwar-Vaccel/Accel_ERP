@@ -1526,6 +1526,18 @@ const [isUpdating, setIsUpdating] = useState<string | null>(null); // For loadin
                         Mark Converted
                       </button>
                     )}
+
+{selectedCustomer.status !== 'lost' && ( 
+  <button
+    onClick={() => {
+      handleStatusChange(selectedCustomer._id, 'lost');
+      setShowDetailsModal(false);
+    }}
+    className="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm"
+  >
+    Mark Lost
+  </button>
+)}
                   </div>
                 </div>
               </div>
