@@ -268,6 +268,9 @@ export const receiveItems = async (
 ): Promise<void> => {
   try {
     const { receivedItems, location, receiptDate, inspectedBy, notes, externalInvoiceNumber, externalInvoiceTotal, items } = req.body;
+
+    console.log("items:",items);
+    
     const order = await PurchaseOrder.findById(req.params.id)
       .populate('items.product', 'name category brand partNo');
 
@@ -283,6 +286,8 @@ export const receiveItems = async (
     let totalReceivedQuantity = 0;
     const results: { errors: string[] } = { errors: [] };
 
+    console.log("receivedItems:",receivedItems);
+    
     // Process each received item
     for (const receivedItem of receivedItems) {
       const {
@@ -346,8 +351,12 @@ export const receiveItems = async (
         ));
       }
 
+      console.log("newReceivedQuantity:",newReceivedQuantity);
       // Update received quantity in PO
       poItem.receivedQuantity = newReceivedQuantity;
+
+      console.log("poItem:",poItem);
+      
 
       // Find or create stock record
       let stock = await Stock.findOne({
@@ -358,15 +367,19 @@ export const receiveItems = async (
       const currentTime = new Date();
 
       if (stock) {
+        console.log("stock1:",stock);
+        
         stock.quantity += validQuantity;
         stock.reservedQuantity = stock.reservedQuantity || 0;
         stock.availableQuantity = stock.quantity - stock.reservedQuantity;
         stock.lastUpdated = currentTime;
         
-       const res = await stock.save();
-       
+        const res = await stock.save();
+        console.log("res:",res,"stock:",stock);
+        
       } else {
-        stock = await Stock.create({
+        console.log("stock2:",stock);
+       const ress = stock = await Stock.create({
           product: actualProductId,
           location: location,
           quantity: validQuantity,
@@ -374,6 +387,7 @@ export const receiveItems = async (
           availableQuantity: validQuantity,
           lastUpdated: currentTime
         });
+        console.log("ress:",ress,"stock4:",stock);
       }
 
 
@@ -735,22 +749,22 @@ const createInvoiceFromPO = async ({
       const stock = await Stock.findOne({ product: item.product, location });
 
       if (stock) {
-        stock.quantity -= item.quantity;
-        stock.availableQuantity = stock.quantity - stock.reservedQuantity;
-        await stock.save();
+        // stock.quantity -= item.quantity;
+        // stock.availableQuantity = stock.quantity - stock.reservedQuantity;
+        // await stock.save();
 
-        await StockLedger.create({
-          product: item.product,
-          location,
-          transactionType: 'outward',
-          quantity: -item.quantity,
-          reason: `Invoice sale - ${invoiceNumber}`,
-          notes: `Invoice created`,
-          transactionDate: new Date(),
-          resultingQuantity: stock.quantity,
-          referenceId: invoiceNumber,
-          referenceType: 'sale'
-        });
+        // await StockLedger.create({
+        //   product: item.product,
+        //   location,
+        //   transactionType: 'outward',
+        //   quantity: -item.quantity,
+        //   reason: `Invoice sale - ${invoiceNumber}`,
+        //   notes: `Invoice created`,
+        //   transactionDate: new Date(),
+        //   resultingQuantity: stock.quantity,
+        //   referenceId: invoiceNumber,
+        //   referenceType: 'sale'
+        // });
       }
     }
   }
