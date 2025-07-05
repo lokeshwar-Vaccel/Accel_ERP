@@ -92,7 +92,6 @@ export const login = createAsyncThunk(
   async (credentials: { email: string; password: string }, { rejectWithValue }) => {
     try {
       const response:any = await api.auth.login(credentials);
-      console.log("response:",response);
       toast.success(response.message)
       // Store token in localStorage
       localStorage.setItem('authToken', response.data.token);

@@ -343,7 +343,6 @@ const CustomerManagement: React.FC = () => {
 
       const response = await apiClient.customers.create(submitData);
 
-      console.log(response.data, "response");
       fetchCustomers()
       // setCustomers([...customers, response.data]);
       setShowAddModal(false);

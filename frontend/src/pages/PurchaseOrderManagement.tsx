@@ -47,6 +47,7 @@ interface POItem {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  taxRate: number;
   receivedQuantity?: number; // Track received quantities
   notes?: string;
 }
@@ -146,6 +147,7 @@ interface POFormData {
     product: string;
     quantity: number;
     unitPrice: number;
+    taxRate: number;
     notes?: string;
   }>;
 }
@@ -173,7 +175,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
 
-  console.log("selectedPO:", selectedPO);
+
 
   const [newInvoice, setNewInvoice] = useState({
     // customer: '',
@@ -223,7 +225,7 @@ const PurchaseOrderManagement: React.FC = () => {
     sourceType: 'manual',
     sourceId: '',
     notes: '',
-    items: [{ product: '', quantity: 1, unitPrice: 0 }]
+    items: [{ product: '', quantity: 1, unitPrice: 0, taxRate: 0 }]
   });
 
   const [receiveData, setReceiveData] = useState<ReceiveItemsData>({
@@ -237,7 +239,7 @@ const PurchaseOrderManagement: React.FC = () => {
     notes: '',
   });
 
-  console.log("receiveData--------:", receiveData);
+
 
 
   // Form errors
@@ -278,9 +280,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const fetchPurchaseOrders = async () => {
     try {
-      console.log('Fetching purchase orders...');
       const response = await apiClient.purchaseOrders.getAll();
-      console.log('Purchase orders response:', response);
 
       let ordersData: PurchaseOrder[] = [];
       if (response.success && response.data) {
@@ -289,141 +289,6 @@ const PurchaseOrderManagement: React.FC = () => {
         } else if ((response.data as any).orders && Array.isArray((response.data as any).orders)) {
           ordersData = (response.data as any).orders;
         }
-        console.log('Found purchase orders:', ordersData);
-
-        // Debug: Check if products are properly populated
-        if (ordersData.length > 0 && ordersData[0].items.length > 0) {
-          console.log('First item product data:', ordersData[0].items[0].product);
-          console.log('Product type:', typeof ordersData[0].items[0].product);
-        }
-      }
-
-      // Set fallback data if no real data
-      if (ordersData.length === 0) {
-        ordersData = [
-          {
-            _id: '1',
-            poNumber: 'PO-202412-0001',
-            supplier: 'ABC Motors Ltd',
-            items: [
-              {
-                product: {
-                  _id: 'p1',
-                  name: '250 KVA Generator Parts Kit',
-                  category: 'spare_part',
-                  brand: 'Cummins',
-                  partNo: 'CUM-GEN-KIT-250'
-                },
-                quantity: 2,
-                unitPrice: 15000,
-                totalPrice: 30000
-              },
-              {
-                product: {
-                  _id: 'p2',
-                  name: 'Oil Filter Set',
-                  category: 'spare_part',
-                  brand: 'Cummins',
-                  partNo: 'CUM-OF-SET-001'
-                },
-                quantity: 10,
-                unitPrice: 500,
-                totalPrice: 5000
-              }
-            ],
-            totalAmount: 35000,
-            status: 'confirmed',
-            orderDate: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            expectedDeliveryDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
-            priority: 'medium',
-            sourceType: 'amc',
-            sourceId: 'AMC-2024-0001',
-            notes: 'Parts required for scheduled AMC maintenance',
-            createdBy: {
-              _id: 'u1',
-              firstName: 'Admin',
-              lastName: 'User',
-              email: 'admin@sunpower.com'
-            },
-            createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date().toISOString(),
-            deliveryStatus: 'on_time',
-            daysUntilDelivery: 2
-          },
-          {
-            _id: '2',
-            poNumber: 'PO-202412-0002',
-            supplier: 'TechParts Supplies',
-            items: [
-              {
-                product: {
-                  _id: 'p3',
-                  name: '500 KVA Control Panel',
-                  category: 'accessory',
-                  brand: 'Caterpillar',
-                  partNo: 'CAT-CP-500KVA'
-                },
-                quantity: 1,
-                unitPrice: 45000,
-                totalPrice: 45000
-              }
-            ],
-            totalAmount: 45000,
-            status: 'sent',
-            orderDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-            expectedDeliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-            priority: 'high',
-            sourceType: 'service',
-            sourceId: 'SRV-2024-0123',
-            notes: 'Urgent replacement for customer service request',
-            createdBy: {
-              _id: 'u1',
-              firstName: 'Admin',
-              lastName: 'User',
-              email: 'admin@sunpower.com'
-            },
-            createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date().toISOString(),
-            deliveryStatus: 'pending',
-            daysUntilDelivery: 7
-          },
-          {
-            _id: '3',
-            poNumber: 'PO-202412-0003',
-            supplier: 'PowerGen Components',
-            items: [
-              {
-                product: {
-                  _id: 'p4',
-                  name: 'Fuel Injection System',
-                  category: 'spare_part',
-                  brand: 'Perkins',
-                  partNo: 'PER-FIS-V8-001'
-                },
-                quantity: 1,
-                unitPrice: 25000,
-                totalPrice: 25000
-              }
-            ],
-            totalAmount: 25000,
-            status: 'received',
-            orderDate: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-            expectedDeliveryDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            actualDeliveryDate: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-            priority: 'low',
-            sourceType: 'inventory',
-            notes: 'Regular inventory replenishment',
-            createdBy: {
-              _id: 'u1',
-              firstName: 'Admin',
-              lastName: 'User',
-              email: 'admin@sunpower.com'
-            },
-            createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-            deliveryStatus: 'delivered'
-          }
-        ];
       }
 
       setPurchaseOrders(ordersData);
@@ -433,11 +298,10 @@ const PurchaseOrderManagement: React.FC = () => {
     }
   };
 
+
   const fetchProducts = async () => {
     try {
-      console.log('Fetching products from API...');
       const response = await apiClient.products.getAll();
-      console.log('Products API Response:', response);
 
       let productsData: Product[] = [];
       if (response.success && response.data) {
@@ -452,96 +316,19 @@ const PurchaseOrderManagement: React.FC = () => {
             gst: typeof product.gst === 'number' ? product.gst : 0
           }));
         }
-        console.log('Found products:', productsData.length);
-      } else if (Array.isArray(response.data)) {
-        productsData = response.data.map((product: any) => ({
-          ...product,
-          gst: typeof product.gst === 'number' ? product.gst : 0
-        }));
-        console.log('Found products (fallback format):', productsData.length);
-      } else {
-        console.log('No product data found in response');
       }
 
       setProducts(productsData);
-
-      if (productsData.length === 0) {
-        console.log('No products found, using mock data for development');
-        const mockProducts: Product[] = [
-          {
-            _id: 'mock-1',
-            name: '250 KVA Generator Set',
-            category: 'genset',
-            brand: 'Cummins',
-            modelNumber: 'C250D5',
-            partNo: 'C250-GEN-001',
-            price: 850000,
-            gst: 18,
-            minStockLevel: 1,
-            currentStock: 3
-          },
-          {
-            _id: 'mock-2',
-            name: 'Oil Filter - Heavy Duty',
-            category: 'spare_part',
-            brand: 'Cummins',
-            modelNumber: 'LF9009',
-            partNo: 'CUM-OF-LF9009',
-            price: 1500,
-            gst: 12,
-            minStockLevel: 10,
-            currentStock: 25
-          },
-          {
-            _id: 'mock-3',
-            name: 'Air Filter Assembly',
-            category: 'spare_part',
-            brand: 'Caterpillar',
-            modelNumber: 'AF25550',
-            partNo: 'CAT-AF-25550',
-            price: 2800,
-            gst: 12,
-            minStockLevel: 5,
-            currentStock: 12
-          },
-          {
-            _id: 'mock-4',
-            name: 'Control Panel - Digital',
-            category: 'accessory',
-            brand: 'Comap',
-            modelNumber: 'InteliLite NT',
-            partNo: 'COM-CTRL-INT',
-            price: 45000,
-            gst: 18,
-            minStockLevel: 2,
-            currentStock: 4
-          },
-          {
-            _id: 'mock-5',
-            name: 'Fuel Injection Pump',
-            category: 'spare_part',
-            brand: 'Perkins',
-            modelNumber: 'DELPHI-9520A',
-            partNo: 'PER-FIP-9520A',
-            price: 28000,
-            gst: 18,
-            minStockLevel: 1,
-            currentStock: 2
-          }
-        ];
-        setProducts(mockProducts);
-      }
     } catch (error) {
       console.error('Error fetching products:', error);
       setProducts([]);
     }
   };
 
+
   const fetchLocations = async () => {
     try {
-      console.log('Fetching locations from API...');
       const response = await apiClient.stock.getLocations();
-      console.log('Locations API Response:', response);
 
       let locationsData: StockLocation[] = [];
       if (response.data) {
@@ -550,56 +337,15 @@ const PurchaseOrderManagement: React.FC = () => {
         } else if ((response.data as any).locations && Array.isArray((response.data as any).locations)) {
           locationsData = (response.data as any).locations;
         }
-        console.log('Found locations:', locationsData.length);
       }
 
       setLocations(locationsData);
-
-      // If no locations found, create some mock data
-      if (locationsData.length === 0) {
-        console.log('No locations found, using fallback data');
-        const mockLocations: StockLocation[] = [
-          {
-            _id: 'loc-main-warehouse',
-            name: 'Main Warehouse',
-            type: 'warehouse'
-          },
-          {
-            _id: 'loc-secondary-warehouse',
-            name: 'Secondary Warehouse',
-            type: 'warehouse'
-          },
-          {
-            _id: 'loc-field-office',
-            name: 'Field Office',
-            type: 'office'
-          }
-        ];
-        setLocations(mockLocations);
-      }
     } catch (error) {
       console.error('Error fetching locations:', error);
-      // Set default locations on error
-      const defaultLocations: StockLocation[] = [
-        {
-          _id: 'loc-main-warehouse',
-          name: 'Main Warehouse',
-          type: 'warehouse'
-        },
-        {
-          _id: 'loc-secondary-warehouse',
-          name: 'Secondary Warehouse',
-          type: 'warehouse'
-        },
-        {
-          _id: 'loc-field-office',
-          name: 'Field Office',
-          type: 'office'
-        }
-      ];
-      setLocations(defaultLocations);
+      setLocations([]);
     }
   };
+
 
   // Helper functions
   const getCreatedByName = (createdBy: string | { firstName: string; lastName: string; email: string }) => {
@@ -612,8 +358,6 @@ const PurchaseOrderManagement: React.FC = () => {
   const getProductName = (product: string | { name: string; partNo?: string }): string => {
     if (typeof product === 'string') {
       // If it's still a string (ObjectId), it means it wasn't populated
-      console.warn('Product not populated, showing ObjectId:', product);
-
       // Try to find product details from our products list
       const foundProduct = products.find(p => p._id === product);
       if (foundProduct) {
@@ -645,13 +389,12 @@ const PurchaseOrderManagement: React.FC = () => {
       sourceType: 'manual',
       sourceId: '',
       notes: '',
-      items: [{ product: '', quantity: 1, unitPrice: 0 }]
+      items: [{ product: '', quantity: 1, unitPrice: 0, taxRate: 0 }]
     });
     setFormErrors({});
 
     // Ensure products are loaded when modal opens
     if (products.length === 0) {
-      console.log('No products loaded, fetching products...');
       await fetchProducts();
     }
 
@@ -670,7 +413,8 @@ const PurchaseOrderManagement: React.FC = () => {
       items: po.items.map(item => ({
         product: typeof item.product === 'string' ? item.product : item.product._id,
         quantity: item.quantity,
-        unitPrice: item.unitPrice
+        unitPrice: item.unitPrice,
+        taxRate: item.taxRate
       }))
     });
     setFormErrors({});
@@ -684,7 +428,6 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const openReceiveModal = (po: PurchaseOrder) => {
-    console.log("po-------:", po);
 
     setSelectedPO(po);
     setReceiveSearchTerm(''); // Clear search when opening modal
@@ -703,15 +446,15 @@ const PurchaseOrderManagement: React.FC = () => {
       items: po.items.map(item => {
         const product = item.product;
         const productId = typeof product === 'string' ? product : product?._id;
-        const unitPrice = typeof product === 'object' && product?.price ? product.price : 0;
-        const taxRate = typeof product === 'object' && product?.gst ? product.gst : 0;
+        // const unitPrice = typeof product === 'object' && product?.price ? product.price : 0;
+        // const taxRate = typeof product === 'object' && product?.gst ? product.gst : 0;
 
         return {
           product: productId,
           description: '',
           quantity: 0,
-          unitPrice,
-          taxRate
+          unitPrice: item.unitPrice,
+          taxRate: item.taxRate
         };
       }),
       location: defaultLocation,
@@ -773,6 +516,7 @@ const PurchaseOrderManagement: React.FC = () => {
       };
 
       const response = await apiClient.purchaseOrders.create(poData);
+
       setPurchaseOrders([response.data, ...purchaseOrders]);
       setShowCreateModal(false);
       resetPOForm();
@@ -848,12 +592,10 @@ const PurchaseOrderManagement: React.FC = () => {
 
     setSubmitting(true);
     try {
-      console.log('Sending receive data:', receiveData);
       const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
 
       // Use the updated purchase order from the backend response
       const updatedPO = response.data.order;
-      console.log('Updated PO from backend:', updatedPO);
 
       setPurchaseOrders(purchaseOrders.map(po =>
         po._id === selectedPO._id ? updatedPO : po
@@ -1003,14 +745,14 @@ const PurchaseOrderManagement: React.FC = () => {
       sourceType: 'manual',
       sourceId: '',
       notes: '',
-      items: [{ product: '', quantity: 1, unitPrice: 0 }]
+      items: [{ product: '', quantity: 1, unitPrice: 0, taxRate: 0 }]
     });
   };
 
   const addItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { product: '', quantity: 1, unitPrice: 0 }]
+      items: [...formData.items, { product: '', quantity: 1, unitPrice: 0, taxRate: 0 }]
     });
   };
 
@@ -1021,9 +763,9 @@ const PurchaseOrderManagement: React.FC = () => {
     });
   };
 
-  const updateItem = (index: number, field: string, value: any) => {
+  const updateItem = (index: number, updates: Record<string, any>) => {
     const updatedItems = [...formData.items];
-    updatedItems[index] = { ...updatedItems[index], [field]: value };
+    updatedItems[index] = { ...updatedItems[index], ...updates };
     setFormData({ ...formData, items: updatedItems });
   };
 
@@ -1068,7 +810,7 @@ const PurchaseOrderManagement: React.FC = () => {
       (partNo && partNo !== '-' && partNo.toLowerCase().includes(searchLower));
   }) : [];
 
-  console.log("filteredReceiveItems:", filteredReceiveItems);
+
 
 
   const getStatusColor = (status: PurchaseOrderStatus) => {
@@ -1641,18 +1383,29 @@ const PurchaseOrderManagement: React.FC = () => {
 
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-3 items-end p-4 bg-gray-50 rounded-lg">
+                    <div key={index} className="grid grid-cols-12 gap-3 items-start p-4 bg-gray-50 rounded-lg">
                       <div className="col-span-4">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
+                        {/* <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label> */}
                         <select
                           value={item.product}
                           onChange={(e) => {
-                            updateItem(index, 'product', e.target.value);
-                            // Auto-populate unit price if product has a default price
-                            const selectedProduct = products.find(p => p._id === e.target.value);
-                            if (selectedProduct?.price && item.unitPrice === 0) {
-                              updateItem(index, 'unitPrice', selectedProduct.price);
-                            }
+                            const selectedProductId = e.target.value;
+                            const selectedProduct = products.find(p => p._id === selectedProductId);
+
+                            const updates = {
+                              product: selectedProductId,
+                              // Auto-populate unit price if product has a default price
+                              ...(selectedProduct?.price && item.unitPrice === 0 && {
+                                unitPrice: selectedProduct.price
+                              }),
+                              // Auto-populate GST if product has a default GST rate
+                              ...(selectedProduct?.gst && item.taxRate === 0 && {
+                                taxRate: selectedProduct.gst
+                              })
+                            };
+
+                            updateItem(index, updates);
                           }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
                             }`}
@@ -1660,17 +1413,26 @@ const PurchaseOrderManagement: React.FC = () => {
                           <option value="">
                             {products.length === 0 ? 'Loading products...' : 'Select Product'}
                           </option>
-                          {products.map(product => (
+                          {products.length > 0 && products.map(product => (
                             <option key={product._id} value={product._id}>
                               {product.name}
                               {product.partNo && ` - ${product.partNo}`}
                               {product.brand && ` (${product.brand})`}
                             </option>
                           ))}
+                          {products.length === 0 && (
+                            <option value="" disabled>
+                              No Products Available
+                            </option>
+                          )}
                         </select>
-                        {formErrors[`items.${index}.product`] && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors[`items.${index}.product`]}</p>
-                        )}
+
+                        {/* Fixed height container for error message */}
+                        <div className="h-5 mt-1">
+                          {formErrors[`items.${index}.product`] && (
+                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.product`]}</p>
+                          )}
+                        </div>
                         {products.length === 0 && (
                           <button
                             type="button"
@@ -1686,54 +1448,83 @@ const PurchaseOrderManagement: React.FC = () => {
                         <input
                           type="number"
                           value={item.quantity}
-                          onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const quantity = parseInt(e.target.value) || 0;
+                            const updates = {
+                              quantity: quantity
+                            };
+                            updateItem(index, updates);
+                          }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.quantity`] ? 'border-red-500' : 'border-gray-300'
                             }`}
                           min="1"
                         />
-                        {formErrors[`items.${index}.quantity`] && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors[`items.${index}.quantity`]}</p>
-                        )}
+                        {/* Fixed height container for error message */}
+                        <div className="h-5 mt-1">
+                          {formErrors[`items.${index}.quantity`] && (
+                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.quantity`]}</p>
+                          )}
+                        </div>
                       </div>
                       <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (₹) *</label>
                         <input
                           type="number"
                           value={item.unitPrice}
-                          onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const unitPrice = parseFloat(e.target.value) || 0;
+                            const updates = {
+                              unitPrice: unitPrice
+                            };
+                            updateItem(index, updates);
+                          }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
                             }`}
                           min="0"
+                          placeholder='0'
                           step="0.01"
                         />
-                        {formErrors[`items.${index}.unitPrice`] && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors[`items.${index}.unitPrice`]}</p>
-                        )}
+                        {/* Fixed height container for error message */}
+                        <div className="h-5 mt-1">
+                          {formErrors[`items.${index}.unitPrice`] && (
+                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.unitPrice`]}</p>
+                          )}
+                        </div>
                       </div>
                       <div className="col-span-2">
-                        <div className="text-xs font-medium text-gray-900">
-                          Total: {formatCurrency(item.quantity * item.unitPrice)}
+                        <div className="text-sm font-bold text-gray-900 mb-1">
+                          Total: {formatCurrency(item.quantity * item.unitPrice || 0)}
                         </div>
                         {formData.items.length > 1 && (
                           <button
                             type="button"
                             onClick={() => removeItem(index)}
-                            className="text-red-600 hover:text-red-700 text-xs mt-1 flex items-center space-x-1"
+                            className="text-red-600 hover:text-red-700 pt-3 text-xs flex items-center space-x-1"
                           >
                             <Trash2 className="w-3 h-3" />
                             <span>Remove</span>
                           </button>
                         )}
+                        {/* Fixed height container to match other columns */}
+                        <div className="h-5 mt-1"></div>
                       </div>
                       <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Item Notes</label>
                         <input
                           type="text"
                           value={item.notes || ''}
-                          onChange={(e) => updateItem(index, 'notes', e.target.value)}
+                          onChange={(e) => {
+                            const notes = e.target.value;
+                            const updates = {
+                              notes: notes
+                            };
+                            updateItem(index, updates);
+                          }}
                           className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs"
                           placeholder="Specifications..."
                         />
+                        {/* Fixed height container to match other columns */}
+                        <div className="h-5 mt-1"></div>
                       </div>
                     </div>
                   ))}
@@ -1748,7 +1539,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     <div className="text-right">
                       <p className="text-sm text-blue-700">Subtotal</p>
                       <p className="text-xl font-bold text-blue-900">
-                        {formatCurrency(formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}
+                        {formatCurrency(formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) || 0)}
                       </p>
                     </div>
                   </div>
@@ -1852,18 +1643,24 @@ const PurchaseOrderManagement: React.FC = () => {
 
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-3 items-end p-4 bg-gray-50 rounded-lg">
+                    <div key={index} className="grid grid-cols-12 gap-3 items-start p-4 bg-gray-50 rounded-lg">
                       <div className="col-span-4">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
                         <select
                           value={item.product}
                           onChange={(e) => {
-                            updateItem(index, 'product', e.target.value);
-                            // Auto-populate unit price if product has a default price
-                            const selectedProduct = products.find(p => p._id === e.target.value);
-                            if (selectedProduct?.price && item.unitPrice === 0) {
-                              updateItem(index, 'unitPrice', selectedProduct.price);
-                            }
+                            const selectedProductId = e.target.value;
+                            const selectedProduct = products.find(p => p._id === selectedProductId);
+
+                            const updates = {
+                              product: selectedProductId,
+                              // Auto-populate unit price if product has a default price
+                              ...(selectedProduct?.price && item.unitPrice === 0 && {
+                                unitPrice: selectedProduct.price
+                              })
+                            };
+
+                            updateItem(index, updates);
                           }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
                             }`}
@@ -1879,9 +1676,12 @@ const PurchaseOrderManagement: React.FC = () => {
                             </option>
                           ))}
                         </select>
-                        {formErrors[`items.${index}.product`] && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors[`items.${index}.product`]}</p>
-                        )}
+                        {/* Fixed height container for error message */}
+                        <div className="h-5 mt-1">
+                          {formErrors[`items.${index}.product`] && (
+                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.product`]}</p>
+                          )}
+                        </div>
                         {products.length === 0 && (
                           <button
                             type="button"
@@ -1897,54 +1697,82 @@ const PurchaseOrderManagement: React.FC = () => {
                         <input
                           type="number"
                           value={item.quantity}
-                          onChange={(e) => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const quantity = parseInt(e.target.value) || 0;
+                            const updates = {
+                              quantity: quantity
+                            };
+                            updateItem(index, updates);
+                          }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.quantity`] ? 'border-red-500' : 'border-gray-300'
                             }`}
                           min="1"
                         />
-                        {formErrors[`items.${index}.quantity`] && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors[`items.${index}.quantity`]}</p>
-                        )}
+                        {/* Fixed height container for error message */}
+                        <div className="h-5 mt-1">
+                          {formErrors[`items.${index}.quantity`] && (
+                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.quantity`]}</p>
+                          )}
+                        </div>
                       </div>
                       <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (₹) *</label>
                         <input
                           type="number"
                           value={item.unitPrice}
-                          onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          onChange={(e) => {
+                            const unitPrice = parseFloat(e.target.value) || 0;
+                            const updates = {
+                              unitPrice: unitPrice
+                            };
+                            updateItem(index, updates);
+                          }}
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
                             }`}
                           min="0"
                           step="0.01"
                         />
-                        {formErrors[`items.${index}.unitPrice`] && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors[`items.${index}.unitPrice`]}</p>
-                        )}
+                        {/* Fixed height container for error message */}
+                        <div className="h-5 mt-1">
+                          {formErrors[`items.${index}.unitPrice`] && (
+                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.unitPrice`]}</p>
+                          )}
+                        </div>
                       </div>
                       <div className="col-span-2">
-                        <div className="text-xs font-medium text-gray-900">
+                        <div className="text-xs font-medium text-gray-900 mb-1">
                           Total: {formatCurrency(item.quantity * item.unitPrice)}
                         </div>
                         {formData.items.length > 1 && (
                           <button
                             type="button"
                             onClick={() => removeItem(index)}
-                            className="text-red-600 hover:text-red-700 text-xs mt-1 flex items-center space-x-1"
+                            className="text-red-600 hover:text-red-700 text-xs flex items-center space-x-1"
                           >
                             <Trash2 className="w-3 h-3" />
                             <span>Remove</span>
                           </button>
                         )}
+                        {/* Fixed height container to match other columns */}
+                        <div className="h-5 mt-1"></div>
                       </div>
                       <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Item Notes</label>
                         <input
                           type="text"
                           value={item.notes || ''}
-                          onChange={(e) => updateItem(index, 'notes', e.target.value)}
+                          onChange={(e) => {
+                            const notes = e.target.value;
+                            const updates = {
+                              notes: notes
+                            };
+                            updateItem(index, updates);
+                          }}
                           className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs"
                           placeholder="Specifications..."
                         />
+                        {/* Fixed height container to match other columns */}
+                        <div className="h-5 mt-1"></div>
                       </div>
                     </div>
                   ))}

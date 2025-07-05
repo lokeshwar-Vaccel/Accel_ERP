@@ -54,8 +54,6 @@ const ProductManagement: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const currentUser = useSelector((state: RootState) => state.auth.user?.id);
-  console.log("currentUser-products:", products);
-
 
   // Custom dropdown states
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -205,8 +203,6 @@ const ProductManagement: React.FC = () => {
   };
 
   const openEditProductModal = (product: Product) => {
-    console.log("product00000:", product);
-
     setIsEditing(true);
     setSelectedProduct(product);
     setFormData({
@@ -658,11 +654,11 @@ const ProductManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">Loading products...</td>
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Loading products...</td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No products found</td>
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No products found</td>
                 </tr>
               ) : (
                 filteredProducts.map((product) => (

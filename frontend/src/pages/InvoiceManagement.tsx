@@ -187,8 +187,6 @@ const InvoiceManagement: React.FC = () => {
     notes: ''
   });
 
-  console.log("paymentUpdate:", paymentUpdate);
-
 
   // Form states
   const [newInvoice, setNewInvoice] = useState<NewInvoice>({
@@ -257,8 +255,6 @@ const InvoiceManagement: React.FC = () => {
       totalAmount: updatedItems.reduce((sum, item: any) => sum + (item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)), 0)
     });
   };
-  console.log("selectedInvoice:", selectedInvoice);
-
 
   const handleSaveChanges = async () => {
     try {
@@ -436,8 +432,6 @@ const InvoiceManagement: React.FC = () => {
 
   const handleUpdatePayment = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
-    console.log("check---");
-
 
     // Smart defaults based on current payment status
     let defaultPaymentStatus = 'paid';
@@ -784,8 +778,6 @@ const InvoiceManagement: React.FC = () => {
           taxRate: Number(item.taxRate || 0)
         }))
       };
-
-      console.log('Invoice payload (backend fixed):', JSON.stringify(invoiceData, null, 2));
 
       await apiClient.invoices.create(invoiceData);
       await fetchInvoices();

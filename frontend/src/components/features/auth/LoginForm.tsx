@@ -34,8 +34,6 @@ export const LoginForm: React.FC = () => {
     };
   }, [dispatch]);
 
-  console.log("error:", error);
-
   useEffect(() => {
     if (error) toast.error(error);
   }, [error]);
@@ -53,7 +51,6 @@ export const LoginForm: React.FC = () => {
     setLastAttempt(now);
     const res = await dispatch(login({ email, password }));
     // if(!res.error){
-    //   console.log("res565:",res);
     //   toast.success(res.message)
     // }
     

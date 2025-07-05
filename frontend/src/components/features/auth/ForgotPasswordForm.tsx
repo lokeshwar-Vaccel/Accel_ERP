@@ -69,7 +69,6 @@ export const ForgotPasswordForm: React.FC = () => {
     if (!validateForm()) return;
     
     const res:any = await dispatch(forgotPassword({ email }));
-    console.log("res----:",res);
     
     toast.success(res?.payload.message )
   };
@@ -77,7 +76,6 @@ export const ForgotPasswordForm: React.FC = () => {
   const handleResend = async () => {
     if (!canResend || !email) return;
     const response = await dispatch(forgotPassword({ email }));
-    console.log("res----12:",response);
       toast.success(response?.payload.message )
   };
 

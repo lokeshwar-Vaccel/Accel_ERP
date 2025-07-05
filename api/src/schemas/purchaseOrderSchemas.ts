@@ -6,6 +6,7 @@ export interface POItemInput {
   description?: string;
   quantity: number;
   unitPrice: number;
+  taxRate: number;
   totalPrice?: number;
   discount?: {
     type?: 'percentage' | 'fixed';
@@ -248,6 +249,7 @@ const poItemSchema = Joi.object<POItemInput>({
   quantity: Joi.number().min(1).required(),
   unitPrice: Joi.number().min(0).precision(2).required(),
   totalPrice: Joi.number().min(0).precision(2),
+  taxRate: Joi.number().min(0).precision(2).required(),
   discount: Joi.object({
     type: Joi.string().valid('percentage', 'fixed'),
     value: Joi.number().min(0)

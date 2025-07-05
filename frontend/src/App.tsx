@@ -15,9 +15,6 @@ const App = () => {
   const dispatch = useDispatch<AppDispatch>();
   const { isAuthenticated, isLoading, user } = useSelector((state: RootState) => state.auth);
 
-  console.log("user:", user);
-  console.log("user.moduleAccess:", user?.moduleAccess);
-
   // Check authentication status on app startup
   useEffect(() => {
     const token = localStorage.getItem('authToken');

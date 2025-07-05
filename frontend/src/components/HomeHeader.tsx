@@ -7,8 +7,6 @@ const HomeHeader: React.FC = () => {
   const dispatch = useDispatch<AppDispatch>();
   const user = useSelector((state: RootState) => state.auth.user);
 
-  console.log("user:",user);
-
   const handleLogout = () => {
     dispatch(logout());
   };

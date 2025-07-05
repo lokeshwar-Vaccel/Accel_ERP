@@ -89,11 +89,6 @@ export const UserManagement: React.FC = () => {
   const [userToDelete, setUserToDelete] = useState<UserDisplay | null>(null);
   const permission = useCurrentModulePermission();
 
-  console.log("currentUser:", currentUser);
-  console.log("Current pathname:", window.location.pathname);
-  console.log("Current user moduleAccess:", useSelector((state: RootState) => state.auth.user?.moduleAccess));
-
-
   // Form states
   const [formData, setFormData] = useState<UserFormData>({
     firstName: '',
@@ -106,10 +101,6 @@ export const UserManagement: React.FC = () => {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-
-  console.log("formData:", formData);
-
-
 
   const userRoles: UserModuleKey[] = ['super_admin', 'admin', 'hr', 'manager', 'viewer'];
   const allModules: ModuleKey[] = [
@@ -234,9 +225,6 @@ export const UserManagement: React.FC = () => {
       setError('Cannot edit deactivated users. Please restore the user first.');
       return;
     }
-
-    console.log("user55:", user);
-
 
     setIsEditing(true);
     setSelectedUser(user);
@@ -448,9 +436,6 @@ export const UserManagement: React.FC = () => {
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesSearch;
   });
-
-  console.log("filteredUsers:", filteredUsers);
-
 
   // Sort users: active users first, then deleted users at the bottom
   const sortedUsers = filteredUsers.sort((a, b) => {

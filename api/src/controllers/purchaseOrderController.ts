@@ -162,17 +162,13 @@ export const createPurchaseOrder = async (
       createdBy: req.user!.id,
       orderDate: new Date()
     };
-
-    console.log('Creating purchase order with data:', orderData);
-
+    
     const order = await PurchaseOrder.create(orderData);
-
-
-
+    
     const populatedOrder = await PurchaseOrder.findById(order._id)
-      .populate('items.product', 'name category brand modelNumber partNo price gst')
-      .populate('createdBy', 'firstName lastName email');
-
+    .populate('items.product', 'name category brand modelNumber partNo price gst')
+    .populate('createdBy', 'firstName lastName email');
+    
     const response: APIResponse = {
       success: true,
       message: 'Purchase order created successfully',
@@ -272,7 +268,6 @@ export const receiveItems = async (
 ): Promise<void> => {
   try {
     const { receivedItems, location, receiptDate, inspectedBy, notes, externalInvoiceNumber, externalInvoiceTotal, items } = req.body;
-    console.log("recivedIterms-items", receivedItems, location, items)
     const order = await PurchaseOrder.findById(req.params.id)
       .populate('items.product', 'name category brand partNo');
 
@@ -283,8 +278,6 @@ export const receiveItems = async (
     if (!['confirmed', 'partially_received'].includes(order.status)) {
       return next(new AppError('Purchase order must be confirmed before receiving items', 400));
     }
-
-    console.log(`Receiving items for PO ${order.poNumber}:`, receivedItems);
 
     let totalOrderedQuantity = 0;
     let totalReceivedQuantity = 0;
@@ -305,13 +298,6 @@ export const receiveItems = async (
       // Handle both field name formats for compatibility
       const actualProductId = productId || product;
       const actualQuantityReceived = quantityReceived || receivedQuantity;
-
-      console.log(`Processing received item:`, {
-        productId: actualProductId,
-        quantityReceived: actualQuantityReceived,
-        condition,
-        receivedItem: JSON.stringify(receivedItem)
-      });
 
       // Validate product ID
       if (!actualProductId) {
@@ -369,9 +355,6 @@ export const receiveItems = async (
         location: new mongoose.Types.ObjectId(location)
       });
 
-      console.log("stock-------:",actualProductId,stock,validQuantity);
-      
-
       const currentTime = new Date();
 
       if (stock) {
@@ -379,10 +362,8 @@ export const receiveItems = async (
         stock.reservedQuantity = stock.reservedQuantity || 0;
         stock.availableQuantity = stock.quantity - stock.reservedQuantity;
         stock.lastUpdated = currentTime;
-        console.log("stock======:",validQuantity,stock);
         
        const res = await stock.save();
-       console.log("res---:",res);
        
       } else {
         stock = await Stock.create({
@@ -414,7 +395,6 @@ export const receiveItems = async (
         notes: itemNotes || notes || `Received from supplier: ${order.supplier}. PO: ${order.poNumber}, Product: ${typeof poItem.product === 'object' && 'name' in poItem.product ? poItem.product.name : actualProductId}`,
       });
 
-      console.log(`Created stock ledger entry for ${validQuantity} units of product ${actualProductId} with reference ${referenceId}`);
     }
 
     // Calculate total quantities to determine PO status
@@ -445,7 +425,6 @@ export const receiveItems = async (
       .populate('items.product', 'name category brand modelNumber partNo price gst description ')
       .populate('createdBy', 'firstName lastName email');
 
-    console.log("invoiceNumber1234567:", populatedOrder);
     const transformedItems = (populatedOrder?.items || []).map((item: any) => ({
       product: item.product._id, // or item.product.id
       quantity: item.receivedQuantity ?? item.quantity, // use receivedQuantity if available
@@ -453,9 +432,6 @@ export const receiveItems = async (
       description: item.product.name,
       taxRate: item.product.gst ?? 0
     }));
-
-    console.log(transformedItems, "ddd");
-
 
     const invoice = await createInvoiceFromPO({
       items: items,
@@ -470,9 +446,6 @@ export const receiveItems = async (
       externalInvoiceTotal: externalInvoiceTotal
     });
 
-    console.log("invoice345:", invoice, populatedOrder?.createdBy);
-
-
 
     //  const invoice = await createInvoiceFromPO({
     //   items: populatedOrder?.items,
@@ -484,8 +457,6 @@ export const receiveItems = async (
     //   invoiceType: 'purchase',
     //   location: location,
     // });
-
-    console.log(`Purchase order ${order.poNumber} status updated to ${order.status}. Received: ${totalReceivedQuantity}/${totalOrderedQuantity}`);
 
     // Check if we had any validation errors but still processed some items
     let message = `Items received successfully. ${order.status === 'received' ? 'Purchase order completed.' : `Partial receipt: ${totalReceivedQuantity}/${totalOrderedQuantity} items received.`}`;
@@ -705,8 +676,6 @@ const createInvoiceFromPO = async ({
   externalInvoiceTotal?: number
 }) => {
   const invoiceNumber = externalInvoiceNumber;
-  console.log("invoiceNumber:", invoiceNumber);
-
 
   let calculatedItems = [];
   let subtotal = 0;

@@ -146,8 +146,6 @@ export const createInvoice = async (
       externalInvoiceTotal
     } = req.body;
 
-    console.log("req.body:",req.body);
-    
     // Generate invoice number
     const invoiceNumber = await generateReferenceId('invoice');
 

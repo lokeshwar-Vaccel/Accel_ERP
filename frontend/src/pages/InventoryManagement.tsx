@@ -136,8 +136,6 @@ const InventoryManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [categoryFilter, setCategoryFilter] = useState('all');
 
-  console.log("inventory:", inventory);
-
   // Custom dropdown states
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -471,9 +469,6 @@ const brandOptionsFilter = [
 ];
 
 
-  console.log("rackFormData9999999:", rackFormData);
-
-
   useEffect(() => {
     if (selectedRoom) {
       setRoomFormData({
@@ -591,7 +586,6 @@ const brandOptionsFilter = [
         // Update existing location
         const response = await apiClient.stock.updateRack(selectedRack._id, rackFormData);
         const updatedRack = (response.data as any).rack || response.data;
-        console.log("updatedRack:", updatedRack);
 
         setRacks(racks.map(loc =>
           loc._id === selectedRack._id ? updatedRack : loc
@@ -744,10 +738,8 @@ const brandOptionsFilter = [
         }
       }
 
-      console.log("roomsData:", roomsData);
 
       // const roomsInLocation = roomsData.filter(room => room.location._id === racks.location._id);
-      // console.log("rackFormData:",roomsInLocation);
       // setFilteredRooms(roomsInLocation);
       setRooms(roomsData);
     } catch (error) {
@@ -755,9 +747,6 @@ const brandOptionsFilter = [
       setRooms([]);
     }
   };
-
-  console.log("rackFormData111111111:", rackFormData);
-
 
   useEffect(() => {
     if (rackFormData.location) {

@@ -49,7 +49,6 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
     setIsLoggingOut(true);
     try {
      const res:any =  await dispatch(logout()).unwrap();
-     console.log("res:",res);
      navigate('/login');
      toast.success(res?.message)
     } catch (error) {
