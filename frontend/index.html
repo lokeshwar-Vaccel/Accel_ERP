@@ -5,9 +5,16 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>React 18, TypeScript, Jest, Testing Library, TailwindCSS 3, Vite, Eslint and Prettier boilerplate</title>
+    <style>
+      /* Fix for Razorpay SVG warnings */
+      svg[width="auto"] { width: 100%; }
+      svg[height="auto"] { height: 100%; }
+    </style>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/index.tsx"></script>
+    <!-- Razorpay SDK -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
   </body>
 </html>

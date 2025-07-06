@@ -7,4 +7,11 @@ interface ImportMetaEnv {
 
 interface ImportMeta {
   readonly env: ImportMetaEnv
+}
+
+// Razorpay global declaration
+declare global {
+  interface Window {
+    Razorpay: any;
+  }
 } 

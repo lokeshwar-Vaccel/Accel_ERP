@@ -6,6 +6,7 @@ interface IPOItemSchema {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  taxRate: number;
   receivedQuantity?: number;
 }
 

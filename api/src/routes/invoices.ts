@@ -5,7 +5,9 @@ import {
   createInvoice, 
   updateInvoice, 
   getInvoiceStats, 
-  updateInvoiceProductPriceAndGST
+  updateInvoiceProductPriceAndGST,
+  sendInvoiceEmail,
+  sendPaymentReminder
 } from '../controllers/invoiceController';
 
 const router = Router();
@@ -29,5 +31,9 @@ router.route('/:id')
   '/:invoiceId/products',
   updateInvoiceProductPriceAndGST
 );
+
+// Email routes
+router.post('/:id/send-email', checkPermission('write'), sendInvoiceEmail);
+router.post('/:id/send-reminder', checkPermission('write'), sendPaymentReminder);
 
 export default router; 

@@ -14,6 +14,8 @@ import ReportsManagement from "../pages/ReportsManagement";
 import FileManagement from "../pages/FileManagement";
 import CommunicationManagement from "../pages/CommunicationManagement";
 import AdminSettings from "../pages/AdminSettings";
+import PaymentPage from "../pages/PaymentPage";
+import PaymentSuccess from "../pages/PaymentSuccess";
 import { ForgotPasswordForm } from "components/features/auth/ForgotPasswordForm";
 import { LoginForm } from "components/features/auth/LoginForm";
 import { ResetPasswordForm } from "components/features/auth/ResetPasswordForm";
@@ -71,6 +73,10 @@ const AppRoutes: React.FC = () => {
 
             {/* Admin Settings */}
             <Route path="/admin-settings" element={<AdminSettings />} />
+
+            {/* Payment Page - Public route for email payment links */}
+            <Route path="/pay/:token" element={<PaymentPage />} />
+            <Route path="/payment-success" element={<PaymentSuccess />} />
 
             {/* 404 - Page not found */}
             {/* <Route path="/404" element={<NotFound />} /> */}

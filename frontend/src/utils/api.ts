@@ -286,6 +286,65 @@ class ApiClient {
 
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/invoices/stats'),
+
+    sendEmail: (id: string) =>
+      this.makeRequest<{ success: boolean; data: { paymentLink: string } }>(`/invoices/${id}/send-email`, {
+        method: 'POST',
+      }),
+
+    sendReminder: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/invoices/${id}/send-reminder`, {
+        method: 'POST',
+      }),
+  };
+
+  // Payment Management APIs
+  payments = {
+    createRazorpayOrder: (orderData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/payments/create-order', {
+        method: 'POST',
+        body: JSON.stringify(orderData),
+      }),
+
+    verifyRazorpayPayment: (verificationData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/payments/verify', {
+        method: 'POST',
+        body: JSON.stringify(verificationData),
+      }),
+
+    processManualPayment: (paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/payments/manual', {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      }),
+
+    getInvoicePayments: (invoiceId: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/payments/invoice/${invoiceId}`),
+  };
+
+  // Payment Links APIs
+  paymentLinks = {
+    verify: (token: string) =>
+      this.makeRequest<{ success: boolean; data: { invoice: any } }>(`/payment-links/verify/${token}`),
+
+    processPayment: (token: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/payment-links/process/${token}`, {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      }),
+
+    sendInvoiceEmail: (invoiceId: string) =>
+      this.makeRequest<{ success: boolean; data: { paymentLink: string } }>(`/payment-links/send-invoice/${invoiceId}`, {
+        method: 'POST',
+      }),
+
+    sendReminder: (invoiceId: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/payment-links/send-reminder/${invoiceId}`, {
+        method: 'POST',
+      }),
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/payment-links/stats'),
   };
 
   // Stock Ledger APIs

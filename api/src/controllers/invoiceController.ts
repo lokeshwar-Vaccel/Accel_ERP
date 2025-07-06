@@ -7,6 +7,8 @@ import { StockLedger } from '../models/StockLedger';
 import { AuthenticatedRequest, APIResponse, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { generateReferenceId } from '../utils/generateReferenceId';
+import { PurchaseOrder } from '../models/PurchaseOrder';
+import { InvoiceEmailService } from '../services/invoiceEmailService';
 
 // @desc    Get all invoices
 // @route   GET /api/v1/invoices
@@ -392,34 +394,31 @@ export const updateInvoiceProductPriceAndGST = async (
       return next(new AppError('Products array is required and cannot be empty', 400));
     }
 
-    // Validate invoice
+    // 1. Fetch Invoice
     const invoice = await Invoice.findById(invoiceId);
-    if (!invoice) {
-      return next(new AppError('Invoice not found', 404));
-    }
+    if (!invoice) return next(new AppError('Invoice not found', 404));
 
     let updated = false;
     let subtotal = 0;
     let totalTax = 0;
 
+    // 2. Process each product update
     for (const { product: productId, price, gst } of products) {
       if (price < 0 || gst < 0) {
         return next(new AppError('Price and GST must be non-negative', 400));
       }
 
       const product = await Product.findById(productId);
-      if (!product) {
-        return next(new AppError(`Product not found: ${productId}`, 404));
-      }
+      if (!product) return next(new AppError(`Product not found: ${productId}`, 404));
 
-      // Update product price and gst
+      // Update Product price & GST
       product.price = price;
       product.gst = gst;
       await product.save();
 
-      // Update matching invoice item
+      // Update matching Invoice item
       invoice.items = invoice.items.map(item => {
-        if (item.product.toString() === productId) {
+        if (item.product.toString() === productId.toString()) {
           const totalPrice = item.quantity * price;
           const taxAmount = (gst * totalPrice) / 100;
 
@@ -430,19 +429,38 @@ export const updateInvoiceProductPriceAndGST = async (
 
           updated = true;
         }
-
         return item;
       });
 
-      // Optionally update stock metadata
+      // Update optional stock record
       const stock = await Stock.findOne({ product: productId, location: invoice.location });
       if (stock) {
-        stock.lastUpdated = price; // Optional: adjust as per schema
+        stock.lastUpdated = new Date();
         await stock.save();
+      }
+
+      // 🔁 Optional: Update purchase order item if invoice is linked
+      if (invoice.poNumber) {
+        const purchaseOrder = await PurchaseOrder.findOne({ poNumber: invoice.poNumber });
+        if (purchaseOrder) {
+          for (const item of purchaseOrder.items) {
+            if (item.product.toString() === productId.toString()) {
+              item.unitPrice = price;
+              item.taxRate = gst;
+              item.totalPrice = item.quantity * price;
+              updated = true;
+            }
+          }
+          await purchaseOrder.save();
+        }
       }
     }
 
-    // Recalculate totals
+    if (!updated) {
+      return next(new AppError('No matching products found in invoice items', 404));
+    }
+
+    // 3. Recalculate invoice totals
     for (const item of invoice.items) {
       subtotal += item.totalPrice;
       totalTax += item.taxAmount ?? 0;
@@ -455,19 +473,79 @@ export const updateInvoiceProductPriceAndGST = async (
 
     await invoice.save();
 
-    if (!updated) {
-      return next(new AppError('No matching products found in invoice items', 404));
-    }
-
+    // 4. Send response
     const response: APIResponse = {
       success: true,
-      message: 'Product prices and GST updated successfully in invoice',
+      message: 'Product prices and GST updated successfully in invoice (and purchase order if linked)',
       data: { invoice }
     };
 
     res.status(200).json(response);
   } catch (error) {
+    console.error('Error updating invoice:', error);
     next(error);
   }
 };
+
+// @desc    Send invoice email with payment link
+// @route   POST /api/v1/invoices/:id/send-email
+// @access  Private
+export const sendInvoiceEmail = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const result = await InvoiceEmailService.sendInvoiceEmail(id);
+
+    if (!result.success) {
+      return next(new AppError(result.message, 400));
+    }
+
+    const response: APIResponse = {
+      success: true,
+      message: result.message,
+      data: {
+        paymentLink: result.paymentLink
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error sending invoice email:', error);
+    next(new AppError('Failed to send invoice email', 500));
+  }
+};
+
+// @desc    Send payment reminder email
+// @route   POST /api/v1/invoices/:id/send-reminder
+// @access  Private
+export const sendPaymentReminder = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    const result = await InvoiceEmailService.sendPaymentReminder(id);
+
+    if (!result.success) {
+      return next(new AppError(result.message, 400));
+    }
+
+    const response: APIResponse = {
+      success: true,
+      message: result.message
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error sending payment reminder:', error);
+    next(new AppError('Failed to send payment reminder', 500));
+  }
+};
+
 

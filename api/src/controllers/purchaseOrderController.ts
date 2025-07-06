@@ -267,12 +267,13 @@ export const receiveItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { receivedItems, location, receiptDate, inspectedBy, notes, externalInvoiceNumber, externalInvoiceTotal, items } = req.body;
+    const { receivedItems, location, receiptDate, inspectedBy, notes, externalInvoiceNumber, externalInvoiceTotal, supplierName, supplierEmail, items } = req.body;
 
     console.log("items:",items);
     
     const order = await PurchaseOrder.findById(req.params.id)
-      .populate('items.product', 'name category brand partNo');
+    .populate('items.product', 'name category brand partNo');
+    console.log("order------------:",order);
 
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
@@ -449,13 +450,15 @@ export const receiveItems = async (
 
     const invoice = await createInvoiceFromPO({
       items: items,
-      user: populatedOrder?.createdBy?.id,
+      supplierName: supplierName,
+      supplierEmail: supplierEmail,
       dueDate: receiptDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       discountAmount: req.body.discountAmount || 0,
       notes: req.body.notes || "",
       terms: req.body.terms || "",
       invoiceType: 'sale',
       location: location,
+      poNumber: order.poNumber,
       externalInvoiceNumber: externalInvoiceNumber,
       externalInvoiceTotal: externalInvoiceTotal
     });
@@ -666,25 +669,29 @@ export const updatePurchaseOrderStatus = async (
 
 const createInvoiceFromPO = async ({
   items,
-  user,
+  supplierName,
+  supplierEmail,
   dueDate,
   discountAmount = 0,
   notes,
   terms,
   invoiceType,
   location,
+  poNumber,
   reduceStock = true,
   externalInvoiceNumber,
   externalInvoiceTotal
 }: {
   items: InvoiceItemInput[],
-  user: any,
+  supplierName: any,
+  supplierEmail: any,
   dueDate: string,
   discountAmount?: number,
   notes?: string,
   terms?: string,
   invoiceType?: string,
   location: any,
+  poNumber: string,
   reduceStock?: boolean,
   externalInvoiceNumber?: string,
   externalInvoiceTotal?: number
@@ -722,7 +729,8 @@ const createInvoiceFromPO = async ({
 
   const invoice = new Invoice({
     invoiceNumber,
-    user,
+    supplierName,
+    supplierEmail,
     issueDate: new Date(),
     dueDate: new Date(dueDate),
     items: calculatedItems,
@@ -738,6 +746,7 @@ const createInvoiceFromPO = async ({
     terms,
     invoiceType,
     location,
+    poNumber,
     externalInvoiceNumber,
     externalInvoiceTotal
   });

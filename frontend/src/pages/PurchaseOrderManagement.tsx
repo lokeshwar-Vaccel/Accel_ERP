@@ -132,6 +132,8 @@ interface ReceiveItemsData {
   receiptDate: string;
   inspectedBy: string;
   notes?: string;
+  supplierName?: string;
+  supplierEmail?: string;
   externalInvoiceNumber?: string;
   externalInvoiceTotal?: number;
 }
@@ -231,14 +233,15 @@ const PurchaseOrderManagement: React.FC = () => {
   const [receiveData, setReceiveData] = useState<ReceiveItemsData>({
     receivedItems: [],
     items: [], // <-- Add this line
-    location: 'main-warehouse',
+    location: '',
     receiptDate: '',
     inspectedBy: '',
+    supplierName: '',
+    supplierEmail: '',
     externalInvoiceNumber: '',
     externalInvoiceTotal: 0,
     notes: '',
   });
-
 
 
 
@@ -281,6 +284,8 @@ const PurchaseOrderManagement: React.FC = () => {
   const fetchPurchaseOrders = async () => {
     try {
       const response = await apiClient.purchaseOrders.getAll();
+      console.log("response-purchaseOrders:",response);
+      
 
       let ordersData: PurchaseOrder[] = [];
       if (response.success && response.data) {
@@ -429,8 +434,13 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const openReceiveModal = (po: PurchaseOrder) => {
 
+    console.log("po:",po);
+    
     setSelectedPO(po);
     setReceiveSearchTerm(''); // Clear search when opening modal
+
+    // Extract supplier name from purchase order
+    const extractedSupplierName = typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier).name;
 
     // Use the first available location or a default if none exist
     const defaultLocation = locations.length > 0 ? locations[0]._id : 'loc-main-warehouse';
@@ -460,6 +470,8 @@ const PurchaseOrderManagement: React.FC = () => {
       location: defaultLocation,
       receiptDate: new Date().toISOString().split('T')[0],
       inspectedBy: 'Admin',
+      supplierName: extractedSupplierName, // Set supplier name from purchase order
+      supplierEmail: '',
       externalInvoiceNumber: '',
       externalInvoiceTotal: 0,
       notes: '',
@@ -592,8 +604,12 @@ const PurchaseOrderManagement: React.FC = () => {
 
     setSubmitting(true);
     try {
+      console.log("receiveData:",receiveData);
+      
       const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
 
+      console.log("response:",response);
+      
       // Use the updated purchase order from the backend response
       const updatedPO = response.data.order;
 
@@ -611,6 +627,8 @@ const PurchaseOrderManagement: React.FC = () => {
         location: locations.length > 0 ? locations[0]._id : 'loc-main-warehouse',
         receiptDate: new Date().toISOString().split('T')[0],
         inspectedBy: 'Admin',
+        supplierName: '',
+        supplierEmail: '',
         externalInvoiceNumber: '',
         externalInvoiceTotal: 0,
         notes: '',
@@ -2187,6 +2205,24 @@ const PurchaseOrderManagement: React.FC = () => {
                       <p className="text-red-500 text-xs mt-1">{formErrors.externalInvoiceNumber}</p>
                     )}
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Supplier Email
+                    </label>
+                    <input
+                      type="text"
+                      value={receiveData.supplierEmail}
+                      onChange={(e) => setReceiveData({ ...receiveData, supplierEmail: e.target.value })}
+
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplierEmail ? 'border-red-500' : 'border-gray-300'
+                        }`}
+                      placeholder="Enter Supplier Email"
+                    />
+                    {formErrors.supplierEmail && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.supplierEmail}</p>
+                    )}
+                  </div>
+                  
                 </div>
 
                 <div className="mt-4">
@@ -2579,7 +2615,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           value={receiveData.externalInvoiceTotal}
                           onChange={(e) => {
                             const value = e.target.value;
-                            setReceiveData({ ...receiveData, externalInvoiceTotal: value });
+                            setReceiveData({ ...receiveData, externalInvoiceTotal: parseFloat(value) || 0 });
 
                             // Clear existing timeout
                             if (debounceTimeoutRef.current) {

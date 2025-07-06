@@ -37,6 +37,9 @@ export interface IInvoice extends mongoose.Document {
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
+  poNumber: string;
+  supplierName: string;
+  supplierEmail: string;
   externalInvoiceNumber?: string; // External/hardcopy invoice number
   externalInvoiceTotal?: number;  // External/hardcopy invoice total
 }
@@ -156,7 +159,7 @@ const invoiceSchema = new Schema<IInvoice>({
   },
   paymentMethod: {
     type: String,
-    enum: ['cash', 'cheque', 'bank_transfer', 'upi', 'card', 'other']
+    enum: ['cash', 'cheque', 'bank_transfer', 'upi', 'card', 'razorpay', 'other']
   },
   paymentDate: Date,
   notes: {
@@ -190,6 +193,18 @@ const invoiceSchema = new Schema<IInvoice>({
   externalInvoiceNumber: {
     type: String,
     required: false,
+    trim: true
+  },
+  supplierName: {
+    type: String,
+    trim: true
+  },
+  supplierEmail: {
+    type: String,
+    trim: true
+  },
+  poNumber: {
+    type: String,
     trim: true
   },
   externalInvoiceTotal: {

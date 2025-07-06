@@ -29,6 +29,7 @@ const moduleMap = {
   reports_analytics: 'Reports & Analytics',
   file_management: 'File Management',
   communications: 'Communications',
+  notifications: 'Notifications',
   admin_settings: 'Admin Settings',
 } as const;
 
@@ -79,6 +80,8 @@ export const UserManagement: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const currentUser = useSelector((state: RootState) => state.auth.user?.role);
 
+  console.log("users:", users);
+
   const [searchTerm, setSearchTerm] = useState('');
 
   // Modal states
@@ -116,6 +119,7 @@ export const UserManagement: React.FC = () => {
     'file_management',
     'communications',
     'admin_settings',
+    'notifications',
   ];
 
   const roleModuleMapping: Record<string, ModuleKey[]> = {
@@ -127,6 +131,7 @@ export const UserManagement: React.FC = () => {
       'inventory_management',
       'purchase_orders',
       'customer_management',
+      'notifications',
     ],
     manager: allModules.filter(m => m !== 'admin_settings'),
     viewer: ['dashboard'],
@@ -146,6 +151,8 @@ export const UserManagement: React.FC = () => {
 
       // Map API response to UserDisplay interface
       const usersData = response.data as any; // Type assertion since API client types aren't fully typed
+      console.log("usersData:", usersData);
+
       const mappedUsers: UserDisplay[] = usersData.users.map((user: any) => ({
         id: user.id || user._id,
         name: user.fullName || `${user.firstName} ${user.lastName}`,
@@ -232,15 +239,18 @@ export const UserManagement: React.FC = () => {
       firstName: user.name.split(' ')[0] || '',
       lastName: user.name.split(' ').slice(1).join(' ') || '',
       email: user.email,
-      password: '', // Password not required for editing
+      password: '', // Not required for editing
       role: user.role as UserRole,
-      phone: user.phone || '', // Ensure phone is filled
-      moduleAccess: user.moduleAccess ? Object.entries(user.moduleAccess).map(([module, config]) => ({
-        module: module as ModuleKey,
-        access: config.access,
-        permission: config.permission as 'read' | 'write' | 'admin'
-      })) : [] // Convert object to array format
+      phone: user.phone || '',
+      moduleAccess: Array.isArray(user.moduleAccess)
+        ? user.moduleAccess.map((item) => ({
+          module: item.module as ModuleKey,
+          access: item.access,
+          permission: item.permission as 'read' | 'write' | 'admin'
+        }))
+        : []
     });
+
     setFormErrors({});
     setShowUserModal(true);
   };
@@ -321,7 +331,7 @@ export const UserManagement: React.FC = () => {
         const res = await apiClient.users.update(selectedUser.id, formData);
         toast.success(res?.message)
       } else {
-         const response = await apiClient.users.create(formData);
+        const response = await apiClient.users.create(formData);
         toast.success(response?.message)
       }
 
@@ -343,15 +353,15 @@ export const UserManagement: React.FC = () => {
 
     setSubmitting(true);
     try {
-     const response = await apiClient.users.delete(userToDelete.id);
-              toast.success(response?.message)
+      const response = await apiClient.users.delete(userToDelete.id);
+      toast.success(response?.message)
 
       await fetchUsers();
       closeDeleteConfirm();
     } catch (err) {
       console.error('Error deactivating user:', err);
       setError('Failed to deactivate user');
-           const msg = isEditing ? 'Failed to delete user' : 'Failed to delete user';
+      const msg = isEditing ? 'Failed to delete user' : 'Failed to delete user';
       toast.error(msg);
       setError(msg);
     } finally {
@@ -870,8 +880,8 @@ export const UserManagement: React.FC = () => {
                     {isEditing ? 'Update user information and permissions' : 'Add a new user to the system'}
                   </p>
                 </div>
-                <button 
-                  onClick={closeModal} 
+                <button
+                  onClick={closeModal}
                   className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition-colors"
                 >
                   <X size={18} />
@@ -947,7 +957,7 @@ export const UserManagement: React.FC = () => {
                           } ${isRoleDropdownOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
                       >
                         <span className={formData.role ? 'text-gray-900' : 'text-gray-500'}>
-                          {formData.role ? 
+                          {formData.role ?
                             getAvailableRoles(currentUser, users).find((role: any) => role.value === formData.role)?.label || 'Select a role'
                             : 'Select a role'
                           }
@@ -966,9 +976,8 @@ export const UserManagement: React.FC = () => {
                                 handleRoleChange(role.value);
                                 setIsRoleDropdownOpen(false);
                               }}
-                              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${
-                                formData.role === role.value ? 'bg-blue-50 text-blue-900' : 'text-gray-900'
-                              }`}
+                              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${formData.role === role.value ? 'bg-blue-50 text-blue-900' : 'text-gray-900'
+                                }`}
                             >
                               <span>{role.label}</span>
                               {formData.role === role.value && (

@@ -14,6 +14,8 @@ import adminRoutes from './admin';
 import communicationRoutes from './communications';
 import ledgerRoutes from './stockLedgerRoutes';
 import invoiceRoutes from './invoices';
+import paymentRoutes from './payments';
+import paymentLinkRoutes from './paymentLinks';
 
 const router = Router();
 
@@ -38,7 +40,9 @@ router.get('/', (req, res) => {
       admin: '/admin',
       communications: '/communications',
       ledger: '/ledger',
-      invoices: '/invoices'
+      invoices: '/invoices',
+      payments: '/payments',
+      paymentLinks: '/payment-links'
     }
   });
 });
@@ -59,5 +63,7 @@ router.use('/admin', adminRoutes);
 router.use('/communications', communicationRoutes);
 router.use('/ledger', ledgerRoutes);
 router.use('/invoices', invoiceRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/payment-links', paymentLinkRoutes);
 
 export default router; 
