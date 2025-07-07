@@ -81,8 +81,8 @@ export const processEmailPayment = async (
       return next(new AppError('Valid payment amount is required', 400));
     }
 
-    // Verify payment token
-    const tokenResult = await InvoiceEmailService.verifyPaymentToken(token);
+    // Verify and consume payment token
+    const tokenResult = await InvoiceEmailService.verifyAndConsumePaymentToken(token);
     if (!tokenResult.success) {
       return next(new AppError(tokenResult.error || 'Invalid payment link', 400));
     }
@@ -125,7 +125,8 @@ export const processEmailPayment = async (
         metadata: {
           paymentSource: 'email_link',
           token: token
-        }
+        },
+        createdBy: invoice.user // Use the invoice owner as the creator
       });
     } else {
       // Handle manual payment
@@ -144,31 +145,38 @@ export const processEmailPayment = async (
         metadata: {
           paymentSource: 'email_link',
           token: token
-        }
+        },
+        createdBy: invoice.user // Use the invoice owner as the creator
       });
     }
 
     await paymentRecord.save();
 
+    // Fetch a fresh invoice object for updating (to avoid customer field issues)
+    const freshInvoice = await Invoice.findById(invoice._id);
+    if (!freshInvoice) {
+      return next(new AppError('Invoice not found for update', 400));
+    }
+
     // Update invoice payment status
-    const newPaidAmount = (invoice.paidAmount || 0) + amount;
-    invoice.paidAmount = newPaidAmount;
-    invoice.remainingAmount = Math.max(0, invoice.totalAmount - newPaidAmount);
+    const newPaidAmount = (freshInvoice.paidAmount || 0) + amount;
+    freshInvoice.paidAmount = newPaidAmount;
+    freshInvoice.remainingAmount = Math.max(0, freshInvoice.totalAmount - newPaidAmount);
     
     // Update payment status based on amount
-    if (newPaidAmount >= invoice.totalAmount) {
-      invoice.paymentStatus = 'paid';
-      invoice.status = 'paid';
+    if (newPaidAmount >= freshInvoice.totalAmount) {
+      freshInvoice.paymentStatus = 'paid';
+      freshInvoice.status = 'paid';
     } else if (newPaidAmount > 0) {
-      invoice.paymentStatus = 'partial';
+      freshInvoice.paymentStatus = 'partial';
     }
 
     // Add payment method if not set
-    if (!invoice.paymentMethod) {
-      invoice.paymentMethod = paymentMethod || 'razorpay';
+    if (!freshInvoice.paymentMethod) {
+      freshInvoice.paymentMethod = paymentMethod || 'razorpay';
     }
 
-    await invoice.save();
+    await freshInvoice.save();
 
     // Send payment confirmation email
     try {
@@ -187,18 +195,22 @@ export const processEmailPayment = async (
       message: 'Payment processed successfully',
       data: {
         paymentId: paymentRecord._id,
-        invoiceId: invoice._id,
+        invoiceId: freshInvoice._id,
         amount: amount,
-        remainingAmount: invoice.remainingAmount,
-        paymentStatus: invoice.paymentStatus,
-        invoiceStatus: invoice.status
+        remainingAmount: freshInvoice.remainingAmount,
+        paymentStatus: freshInvoice.paymentStatus,
+        invoiceStatus: freshInvoice.status
       }
     };
 
     res.status(200).json(response);
   } catch (error) {
     console.error('Error processing email payment:', error);
-    next(new AppError('Failed to process payment', 500));
+    console.error('Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace'
+    });
+    next(new AppError(`Failed to process payment: ${error instanceof Error ? error.message : 'Unknown error'}`, 500));
   }
 };
 

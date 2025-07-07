@@ -10,6 +10,8 @@ import { Toaster } from 'react-hot-toast';
 import { ForgotPasswordForm } from 'components/features/auth/ForgotPasswordForm';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ResetPasswordForm } from 'components/features/auth/ResetPasswordForm';
+import PaymentPage from 'pages/PaymentPage';
+import PaymentSuccess from 'pages/PaymentSuccess';
 
 const App = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -30,21 +32,27 @@ const App = () => {
 
   return (
     <>
-      {isAuthenticated ? (
-        <Layout moduleAccess={moduleAccess}>
-          <AppRoutes />
-        </Layout>
-      ) : (
-        <>
-          <Routes>
-            <Route path="/" element={<Navigate to="/login" replace />} />
-            <Route path="/login" element={<LoginForm />} />
-            <Route path="/forgot-password" element={<ForgotPasswordForm />} />
-            <Route path="/reset-password" element={<ResetPasswordForm />} />
-            <Route path="*" element={<Navigate to="/login" replace />} />
-          </Routes>
-        </>
-      )}
+      <Routes>
+        {/* Public routes that don't require authentication */}
+        <Route path="/pay/:token" element={<PaymentPage />} />
+        <Route path="/payment-success" element={<PaymentSuccess />} />
+        
+        {/* Authentication routes */}
+        <Route path="/login" element={<LoginForm />} />
+        <Route path="/forgot-password" element={<ForgotPasswordForm />} />
+        <Route path="/reset-password" element={<ResetPasswordForm />} />
+        
+        {/* Protected routes - require authentication */}
+        {isAuthenticated ? (
+          <Route path="/*" element={
+            <Layout moduleAccess={moduleAccess}>
+              <AppRoutes />
+            </Layout>
+          } />
+        ) : (
+          <Route path="/*" element={<Navigate to="/login" replace />} />
+        )}
+      </Routes>
       <Toaster
         position="top-right"
         toastOptions={{

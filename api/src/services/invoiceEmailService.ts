@@ -497,8 +497,43 @@ export class InvoiceEmailService {
     }
   }
 
-  // Verify payment token
+  // Verify payment token (without consuming)
   static async verifyPaymentToken(token: string): Promise<{ 
+    success: boolean; 
+    invoice?: IInvoice; 
+    error?: string 
+  }> {
+    try {
+      const result = await PaymentToken.verify(token);
+      
+      if (!result.isValid) {
+        return { success: false, error: result.error };
+      }
+
+      const invoice = await Invoice.findById(result.invoiceId).populate('customer');
+      if (!invoice) {
+        return { success: false, error: 'Invoice not found' };
+      }
+
+      // Get customer information using the same logic as other methods
+      const customer = await this.getCustomerInfo(invoice);
+      
+      // Set the customer data directly on the invoice object for display purposes
+      (invoice as any).customer = customer;
+
+      return { success: true, invoice };
+
+    } catch (error) {
+      console.error('Error verifying payment token:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to verify payment token' 
+      };
+    }
+  }
+
+  // Verify and consume payment token (for payment processing)
+  static async verifyAndConsumePaymentToken(token: string): Promise<{ 
     success: boolean; 
     invoice?: IInvoice; 
     error?: string 
@@ -515,10 +550,13 @@ export class InvoiceEmailService {
         return { success: false, error: 'Invoice not found' };
       }
 
+      // Don't modify the customer field - keep it as is (ObjectId or null)
+      // The customer data will be populated when needed for display
+
       return { success: true, invoice };
 
     } catch (error) {
-      console.error('Error verifying payment token:', error);
+      console.error('Error verifying and consuming payment token:', error);
       return { 
         success: false, 
         error: error instanceof Error ? error.message : 'Failed to verify payment token' 

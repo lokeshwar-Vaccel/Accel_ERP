@@ -18,6 +18,7 @@ export interface IPaymentToken extends Document {
 export interface IPaymentTokenModel extends Model<IPaymentToken> {
   generateSecureToken(): string;
   createForInvoice(invoiceId: mongoose.Types.ObjectId, expiresInDays?: number): Promise<string>;
+  verify(token: string): Promise<{ invoiceId: mongoose.Types.ObjectId; isValid: boolean; error?: string }>;
   verifyAndConsume(token: string, userId?: mongoose.Types.ObjectId): Promise<{ invoiceId: mongoose.Types.ObjectId; isValid: boolean; error?: string }>;
   cleanupExpired(): Promise<number>;
 }
@@ -88,6 +89,27 @@ paymentTokenSchema.statics.createForInvoice = async function(
   return token;
 };
 
+// Static method to verify token (without consuming)
+paymentTokenSchema.statics.verify = async function(
+  token: string
+): Promise<{ invoiceId: mongoose.Types.ObjectId; isValid: boolean; error?: string }> {
+  const tokenRecord = await this.findOne({ token });
+
+  if (!tokenRecord) {
+    return { invoiceId: new mongoose.Types.ObjectId(), isValid: false, error: 'Invalid token' };
+  }
+
+  // if (tokenRecord.isUsed) {
+  //   return { invoiceId: tokenRecord.invoiceId, isValid: false, error: 'Token already used' };
+  // }
+
+  if (tokenRecord.expiresAt < new Date()) {
+    return { invoiceId: tokenRecord.invoiceId, isValid: false, error: 'Token expired' };
+  }
+
+  return { invoiceId: tokenRecord.invoiceId, isValid: true };
+};
+
 // Static method to verify and consume token
 paymentTokenSchema.statics.verifyAndConsume = async function(
   token: string,
@@ -99,9 +121,9 @@ paymentTokenSchema.statics.verifyAndConsume = async function(
     return { invoiceId: new mongoose.Types.ObjectId(), isValid: false, error: 'Invalid token' };
   }
 
-  if (tokenRecord.isUsed) {
-    return { invoiceId: tokenRecord.invoiceId, isValid: false, error: 'Token already used' };
-  }
+  // if (tokenRecord.isUsed) {
+  //   return { invoiceId: tokenRecord.invoiceId, isValid: false, error: 'Token already used' };
+  // }
 
   if (tokenRecord.expiresAt < new Date()) {
     return { invoiceId: tokenRecord.invoiceId, isValid: false, error: 'Token expired' };

@@ -21,12 +21,24 @@ export const getStockLevels = async (
       sort = '-lastUpdated', 
       search,
       location,
+      room,
+      rack,
       lowStock,
-      product
+      product,
+      category,
+      dept,
+      brand,
+      outOfStock
     } = req.query as QueryParams & {
       location?: string;
+      room?: string;
+      rack?: string;
       lowStock?: string;
       product?: string;
+      category?: string;
+      dept?: string;
+      brand?: string;
+      outOfStock?: string;
     };
 
     // Build query
@@ -34,6 +46,14 @@ export const getStockLevels = async (
     
     if (location) {
       query.location = location;
+    }
+    
+    if (room) {
+      query.room = room;
+    }
+    
+    if (rack) {
+      query.rack = rack;
     }
     
     if (product) {
@@ -48,10 +68,10 @@ export const getStockLevels = async (
       .populate('rack', 'name ')
       .sort(sort as string);
 
-    // Filter by low stock if requested
-    if (lowStock === 'true') {
+    // Filter by stock status
+    if (lowStock === 'true' || outOfStock === 'true') {
       // We need to use aggregate pipeline for this complex query
-      const lowStockItems = await Stock.aggregate([
+      const stockStatusItems = await Stock.aggregate([
         { $match: query },
         {
           $lookup: {
@@ -78,7 +98,11 @@ export const getStockLevels = async (
         {
           $match: {
             $expr: {
-              $lte: ['$quantity', '$productInfo.minStockLevel']
+              $cond: {
+                if: { $eq: [outOfStock, 'true'] },
+                then: { $eq: ['$quantity', 0] },
+                else: { $lte: ['$quantity', '$productInfo.minStockLevel'] }
+              }
             }
           }
         },
@@ -105,7 +129,11 @@ export const getStockLevels = async (
         {
           $match: {
             $expr: {
-              $lte: ['$quantity', '$productInfo.minStockLevel']
+              $cond: {
+                if: { $eq: [outOfStock, 'true'] },
+                then: { $eq: ['$quantity', 0] },
+                else: { $lte: ['$quantity', '$productInfo.minStockLevel'] }
+              }
             }
           }
         },
@@ -114,8 +142,8 @@ export const getStockLevels = async (
 
       const response: APIResponse = {
         success: true,
-        message: 'Low stock items retrieved successfully',
-        data: { stockLevels: lowStockItems },
+        message: outOfStock === 'true' ? 'Out of stock items retrieved successfully' : 'Low stock items retrieved successfully',
+        data: { stockLevels: stockStatusItems },
         pagination: {
           page: Number(page),
           limit: Number(limit),
@@ -128,17 +156,33 @@ export const getStockLevels = async (
       return;
     }
 
-    // Handle search
+    // Handle search and product-based filters
+    let productFilters: any = {};
+    
     if (search) {
-      // Get products matching search criteria
-      const products = await Product.find({
-        $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { brand: { $regex: search, $options: 'i' } },
-          { modelNumber: { $regex: search, $options: 'i' } }
-        ]
-      }).select('_id');
-      
+      productFilters.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { brand: { $regex: search, $options: 'i' } },
+        { modelNumber: { $regex: search, $options: 'i' } },
+        { partNo: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (category) {
+      productFilters.category = category;
+    }
+    
+    if (dept) {
+      productFilters.dept = dept;
+    }
+    
+    if (brand) {
+      productFilters.brand = { $regex: brand, $options: 'i' };
+    }
+    
+    // If we have product filters, get the product IDs first
+    if (Object.keys(productFilters).length > 0) {
+      const products = await Product.find(productFilters).select('_id');
       query.product = { $in: products.map(p => p._id) };
     }
 

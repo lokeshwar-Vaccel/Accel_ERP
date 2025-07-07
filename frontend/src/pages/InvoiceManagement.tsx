@@ -29,6 +29,7 @@ import { apiClient } from '../utils/api';
 import { RootState } from '../redux/store';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import toast from 'react-hot-toast';
 
 // Types
 interface Invoice {
@@ -233,6 +234,8 @@ const InvoiceManagement: React.FC = () => {
 
   const [editMode, setEditMode] = useState(false);
   const [editModeChanges, setEditModeChanges] = useState(true);
+  const [originalInvoiceData, setOriginalInvoiceData] = useState<any>(null);
+  const [savingChanges, setSavingChanges] = useState(false);
 
   const handleItemEdit = (index: number, field: string, value: any) => {
     if (!selectedInvoice) return;
@@ -268,11 +271,12 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const handleSaveChanges = async () => {
+    setSavingChanges(true);
     try {
       if (!selectedInvoice) return;
 
       const payload = {
-        products: selectedInvoice.items.map((item) => ({
+        products: selectedInvoice.items.map((item: any) => ({
           product: item.product._id || item.product, // Handles populated or plain ID
           price: item.unitPrice,
           gst: item.taxRate,
@@ -281,13 +285,53 @@ const InvoiceManagement: React.FC = () => {
 
       const res = await apiClient.invoices.priceUpdate(selectedInvoice._id, payload);
 
-      // setEditMode(false);
-      // Optionally show toast or refresh invoice list
+      if (res.success) {
+        // Update the selected invoice with new data
+        const updatedInvoice = { ...selectedInvoice };
+        
+        // Update items with new prices and recalculate totals
+        updatedInvoice.items = updatedInvoice.items.map((item: any, index: number) => {
+          const updatedItem = { ...item };
+          if (res.data && res.data.products && res.data.products[index]) {
+            updatedItem.unitPrice = res.data.products[index].price;
+            updatedItem.taxRate = res.data.products[index].gst;
+          }
+          return updatedItem;
+        });
+
+        // Recalculate total amount
+        updatedInvoice.totalAmount = updatedInvoice.items.reduce((sum: number, item: any) => {
+          const subtotal = item.quantity * item.unitPrice;
+          const taxAmount = subtotal * (item.taxRate / 100);
+          return sum + subtotal + taxAmount;
+        }, 0);
+
+        // Update remaining amount
+        updatedInvoice.remainingAmount = updatedInvoice.totalAmount - (updatedInvoice.paidAmount || 0);
+
+        // Update the selected invoice state
+        setSelectedInvoice(updatedInvoice);
+
+        // Update the invoice in the main invoices list
+        setInvoices(prevInvoices => 
+          prevInvoices.map(invoice => 
+            invoice._id === selectedInvoice._id ? updatedInvoice : invoice
+          )
+        );
+
+        // Update stats
+        await fetchStats();
+
+        toast.success('Invoice updated successfully!');
+      } else {
+        throw new Error('Failed to update invoice');
+      }
     } catch (error) {
       console.error('Error updating invoice items:', error);
+      toast.error('Failed to update invoice. Please try again.');
     } finally {
       setEditMode(false);
-      // setEditModeChanges(true);
+      setSavingChanges(false);
     }
   };
 
@@ -430,6 +474,7 @@ const InvoiceManagement: React.FC = () => {
 
   const handleViewInvoice = (invoice: Invoice) => {
     setSelectedInvoice(invoice);
+    setOriginalInvoiceData(JSON.parse(JSON.stringify(invoice))); // Deep copy for backup
     setShowViewModal(true);
   };
 
@@ -485,8 +530,10 @@ const InvoiceManagement: React.FC = () => {
       await fetchStats();
       setShowStatusModal(false);
       setStatusUpdate({ status: '', notes: '' });
+      toast.success('Invoice status updated successfully!');
     } catch (error) {
       console.error('Error updating invoice status:', error);
+      toast.error('Failed to update invoice status. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -567,7 +614,7 @@ const InvoiceManagement: React.FC = () => {
               await fetchStats();
               setShowPaymentModal(false);
               setPaymentUpdate({ paymentStatus: '', paymentMethod: '', paymentDate: '', paidAmount: 0, notes: '', useRazorpay: false });
-              alert('Payment successful!');
+              toast.success('Payment processed successfully!');
             } else {
               throw new Error('Payment verification failed');
             }
@@ -577,7 +624,7 @@ const InvoiceManagement: React.FC = () => {
               message: error instanceof Error ? error.message : 'Unknown error',
               stack: error instanceof Error ? error.stack : undefined
             });
-            alert('Payment verification failed. Please contact support.');
+            toast.error('Payment verification failed. Please contact support.');
           }
         },
         prefill: {
@@ -601,7 +648,7 @@ const InvoiceManagement: React.FC = () => {
     } catch (error) {
       console.error('Razorpay payment error:', error);
       const errorMessage = error instanceof Error ? error.message : 'Failed to initiate payment. Please try again.';
-      alert(errorMessage);
+      toast.error(errorMessage);
     }
   };
 
@@ -624,13 +671,13 @@ const InvoiceManagement: React.FC = () => {
         await fetchStats();
         setShowPaymentModal(false);
         setPaymentUpdate({ paymentStatus: '', paymentMethod: '', paymentDate: '', paidAmount: 0, notes: '', useRazorpay: false });
-        alert('Payment processed successfully!');
+        toast.success('Payment processed successfully!');
       } else {
         throw new Error('Failed to process payment');
       }
     } catch (error) {
       console.error('Manual payment error:', error);
-      alert('Failed to process payment. Please try again.');
+      toast.error('Failed to process payment. Please try again.');
     }
   };
 
@@ -641,15 +688,15 @@ const InvoiceManagement: React.FC = () => {
       const response = await apiClient.invoices.sendEmail(invoice._id);
       
       if (response.success) {
-        alert(`Invoice email sent successfully! Payment link: ${response.data.paymentLink}`);
+        toast.success(`Invoice email sent successfully!`);
         await fetchInvoices();
         await fetchStats();
       } else {
-        alert('Failed to send invoice email');
+        toast.error('Failed to send invoice email');
       }
     } catch (error) {
       console.error('Error sending invoice email:', error);
-      alert('Failed to send invoice email. Please try again.');
+      toast.error('Failed to send invoice email. Please try again.');
     }
   };
 
@@ -662,15 +709,15 @@ const InvoiceManagement: React.FC = () => {
       
       
       if (response.success) {
-        alert('Payment reminder sent successfully!');
+        toast.success('Payment reminder sent successfully!');
         await fetchInvoices();
         await fetchStats();
       } else {
-        alert('Failed to send payment reminder');
+        toast.error('Failed to send payment reminder');
       }
     } catch (error) {
       console.error('Error sending payment reminder:', error);
-      alert('Failed to send payment reminder. Please try again.');
+      toast.error('Failed to send payment reminder. Please try again.');
     }
   };
 
@@ -683,7 +730,7 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const quickCancelInvoice = async (invoice: Invoice) => {
-    if (confirm('Are you sure you want to cancel this invoice?')) {
+    if (window.confirm('Are you sure you want to cancel this invoice?')) {
       await handleUpdateStatusQuick(invoice._id, 'cancelled');
     }
   };
@@ -693,8 +740,10 @@ const InvoiceManagement: React.FC = () => {
       await apiClient.invoices.update(invoiceId, { status });
       await fetchInvoices();
       await fetchStats();
+      toast.success(`Invoice ${status} successfully!`);
     } catch (error) {
       console.error('Error updating invoice status:', error);
+      toast.error('Failed to update invoice status. Please try again.');
     }
   };
 
@@ -703,8 +752,10 @@ const InvoiceManagement: React.FC = () => {
       await apiClient.invoices.update(invoiceId, paymentData);
       await fetchInvoices();
       await fetchStats();
+      toast.success('Payment updated successfully!');
     } catch (error) {
       console.error('Error updating payment:', error);
+      toast.error('Failed to update payment. Please try again.');
     }
   };
 
@@ -750,7 +801,7 @@ const InvoiceManagement: React.FC = () => {
       });
     }
 
-    if (invoice.status === 'sent' && invoice.paymentStatus === 'pending') {
+    if (invoice.status === 'sent' && (invoice.paymentStatus === 'pending' || invoice.paymentStatus === 'partial')) {
       actions.push({
         icon: <Send className="w-4 h-4" />,
         label: 'Send Reminder',
@@ -1058,8 +1109,10 @@ const InvoiceManagement: React.FC = () => {
       setShowCreateModal(false);
       setStockValidation({}); // Clear stock validation
       setFormErrors({}); // Clear form errors
+      toast.success('Invoice created successfully!');
     } catch (error) {
       console.error('Error creating invoice:', error);
+      toast.error('Failed to create invoice. Please try again.');
       setFormErrors({ general: 'Failed to create invoice. Please try again.' });
     } finally {
       setSubmitting(false);
@@ -2003,11 +2056,10 @@ const InvoiceManagement: React.FC = () => {
 
               {/* Totals */}
               <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-between">
+                <div className="flex justify-end">
 
-                  <div className=''>
+                  {/* <div className=''>
                     <div className="flex items-center space-x-2 mb-4">
-                      {/* <DollarSign className="w-5 h-5 text-gray-600" /> */}
                       <h3 className="text-lg font-semibold text-gray-900">External Invoice details</h3>
                     </div>
                     <div className='flex gap-4'>
@@ -2044,7 +2096,7 @@ const InvoiceManagement: React.FC = () => {
                         )}
                       </div>
                     </div>
-                  </div>
+                  </div> */}
 
                   <div className="w-80 space-y-3">
                     <div className="flex justify-between text-sm">
@@ -2144,7 +2196,11 @@ const InvoiceManagement: React.FC = () => {
                   Print
                 </button>
                 <button
-                  onClick={() => { setShowViewModal(false); setEditMode(false) }}
+                  onClick={() => { 
+                    setShowViewModal(false); 
+                    setEditMode(false);
+                    setOriginalInvoiceData(null); // Clear backup data
+                  }}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <X className="w-6 h-6" />
@@ -2192,7 +2248,7 @@ const InvoiceManagement: React.FC = () => {
               </div>
 
               {/* Total Amount Mismatch Warning */}
-              {selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
+              {selectedInvoice.externalInvoiceTotal !== 0 && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <div className="flex items-center">
                     <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
@@ -2204,7 +2260,13 @@ const InvoiceManagement: React.FC = () => {
                       </p>
                     </div>
                     <button
-                      onClick={() => setEditMode(true)}
+                      onClick={() => {
+                        // Create a backup of current state when entering edit mode
+                        if (selectedInvoice && !originalInvoiceData) {
+                          setOriginalInvoiceData(JSON.parse(JSON.stringify(selectedInvoice)));
+                        }
+                        setEditMode(true);
+                      }}
                       className="ml-3 bg-yellow-600 text-white px-3 py-1 rounded-md text-sm hover:bg-yellow-700"
                     >
                       Edit Items
@@ -2225,9 +2287,9 @@ const InvoiceManagement: React.FC = () => {
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                        {editMode && (
+                        {/* {editMode && (
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                        )}
+                        )} */}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -2266,7 +2328,7 @@ const InvoiceManagement: React.FC = () => {
                             )}
                           </td>
                           <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{((item.quantity ?? 0) * (item.unitPrice ?? 0) + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate || 0) / 100)).toLocaleString()}</td>
-                          {editMode && (
+                          {/* {editMode && (
                             <td className="px-4 py-2 text-sm">
                               <button
                                 onClick={() => recalculateItem(index)}
@@ -2275,7 +2337,7 @@ const InvoiceManagement: React.FC = () => {
                                 Recalc
                               </button>
                             </td>
-                          )}
+                          )} */}
                         </tr>
                       ))}
                     </tbody>
@@ -2292,20 +2354,37 @@ const InvoiceManagement: React.FC = () => {
                       <p className="font-medium mt-1">Target Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toLocaleString()}</p>
                     </div>
                     <div className="flex space-x-2">
+                                          <button
+                      onClick={() => {
+                        // Restore original values when canceling
+                        if (originalInvoiceData) {
+                          setSelectedInvoice(JSON.parse(JSON.stringify(originalInvoiceData)));
+                        }
+                        setEditMode(false);
+                      }}
+                      className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
                       <button
-                        onClick={() => setEditMode(false)}
-                        className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleSaveChanges();
-                          setEditMode(false);
+                        onClick={async () => {
+                          await handleSaveChanges();
+                          // Update the original data after successful save
+                          if (selectedInvoice) {
+                            setOriginalInvoiceData(JSON.parse(JSON.stringify(selectedInvoice)));
+                          }
                         }}
-                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                        disabled={savingChanges}
+                        className="px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Save Changes
+                        {savingChanges ? (
+                          <div className="flex items-center">
+                            <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin mr-1"></div>
+                            Saving...
+                          </div>
+                        ) : (
+                          'Save Changes'
+                        )}
                       </button>
                     </div>
                   </div>
@@ -2337,11 +2416,11 @@ const InvoiceManagement: React.FC = () => {
                     <div className="border-t pt-2">
                       <div className="flex justify-between text-lg font-bold">
                         <span>Total Amount:</span>
-                        <span className={selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ? 'text-red-600' : 'text-gray-900'}>
+                        <span className={selectedInvoice.externalInvoiceTotal !== 0 && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ? 'text-red-600' : 'text-gray-900'}>
                           ₹{(selectedInvoice.totalAmount ?? 0).toLocaleString()}
                         </span>
                       </div>
-                      {selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
+                      {selectedInvoice.externalInvoiceTotal !== 0 && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
                         <div className="flex justify-between text-sm text-gray-600 mt-1">
                           <span>External Total:</span>
                           <span>₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toLocaleString()}</span>

@@ -24,15 +24,6 @@ const AppRoutes: React.FC = () => {
     return (
         <Routes>
             {/* Default route - redirect to dashboard */}
-            {/* <Route path="/login" element={<LoginForm />} />
-            <Route path="/forgot-password" element={<ForgotPasswordForm />} />
-            <Route path="/reset-password" element={<ResetPasswordForm />} />
-            <Route
-                path="/forgot-password"
-                element={
-                    <Navigate to="/login" replace />
-                }
-            /> */}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
             {/* Main application routes */}
@@ -75,11 +66,10 @@ const AppRoutes: React.FC = () => {
             <Route path="/admin-settings" element={<AdminSettings />} />
 
             {/* Payment Page - Public route for email payment links */}
-            <Route path="/pay/:token" element={<PaymentPage />} />
-            <Route path="/payment-success" element={<PaymentSuccess />} />
+            {/* <Route path="/pay/:token" element={<PaymentPage />} />
+            <Route path="/payment-success" element={<PaymentSuccess />} /> */}
 
             {/* 404 - Page not found */}
-            {/* <Route path="/404" element={<NotFound />} /> */}
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
     );

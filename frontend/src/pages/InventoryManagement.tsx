@@ -242,7 +242,9 @@ const InventoryManagement: React.FC = () => {
     search: '',
     category: '',
     location: '',
-    stockStatus: 'all'
+    stockStatus: 'all',
+    sortBy: 'name',
+    sortOrder: 'asc'
   });
 
   const onFiltersChange = useCallback((newFilters: Partial<any>) => {
@@ -303,6 +305,52 @@ const InventoryManagement: React.FC = () => {
       });
     }
 
+    // Sort items
+    if (filters.sortBy && filters.sortOrder) {
+      items.sort((a, b) => {
+        let aValue, bValue;
+        
+        switch (filters.sortBy) {
+          case 'name':
+            aValue = a.product?.name || '';
+            bValue = b.product?.name || '';
+            break;
+          case 'category':
+            aValue = a.product?.category || '';
+            bValue = b.product?.category || '';
+            break;
+          case 'brand':
+            aValue = a.product?.brand || '';
+            bValue = b.product?.brand || '';
+            break;
+          case 'location':
+            aValue = a.location?.name || '';
+            bValue = b.location?.name || '';
+            break;
+          case 'quantity':
+            aValue = a.quantity || 0;
+            bValue = b.quantity || 0;
+            break;
+          case 'price':
+            aValue = a.product?.price || 0;
+            bValue = b.product?.price || 0;
+            break;
+          case 'lastUpdated':
+            aValue = new Date(a.lastUpdated || 0);
+            bValue = new Date(b.lastUpdated || 0);
+            break;
+          default:
+            aValue = a.product?.name || '';
+            bValue = b.product?.name || '';
+        }
+
+        if (filters.sortOrder === 'asc') {
+          return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
+        } else {
+          return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
+        }
+      });
+    }
 
     return items;
   }, [inventory, filters]);
@@ -369,6 +417,31 @@ const InventoryManagement: React.FC = () => {
     { value: 'out_of_stock', label: 'Out of Stock' },
     { value: 'overstocked', label: 'Overstocked' }
   ];
+
+  const sortByOptions = [
+    { value: 'name', label: 'Product Name' },
+    { value: 'category', label: 'Category' },
+    { value: 'brand', label: 'Brand' },
+    { value: 'location', label: 'Location' },
+    { value: 'quantity', label: 'Quantity' },
+    { value: 'price', label: 'Price' },
+    { value: 'lastUpdated', label: 'Last Updated' }
+  ];
+
+  const sortOrderOptions = [
+    { value: 'asc', label: 'A-Z (Ascending)' },
+    { value: 'desc', label: 'Z-A (Descending)' }
+  ];
+
+  const getSortByLabel = () => {
+    const option = sortByOptions.find(opt => opt.value === filters.sortBy);
+    return option ? option.label : 'Product Name';
+  };
+
+  const getSortOrderLabel = () => {
+    const option = sortOrderOptions.find(opt => opt.value === filters.sortOrder);
+    return option ? option.label : 'A-Z (Ascending)';
+  };
 
   const deptOptions = [
     { value: '', label: 'All Departments' },
@@ -586,6 +659,7 @@ const brandOptionsFilter = [
         // Update existing location
         const response = await apiClient.stock.updateRack(selectedRack._id, rackFormData);
         const updatedRack = (response.data as any).rack || response.data;
+        console.log("updatedRack:", updatedRack);
 
         setRacks(racks.map(loc =>
           loc._id === selectedRack._id ? updatedRack : loc
@@ -643,6 +717,8 @@ const brandOptionsFilter = [
         setShowRoomFilterDropdown(false);
         setShowRackFilterDropdown(false);
         setShowStockStatusFilterDropdown(false);
+        setShowSortFilterDropdown(false);
+        setShowSortOrderFilterDropdown(false);
       }
     };
 
@@ -740,6 +816,7 @@ const brandOptionsFilter = [
 
 
       // const roomsInLocation = roomsData.filter(room => room.location._id === racks.location._id);
+      // console.log("rackFormData:",roomsInLocation);
       // setFilteredRooms(roomsInLocation);
       setRooms(roomsData);
     } catch (error) {
@@ -1619,6 +1696,8 @@ const brandOptionsFilter = [
   const [showRoomFilterDropdown, setShowRoomFilterDropdown] = useState(false);
   const [showRackFilterDropdown, setShowRackFilterDropdown] = useState(false);
   const [showStockStatusFilterDropdown, setShowStockStatusFilterDropdown] = useState(false);
+  const [showSortFilterDropdown, setShowSortFilterDropdown] = useState(false);
+  const [showSortOrderFilterDropdown, setShowSortOrderFilterDropdown] = useState(false);
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
@@ -1956,7 +2035,7 @@ const brandOptionsFilter = [
                <div className="space-y-3">
                  <h4 className="text-sm font-semibold text-gray-900 flex items-center">
                    <BarChart3 className="w-4 h-4 mr-2 text-purple-500" />
-                   Stock Status
+                   Stock Status & Sort
                  </h4>
                  <div className="space-y-3">
                    {/* Stock Level Dropdown */}
@@ -1993,6 +2072,78 @@ const brandOptionsFilter = [
                      </div>
                    </div>
 
+                   {/* Sort By Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowSortFilterDropdown(!showSortFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {getSortByLabel()}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSortFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showSortFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {sortByOptions.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ 
+                                   sortBy: option.value
+                                 });
+                                 setShowSortFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 filters.sortBy === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
+
+                   {/* Sort Order Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Sort Order</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowSortOrderFilterDropdown(!showSortOrderFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {getSortOrderLabel()}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSortOrderFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showSortOrderFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {sortOrderOptions.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ 
+                                   sortOrder: option.value
+                                 });
+                                 setShowSortOrderFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 filters.sortOrder === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
+
                    <div className="pt-2">
                      <button
                        onClick={() => {
@@ -2004,7 +2155,9 @@ const brandOptionsFilter = [
                            location: '',
                            room: '',
                            rack: '',
-                           stockStatus: 'all'
+                           stockStatus: 'all',
+                           sortBy: 'name',
+                           sortOrder: 'asc'
                          });
                          setShowAdvancedFilters(false);
                          // Close all filter dropdowns
@@ -2015,6 +2168,8 @@ const brandOptionsFilter = [
                          setShowRoomFilterDropdown(false);
                          setShowRackFilterDropdown(false);
                          setShowStockStatusFilterDropdown(false);
+                         setShowSortFilterDropdown(false);
+                         setShowSortOrderFilterDropdown(false);
                        }}
                        className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                      >
@@ -2028,7 +2183,7 @@ const brandOptionsFilter = [
         )}
 
         {/* Active Filters & Results Summary - Only show when filters are active */}
-        {(filters.search || filters.category || filters.dept || filters.brand || filters.location || filters.room || filters.rack || filters.stockStatus !== 'all') && (
+        {(filters.search || filters.category || filters.dept || filters.brand || filters.location || filters.room || filters.rack || filters.stockStatus !== 'all' || filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
           <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-100">
             <div className="flex items-center text-sm text-gray-600">
               <span className="font-medium">{filteredInventory.length}</span>
@@ -2094,6 +2249,18 @@ const brandOptionsFilter = [
                   <button
                     onClick={() => onFiltersChange({ stockStatus: 'all' })}
                     className="ml-1 text-orange-600 hover:text-orange-800 font-bold"
+                  >
+                    ×
+                  </button>
+                </span>
+              )}
+              
+              {(filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
+                <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
+                  {getSortByLabel()} - {getSortOrderLabel()}
+                  <button
+                    onClick={() => onFiltersChange({ sortBy: 'name', sortOrder: 'asc' })}
+                    className="ml-1 text-indigo-600 hover:text-indigo-800 font-bold"
                   >
                     ×
                   </button>

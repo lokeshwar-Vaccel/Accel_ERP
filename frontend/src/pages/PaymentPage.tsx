@@ -20,11 +20,11 @@ interface Invoice {
   dueDate: string;
   status: string;
   paymentStatus: string;
-  customer: {
+  customer?: {
     name: string;
     email: string;
-    phone: string;
-  };
+    phone?: string;
+  } | null;
   items: Array<{
     description: string;
     quantity: number;
@@ -94,8 +94,11 @@ const PaymentPage: React.FC = () => {
 
     try {
       setSubmitting(true);
+      console.log("paymentForm:",paymentForm);
+      
       
       const response = await apiClient.paymentLinks.processPayment(token, paymentForm);
+      console.log("response--:",response);
       
       if (response.success) {
         setSuccess(true);
@@ -220,10 +223,16 @@ const PaymentPage: React.FC = () => {
                 </h2>
                 
                 <div className="space-y-2">
-                  <p className="font-medium">{invoice.customer.name}</p>
-                  <p className="text-gray-600">{invoice.customer.email}</p>
-                  {invoice.customer.phone && (
-                    <p className="text-gray-600">{invoice.customer.phone}</p>
+                  {invoice.customer ? (
+                    <>
+                      <p className="font-medium">{invoice.customer.name}</p>
+                      <p className="text-gray-600">{invoice.customer.email}</p>
+                      {invoice.customer.phone && (
+                        <p className="text-gray-600">{invoice.customer.phone}</p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-gray-500 italic">Customer information not available</p>
                   )}
                 </div>
               </div>

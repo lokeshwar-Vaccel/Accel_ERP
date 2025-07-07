@@ -237,7 +237,7 @@ class ApiClient {
 
     // Stock Management
     getStock: (params?: any) =>
-      this.makeRequest<{ success: boolean; data: any }>(`/stock${params ? `?${new URLSearchParams(params)}` : ''}`),
+      this.makeRequest<{ success: boolean; data: any; pagination?: any }>(`/stock${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     adjustStock: (adjustmentData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/stock/adjust', {
