@@ -8,6 +8,7 @@ import { generateReferenceId } from '../utils/generateReferenceId';
 import { Product } from '../models/Product';
 import { Invoice } from '../models/Invoice';
 import mongoose, { Types } from 'mongoose';
+import { sendEmail } from '../utils/email';
 
 // Purchase Order Status enum for internal use
 enum PurchaseOrderStatus {
@@ -162,7 +163,7 @@ export const createPurchaseOrder = async (
       createdBy: req.user!.id,
       orderDate: new Date()
     };
-    
+
     const order = await PurchaseOrder.create(orderData);
     
     const populatedOrder = await PurchaseOrder.findById(order._id)
@@ -204,6 +205,9 @@ export const updatePurchaseOrder = async (
       }
       req.body.totalAmount = totalAmount;
     }
+
+    console.log("req.body:",req.body);
+    
 
     const updatedOrder = await PurchaseOrder.findByIdAndUpdate(
       req.params.id,
@@ -456,7 +460,7 @@ export const receiveItems = async (
       discountAmount: req.body.discountAmount || 0,
       notes: req.body.notes || "",
       terms: req.body.terms || "",
-      invoiceType: 'sale',
+      invoiceType: 'purchase',
       location: location,
       poNumber: order.poNumber,
       externalInvoiceNumber: externalInvoiceNumber,
@@ -649,8 +653,26 @@ export const updatePurchaseOrderStatus = async (
       return next(new AppError(`Cannot change status from ${order.status} to ${status}`, 400));
     }
 
+    console.log("order11:",order);
+    
+
     order.status = status;
     await order.save();
+
+    // Send email to supplier if status is changed to 'sent'
+    if (status === 'sent' && order.supplierEmail) {
+      const subject = `Purchase Order ${order.poNumber} Sent`;
+      const html = `<p>Dear Supplier,</p>
+        <p>Your purchase order <strong>${order.poNumber}</strong> has been sent.</p>
+        <p>Thank you.</p>`;
+      sendEmail(order.supplierEmail, subject, html)
+        .then(() => {
+          console.log('PO email sent to supplier:', order.supplierEmail);
+        })
+        .catch((err) => {
+          console.error('Error sending PO email:', err);
+        });
+    }
 
     const response: APIResponse = {
       success: true,

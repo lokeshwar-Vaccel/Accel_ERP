@@ -31,7 +31,7 @@ export interface IInvoice extends mongoose.Document {
   paymentDate?: Date;
   notes?: string;
   terms?: string;
-  invoiceType: 'sale' | 'service' | 'amc' | 'other';
+  invoiceType: 'sale' | 'purchase' | 'service' | 'amc' | 'other';
   referenceId?: string; // Service ticket, AMC contract, etc.
   location: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
@@ -173,7 +173,7 @@ const invoiceSchema = new Schema<IInvoice>({
   },
   invoiceType: {
     type: String,
-    enum: ['sale', 'service', 'amc', 'other'],
+    enum: ['sale', 'service', 'purchase', 'amc', 'other'],
     required: true
   },
   referenceId: {

@@ -75,7 +75,6 @@ const generateInvoiceEmailTemplate = (
               <div>
                 <strong>Issue Date:</strong> ${issueDate}<br>
                 <strong>Due Date:</strong> ${dueDate}<br>
-                <strong>Status:</strong> <span style="color: #059669; font-weight: bold;">${invoice.status.toUpperCase()}</span>
               </div>
               <div>
                 <strong>Total Amount:</strong> ₹${totalAmount}<br>
@@ -86,7 +85,7 @@ const generateInvoiceEmailTemplate = (
           </div>
 
           <div style="text-align: center; margin: 30px 0;">
-            <a href="${paymentLink}" class="payment-button">
+            <a href="${paymentLink}" class="payment-button" style="color:rgb(255, 255, 255);">
               💳 Pay Now - ₹${remainingAmount}
             </a>
           </div>
@@ -216,8 +215,8 @@ const generatePaymentReminderTemplate = (
 
           <p>To avoid any late fees or service interruptions, please complete your payment as soon as possible.</p>
 
-          <div style="text-align: center; margin: 30px 0;">
-            <a href="${paymentLink}" class="payment-button">
+          <div style="text-align: center; margin: 30px 0; ">
+            <a href="${paymentLink}" class="payment-button" style="color:rgb(255, 255, 255);">
               💳 Pay Now - ₹${remainingAmount}
             </a>
           </div>
@@ -328,14 +327,14 @@ export class InvoiceEmailService {
     }
     
     // If customer is null, create a customer object from supplierEmail
-    if (invoice.supplierEmail) {
-      return {
-        name: invoice.supplierName || 'Customer',
-        email: invoice.supplierEmail,
-        phone: '',
-        address: ''
-      };
-    }
+    // if (invoice.supplierEmail) {
+    //   return {
+    //     name: invoice.supplierName || 'Customer',
+    //     email: invoice.supplierEmail,
+    //     phone: '',
+    //     address: ''
+    //   };
+    // }
     
     return null;
   }

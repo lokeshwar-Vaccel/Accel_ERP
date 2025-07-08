@@ -80,6 +80,7 @@ interface PurchaseOrder {
   _id: string;
   poNumber: string;
   supplier: string | Supplier;
+  supplierEmail: string | any;
   items: POItem[];
   totalAmount: number;
   status: PurchaseOrderStatus;
@@ -140,6 +141,7 @@ interface ReceiveItemsData {
 
 interface POFormData {
   supplier: string;
+  supplierEmail: string;
   expectedDeliveryDate: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   sourceType: 'manual' | 'amc' | 'service' | 'inventory';
@@ -161,6 +163,9 @@ const PurchaseOrderManagement: React.FC = () => {
   const [locations, setLocations] = useState<StockLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  console.log("purchaseOrders:",purchaseOrders);
+  
 
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
@@ -222,6 +227,7 @@ const PurchaseOrderManagement: React.FC = () => {
   // Form data
   const [formData, setFormData] = useState<POFormData>({
     supplier: '',
+    supplierEmail: '',
     expectedDeliveryDate: '',
     priority: 'low',
     sourceType: 'manual',
@@ -284,8 +290,8 @@ const PurchaseOrderManagement: React.FC = () => {
   const fetchPurchaseOrders = async () => {
     try {
       const response = await apiClient.purchaseOrders.getAll();
-      console.log("response-purchaseOrders:",response);
-      
+      console.log("response-purchaseOrders:", response);
+
 
       let ordersData: PurchaseOrder[] = [];
       if (response.success && response.data) {
@@ -389,6 +395,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const handleCreatePO = async () => {
     setFormData({
       supplier: '',
+      supplierEmail: '',
       expectedDeliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       priority: 'low',
       sourceType: 'manual',
@@ -408,8 +415,11 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const handleEditPO = (po: PurchaseOrder) => {
     setEditingPO(po);
+    console.log("po:",po);
+    
     setFormData({
       supplier: typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)._id,
+      supplierEmail: typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)._id,
       expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : '',
       priority: po.priority || 'low',
       sourceType: po.sourceType || 'manual',
@@ -434,13 +444,14 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const openReceiveModal = (po: PurchaseOrder) => {
 
-    console.log("po:",po);
-    
+    console.log("po:", po);
+
     setSelectedPO(po);
     setReceiveSearchTerm(''); // Clear search when opening modal
 
     // Extract supplier name from purchase order
     const extractedSupplierName = typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier).name;
+    const extractedSupplierEmail = typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any);
 
     // Use the first available location or a default if none exist
     const defaultLocation = locations.length > 0 ? locations[0]._id : 'loc-main-warehouse';
@@ -471,7 +482,7 @@ const PurchaseOrderManagement: React.FC = () => {
       receiptDate: new Date().toISOString().split('T')[0],
       inspectedBy: 'Admin',
       supplierName: extractedSupplierName, // Set supplier name from purchase order
-      supplierEmail: '',
+      supplierEmail: extractedSupplierEmail,
       externalInvoiceNumber: '',
       externalInvoiceTotal: 0,
       notes: '',
@@ -527,6 +538,9 @@ const PurchaseOrderManagement: React.FC = () => {
         }))
       };
 
+      console.log("poData:", poData);
+
+
       const response = await apiClient.purchaseOrders.create(poData);
 
       setPurchaseOrders([response.data, ...purchaseOrders]);
@@ -562,8 +576,14 @@ const PurchaseOrderManagement: React.FC = () => {
         }))
       };
 
+      console.log("poData:",poData);
+      
+
       const response = await apiClient.purchaseOrders.update(editingPO._id, poData);
-      setPurchaseOrders(purchaseOrders.map(po => po._id === editingPO._id ? response.data : po));
+      console.log("response999:",response);
+      console.log("response--9:",purchaseOrders.map(po => po._id === editingPO._id ? response.data : po));
+      
+      setPurchaseOrders(purchaseOrders.map(po => po._id === editingPO._id ? response.data?.order : po));
       setShowEditModal(false);
       setEditingPO(null);
       resetPOForm();
@@ -604,12 +624,12 @@ const PurchaseOrderManagement: React.FC = () => {
 
     setSubmitting(true);
     try {
-      console.log("receiveData:",receiveData);
-      
+      console.log("receiveData:", receiveData);
+
       const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
 
-      console.log("response:",response);
-      
+      console.log("response:", response);
+
       // Use the updated purchase order from the backend response
       const updatedPO = response.data.order;
 
@@ -758,6 +778,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const resetPOForm = () => {
     setFormData({
       supplier: '',
+      supplierEmail: '',
       expectedDeliveryDate: '',
       priority: 'low',
       sourceType: 'manual',
@@ -788,11 +809,11 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const filteredPOs = purchaseOrders.filter(po => {
-    const supplierName = typeof po.supplier === 'string' ? po.supplier : po.supplier.name;
-    const matchesSearch = po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      supplierName.toLowerCase().includes(searchTerm.toLowerCase());
+    const supplierName = typeof po.supplier === 'string' ? po.supplier : po.supplier?.name;
+    const matchesSearch = po.poNumber?.toLowerCase().includes(searchTerm?.toLowerCase()) ||
+      supplierName?.toLowerCase().includes(searchTerm?.toLowerCase());
     const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
-    const matchesSupplier = !supplierFilter || supplierName.toLowerCase().includes(supplierFilter.toLowerCase());
+    const matchesSupplier = !supplierFilter || supplierName?.toLowerCase().includes(supplierFilter?.toLowerCase());
 
     return matchesSearch && matchesStatus && matchesSupplier;
   });
@@ -1176,6 +1197,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-xs font-medium text-gray-900">{typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier).name}</div>
+                      <div className="text-xs font-medium text-gray-500">{typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)}</div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div>
@@ -1243,6 +1265,24 @@ const PurchaseOrderManagement: React.FC = () => {
                             <Package className="w-4 h-4" />
                           </button>
                         )}
+                        {po.status === 'sent' && (
+                          <button
+                            onClick={() => handleStatusUpdate(po._id, 'confirmed')}
+                            className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
+                          >
+                            <Check className="w-4 h-4" />
+                            {/* <span>Mark as Confirmed</span> */}
+                          </button>
+                        )}
+                        {(po.status === 'draft' || po.status === 'sent') && (
+                          <button
+                            onClick={() => handleStatusUpdate(po._id, 'cancelled')}
+                            className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                            {/* <span>Cancel PO</span> */}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1275,7 +1315,7 @@ const PurchaseOrderManagement: React.FC = () => {
               )}
 
               {/* Basic Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Supplier *
@@ -1290,6 +1330,23 @@ const PurchaseOrderManagement: React.FC = () => {
                   />
                   {formErrors.supplier && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.supplier}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Supplier Email
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.supplierEmail}
+                    onChange={(e) => setFormData({ ...formData, supplierEmail: e.target.value })}
+
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplierEmail ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                    placeholder="Enter Supplier Email"
+                  />
+                  {formErrors.supplierEmail && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.supplierEmail}</p>
                   )}
                 </div>
                 <div>
@@ -1587,7 +1644,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
       {/* Edit PO Modal */}
       {showEditModal && editingPO && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Edit Purchase Order - {editingPO.poNumber}</h2>
@@ -1621,6 +1678,23 @@ const PurchaseOrderManagement: React.FC = () => {
                   />
                   {formErrors.supplier && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.supplier}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Supplier Email
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.supplierEmail}
+                    onChange={(e) => setFormData({ ...formData, supplierEmail: e.target.value })}
+
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplierEmail ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                    placeholder="Enter Supplier Email"
+                  />
+                  {formErrors.supplierEmail && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.supplierEmail}</p>
                   )}
                 </div>
                 <div>
@@ -1835,7 +1909,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
       {/* PO Details Modal */}
       {showDetailsModal && selectedPO && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[50]">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div>
@@ -2205,24 +2279,7 @@ const PurchaseOrderManagement: React.FC = () => {
                       <p className="text-red-500 text-xs mt-1">{formErrors.externalInvoiceNumber}</p>
                     )}
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Supplier Email
-                    </label>
-                    <input
-                      type="text"
-                      value={receiveData.supplierEmail}
-                      onChange={(e) => setReceiveData({ ...receiveData, supplierEmail: e.target.value })}
 
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplierEmail ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                      placeholder="Enter Supplier Email"
-                    />
-                    {formErrors.supplierEmail && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.supplierEmail}</p>
-                    )}
-                  </div>
-                  
                 </div>
 
                 <div className="mt-4">
@@ -2359,9 +2416,10 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <div className="flex gap-2">
                                   <input
                                     type="number"
-                                    value={receivedItem?.quantityReceived || 0}
+                                    value={receivedItem?.quantityReceived}
+                                    placeholder='0'
                                     onChange={(e) => {
-                                      const qty = parseInt(e.target.value) || 0;
+                                      const qty = parseInt(e.target.value);
 
                                       // Update receivedItems
                                       const newReceivedItems = [...receiveData.receivedItems];
@@ -2615,7 +2673,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           value={receiveData.externalInvoiceTotal}
                           onChange={(e) => {
                             const value = e.target.value;
-                            setReceiveData({ ...receiveData, externalInvoiceTotal: parseFloat(value) || 0 });
+                            setReceiveData({ ...receiveData, externalInvoiceTotal: parseFloat(value) });
 
                             // Clear existing timeout
                             if (debounceTimeoutRef.current) {

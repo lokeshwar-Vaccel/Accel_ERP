@@ -22,6 +22,7 @@ export interface POItemInput {
 
 export interface CreatePurchaseOrderInput {
   supplier: string;
+  supplierEmail: string;
   items: POItemInput[];
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
@@ -53,6 +54,8 @@ export interface CreatePurchaseOrderInput {
 
 export interface UpdatePurchaseOrderInput {
   supplier?: string;
+  supplierEmail?: string;
+  items: POItemInput[];
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
@@ -231,6 +234,7 @@ export interface PurchaseOrderImportInput {
 // Base purchase order fields
 const basePOFields = {
   supplier: Joi.string().max(200).trim(),
+  supplierEmail: Joi.string().max(200).trim(),
   totalAmount: Joi.number().min(0).precision(2),
   status: Joi.string().valid('draft', 'sent', 'confirmed', 'received', 'cancelled'),
   orderDate: Joi.date().iso(),
@@ -265,6 +269,7 @@ const poItemSchema = Joi.object<POItemInput>({
 // Create purchase order schema
 export const createPurchaseOrderSchema = Joi.object<CreatePurchaseOrderInput>({
   supplier: basePOFields.supplier.required(),
+  supplierEmail: basePOFields.supplier.required(),
   items: Joi.array().items(poItemSchema).min(1).max(100).required(),
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
   priority: basePOFields.priority.default('medium'),
@@ -297,6 +302,8 @@ export const createPurchaseOrderSchema = Joi.object<CreatePurchaseOrderInput>({
 // Update purchase order schema
 export const updatePurchaseOrderSchema = Joi.object<UpdatePurchaseOrderInput>({
   supplier: basePOFields.supplier,
+  supplierEmail: basePOFields.supplierEmail,
+  items: Joi.array().items(poItemSchema).min(1).max(100).required(),
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
   priority: basePOFields.priority,
   status: basePOFields.status,

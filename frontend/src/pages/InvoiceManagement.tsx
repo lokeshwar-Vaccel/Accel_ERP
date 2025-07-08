@@ -20,7 +20,9 @@ import {
   Send,
   CreditCard,
   Ban,
-  AlertCircle
+  AlertCircle,
+  XCircle,
+  TrendingDown
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -113,7 +115,7 @@ interface NewInvoiceItem {
 interface NewInvoice {
   customer: string;
   dueDate: string;
-  invoiceType: 'sale' | 'service' | 'amc' | 'other';
+  invoiceType: 'sale' | 'purchase' | 'service' | 'amc' | 'other';
   location: string;
   notes: string;
   items: NewInvoiceItem[];
@@ -179,6 +181,7 @@ const InvoiceManagement: React.FC = () => {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
+  const [invoiceType, setInvoiceType] = useState('purchase');
 
   // Status update states
   const [statusUpdate, setStatusUpdate] = useState<StatusUpdate>({
@@ -255,6 +258,108 @@ const InvoiceManagement: React.FC = () => {
     });
   };
 
+
+  const calculateAdjustedTaxRate = (unitPrice: number, quantity: number, targetTotal: number): number => {
+  if (unitPrice === 0 || quantity === 0) return 0;
+  const base = unitPrice * quantity;
+  const tax = targetTotal - base;
+  const taxRate = (tax / base) * 100;
+  return Math.max(0, parseFloat(taxRate.toFixed(2)));
+};
+
+const autoAdjustTaxRates = () => {
+  const items = selectedInvoice.items ?? [];
+  const targetTotal = selectedInvoice.externalInvoiceTotal ?? 0;
+
+  const subtotal = items.reduce(
+    (sum, item) => sum + (item.unitPrice ?? 0) * (item.quantity ?? 0),
+    0
+  );
+
+  const adjustedItems = items.map((item) => {
+    const quantity = item.quantity ?? 0;
+    const unitPrice = item.unitPrice ?? 0;
+    const base = unitPrice * quantity;
+
+    const share = subtotal > 0 ? base / subtotal : 0;
+    const targetItemTotal = share * targetTotal;
+
+    const adjustedTaxRate = calculateAdjustedTaxRate(unitPrice, quantity, targetItemTotal);
+    const taxAmount = parseFloat(((base * adjustedTaxRate) / 100).toFixed(2));
+    const totalPrice = parseFloat((base + taxAmount).toFixed(2));
+
+    return {
+      ...item,
+      taxRate: adjustedTaxRate,
+      taxAmount,
+      totalPrice,
+    };
+  });
+
+  const taxAmount = adjustedItems.reduce((sum, item) => sum + item.taxAmount, 0);
+  const totalAmount = adjustedItems.reduce((sum, item) => sum + item.totalPrice, 0);
+
+  setSelectedInvoice((prev) => ({
+    ...prev,
+    items: adjustedItems,
+    subtotal: parseFloat(subtotal.toFixed(2)),
+    taxAmount: parseFloat(taxAmount.toFixed(2)),
+    totalAmount: parseFloat(totalAmount.toFixed(2)),
+    remainingAmount: parseFloat(((totalAmount - (prev.paidAmount ?? 0))).toFixed(2)),
+  }));
+};
+
+const autoAdjustUnitPrice = () => {
+  const items = selectedInvoice.items ?? [];
+  const targetTotal = selectedInvoice.externalInvoiceTotal ?? 0;
+
+  const currentTotal = items.reduce((sum, item) => {
+    const quantity = item.quantity ?? 0;
+    const unitPrice = item.unitPrice ?? 0;
+    const taxRate = item.taxRate ?? 0;
+    const base = unitPrice * quantity;
+    const tax = (base * taxRate) / 100;
+    return sum + base + tax;
+  }, 0);
+
+  const adjustedItems = items.map((item) => {
+    const quantity = item.quantity ?? 0;
+    const taxRate = item.taxRate ?? 0;
+
+    const itemBase = item.unitPrice * quantity;
+    const itemShare = currentTotal > 0 ? (itemBase + (itemBase * taxRate) / 100) / currentTotal : 0;
+    const targetItemTotal = itemShare * targetTotal;
+
+    const adjustedUnitPrice = parseFloat(((targetItemTotal / quantity) / (1 + taxRate / 100)).toFixed(2));
+    const basePrice = adjustedUnitPrice * quantity;
+    const taxAmount = parseFloat(((basePrice * taxRate) / 100).toFixed(2));
+    const totalPrice = parseFloat((basePrice + taxAmount).toFixed(2));
+
+    return {
+      ...item,
+      unitPrice: adjustedUnitPrice,
+      taxAmount,
+      totalPrice,
+    };
+  });
+
+  const subtotal = adjustedItems.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
+  const taxAmount = adjustedItems.reduce((sum, item) => sum + item.taxAmount, 0);
+  const totalAmount = parseFloat((subtotal + taxAmount).toFixed(2));
+  const paidAmount = selectedInvoice.paidAmount ?? 0;
+  const remainingAmount = parseFloat((totalAmount - paidAmount).toFixed(2));
+
+  setSelectedInvoice((prev) => ({
+    ...prev,
+    items: adjustedItems,
+    subtotal: parseFloat(subtotal.toFixed(2)),
+    taxAmount: parseFloat(taxAmount.toFixed(2)),
+    totalAmount,
+    remainingAmount,
+  }));
+};
+
+
   const recalculateItem = (index: number) => {
     if (!selectedInvoice) return;
     const updatedItems = [...selectedInvoice.items];
@@ -288,7 +393,7 @@ const InvoiceManagement: React.FC = () => {
       if (res.success) {
         // Update the selected invoice with new data
         const updatedInvoice = { ...selectedInvoice };
-        
+
         // Update items with new prices and recalculate totals
         updatedInvoice.items = updatedInvoice.items.map((item: any, index: number) => {
           const updatedItem = { ...item };
@@ -313,8 +418,8 @@ const InvoiceManagement: React.FC = () => {
         setSelectedInvoice(updatedInvoice);
 
         // Update the invoice in the main invoices list
-        setInvoices(prevInvoices => 
-          prevInvoices.map(invoice => 
+        setInvoices(prevInvoices =>
+          prevInvoices.map(invoice =>
             invoice._id === selectedInvoice._id ? updatedInvoice : invoice
           )
         );
@@ -588,7 +693,7 @@ const InvoiceManagement: React.FC = () => {
 
       // Initialize Razorpay
       const options = {
-        key:  'rzp_test_vlWs0Sr2LECorO', // Replace with your key
+        key: 'rzp_test_vlWs0Sr2LECorO', // Replace with your key
         amount: Math.round(paymentUpdate.paidAmount * 100), // Amount in paise
         currency: 'INR',
         name: 'Sun Power Services',
@@ -598,7 +703,7 @@ const InvoiceManagement: React.FC = () => {
           try {
             console.log('Payment response from Razorpay:', response);
             console.log('Payment ID for verification:', paymentId);
-            
+
             // Verify payment
             const verificationResponse = await apiClient.payments.verifyRazorpayPayment({
               razorpay_order_id: response.razorpay_order_id,
@@ -686,7 +791,7 @@ const InvoiceManagement: React.FC = () => {
     try {
       // Send invoice email with payment link
       const response = await apiClient.invoices.sendEmail(invoice._id);
-      
+
       if (response.success) {
         toast.success(`Invoice email sent successfully!`);
         await fetchInvoices();
@@ -705,9 +810,9 @@ const InvoiceManagement: React.FC = () => {
       console.log("check-----:");
       const response = await apiClient.invoices.sendReminder(invoice._id);
 
-      console.log("response-----:",response);
-      
-      
+      console.log("response-----:", response);
+
+
       if (response.success) {
         toast.success('Payment reminder sent successfully!');
         await fetchInvoices();
@@ -771,62 +876,65 @@ const InvoiceManagement: React.FC = () => {
       color: 'text-blue-600 hover:text-blue-900 hover:bg-blue-50'
     });
 
-    // Edit Status - Available for all invoices except cancelled
-    if (invoice.status !== 'cancelled') {
-      actions.push({
-        icon: <Edit className="w-4 h-4" />,
-        label: 'Edit Status',
-        action: () => handleUpdateStatus(invoice, invoice.status),
-        color: 'text-purple-600 hover:text-purple-900 hover:bg-purple-50'
-      });
-    }
+    if (invoice.invoiceType === 'sale') {
 
-    // Payment Management - Available for invoices that can have payments
-    if (invoice.status !== 'cancelled' && invoice.status !== 'draft') {
-      actions.push({
-        icon: <DollarSign className="w-4 h-4" />,
-        label: 'Update Payment',
-        action: () => handleUpdatePayment(invoice),
-        color: 'text-green-600 hover:text-green-900 hover:bg-green-50'
-      });
-    }
+      // Edit Status - Available for all invoices except cancelled
+      if (invoice.status !== 'cancelled') {
+        actions.push({
+          icon: <Edit className="w-4 h-4" />,
+          label: 'Edit Status',
+          action: () => handleUpdateStatus(invoice, invoice.status),
+          color: 'text-purple-600 hover:text-purple-900 hover:bg-purple-50'
+        });
+      }
 
-    // Email actions
-    if (invoice.status === 'draft') {
-      actions.push({
-        icon: <Send className="w-4 h-4" />,
-        label: 'Send Email',
-        action: () => quickSendInvoice(invoice),
-        color: 'text-orange-600 hover:text-orange-900 hover:bg-orange-50'
-      });
-    }
+      // Payment Management - Available for invoices that can have payments
+      if (invoice.status !== 'cancelled' && invoice.status !== 'draft') {
+        actions.push({
+          icon: <DollarSign className="w-4 h-4" />,
+          label: 'Update Payment',
+          action: () => handleUpdatePayment(invoice),
+          color: 'text-green-600 hover:text-green-900 hover:bg-green-50'
+        });
+      }
 
-    if (invoice.status === 'sent' && (invoice.paymentStatus === 'pending' || invoice.paymentStatus === 'partial')) {
-      actions.push({
-        icon: <Send className="w-4 h-4" />,
-        label: 'Send Reminder',
-        action: () => sendPaymentReminder(invoice),
-        color: 'text-yellow-600 hover:text-yellow-900 hover:bg-yellow-50'
-      });
-    }
+      // Email actions
+      if (invoice.status === 'draft') {
+        actions.push({
+          icon: <Send className="w-4 h-4" />,
+          label: 'Send Email',
+          action: () => quickSendInvoice(invoice),
+          color: 'text-orange-600 hover:text-orange-900 hover:bg-orange-50'
+        });
+      }
 
-    if (invoice.status === 'sent' && invoice.paymentStatus === 'pending') {
-      actions.push({
-        icon: <CheckCircle className="w-4 h-4" />,
-        label: 'Quick Paid',
-        action: () => quickMarkPaid(invoice),
-        color: 'text-green-600 hover:text-green-900 hover:bg-green-50'
-      });
-    }
+      if (invoice.status === 'sent' && (invoice.paymentStatus === 'pending' || invoice.paymentStatus === 'partial')) {
+        actions.push({
+          icon: <Send className="w-4 h-4" />,
+          label: 'Send Reminder',
+          action: () => sendPaymentReminder(invoice),
+          color: 'text-yellow-600 hover:text-yellow-900 hover:bg-yellow-50'
+        });
+      }
 
-    // Cancel option for non-finalized invoices
-    if (invoice.status !== 'cancelled' && invoice.paymentStatus !== 'paid') {
-      actions.push({
-        icon: <X className="w-4 h-4" />,
-        label: 'Cancel',
-        action: () => quickCancelInvoice(invoice),
-        color: 'text-red-600 hover:text-red-900 hover:bg-red-50'
-      });
+      if (invoice.status === 'sent' && invoice.paymentStatus === 'pending') {
+        actions.push({
+          icon: <CheckCircle className="w-4 h-4" />,
+          label: 'Quick Paid',
+          action: () => quickMarkPaid(invoice),
+          color: 'text-green-600 hover:text-green-900 hover:bg-green-50'
+        });
+      }
+
+      // Cancel option for non-finalized invoices
+      if (invoice.status !== 'cancelled' && invoice.paymentStatus !== 'paid') {
+        actions.push({
+          icon: <X className="w-4 h-4" />,
+          label: 'Cancel',
+          action: () => quickCancelInvoice(invoice),
+          color: 'text-red-600 hover:text-red-900 hover:bg-red-50'
+        });
+      }
     }
 
     return actions;
@@ -1009,10 +1117,10 @@ const InvoiceManagement: React.FC = () => {
 
     // Validate Razorpay configuration
     if (paymentUpdate.useRazorpay) {
-      const razorpayKey =  "rzp_test_vlWs0Sr2LECorO";
-      console.log("razorpayKey:",razorpayKey);
-      
-      if (!razorpayKey ) {
+      const razorpayKey = "rzp_test_vlWs0Sr2LECorO";
+      console.log("razorpayKey:", razorpayKey);
+
+      if (!razorpayKey) {
         errors.razorpay = 'Razorpay key not configured. Please check environment variables.';
       }
     }
@@ -1152,14 +1260,30 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const filteredInvoices = invoices.filter(invoice => {
+    console.log("invoices--9:", invoices);
+
     const matchesSearch =
       invoice?.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
     const matchesPayment = paymentFilter === 'all' || invoice.paymentStatus === paymentFilter;
-
-    return matchesSearch && matchesStatus && matchesPayment;
+    const matchesType = invoice.invoiceType === invoiceType;
+    return matchesSearch && matchesStatus && matchesPayment && matchesType;
   });
+
+  console.log("filteredInvoices:", filteredInvoices);
+
+
+  const getStatusIcon = (status: string) => {
+    const icons: any = {
+      completed: <CheckCircle className="w-4 h-4" />,
+      cancelled: <XCircle className="w-4 h-4" />,
+      pending: <Clock className="w-4 h-4" />,
+      overdue: <AlertCircle className="w-4 h-4" />,
+      received: <CheckCircle className="w-4 h-4" />
+    };
+    return icons[status];
+  };
 
   const statCards = [
     {
@@ -1487,87 +1611,117 @@ const InvoiceManagement: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search invoices..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
+        <div className="flex flex-col justify-between md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
+          <div className="flex gap-4 ">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search invoices..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
 
-          {/* Status Filter Custom Dropdown */}
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => setShowStatusFilterDropdown(!showStatusFilterDropdown)}
-              className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-            >
-              <span className="text-gray-700 truncate mr-1">{getStatusFilterLabel(statusFilter)}</span>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStatusFilterDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showStatusFilterDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                {[
-                  { value: 'all', label: 'All Status' },
-                  { value: 'draft', label: 'Draft' },
-                  { value: 'sent', label: 'Sent' },
-                  { value: 'paid', label: 'Paid' },
-                  { value: 'overdue', label: 'Overdue' },
-                  { value: 'cancelled', label: 'Cancelled' }
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setStatusFilter(option.value);
-                      setShowStatusFilterDropdown(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                      }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+            {/* Status Filter Custom Dropdown */}
+            <div className="relative dropdown-container">
+              <button
+                onClick={() => setShowStatusFilterDropdown(!showStatusFilterDropdown)}
+                className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+              >
+                <span className="text-gray-700 truncate mr-1">{getStatusFilterLabel(statusFilter)}</span>
+                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStatusFilterDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showStatusFilterDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                  {[
+                    { value: 'all', label: 'All Status' },
+                    { value: 'draft', label: 'Draft' },
+                    { value: 'sent', label: 'Sent' },
+                    { value: 'paid', label: 'Paid' },
+                    { value: 'overdue', label: 'Overdue' },
+                    { value: 'cancelled', label: 'Cancelled' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setStatusFilter(option.value);
+                        setShowStatusFilterDropdown(false);
+                      }}
+                      className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                        }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
-          {/* Payment Filter Custom Dropdown */}
-          <div className="relative dropdown-container">
+            {/* Payment Filter Custom Dropdown */}
+            <div className="relative dropdown-container">
+              <button
+                onClick={() => setShowPaymentFilterDropdown(!showPaymentFilterDropdown)}
+                className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+              >
+                <span className="text-gray-700 truncate mr-1">{getPaymentFilterLabel(paymentFilter)}</span>
+                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showPaymentFilterDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showPaymentFilterDropdown && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                  {[
+                    { value: 'all', label: 'All Payments' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'partial', label: 'Partial' },
+                    { value: 'paid', label: 'Paid' },
+                    { value: 'failed', label: 'Failed' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => {
+                        setPaymentFilter(option.value);
+                        setShowPaymentFilterDropdown(false);
+                      }}
+                      className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${paymentFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                        }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          {/* Invoice Type Toggle */}
+          <div className="flex bg-gray-100 rounded-xl p-0" onClick={invoiceType ==='sale' ? () => setInvoiceType('purchase') : () => setInvoiceType('sale')}>
             <button
-              onClick={() => setShowPaymentFilterDropdown(!showPaymentFilterDropdown)}
-              className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+              // onClick={() => setInvoiceType('purchase')}
+              className={`px-6 py-3 rounded-xl font-medium transition-all duration-200 ${invoiceType === 'purchase'
+                ? 'bg-white text-blue-600 shadow-sm border border-blue-500'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
             >
-              <span className="text-gray-700 truncate mr-1">{getPaymentFilterLabel(paymentFilter)}</span>
-              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showPaymentFilterDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showPaymentFilterDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                {[
-                  { value: 'all', label: 'All Payments' },
-                  { value: 'pending', label: 'Pending' },
-                  { value: 'partial', label: 'Partial' },
-                  { value: 'paid', label: 'Paid' },
-                  { value: 'failed', label: 'Failed' }
-                ].map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setPaymentFilter(option.value);
-                      setShowPaymentFilterDropdown(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${paymentFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                      }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+              <div className="flex items-center space-x-2">
+                <TrendingDown className="w-4 h-4" />
+                <span>Purchase Invoices</span>
               </div>
-            )}
+            </button>
+            <button
+              // onClick={() => setInvoiceType('sale')}
+              className={`px-6 py-3 rounded-xl font-medium transition-all duration-200 ${invoiceType === 'sale'
+                ? 'bg-white text-blue-600 shadow-sm border border-blue-500'
+                : 'text-gray-600 hover:text-gray-900'
+                }`}
+            >
+              <div className="flex items-center space-x-2">
+                <TrendingUp className="w-4 h-4" />
+                <span>Sales Invoices</span>
+              </div>
+            </button>
           </div>
         </div>
+
 
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xs text-gray-600">
@@ -1576,6 +1730,8 @@ const InvoiceManagement: React.FC = () => {
         </div>
       </div>
 
+
+
       {/* Invoices Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
@@ -1583,11 +1739,13 @@ const InvoiceManagement: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {invoiceType === 'sale' ? 'Customer' : 'Supplier'}
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                {invoiceType === 'sale' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -1596,45 +1754,73 @@ const InvoiceManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Loading invoices...</td>
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                    <div className="flex justify-center items-center space-x-2">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                      <span>Loading invoices...</span>
+                    </div>
+                  </td>
                 </tr>
               ) : filteredInvoices.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No invoices found</td>
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                    <div className="text-center">
+                      <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-lg font-medium text-gray-900 mb-2">No invoices found</p>
+                      <p className="text-gray-500">Try adjusting your search or filters</p>
+                    </div>
+                  </td>
                 </tr>
               ) : (
                 filteredInvoices.map((invoice) => (
-                  <tr key={invoice._id} className="hover:bg-gray-50">
+                  <tr key={invoice._id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-sm font-medium text-blue-600">
                       {invoice.invoiceNumber}
                     </td>
                     <td className="px-4 py-3">
                       <div>
-                        <div className="text-sm font-medium text-gray-900">{invoice.customer ? invoice.customer.name : invoice?.supplierName}</div>
-                        <div className="text-xs text-gray-500">{invoice.customer ? invoice.customer.email : invoice?.supplierEmail}</div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {invoice.customer ? invoice.customer.name : invoice?.supplierName}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {invoice.customer ? invoice.customer.email : invoice?.supplierEmail}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                      ₹{invoice.totalAmount.toLocaleString()}
+                      ₹{invoice.totalAmount.toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                    <td className="px-4 py-3 text-sm font-medium text-green-600">
                       ₹{(invoice.paidAmount || 0).toLocaleString()}
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                    <td className="px-4 py-3 text-sm font-medium text-red-600">
                       ₹{(invoice.remainingAmount || invoice.totalAmount - (invoice.paidAmount || 0)).toLocaleString()}
                     </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
-                        {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
-                      </span>
-                    </td>
+                    {invoice.invoiceType === 'sale' ? <td className="px-4 py-3">
+                      <div className="flex items-center space-x-2">
+                        {getStatusIcon(invoice.status)}
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
+                          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                        </span>
+                      </div>
+                    </td> : <td className="px-4 py-3">
+                      <div className="flex items-center space-x-2">
+                        {getStatusIcon(invoice.status)}
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${invoice.externalInvoiceTotal == invoice.totalAmount ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                          {invoice.externalInvoiceTotal == invoice.totalAmount ? "Not Mismatch" : "Amount Mismatch"}
+                        </span>
+                      </div>
+                    </td>}
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(invoice.paymentStatus)}`}>
                         {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
-                      {new Date(invoice.dueDate).toLocaleDateString()}
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4 text-gray-400" />
+                        <span>{new Date(invoice.dueDate).toLocaleDateString()}</span>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
@@ -1642,7 +1828,7 @@ const InvoiceManagement: React.FC = () => {
                           <button
                             key={index}
                             onClick={action.action}
-                            className={`${action.color} p-1 rounded transition-colors`}
+                            className={`${action.color} p-2 rounded-lg transition-colors hover:shadow-md`}
                             title={action.label}
                           >
                             {action.icon}
@@ -1819,6 +2005,7 @@ const InvoiceManagement: React.FC = () => {
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
                         {[
                           { value: 'sale', label: 'Sale' },
+                          { value: 'purchase', label: 'Purchase' },
                           { value: 'service', label: 'Service' },
                           { value: 'amc', label: 'AMC' },
                           { value: 'other', label: 'Other' }
@@ -1826,7 +2013,7 @@ const InvoiceManagement: React.FC = () => {
                           <button
                             key={option.value}
                             onClick={() => {
-                              setNewInvoice({ ...newInvoice, invoiceType: option.value as 'sale' | 'service' | 'amc' | 'other' });
+                              setNewInvoice({ ...newInvoice, invoiceType: option.value as 'sale' | 'purchase' | 'service' | 'amc' | 'other' });
                               setShowInvoiceTypeDropdown(false);
                             }}
                             className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.invoiceType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
@@ -2196,8 +2383,8 @@ const InvoiceManagement: React.FC = () => {
                   Print
                 </button>
                 <button
-                  onClick={() => { 
-                    setShowViewModal(false); 
+                  onClick={() => {
+                    setShowViewModal(false);
                     setEditMode(false);
                     setOriginalInvoiceData(null); // Clear backup data
                   }}
@@ -2287,9 +2474,9 @@ const InvoiceManagement: React.FC = () => {
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                        {/* {editMode && (
+                        {editMode && (
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                        )} */}
+                        )}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
@@ -2305,7 +2492,7 @@ const InvoiceManagement: React.FC = () => {
                                 onChange={(e) => handleItemEdit(index, 'unitPrice', parseFloat(e.target.value) || 0)}
                                 onBlur={() => recalculateItem(index)}
                                 className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                step="0.01"
+                                step="1"
                               />
                             ) : (
                               `₹${(item.unitPrice ?? 0).toLocaleString()}`
@@ -2319,7 +2506,7 @@ const InvoiceManagement: React.FC = () => {
                                 onChange={(e) => handleItemEdit(index, 'taxRate', parseFloat(e.target.value) || 0)}
                                 onBlur={() => recalculateItem(index)}
                                 className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                step="0.01"
+                                step="1"
                                 min="0"
                                 max="100"
                               />
@@ -2327,17 +2514,22 @@ const InvoiceManagement: React.FC = () => {
                               `${item.taxRate ?? 0}%`
                             )}
                           </td>
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{((item.quantity ?? 0) * (item.unitPrice ?? 0) + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate || 0) / 100)).toLocaleString()}</td>
-                          {/* {editMode && (
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{((item.quantity ?? 0) * (item.unitPrice ?? 0) + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate || 0) / 100)).toFixed(3)}</td>
+                          {editMode && (
                             <td className="px-4 py-2 text-sm">
                               <button
-                                onClick={() => recalculateItem(index)}
-                                className="text-blue-600 hover:text-blue-800 text-xs"
+                                onClick={autoAdjustTaxRates}
+                                className="ml-3 bg-indigo-600 text-white px-3 py-1 rounded-md text-sm hover:bg-indigo-700"
                               >
-                                Recalc
+                                Auto Adjust Tax
                               </button>
+                              <button 
+                              onClick={autoAdjustUnitPrice}
+                              className="ml-3 bg-indigo-600 text-white px-3 py-1 rounded-md text-sm hover:bg-indigo-700"
+                              >
+                                Auto Adjust Price</button>
                             </td>
-                          )} */}
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -2354,18 +2546,18 @@ const InvoiceManagement: React.FC = () => {
                       <p className="font-medium mt-1">Target Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toLocaleString()}</p>
                     </div>
                     <div className="flex space-x-2">
-                                          <button
-                      onClick={() => {
-                        // Restore original values when canceling
-                        if (originalInvoiceData) {
-                          setSelectedInvoice(JSON.parse(JSON.stringify(originalInvoiceData)));
-                        }
-                        setEditMode(false);
-                      }}
-                      className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-                    >
-                      Cancel
-                    </button>
+                      <button
+                        onClick={() => {
+                          // Restore original values when canceling
+                          if (originalInvoiceData) {
+                            setSelectedInvoice(JSON.parse(JSON.stringify(originalInvoiceData)));
+                          }
+                          setEditMode(false);
+                        }}
+                        className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
                       <button
                         onClick={async () => {
                           await handleSaveChanges();

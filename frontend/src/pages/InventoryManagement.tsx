@@ -260,10 +260,10 @@ const InventoryManagement: React.FC = () => {
     // Search filter
     if (filters.search) {
       items = items.filter(item =>
-        (item.product?.name?.toLowerCase().includes(filters.search.toLowerCase()) ||
-          item.product?.brand?.toLowerCase().includes(filters.search.toLowerCase()) ||
-          item.product?.partNo?.toLowerCase().includes(filters.search.toLowerCase()) ||
-          item.location?.name?.toLowerCase().includes(filters.search.toLowerCase()))
+      (item.product?.name?.toLowerCase().includes(filters.search.toLowerCase()) ||
+        item.product?.brand?.toLowerCase().includes(filters.search.toLowerCase()) ||
+        item.product?.partNo?.toLowerCase().includes(filters.search.toLowerCase()) ||
+        item.location?.name?.toLowerCase().includes(filters.search.toLowerCase()))
       );
     }
 
@@ -284,7 +284,7 @@ const InventoryManagement: React.FC = () => {
       items = items.filter(item => item.rack?._id === filters.rack);
     }
 
-        if (filters.dept) {
+    if (filters.dept) {
       items = items.filter(item => item.product?.dept === filters.dept);
     }
 
@@ -309,7 +309,7 @@ const InventoryManagement: React.FC = () => {
     if (filters.sortBy && filters.sortOrder) {
       items.sort((a, b) => {
         let aValue, bValue;
-        
+
         switch (filters.sortBy) {
           case 'name':
             aValue = a.product?.name || '';
@@ -501,45 +501,45 @@ const InventoryManagement: React.FC = () => {
     }))
   ];
   const roomOptionsFilter = [
-    { value: '', label: 'Select a room'},
+    { value: '', label: 'Select a room' },
     ...rooms.map(room => ({
       value: room._id,
       label: room.name
     }))
   ];
   const rackOptionsFilter = [
-    { value: '', label: 'Select a rack'},
+    { value: '', label: 'Select a rack' },
     ...racks.map(room => ({
       value: room._id,
       label: room.name
     }))
   ];
 
-// Extract unique departments
-const uniqueDepts = Array.from(
-  new Set(inventory.map(item => item.product?.dept).filter(Boolean))
-) as string[];
+  // Extract unique departments
+  const uniqueDepts = Array.from(
+    new Set(inventory.map(item => item.product?.dept).filter(Boolean))
+  ) as string[];
 
-const deptOptionsFilter = [
-  { value: '', label: 'Select a department' },
-  ...uniqueDepts.map(dept => ({
-    value: dept,
-    label: dept
-  }))
-];
+  const deptOptionsFilter = [
+    { value: '', label: 'Select a department' },
+    ...uniqueDepts.map(dept => ({
+      value: dept,
+      label: dept
+    }))
+  ];
 
-// Extract unique brands
-const uniqueBrands = Array.from(
-  new Set(inventory.map(item => item.product?.brand).filter(Boolean))
-) as string[];
+  // Extract unique brands
+  const uniqueBrands = Array.from(
+    new Set(inventory.map(item => item.product?.brand).filter(Boolean))
+  ) as string[];
 
-const brandOptionsFilter = [
-  { value: '', label: 'Select a brand' },
-  ...uniqueBrands.map(brand => ({
-    value: brand,
-    label: brand
-  }))
-];
+  const brandOptionsFilter = [
+    { value: '', label: 'Select a brand' },
+    ...uniqueBrands.map(brand => ({
+      value: brand,
+      label: brand
+    }))
+  ];
 
 
   useEffect(() => {
@@ -1076,14 +1076,14 @@ const brandOptionsFilter = [
     if (!transferFormData.toLocation) {
       errors.toLocation = 'Destination location is required';
     }
-    
+
     // Check if transfer is to exact same location/room/rack
     if (transferFormData.fromLocation === transferFormData.toLocation &&
-        transferFormData.fromRoom === transferFormData.toRoom &&
-        transferFormData.fromRack === transferFormData.toRack) {
+      transferFormData.fromRoom === transferFormData.toRoom &&
+      transferFormData.fromRack === transferFormData.toRack) {
       errors.toLocation = 'Destination must be different from source (location, room, or rack)';
     }
-    
+
     if (transferFormData.quantity <= 0) {
       errors.quantity = 'Quantity must be greater than 0';
     }
@@ -1687,7 +1687,7 @@ const brandOptionsFilter = [
   };
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  
+
   // Custom dropdown states for filters
   const [showCategoryFilterDropdown, setShowCategoryFilterDropdown] = useState(false);
   const [showDeptFilterDropdown, setShowDeptFilterDropdown] = useState(false);
@@ -1762,7 +1762,7 @@ const brandOptionsFilter = [
                 className="pl-9 text-sm h-9"
               />
             </div>
-            
+
             {/* Quick Actions */}
             <div className="flex gap-2">
               <button
@@ -1793,391 +1793,380 @@ const brandOptionsFilter = [
         {showAdvancedFilters && (
           <div className="p-4 bg-gray-50 border-b border-gray-100">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                             {/* Product Filters */}
-               <div className="space-y-3">
-                 <h4 className="text-sm font-semibold text-gray-900 flex items-center">
-                   <Package className="w-4 h-4 mr-2 text-blue-500" />
-                   Product Filters
-                 </h4>
-                 <div className="space-y-3">
-                   {/* Category Dropdown */}
-                   <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                     <div className="relative dropdown-container">
-                       <button
-                         onClick={() => setShowCategoryFilterDropdown(!showCategoryFilterDropdown)}
-                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                       >
-                         <span className="text-gray-700 truncate mr-1">
-                           {categoryOptions.find(opt => opt.value === (filters.category || ''))?.label || 'All Categories'}
-                         </span>
-                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCategoryFilterDropdown ? 'rotate-180' : ''}`} />
-                       </button>
-                       {showCategoryFilterDropdown && (
-                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                           {categoryOptions.map((option) => (
-                             <button
-                               key={option.value}
-                               onClick={() => {
-                                 onFiltersChange({ category: option.value === 'all' ? '' : option.value });
-                                 setShowCategoryFilterDropdown(false);
-                               }}
-                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                 (filters.category || 'all') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                               }`}
-                             >
-                               {option.label}
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                     </div>
-                   </div>
+              {/* Product Filters */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900 flex items-center">
+                  <Package className="w-4 h-4 mr-2 text-blue-500" />
+                  Product Filters
+                </h4>
+                <div className="space-y-3">
+                  {/* Category Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <div className="relative dropdown-container">
+                      <button
+                        onClick={() => setShowCategoryFilterDropdown(!showCategoryFilterDropdown)}
+                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                      >
+                        <span className="text-gray-700 truncate mr-1">
+                          {categoryOptions.find(opt => opt.value === (filters.category || ''))?.label || 'All Categories'}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCategoryFilterDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showCategoryFilterDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                          {categoryOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                onFiltersChange({ category: option.value === 'all' ? '' : option.value });
+                                setShowCategoryFilterDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.category || 'all') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                   {/* Department Dropdown */}
-                   <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                     <div className="relative dropdown-container">
-                       <button
-                         onClick={() => setShowDeptFilterDropdown(!showDeptFilterDropdown)}
-                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                       >
-                         <span className="text-gray-700 truncate mr-1">
-                           {deptOptionsFilter.find(opt => opt.value === (filters.dept || ''))?.label || 'Select a department'}
-                         </span>
-                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showDeptFilterDropdown ? 'rotate-180' : ''}`} />
-                       </button>
-                       {showDeptFilterDropdown && (
-                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                           {deptOptionsFilter.map((option) => (
-                             <button
-                               key={option.value}
-                               onClick={() => {
-                                 onFiltersChange({ dept: option.value });
-                                 setShowDeptFilterDropdown(false);
-                               }}
-                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                 (filters.dept || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                               }`}
-                             >
-                               {option.label}
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                     </div>
-                   </div>
+                  {/* Department Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                    <div className="relative dropdown-container">
+                      <button
+                        onClick={() => setShowDeptFilterDropdown(!showDeptFilterDropdown)}
+                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                      >
+                        <span className="text-gray-700 truncate mr-1">
+                          {deptOptionsFilter.find(opt => opt.value === (filters.dept || ''))?.label || 'Select a department'}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showDeptFilterDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showDeptFilterDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                          {deptOptionsFilter.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                onFiltersChange({ dept: option.value });
+                                setShowDeptFilterDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.dept || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                   {/* Brand Dropdown */}
-                   <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
-                     <div className="relative dropdown-container">
-                       <button
-                         onClick={() => setShowBrandFilterDropdown(!showBrandFilterDropdown)}
-                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                       >
-                         <span className="text-gray-700 truncate mr-1">
-                           {brandOptionsFilter.find(opt => opt.value === (filters.brand || ''))?.label || 'Select a brand'}
-                         </span>
-                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showBrandFilterDropdown ? 'rotate-180' : ''}`} />
-                       </button>
-                       {showBrandFilterDropdown && (
-                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                           {brandOptionsFilter.map((option) => (
-                             <button
-                               key={option.value}
-                               onClick={() => {
-                                 onFiltersChange({ brand: option.value });
-                                 setShowBrandFilterDropdown(false);
-                               }}
-                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                 (filters.brand || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                               }`}
-                             >
-                               {option.label}
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                     </div>
-                   </div>
-                 </div>
-               </div>
+                  {/* Brand Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                    <div className="relative dropdown-container">
+                      <button
+                        onClick={() => setShowBrandFilterDropdown(!showBrandFilterDropdown)}
+                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                      >
+                        <span className="text-gray-700 truncate mr-1">
+                          {brandOptionsFilter.find(opt => opt.value === (filters.brand || ''))?.label || 'Select a brand'}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showBrandFilterDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showBrandFilterDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                          {brandOptionsFilter.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                onFiltersChange({ brand: option.value });
+                                setShowBrandFilterDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.brand || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                             {/* Location Filters */}
-               <div className="space-y-3">
-                 <h4 className="text-sm font-semibold text-gray-900 flex items-center">
-                   <MapPin className="w-4 h-4 mr-2 text-green-500" />
-                   Location Hierarchy
-                 </h4>
-                 <div className="space-y-3">
-                   {/* Location Dropdown */}
-                   <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                     <div className="relative dropdown-container">
-                       <button
-                         onClick={() => setShowLocationFilterDropdown(!showLocationFilterDropdown)}
-                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                       >
-                         <span className="text-gray-700 truncate mr-1">
-                           {locationOptions.find(opt => opt.value === (filters.location || ''))?.label || 'Select a location'}
-                         </span>
-                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationFilterDropdown ? 'rotate-180' : ''}`} />
-                       </button>
-                       {showLocationFilterDropdown && (
-                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                           {locationOptions.map((option) => (
-                             <button
-                               key={option.value}
-                               onClick={() => {
-                                 onFiltersChange({ location: option.value, room: '', rack: '' }); // Reset dependent filters
-                                 setShowLocationFilterDropdown(false);
-                               }}
-                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                 (filters.location || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                               }`}
-                             >
-                               {option.label}
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                     </div>
-                   </div>
+              {/* Location Filters */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900 flex items-center">
+                  <MapPin className="w-4 h-4 mr-2 text-green-500" />
+                  Location Hierarchy
+                </h4>
+                <div className="space-y-3">
+                  {/* Location Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                    <div className="relative dropdown-container">
+                      <button
+                        onClick={() => setShowLocationFilterDropdown(!showLocationFilterDropdown)}
+                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                      >
+                        <span className="text-gray-700 truncate mr-1">
+                          {locationOptions.find(opt => opt.value === (filters.location || ''))?.label || 'Select a location'}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationFilterDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showLocationFilterDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                          {locationOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                onFiltersChange({ location: option.value, room: '', rack: '' }); // Reset dependent filters
+                                setShowLocationFilterDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.location || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                   {/* Room Dropdown */}
-                   <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
-                     <div className="relative dropdown-container">
-                       <button
-                         onClick={() => !filters.location ? null : setShowRoomFilterDropdown(!showRoomFilterDropdown)}
-                         disabled={!filters.location}
-                         className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${
-                           !filters.location 
-                             ? 'cursor-not-allowed bg-gray-50 text-gray-400' 
-                             : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
-                         }`}
-                       >
-                         <span className="truncate mr-1">
-                           {!filters.location 
-                             ? 'Select location first'
-                             : roomOptionsFilter.find(opt => opt.value === (filters.room || ''))?.label || 'Select a room'
-                           }
-                         </span>
-                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showRoomFilterDropdown ? 'rotate-180' : ''}`} />
-                       </button>
-                       {showRoomFilterDropdown && filters.location && (
-                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                           {roomOptionsFilter.map((option) => (
-                             <button
-                               key={option.value}
-                               onClick={() => {
-                                 onFiltersChange({ room: option.value, rack: '' }); // Reset dependent filter
-                                 setShowRoomFilterDropdown(false);
-                               }}
-                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                 (filters.room || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                               }`}
-                             >
-                               {option.label}
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                     </div>
-                   </div>
+                  {/* Room Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                    <div className="relative dropdown-container">
+                      <button
+                        onClick={() => !filters.location ? null : setShowRoomFilterDropdown(!showRoomFilterDropdown)}
+                        disabled={!filters.location}
+                        className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${!filters.location
+                            ? 'cursor-not-allowed bg-gray-50 text-gray-400'
+                            : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                          }`}
+                      >
+                        <span className="truncate mr-1">
+                          {!filters.location
+                            ? 'Select location first'
+                            : roomOptionsFilter.find(opt => opt.value === (filters.room || ''))?.label || 'Select a room'
+                          }
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showRoomFilterDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showRoomFilterDropdown && filters.location && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                          {roomOptionsFilter.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                onFiltersChange({ room: option.value, rack: '' }); // Reset dependent filter
+                                setShowRoomFilterDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.room || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                   {/* Rack Dropdown */}
-                   <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">Rack</label>
-                     <div className="relative dropdown-container">
-                       <button
-                         onClick={() => !filters.room ? null : setShowRackFilterDropdown(!showRackFilterDropdown)}
-                         disabled={!filters.room}
-                         className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${
-                           !filters.room 
-                             ? 'cursor-not-allowed bg-gray-50 text-gray-400' 
-                             : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
-                         }`}
-                       >
-                         <span className="truncate mr-1">
-                           {!filters.room 
-                             ? 'Select room first'
-                             : rackOptionsFilter.find(opt => opt.value === (filters.rack || ''))?.label || 'Select a rack'
-                           }
-                         </span>
-                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showRackFilterDropdown ? 'rotate-180' : ''}`} />
-                       </button>
-                       {showRackFilterDropdown && filters.room && (
-                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                           {rackOptionsFilter.map((option) => (
-                             <button
-                               key={option.value}
-                               onClick={() => {
-                                 onFiltersChange({ rack: option.value });
-                                 setShowRackFilterDropdown(false);
-                               }}
-                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                 (filters.rack || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                               }`}
-                             >
-                               {option.label}
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                     </div>
-                   </div>
-                 </div>
-               </div>
+                  {/* Rack Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Rack</label>
+                    <div className="relative dropdown-container">
+                      <button
+                        onClick={() => !filters.room ? null : setShowRackFilterDropdown(!showRackFilterDropdown)}
+                        disabled={!filters.room}
+                        className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${!filters.room
+                            ? 'cursor-not-allowed bg-gray-50 text-gray-400'
+                            : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                          }`}
+                      >
+                        <span className="truncate mr-1">
+                          {!filters.room
+                            ? 'Select room first'
+                            : rackOptionsFilter.find(opt => opt.value === (filters.rack || ''))?.label || 'Select a rack'
+                          }
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showRackFilterDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showRackFilterDropdown && filters.room && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                          {rackOptionsFilter.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                onFiltersChange({ rack: option.value });
+                                setShowRackFilterDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.rack || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                             {/* Stock Status & Actions */}
-               <div className="space-y-3">
-                 <h4 className="text-sm font-semibold text-gray-900 flex items-center">
-                   <BarChart3 className="w-4 h-4 mr-2 text-purple-500" />
-                   Stock Status & Sort
-                 </h4>
-                 <div className="space-y-3">
-                   {/* Stock Level Dropdown */}
-                   <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">Stock Level</label>
-                     <div className="relative dropdown-container">
-                       <button
-                         onClick={() => setShowStockStatusFilterDropdown(!showStockStatusFilterDropdown)}
-                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                       >
-                         <span className="text-gray-700 truncate mr-1">
-                           {stockStatusOptions.find(opt => opt.value === filters.stockStatus)?.label || 'All Stock Levels'}
-                         </span>
-                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStockStatusFilterDropdown ? 'rotate-180' : ''}`} />
-                       </button>
-                       {showStockStatusFilterDropdown && (
-                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                           {stockStatusOptions.map((option) => (
-                             <button
-                               key={option.value}
-                               onClick={() => {
-                                 onFiltersChange({ stockStatus: option.value });
-                                 setShowStockStatusFilterDropdown(false);
-                               }}
-                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                 filters.stockStatus === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                               }`}
-                             >
-                               {option.label}
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                     </div>
-                   </div>
+              {/* Stock Status & Actions */}
+              <div className="space-y-3">
+                <h4 className="text-sm font-semibold text-gray-900 flex items-center">
+                  <BarChart3 className="w-4 h-4 mr-2 text-purple-500" />
+                  Stock Status & Sort
+                </h4>
+                <div className="space-y-3">
+                  {/* Stock Level Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Stock Level</label>
+                    <div className="relative dropdown-container">
+                      <button
+                        onClick={() => setShowStockStatusFilterDropdown(!showStockStatusFilterDropdown)}
+                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                      >
+                        <span className="text-gray-700 truncate mr-1">
+                          {stockStatusOptions.find(opt => opt.value === filters.stockStatus)?.label || 'All Stock Levels'}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStockStatusFilterDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showStockStatusFilterDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                          {stockStatusOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                onFiltersChange({ stockStatus: option.value });
+                                setShowStockStatusFilterDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${filters.stockStatus === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                   {/* Sort By Dropdown */}
-                   <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
-                     <div className="relative dropdown-container">
-                       <button
-                         onClick={() => setShowSortFilterDropdown(!showSortFilterDropdown)}
-                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                       >
-                         <span className="text-gray-700 truncate mr-1">
-                           {getSortByLabel()}
-                         </span>
-                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSortFilterDropdown ? 'rotate-180' : ''}`} />
-                       </button>
-                       {showSortFilterDropdown && (
-                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                           {sortByOptions.map((option) => (
-                             <button
-                               key={option.value}
-                               onClick={() => {
-                                 onFiltersChange({ 
-                                   sortBy: option.value
-                                 });
-                                 setShowSortFilterDropdown(false);
-                               }}
-                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                 filters.sortBy === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                               }`}
-                             >
-                               {option.label}
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                     </div>
-                   </div>
+                  {/* Sort By Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+                    <div className="relative dropdown-container">
+                      <button
+                        onClick={() => setShowSortFilterDropdown(!showSortFilterDropdown)}
+                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                      >
+                        <span className="text-gray-700 truncate mr-1">
+                          {getSortByLabel()}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSortFilterDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showSortFilterDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                          {sortByOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                onFiltersChange({
+                                  sortBy: option.value
+                                });
+                                setShowSortFilterDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${filters.sortBy === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                   {/* Sort Order Dropdown */}
-                   <div>
-                     <label className="block text-sm font-medium text-gray-700 mb-1">Sort Order</label>
-                     <div className="relative dropdown-container">
-                       <button
-                         onClick={() => setShowSortOrderFilterDropdown(!showSortOrderFilterDropdown)}
-                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                       >
-                         <span className="text-gray-700 truncate mr-1">
-                           {getSortOrderLabel()}
-                         </span>
-                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSortOrderFilterDropdown ? 'rotate-180' : ''}`} />
-                       </button>
-                       {showSortOrderFilterDropdown && (
-                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                           {sortOrderOptions.map((option) => (
-                             <button
-                               key={option.value}
-                               onClick={() => {
-                                 onFiltersChange({ 
-                                   sortOrder: option.value
-                                 });
-                                 setShowSortOrderFilterDropdown(false);
-                               }}
-                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                 filters.sortOrder === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                               }`}
-                             >
-                               {option.label}
-                             </button>
-                           ))}
-                         </div>
-                       )}
-                     </div>
-                   </div>
+                  {/* Sort Order Dropdown */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Sort Order</label>
+                    <div className="relative dropdown-container">
+                      <button
+                        onClick={() => setShowSortOrderFilterDropdown(!showSortOrderFilterDropdown)}
+                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                      >
+                        <span className="text-gray-700 truncate mr-1">
+                          {getSortOrderLabel()}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSortOrderFilterDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showSortOrderFilterDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                          {sortOrderOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              onClick={() => {
+                                onFiltersChange({
+                                  sortOrder: option.value
+                                });
+                                setShowSortOrderFilterDropdown(false);
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${filters.sortOrder === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
 
-                   <div className="pt-2">
-                     <button
-                       onClick={() => {
-                         onFiltersChange({
-                           search: '',
-                           category: '',
-                           dept: '',
-                           brand: '',
-                           location: '',
-                           room: '',
-                           rack: '',
-                           stockStatus: 'all',
-                           sortBy: 'name',
-                           sortOrder: 'asc'
-                         });
-                         setShowAdvancedFilters(false);
-                         // Close all filter dropdowns
-                         setShowCategoryFilterDropdown(false);
-                         setShowDeptFilterDropdown(false);
-                         setShowBrandFilterDropdown(false);
-                         setShowLocationFilterDropdown(false);
-                         setShowRoomFilterDropdown(false);
-                         setShowRackFilterDropdown(false);
-                         setShowStockStatusFilterDropdown(false);
-                         setShowSortFilterDropdown(false);
-                         setShowSortOrderFilterDropdown(false);
-                       }}
-                       className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                     >
-                       Clear All Filters
-                     </button>
-                   </div>
-                 </div>
-               </div>
+                  <div className="pt-2">
+                    <button
+                      onClick={() => {
+                        onFiltersChange({
+                          search: '',
+                          category: '',
+                          dept: '',
+                          brand: '',
+                          location: '',
+                          room: '',
+                          rack: '',
+                          stockStatus: 'all',
+                          sortBy: 'name',
+                          sortOrder: 'asc'
+                        });
+                        setShowAdvancedFilters(false);
+                        // Close all filter dropdowns
+                        setShowCategoryFilterDropdown(false);
+                        setShowDeptFilterDropdown(false);
+                        setShowBrandFilterDropdown(false);
+                        setShowLocationFilterDropdown(false);
+                        setShowRoomFilterDropdown(false);
+                        setShowRackFilterDropdown(false);
+                        setShowStockStatusFilterDropdown(false);
+                        setShowSortFilterDropdown(false);
+                        setShowSortOrderFilterDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                    >
+                      Clear All Filters
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
@@ -2194,7 +2183,7 @@ const brandOptionsFilter = [
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-gray-500 font-medium">Active filters:</span>
-              
+
               {filters.search && (
                 <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
                   "{filters.search}"
@@ -2206,7 +2195,7 @@ const brandOptionsFilter = [
                   </button>
                 </span>
               )}
-              
+
               {filters.category && (
                 <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
                   {filters.category}
@@ -2218,7 +2207,7 @@ const brandOptionsFilter = [
                   </button>
                 </span>
               )}
-              
+
               {filters.dept && (
                 <span className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
                   {filters.dept}
@@ -2230,7 +2219,7 @@ const brandOptionsFilter = [
                   </button>
                 </span>
               )}
-              
+
               {filters.location && (
                 <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
                   {locations.find(l => l._id === filters.location)?.name}
@@ -2242,7 +2231,7 @@ const brandOptionsFilter = [
                   </button>
                 </span>
               )}
-              
+
               {filters.stockStatus !== 'all' && (
                 <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
                   {stockStatusOptions.find(s => s.value === filters.stockStatus)?.label}
@@ -2254,7 +2243,7 @@ const brandOptionsFilter = [
                   </button>
                 </span>
               )}
-              
+
               {(filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
                 <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
                   {getSortByLabel()} - {getSortOrderLabel()}
@@ -2313,7 +2302,7 @@ const brandOptionsFilter = [
                   const StatusIcon = status.icon;
                   return (
                     <tr key={item._id || idx} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-4 w-72">
+                      <td className="px-4 py-4 w-72 uppercase">
                         <div className="flex items-start">
                           <Package className="w-4 h-4 text-gray-400 mr-2 mt-1 flex-shrink-0" />
                           <div className="min-w-0 flex-1">
@@ -2377,15 +2366,15 @@ const brandOptionsFilter = [
                       <td className="px-4 py-4 w-28">
                         <div className="space-y-1">
                           <div className="text-sm font-medium text-gray-900">
-                            ₹{item.product?.price || 0}
+                            ₹{(item.product?.price || 0).toFixed(2)}
                           </div>
-                          <div className="text-xs text-gray-400">
+                          <div className="text-xs text-gray-500">
                             GST: {item.product?.gst}%
                           </div>
                         </div>
                       </td>
 
-                      <td className="px-4 py-4 w-36">
+                      <td className="px-4 py-4 w-36 uppercase">
                         <div className="space-y-2">
                           <Badge variant={status.variant}>
                             <StatusIcon className="w-3 h-3 mr-1" />
@@ -2399,7 +2388,7 @@ const brandOptionsFilter = [
                         </div>
                       </td>
 
-                      <td className="px-4 py-4 w-32">
+                      <td className="px-4 py-4 w-32 uppercase">
                         <div className="space-y-1 text-xs text-gray-500">
                           <div>
                             HSN: {item.product?.hsnNumber}
@@ -2412,9 +2401,9 @@ const brandOptionsFilter = [
                           </div>
                         </div>
                       </td>
-                         <td className="px-4 py-4 w-20 whitespace-nowrap text-sm font-medium">
-                         <div className="flex items-center justify-center space-x-1">
-                           <button
+                      <td className="px-4 py-4 w-20 whitespace-nowrap text-sm font-medium">
+                        <div className="flex items-center justify-center space-x-1">
+                          <button
                             onClick={() => handleUpdateStock(item)}
                             className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
                             title="Adjust Stock"
@@ -3117,7 +3106,7 @@ const brandOptionsFilter = [
                     <ArrowUpDown className="w-5 h-5 mr-2" />
                     From (Source)
                   </h3>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
@@ -3162,21 +3151,20 @@ const brandOptionsFilter = [
                     <MapPin className="w-5 h-5 mr-2" />
                     To (Destination)
                   </h3>
-                  
+
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
                       <select
                         value={transferFormData.toLocation}
-                        onChange={(e) => setTransferFormData({ 
-                          ...transferFormData, 
+                        onChange={(e) => setTransferFormData({
+                          ...transferFormData,
                           toLocation: e.target.value,
                           toRoom: '', // Reset room when location changes
                           toRack: ''  // Reset rack when location changes
                         })}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                          formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
+                          }`}
                       >
                         <option value="">Select destination location</option>
                         {locations.map((location) => (
@@ -3194,8 +3182,8 @@ const brandOptionsFilter = [
                       <label className="block text-sm font-medium text-gray-700 mb-1">Room (Optional)</label>
                       <select
                         value={transferFormData.toRoom}
-                        onChange={(e) => setTransferFormData({ 
-                          ...transferFormData, 
+                        onChange={(e) => setTransferFormData({
+                          ...transferFormData,
                           toRoom: e.target.value,
                           toRack: '' // Reset rack when room changes
                         })}
@@ -3230,7 +3218,7 @@ const brandOptionsFilter = [
               {/* Transfer Details */}
               <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                 <h3 className="text-lg font-medium text-yellow-900 mb-4">Transfer Details</h3>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3249,9 +3237,8 @@ const brandOptionsFilter = [
                         onChange={(e) => setTransferFormData({ ...transferFormData, quantity: Number(e.target.value) })}
                         min="1"
                         max={selectedItem ? (selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))) : undefined}
-                        className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                          formErrors.quantity ? 'border-red-500' : 'border-gray-300'
-                        }`}
+                        className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.quantity ? 'border-red-500' : 'border-gray-300'
+                          }`}
                         placeholder="Enter quantity to transfer"
                       />
                       {selectedItem && (
@@ -3297,17 +3284,17 @@ const brandOptionsFilter = [
                       <div className="flex items-center justify-between">
                         <span>
                           From: {locations.find(l => l._id === transferFormData.fromLocation)?.name}
-                          {transferFormData.fromRoom && rooms.find(r => r._id === transferFormData.fromRoom) && 
+                          {transferFormData.fromRoom && rooms.find(r => r._id === transferFormData.fromRoom) &&
                             ` → ${rooms.find(r => r._id === transferFormData.fromRoom)?.name}`}
-                          {transferFormData.fromRack && racks.find(r => r._id === transferFormData.fromRack) && 
+                          {transferFormData.fromRack && racks.find(r => r._id === transferFormData.fromRack) &&
                             ` → ${racks.find(r => r._id === transferFormData.fromRack)?.name}`}
                         </span>
                         <ArrowUpDown className="w-4 h-4 text-gray-400" />
                         <span>
                           To: {locations.find(l => l._id === transferFormData.toLocation)?.name}
-                          {transferFormData.toRoom && rooms.find(r => r._id === transferFormData.toRoom) && 
+                          {transferFormData.toRoom && rooms.find(r => r._id === transferFormData.toRoom) &&
                             ` → ${rooms.find(r => r._id === transferFormData.toRoom)?.name}`}
-                          {transferFormData.toRack && racks.find(r => r._id === transferFormData.toRack) && 
+                          {transferFormData.toRack && racks.find(r => r._id === transferFormData.toRack) &&
                             ` → ${racks.find(r => r._id === transferFormData.toRack)?.name}`}
                         </span>
                       </div>
@@ -4158,7 +4145,7 @@ const brandOptionsFilter = [
           </div>
         </div>
       )}
-            <Pagination
+      <Pagination
         currentPage={currentPage}
         totalPages={totalPages}
         totalItems={totalItems}

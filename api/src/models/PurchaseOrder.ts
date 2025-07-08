@@ -14,6 +14,7 @@ interface IPOItemSchema {
 interface IPurchaseOrderSchema extends Document {
   poNumber: string;
   supplier: string;
+  supplierEmail: string;
   items: IPOItemSchema[];
   totalAmount: number;
   status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
@@ -71,6 +72,11 @@ const purchaseOrderSchema = new Schema({
     required: [true, 'Supplier is required'],
     trim: true,
     maxlength: [200, 'Supplier name cannot exceed 200 characters']
+  },
+  supplierEmail: {
+    type: String,
+    trim: true,
+    // maxlength: [100, 'Supplier Email cannot exceed 100 characters']
   },
   items: {
     type: [poItemSchema],
