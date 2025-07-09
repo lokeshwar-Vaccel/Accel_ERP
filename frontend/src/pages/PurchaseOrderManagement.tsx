@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
+import { Pagination } from 'components/ui/Pagination';
 
 // Types matching backend structure
 type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'partially_received' | 'received' | 'cancelled';
@@ -172,6 +173,12 @@ const PurchaseOrderManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | 'all'>('all');
   const [supplierFilter, setSupplierFilter] = useState('');
 
+    const [currentPage, setCurrentPage] = useState(1);
+    const [limit, setLimit] = useState(10);
+    const [totalPages, setTotalPages] = useState(0);
+    const [totalDatas, setTotalDatas] = useState(0);
+    const [sort, setSort] = useState('-createdAt');
+
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -268,6 +275,10 @@ const PurchaseOrderManagement: React.FC = () => {
   const [previewData, setPreviewData] = useState<any>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+    const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
   useEffect(() => {
     fetchAllData();
   }, []);
@@ -288,10 +299,27 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const fetchPurchaseOrders = async () => {
+
+    const params: any = {
+      page: currentPage,
+      limit,
+      sort,
+      search: searchTerm,
+      ...(statusFilter !== 'all' && { status: statusFilter }),
+      // ...(leadSourceFilter && { leadSource: leadSourceFilter }),
+      // ...(dateFrom && { dateFrom }),
+      // ...(dateTo && { dateTo }),
+      // ...(assignedToParam && { assignedTo: assignedToParam }),
+    };
+
     try {
-      const response = await apiClient.purchaseOrders.getAll();
+      const response = await apiClient.purchaseOrders.getAll(params);
       console.log("response-purchaseOrders:", response);
 
+       setCurrentPage(response.pagination.page);
+      setLimit(response.pagination.limit);
+      setTotalDatas(response.pagination.total);
+      setTotalPages(response.pagination.pages);
 
       let ordersData: PurchaseOrder[] = [];
       if (response.success && response.data) {
@@ -308,6 +336,10 @@ const PurchaseOrderManagement: React.FC = () => {
       setPurchaseOrders([]);
     }
   };
+
+    useEffect(() => {
+      fetchPurchaseOrders();
+    }, [currentPage, limit, sort, searchTerm, statusFilter]);
 
 
   const fetchProducts = async () => {
@@ -885,13 +917,14 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(amount);
+};
+
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-IN');
@@ -1110,7 +1143,7 @@ const PurchaseOrderManagement: React.FC = () => {
           </div>
 
           {/* Supplier Custom Dropdown */}
-          <div className="relative dropdown-container">
+          {/* <div className="relative dropdown-container">
             <button
               onClick={() => {
                 setShowSupplierDropdown(!showSupplierDropdown);
@@ -1133,10 +1166,9 @@ const PurchaseOrderManagement: React.FC = () => {
                 >
                   All Suppliers
                 </button>
-                {/* Add actual suppliers here when available */}
               </div>
             )}
-          </div>
+          </div> */}
         </div>
 
         <div className="mt-4 flex items-center justify-between">
@@ -1292,6 +1324,14 @@ const PurchaseOrderManagement: React.FC = () => {
           </table>
         </div>
       </div>
+
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              totalItems={totalDatas}
+              itemsPerPage={limit}
+            />
 
       {/* Create PO Modal */}
       {showCreateModal && (

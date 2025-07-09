@@ -221,7 +221,12 @@ invoiceSchema.pre('save', function(this: IInvoice, next) {
   // Calculate subtotal and taxes
   this.subtotal = this.items.reduce((sum, item) => sum + item.totalPrice, 0);
   this.taxAmount = this.items.reduce((sum, item) => sum + (item.taxAmount || 0), 0);
-  this.totalAmount = this.subtotal + this.taxAmount - this.discountAmount;
+  // this.totalAmount = this.subtotal + this.taxAmount - this.discountAmount;
+  this.totalAmount = Math.round(parseFloat((this.subtotal + this.taxAmount -this.discountAmount).toFixed(2)));
+console.log("____step 1", this.totalAmount);
+ 
+
+
   
   // Ensure paidAmount doesn't exceed totalAmount
   if (this.paidAmount > this.totalAmount) {

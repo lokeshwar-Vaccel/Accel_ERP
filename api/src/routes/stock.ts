@@ -41,7 +41,7 @@ router.use(checkModuleAccess('inventory_management'));
 const getLowStockItems = getStock;
 
 // Stock routes
-router.get('/', validate(stockQuerySchema, 'query'), checkPermission('read'), getStock);
+router.get('/', checkPermission('read'), getStock);
 router.get('/low-stock', checkPermission('read'), getLowStockItems);
 
 // Stock adjustments

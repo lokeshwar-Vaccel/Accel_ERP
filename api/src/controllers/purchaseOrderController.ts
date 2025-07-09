@@ -747,7 +747,16 @@ const createInvoiceFromPO = async ({
     totalTax += taxAmount;
   }
 
-  const totalAmount = subtotal + totalTax - discountAmount;
+  function roundTo2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+let ans = roundTo2(totalTax)
+console.log("_____ans",ans);
+
+const totalAmount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discountAmount;
+console.log("_______subtotal",subtotal , "_______totalTax",totalTax);
+
+console.log("____totalAmount",totalAmount);
 
   const invoice = new Invoice({
     invoiceNumber,
@@ -757,9 +766,9 @@ const createInvoiceFromPO = async ({
     dueDate: new Date(dueDate),
     items: calculatedItems,
     subtotal,
-    taxAmount: totalTax,
+    taxAmount: totalTax.toFixed(2),
     discountAmount,
-    totalAmount,
+    totalAmount:totalAmount,
     paidAmount: 0,
     remainingAmount: totalAmount,
     status: 'draft',
@@ -773,7 +782,8 @@ const createInvoiceFromPO = async ({
     externalInvoiceTotal
   });
 
-  await invoice.save();
+ let myInvoice = await invoice.save();
+console.log("________myInvoice",myInvoice);
 
   if (reduceStock) {
     for (const item of calculatedItems) {

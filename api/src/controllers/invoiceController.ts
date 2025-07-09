@@ -19,31 +19,34 @@ export const getInvoices = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      sort = '-createdAt', 
+    const {
+      page = 1,
+      limit = 10,
+      sort = '-createdAt',
       search,
       status,
       paymentStatus,
       customer,
       dateFrom,
-      dateTo
+      dateTo,
+      invoiceType
     } = req.query as QueryParams & {
       status?: string;
       paymentStatus?: string;
       customer?: string;
       dateFrom?: string;
       dateTo?: string;
+      invoiceType?: 'sale' | 'purchase';
     };
 
     // Build query
     const query: any = {};
-    
+
     if (status) query.status = status;
     if (paymentStatus) query.paymentStatus = paymentStatus;
     if (customer) query.customer = customer;
-    
+    if (invoiceType) query.invoiceType = invoiceType;
+
     if (dateFrom || dateTo) {
       query.issueDate = {};
       if (dateFrom) query.issueDate.$gte = new Date(dateFrom);
@@ -60,7 +63,7 @@ export const getInvoices = async (
 
     // Execute query with pagination
     const skip = (Number(page) - 1) * Number(limit);
-    
+
     const invoices = await Invoice.find(query)
       .populate('user', 'firstName lastName email')
       .populate('customer', 'name email phone address')
@@ -92,6 +95,7 @@ export const getInvoices = async (
     next(error);
   }
 };
+
 
 // @desc    Get single invoice
 // @route   GET /api/v1/invoices/:id
@@ -133,12 +137,12 @@ export const createInvoice = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { 
-      customer, 
-      items, 
-      dueDate, 
-      discountAmount = 0, 
-      notes, 
+    const {
+      customer,
+      items,
+      dueDate,
+      discountAmount = 0,
+      notes,
       terms,
       invoiceType,
       referenceId,
@@ -178,9 +182,13 @@ export const createInvoice = async (
       subtotal += itemTotal;
       totalTax += taxAmount;
     }
+      function roundTo2(n: number) {
+  return Math.round(n * 100) / 100;
+}
 
     // Create invoice with ALL required schema fields
-    const totalAmount = subtotal + totalTax - discountAmount;
+    let ans = roundTo2(totalTax)
+    const totalAmount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discountAmount;
     const invoice = new Invoice({
       invoiceNumber,
       customer,
@@ -190,7 +198,7 @@ export const createInvoice = async (
       subtotal,
       taxAmount: totalTax,
       discountAmount,
-      totalAmount,
+      totalAmount:399,
       paidAmount: 0,
       remainingAmount: totalAmount,
       status: 'draft',
@@ -210,9 +218,9 @@ export const createInvoice = async (
     // Reduce stock if requested
     if (reduceStock) {
       for (const item of calculatedItems) {
-        const stock = await Stock.findOne({ 
-          product: item.product, 
-          location: location 
+        const stock = await Stock.findOne({
+          product: item.product,
+          location: location
         });
 
         if (stock) {
@@ -349,8 +357,8 @@ export const getInvoiceStats = async (
     ] = await Promise.all([
       Invoice.countDocuments(),
       Invoice.countDocuments({ paymentStatus: 'paid' }),
-      Invoice.countDocuments({ 
-        status: 'sent', 
+      Invoice.countDocuments({
+        status: 'sent',
         dueDate: { $lt: new Date() },
         paymentStatus: { $ne: 'paid' }
       }),
@@ -375,7 +383,7 @@ export const getInvoiceStats = async (
   } catch (error) {
     next(error);
   }
-}; 
+};
 
 
 // @desc    Update price and GST of a product in an invoice
@@ -402,6 +410,8 @@ export const updateInvoiceProductPriceAndGST = async (
     let subtotal = 0;
     let totalTax = 0;
 
+     const truncateTo2 = (value: number) => Math.floor(value * 10) / 10;
+
     // 2. Process each product update
     for (const { product: productId, price, gst } of products) {
       if (price < 0 || gst < 0) {
@@ -415,12 +425,15 @@ export const updateInvoiceProductPriceAndGST = async (
       product.price = price;
       product.gst = gst;
       await product.save();
+     
 
       // Update matching Invoice item
       invoice.items = invoice.items.map(item => {
         if (item.product.toString() === productId.toString()) {
           const totalPrice = item.quantity * price;
-          const taxAmount = (gst * totalPrice) / 100;
+          let taxAmount = (gst * totalPrice) / 100;
+          taxAmount = truncateTo2(taxAmount)
+          console.log("_______taxAmount", taxAmount, "_____totalPrice", totalPrice);
 
           item.unitPrice = price;
           item.taxRate = gst;
@@ -459,17 +472,22 @@ export const updateInvoiceProductPriceAndGST = async (
     if (!updated) {
       return next(new AppError('No matching products found in invoice items', 404));
     }
+    function roundTo2(n: number) {
+      return Math.round(n * 100) / 100;
+    }
 
     // 3. Recalculate invoice totals
     for (const item of invoice.items) {
       subtotal += item.totalPrice;
       totalTax += item.taxAmount ?? 0;
     }
+    console.log("____subtotal", subtotal, "_____totalTax", totalTax, roundTo2(subtotal + totalTax), "______Number((subtotal + totalTax).toFixed(2))", Number((subtotal + totalTax).toFixed(2)));
 
     invoice.subtotal = subtotal;
     invoice.taxAmount = totalTax;
-    invoice.totalAmount = subtotal + totalTax - invoice.discountAmount;
+    invoice.totalAmount = Math.round(truncateTo2(subtotal + totalTax)) - invoice.discountAmount;
     invoice.remainingAmount = invoice.totalAmount - invoice.paidAmount;
+console.log("_____nvoice.totalAmount",invoice.totalAmount);
 
     await invoice.save();
 

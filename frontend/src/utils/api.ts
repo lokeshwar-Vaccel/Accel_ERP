@@ -236,9 +236,10 @@ class ApiClient {
       }),
 
     // Stock Management
-    getStock: (params?: any) =>
-      this.makeRequest<{ success: boolean; data: any; pagination?: any }>(`/stock${params ? `?${new URLSearchParams(params)}` : ''}`),
-
+    getStock: (params?: any) =>{
+      // this.makeRequest<{ success: boolean; data: any; pagination?: any }>(`/stock${params ? `?${new URLSearchParams(params)}` : ''}`),
+      return this.makeRequest<{ success: boolean; data:{stockLevels:any[]}; pagination: any }>(`/stock${params ? `?${new URLSearchParams(params)}` : ''}`);
+  },
     adjustStock: (adjustmentData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/stock/adjust', {
         method: 'POST',
@@ -747,6 +748,35 @@ class ApiClient {
 
     getAlerts: () =>
       this.makeRequest<{ success: boolean; data: any[] }>('/dashboard/alerts'),
+  };
+  // Notification APIs
+  notifications = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/notifications${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getUnreadCount: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/notifications/unread-count'),
+
+    markAsRead: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/notifications/${id}/read`, {
+        method: 'PATCH',
+      }),
+
+    markAllAsRead: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/notifications/mark-all-read', {
+        method: 'PATCH',
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean }>(`/notifications/${id}`, {
+        method: 'DELETE',
+      }),
+
+    create: (notificationData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/notifications/create', {
+        method: 'POST',
+        body: JSON.stringify(notificationData),
+      }),
   };
 }
 

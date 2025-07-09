@@ -4,6 +4,7 @@ import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 import { RootState } from 'redux/store';
 import { useSelector } from 'react-redux';
+import { Pagination } from 'components/ui/Pagination';
 
 export interface Product {
   _id: string;
@@ -54,6 +55,12 @@ const ProductManagement: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const currentUser = useSelector((state: RootState) => state.auth.user?.id);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalDatas, setTotalDatas] = useState(0);
+  const [sort, setSort] = useState('-createdAt');
 
   // Custom dropdown states
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -140,12 +147,16 @@ const ProductManagement: React.FC = () => {
   ];
 
   const stockUnit = [
-    'pcs','kg','litre','meter','sq.ft','hour','set','box','can','roll'
+    'pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'
   ];
 
   const category = [
     'genset', 'spare_part', 'accessory'
   ];
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -436,10 +447,30 @@ const ProductManagement: React.FC = () => {
   };
 
   const fetchProducts = async () => {
+
+    const params: any = {
+      page: currentPage,
+      limit,
+      sort,
+      search: searchTerm,
+      ...(categoryFilter !== 'all' && { category: categoryFilter }),
+      ...(statusFilter !== 'all' && {
+        isActive: statusFilter === 'active' ? true : false,
+      }),
+      // ...(leadSourceFilter && { leadSource: leadSourceFilter }),
+      // ...(dateFrom && { dateFrom }),
+      // ...(dateTo && { dateTo }),
+      // ...(assignedToParam && { assignedTo: assignedToParam }),
+    };
+
     try {
       setLoading(true);
-      const response = await apiClient.products.getAll();
-
+      const response = await apiClient.products.getAll(params);
+      // setCounts(response.data.counts);
+      setCurrentPage(response.pagination.page);
+      setLimit(response.pagination.limit);
+      setTotalDatas(response.pagination.total);
+      setTotalPages(response.pagination.pages);
       // Handle different response formats: { data: { products: [...] } } or { data: [...] }
       let products: any[] = [];
       if (response.data) {
@@ -458,6 +489,10 @@ const ProductManagement: React.FC = () => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    fetchProducts();
+  }, [currentPage, limit, sort, searchTerm, statusFilter, categoryFilter]);
 
   const filteredProducts = Array.isArray(products) ? products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -519,7 +554,7 @@ const ProductManagement: React.FC = () => {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-gray-600">Total Products</p>
-              <p className="text-xl font-bold text-gray-900">{Array.isArray(products) ? products.length : 0}</p>
+              <p className="text-xl font-bold text-gray-900">{totalDatas}</p>
             </div>
             <Package className="w-6 h-6 text-blue-600" />
           </div>
@@ -711,6 +746,14 @@ const ProductManagement: React.FC = () => {
           </table>
         </div>
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
+        totalItems={totalDatas}
+        itemsPerPage={limit}
+      />
 
       {/* Product Form Modal */}
       {showProductModal && (
