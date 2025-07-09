@@ -14,7 +14,7 @@ const router = Router();
 
 // All routes are protected and require invoice management access
 router.use(protect);
-router.use(checkModuleAccess('invoice_management'));
+router.use(checkModuleAccess('billing'));
 
 // Invoice routes
 router.route('/')

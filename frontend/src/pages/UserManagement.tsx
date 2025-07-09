@@ -19,7 +19,7 @@ import toast from 'react-hot-toast';
 // Module key-label map
 const moduleMap = {
   dashboard: 'Dashboard',
-  customer_management: 'Customer Management',
+  lead_management: 'Lead Management',
   user_management: 'User Management',
   product_management: 'Product Management',
   inventory_management: 'Inventory Management',
@@ -29,7 +29,6 @@ const moduleMap = {
   reports_analytics: 'Reports & Analytics',
   file_management: 'File Management',
   communications: 'Communications',
-  notifications: 'Notifications',
   admin_settings: 'Admin Settings',
 } as const;
 
@@ -108,7 +107,7 @@ export const UserManagement: React.FC = () => {
   const userRoles: UserModuleKey[] = ['super_admin', 'admin', 'hr', 'manager', 'viewer'];
   const allModules: ModuleKey[] = [
     'dashboard',
-    'customer_management',
+    'lead_management',
     'user_management',
     'product_management',
     'inventory_management',
@@ -119,7 +118,6 @@ export const UserManagement: React.FC = () => {
     'file_management',
     'communications',
     'admin_settings',
-    'notifications',
   ];
 
   const roleModuleMapping: Record<string, ModuleKey[]> = {
@@ -130,8 +128,7 @@ export const UserManagement: React.FC = () => {
       'user_management',
       'inventory_management',
       'purchase_orders',
-      'customer_management',
-      'notifications',
+      'lead_management',
     ],
     manager: allModules.filter(m => m !== 'admin_settings'),
     viewer: ['dashboard'],

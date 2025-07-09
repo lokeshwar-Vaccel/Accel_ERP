@@ -32,8 +32,8 @@ const AppRoutes: React.FC = () => {
             {/* User Management */}
             <Route path="/user-management" element={<UserManagement />} />
 
-            {/* Customer Management */}
-            <Route path="/customer-management" element={<CustomerManagement />} />
+            {/* Lead Management */}
+            <Route path="/lead-management" element={<CustomerManagement />} />
 
             {/* Product Management */}
             <Route path="/product-management" element={<ProductManagement />} />
@@ -41,8 +41,8 @@ const AppRoutes: React.FC = () => {
             {/* Inventory Management */}
             <Route path="/inventory-management" element={<InventoryManagement />} />
 
-            {/* Invoice Management */}
-            <Route path="/invoice-management" element={<InvoiceManagement />} />
+            {/* Billing */}
+            <Route path="/Billing" element={<InvoiceManagement />} />
 
             {/* Service Management */}
             <Route path="/service-management" element={<ServiceManagement />} />

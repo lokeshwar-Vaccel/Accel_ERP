@@ -173,7 +173,7 @@ Authorization: Bearer <your-jwt-token>
 - `PUT /users/:id/reset-password` - Reset user password
 - `GET /users/stats` - Get user statistics
 
-#### Customer Management
+#### Lead Management
 - `GET /customers` - Get all customers
 - `POST /customers` - Create new customer
 - `GET /customers/:id` - Get customer by ID

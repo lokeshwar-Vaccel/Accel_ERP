@@ -125,7 +125,7 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: any }>('/users/stats'),
   };
 
-  // Customer Management APIs
+  // Lead Management APIs
   customers = {
     getAll: (params: any) => {
 
@@ -263,7 +263,7 @@ class ApiClient {
       }),
   };
 
-  // Invoice Management APIs
+  // Billing APIs
   invoices = {
     getAll: (params?: any) =>
       this.makeRequest<{ success: boolean; data: { invoices: any[] } }>(`/invoices${params ? `?${new URLSearchParams(params)}` : ''}`),

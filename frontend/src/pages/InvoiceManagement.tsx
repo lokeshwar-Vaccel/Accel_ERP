@@ -1411,8 +1411,11 @@ const InvoiceManagement: React.FC = () => {
   const getInvoiceTypeLabel = (value: string) => {
     const options = [
       { value: 'sale', label: 'Sale' },
+      { value: 'purchase', label: 'Purchase' },
       { value: 'service', label: 'Service' },
       { value: 'amc', label: 'AMC' },
+      { value: 'quotation', label: 'Quotation' },
+      { value: 'challan', label: 'Delivery Challan' },
       { value: 'other', label: 'Other' }
     ];
     return options.find(opt => opt.value === value)?.label || 'Sale';
@@ -1642,7 +1645,7 @@ const InvoiceManagement: React.FC = () => {
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader
-        title="Invoice Management"
+        title="Billing"
         subtitle="Create and manage customer invoices"
       >
         <Button
@@ -1756,30 +1759,50 @@ const InvoiceManagement: React.FC = () => {
             </div>
           </div>
           {/* Invoice Type Toggle */}
-          <div className="flex bg-gray-100 rounded-xl p-0" onClick={invoiceType === 'sale' ? () => setInvoiceType('purchase') : () => setInvoiceType('sale')}>
+          <div className="flex bg-gray-100 rounded-xl p-0">
             <button
-              // onClick={() => setInvoiceType('purchase')}
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-200 ${invoiceType === 'purchase'
-                ? 'bg-white text-blue-600 shadow-sm border border-blue-500'
-                : 'text-gray-600 hover:text-gray-900'
-                }`}
+              onClick={() => setInvoiceType('quotation')}
+              className={`px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-all duration-200 ${
+                invoiceType === 'quotation'
+                  ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-500'
+                  : 'text-gray-600 hover:text-blue-700'
+              }`}
             >
-              <div className="flex items-center space-x-2">
-                <TrendingDown className="w-4 h-4" />
-                <span>Purchase Invoices</span>
-              </div>
+              <FileText className="w-4 h-4" />
+              <span>Quotation</span>
             </button>
             <button
-              // onClick={() => setInvoiceType('sale')}
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-200 ${invoiceType === 'sale'
-                ? 'bg-white text-blue-600 shadow-sm border border-blue-500'
-                : 'text-gray-600 hover:text-gray-900'
-                }`}
+              onClick={() => setInvoiceType('purchase')}
+              className={`px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-all duration-200 ${
+                invoiceType === 'purchase'
+                  ? 'bg-purple-50 text-purple-700 shadow-sm border border-purple-500'
+                  : 'text-gray-600 hover:text-purple-700'
+              }`}
             >
-              <div className="flex items-center space-x-2">
-                <TrendingUp className="w-4 h-4" />
-                <span>Sales Invoices</span>
-              </div>
+              <TrendingDown className="w-4 h-4" />
+              <span>Purchase Invoices</span>
+            </button>
+            <button
+              onClick={() => setInvoiceType('sale')}
+              className={`px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-all duration-200 ${
+                invoiceType === 'sale'
+                  ? 'bg-green-50 text-green-700 shadow-sm border border-green-500'
+                  : 'text-gray-600 hover:text-green-700'
+              }`}
+            >
+              <TrendingUp className="w-4 h-4" />
+              <span>Sales Invoices</span>
+            </button>
+            <button
+              onClick={() => setInvoiceType('challan')}
+              className={`px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-all duration-200 ${
+                invoiceType === 'challan'
+                  ? 'bg-orange-50 text-orange-700 shadow-sm border border-orange-500'
+                  : 'text-gray-600 hover:text-orange-700'
+              }`}
+            >
+              <Package className="w-4 h-4" />
+              <span>Delivery Challan</span>
             </button>
           </div>
         </div>
@@ -1800,14 +1823,20 @@ const InvoiceManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {invoiceType === 'sale' ? 'Customer' : 'Supplier'}
+                  {invoiceType === 'quotation' ? 'Quotation No' :
+                   invoiceType === 'challan' ? 'Challan No' :
+                   'Invoice'}
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {invoiceType === 'purchase' ? 'Supplier' :
+                   invoiceType === 'challan' ? 'Recipient' :
+                   'Customer'}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                 {invoiceType === 'sale' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>}
                 {invoiceType === 'sale' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>}
-                {invoiceType !== 'sale' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>}
+                {<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>}
                 {invoiceType === 'sale' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -1920,7 +1949,15 @@ const InvoiceManagement: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Create New Invoice</h2>
+              <h2 className="text-xl font-semibold text-gray-900">
+                {invoiceType === 'quotation'
+                  ? 'Create New Quotation'
+                  : invoiceType === 'challan'
+                  ? 'Create New Delivery Challan'
+                  : invoiceType === 'purchase'
+                  ? 'Create New Purchase Invoice'
+                  : 'Create New Sales Invoice'}
+              </h2>
               <button
                 onClick={() => setShowCreateModal(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -2079,12 +2116,14 @@ const InvoiceManagement: React.FC = () => {
                           { value: 'purchase', label: 'Purchase' },
                           { value: 'service', label: 'Service' },
                           { value: 'amc', label: 'AMC' },
+                          { value: 'quotation', label: 'Quotation' },
+                          { value: 'challan', label: 'Delivery Challan' },
                           { value: 'other', label: 'Other' }
                         ].map((option) => (
                           <button
                             key={option.value}
                             onClick={() => {
-                              setNewInvoice({ ...newInvoice, invoiceType: option.value as 'sale' | 'purchase' | 'service' | 'amc' | 'other' });
+                              setNewInvoice({ ...newInvoice, invoiceType: option.value as any });
                               setShowInvoiceTypeDropdown(false);
                             }}
                             className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.invoiceType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'

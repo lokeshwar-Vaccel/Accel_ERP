@@ -29,8 +29,8 @@ const router = Router();
 // All routes are protected
 router.use(protect);
 
-// Check module access for customer management
-router.use(checkModuleAccess('customer_management'));
+// Check module access for lead management
+router.use(checkModuleAccess('lead_management'));
 
 // Customer routes
 router.route('/')

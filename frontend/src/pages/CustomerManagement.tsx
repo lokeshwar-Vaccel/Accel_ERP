@@ -29,7 +29,8 @@ import {
   UserCheck,
   ChevronDown,
   Contact,
-  PhoneIncoming
+  PhoneIncoming,
+  Sparkles
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -90,6 +91,19 @@ interface Customer {
   createdAt: string;
   updatedAt: string;
   latestContact?: ContactHistory;
+  addresses?: Address[];
+}
+
+// Address type
+interface Address {
+  id: number;
+  type: string;
+  street: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+  isPrimary: boolean;
 }
 
 interface CustomerFormData {
@@ -101,6 +115,7 @@ interface CustomerFormData {
   leadSource: string;
   assignedTo: string;
   notes: string;
+  addresses: Address[];
 }
 
 interface ContactFormData {
@@ -174,7 +189,17 @@ const CustomerManagement: React.FC = () => {
     customerType: 'retail',
     leadSource: '',
     assignedTo: '',
-    notes: ''
+    notes: '',
+    addresses: [{
+      id: Date.now(),
+      type: 'shipping',
+      street: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: '',
+      isPrimary: true
+    }]
   });
 
   const [contactFormData, setContactFormData] = useState<ContactFormData>({
@@ -195,6 +220,96 @@ const CustomerManagement: React.FC = () => {
   const [showContactTypeDropdown, setShowContactTypeDropdown] = useState(false);
 
   const user = useSelector((state: RootState) => state.auth.user);
+
+  // Tab state for navigation
+  const tabOptions = [
+    { label: 'Customer', value: 'customer' },
+    { label: 'Supplier', value: 'supplier' },
+    // Add more tabs here if needed
+  ];
+  const [activeTab, setActiveTab] = useState<'customer' | 'supplier'>('customer');
+
+  const getTypeIcon = (value: string) => {
+    // Optionally return a string or a default icon name
+    const option = typeOptions.find(option => option.value === value);
+    return option ? option.label : 'User';
+  };
+
+
+  const getAddressTypeColor = (type: string) => {
+    const addressType = addressTypes.find(t => t.value === type);
+    return addressType ? addressType.color : 'bg-gray-500';
+  };
+
+  const addAddress = () => {
+    const newAddress: Address = {
+      id: Date.now(),
+      type: 'shipping',
+      street: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: '',
+      isPrimary: false
+    };
+    setCustomerFormData(prev => ({
+      ...prev,
+      addresses: [...prev.addresses, newAddress]
+    }));
+  };
+
+  const removeAddress = (addressId: number) => {
+    if (customerFormData.addresses.length === 1) return;
+    const updatedAddresses = customerFormData.addresses.filter((addr: Address) => addr.id !== addressId);
+    if (customerFormData.addresses.find((addr: Address) => addr.id === addressId)?.isPrimary) {
+      updatedAddresses[0].isPrimary = true;
+    }
+    setCustomerFormData(prev => ({
+      ...prev,
+      addresses: updatedAddresses
+    }));
+  };
+
+  const updateAddress = (addressId: number, field: keyof Address, value: string | boolean) => {
+    const updatedAddresses = customerFormData.addresses.map((addr: Address) => {
+      if (addr.id === addressId) {
+        return { ...addr, [field]: value };
+      }
+      return addr;
+    });
+    setCustomerFormData(prev => ({
+      ...prev,
+      addresses: updatedAddresses
+    }));
+  };
+
+  const setPrimaryAddress = (addressId: number) => {
+    const updatedAddresses = customerFormData.addresses.map((addr: Address) => ({
+      ...addr,
+      isPrimary: addr.id === addressId
+    }));
+    setCustomerFormData(prev => ({
+      ...prev,
+      addresses: updatedAddresses
+    }));
+  };
+
+  const addressTypes = [
+    { value: 'billing', label: 'Billing Address', color: 'bg-blue-500' },
+    { value: 'shipping', label: 'Shipping Address', color: 'bg-green-500' },
+    { value: 'office', label: 'Office Address', color: 'bg-purple-500' },
+    { value: 'home', label: 'Home Address', color: 'bg-orange-500' },
+    { value: 'other', label: 'Other', color: 'bg-gray-500' }
+  ];
+
+  // const handleSubmitCustomer = () => {
+  //   setSubmitting(true);
+  //   setTimeout(() => {
+  //     setSubmitting(false);
+  //     setShowAddModal(false);
+  //   }, 2000);
+  // };
+
 
   useEffect(() => {
     if (user?.role === 'hr') {
@@ -451,7 +566,17 @@ const CustomerManagement: React.FC = () => {
       customerType: 'retail',
       leadSource: '',
       assignedTo: '',
-      notes: ''
+      notes: '',
+      addresses: [{
+        id: Date.now(),
+        type: 'shipping',
+        street: '',
+        city: '',
+        state: '',
+        zipCode: '',
+        country: '',
+        isPrimary: true
+      }]
     });
     setShowAssignedToDropdown(false);
   };
@@ -479,7 +604,19 @@ const CustomerManagement: React.FC = () => {
       customerType: customer.customerType,
       leadSource: customer.leadSource || '',
       assignedTo: getUserId(customer.assignedTo),
-      notes: customer.notes || ''
+      notes: customer.notes || '',
+      addresses: (customer as any).addresses && Array.isArray((customer as any).addresses)
+        ? (customer as any).addresses
+        : [{
+          id: Date.now(),
+          type: 'shipping',
+          street: '',
+          city: '',
+          state: '',
+          zipCode: '',
+          country: '',
+          isPrimary: true
+        }]
     });
     setFormErrors({});
     setShowEditModal(true);
@@ -686,7 +823,7 @@ const CustomerManagement: React.FC = () => {
     <div className="pl-2 pr-6 py-6 space-y-4">
       {/* Header */}
       <PageHeader
-        title="Customer Relationship Management"
+        title="Lead Management"
         subtitle="Manage leads, customers, and track interactions"
       >
         <div className="flex space-x-3">
@@ -731,7 +868,7 @@ const CustomerManagement: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 md:space-x-4">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -742,67 +879,17 @@ const CustomerManagement: React.FC = () => {
               className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-
-          {/* Status Custom Dropdown */}
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => {
-                setShowStatusDropdown(!showStatusDropdown);
-                setShowTypeDropdown(false);
-              }}
-              className="flex items-center justify-between w-full md:w-32 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-            >
-              <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
-              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showStatusDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                {statusOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setStatusFilter(option.value as LeadStatus | 'all');
-                      setShowStatusDropdown(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                      }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Type Custom Dropdown */}
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => {
-                setShowTypeDropdown(!showTypeDropdown);
-                setShowStatusDropdown(false);
-              }}
-              className="flex items-center justify-between w-full md:w-28 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-            >
-              <span className="text-gray-700 truncate mr-1">{getTypeLabel(typeFilter)}</span>
-              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showTypeDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showTypeDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                {typeOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setTypeFilter(option.value as CustomerType | 'all');
-                      setShowTypeDropdown(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${typeFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                      }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
+          {/* Tab Navigation inside filter card, right side */}
+          <div className="flex space-x-2">
+            {tabOptions.map(tab => (
+              <button
+                key={tab.value}
+                className={`px-4 py-2 rounded-lg font-semibold focus:outline-none transition-colors border-b-2 ${activeTab === tab.value ? 'border-blue-600 text-blue-700 bg-white' : 'border-transparent text-gray-500 bg-gray-100 hover:text-blue-600'}`}
+                onClick={() => setActiveTab(tab.value as typeof activeTab)}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -957,7 +1044,7 @@ const CustomerManagement: React.FC = () => {
       {/* Add Customer Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Add New Customer</h2>
               <button
@@ -978,7 +1065,7 @@ const CustomerManagement: React.FC = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4 p-1">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Customer Name *
@@ -1019,9 +1106,8 @@ const CustomerManagement: React.FC = () => {
                             setCustomerFormData({ ...customerFormData, customerType: option.value as CustomerType });
                             setShowCustomerTypeDropdown(false);
                           }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           {option.label}
                         </button>
@@ -1029,9 +1115,6 @@ const CustomerManagement: React.FC = () => {
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Email
@@ -1064,26 +1147,7 @@ const CustomerManagement: React.FC = () => {
                     <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
                   )}
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Address *
-                </label>
-                <textarea
-                  value={customerFormData.address}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, address: e.target.value })}
-                  rows={3}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.address ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  placeholder="Enter complete address"
-                />
-                {formErrors.address && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Lead Source
@@ -1146,9 +1210,10 @@ const CustomerManagement: React.FC = () => {
                     )}
                   </div>
                 </div>
+
               </div>
 
-              <div>
+              <div className='p-1'>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Notes
                 </label>
@@ -1159,6 +1224,142 @@ const CustomerManagement: React.FC = () => {
                   className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Additional notes about the customer"
                 />
+              </div>
+
+
+              {/* Addresses Section */}
+              <div className="space-y-6 p-1">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-teal-500 rounded-full flex items-center justify-center">
+                      <MapPin className="w-4 h-4 text-white" />
+                    </div>
+                    <h3 className="text-xl font-semibold text-gray-900">Addresses</h3>
+                    <div className="flex-1 h-px bg-gradient-to-r from-green-200 to-transparent"></div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addAddress}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-xl hover:from-green-600 hover:to-teal-600 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 font-medium"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Address
+                  </button>
+                </div>
+
+                <div className="space-y-6">
+                  {customerFormData?.addresses.map((address, index) => (
+                    <div key={address.id} className="bg-gradient-to-r from-gray-50 to-white border-2 border-gray-100 rounded-2xl p-6 hover:shadow-lg transition-all duration-300">
+                      <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-3 h-3 rounded-full ${getAddressTypeColor(address.type)}`}></div>
+                          <select
+                            value={address.type}
+                            onChange={(e) => updateAddress(address.id, 'type', e.target.value)}
+                            className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white font-medium transition-all duration-200"
+                          >
+                            {addressTypes.map(type => (
+                              <option key={type.value} value={type.value}>
+                                {type.label}
+                              </option>
+                            ))}
+                          </select>
+                          {address.isPrimary && (
+                            <div className="flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-sm rounded-full shadow-md">
+                              <Sparkles className="w-3 h-3" />
+                              Primary
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {!address.isPrimary && (
+                            <button
+                              type="button"
+                              onClick={() => setPrimaryAddress(address.id)}
+                              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
+                            >
+                              Set as Primary
+                            </button>
+                          )}
+                          {customerFormData.addresses.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeAddress(address.id)}
+                              className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors"
+                            >
+                              <Trash2 className="w-5 h-5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-gray-700">
+                            Street Address *
+                          </label>
+                          <input
+                            type="text"
+                            value={address.street}
+                            onChange={(e) => updateAddress(address.id, 'street', e.target.value)}
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300 transition-all duration-200"
+                            placeholder="Enter street address"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="block text-sm font-semibold text-gray-700">
+                            City *
+                          </label>
+                          <input
+                            type="text"
+                            value={address.city}
+                            onChange={(e) => updateAddress(address.id, 'city', e.target.value)}
+                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300 transition-all duration-200"
+                            placeholder="Enter city"
+                          />
+                        </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                          <div className="space-y-2">
+                            <label className="block text-sm font-semibold text-gray-700">
+                              State/Province *
+                            </label>
+                            <input
+                              type="text"
+                              value={address.state}
+                              onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
+                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300 transition-all duration-200"
+                              placeholder="Enter state/province"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-sm font-semibold text-gray-700">
+                              ZIP/Postal Code *
+                            </label>
+                            <input
+                              type="text"
+                              value={address.zipCode}
+                              onChange={(e) => updateAddress(address.id, 'zipCode', e.target.value)}
+                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300 transition-all duration-200"
+                              placeholder="Enter ZIP/postal code"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block text-sm font-semibold text-gray-700">
+                              Country *
+                            </label>
+                            <input
+                              type="text"
+                              value={address.country}
+                              onChange={(e) => updateAddress(address.id, 'country', e.target.value)}
+                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300 transition-all duration-200"
+                              placeholder="Enter country"
+                            />
+                          </div>
+                        </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="flex space-x-3 pt-4">
@@ -1251,9 +1452,8 @@ const CustomerManagement: React.FC = () => {
                             setCustomerFormData({ ...customerFormData, customerType: option.value as CustomerType });
                             setShowCustomerTypeDropdown(false);
                           }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           {option.label}
                         </button>
@@ -1644,9 +1844,8 @@ const CustomerManagement: React.FC = () => {
                             setContactFormData({ ...contactFormData, type: option.value as ContactType });
                             setShowContactTypeDropdown(false);
                           }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                            contactFormData.type === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${contactFormData.type === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
                         >
                           {option.label}
                         </button>

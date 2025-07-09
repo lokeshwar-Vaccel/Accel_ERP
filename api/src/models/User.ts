@@ -10,7 +10,7 @@ const moduleAccessSchema = new Schema<any>({
     trim: true,
     // enum: [
     //   'user_management',
-    //   'customer_management',
+    //   'lead_management',
     //   'inventory_management',
     //   'service_management',
     //   'amc_management',

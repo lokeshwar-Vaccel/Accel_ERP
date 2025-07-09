@@ -24,9 +24,9 @@ const updateSuperAdminAccess = async () => {
     for (const admin of superAdmins) {
       console.log(`👤 Updating user: ${admin.firstName} ${admin.lastName} (${admin.email})`);
       
-      // Check if invoice_management already exists
+      // Check if billing already exists
       const hasInvoiceAccess = admin.moduleAccess.some(
-        (module: any) => module.module === 'invoice_management'
+        (module: any) => module.module === 'billing'
       );
 
       if (hasInvoiceAccess) {
@@ -36,7 +36,7 @@ const updateSuperAdminAccess = async () => {
 
       // Add invoice management access
       admin.moduleAccess.push({
-        module: 'invoice_management',
+        module: 'billing',
         access: true,
         permission: 'admin'
       });

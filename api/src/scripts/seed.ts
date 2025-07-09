@@ -31,11 +31,11 @@ const sampleUsers = [
     status: 'active',
     moduleAccess: [
       { module: 'dashboard', access: true, permission: 'admin' },
-      { module: 'customer_management', access: true, permission: 'admin' },
+      { module: 'lead_management', access: true, permission: 'admin' },
       { module: 'user_management', access: true, permission: 'admin' },
       { module: 'product_management', access: true, permission: 'admin' },
       { module: 'inventory_management', access: true, permission: 'admin' },
-      { module: 'invoice_management', access: true, permission: 'admin' },
+      { module: 'billing', access: true, permission: 'admin' },
       { module: 'service_management', access: true, permission: 'admin' },
       { module: 'amc_management', access: true, permission: 'admin' },
       { module: 'purchase_orders', access: true, permission: 'admin' },
@@ -54,7 +54,7 @@ const sampleUsers = [
     status: 'active',
     moduleAccess: [
       { module: 'dashboard', access: true, permission: 'write' },
-      { module: 'customer_management', access: true, permission: 'write' },
+      { module: 'lead_management', access: true, permission: 'write' },
       { module: 'user_management', access: true, permission: 'read' },
       { module: 'product_management', access: true, permission: 'write' },
       { module: 'inventory_management', access: true, permission: 'write' },
@@ -90,7 +90,7 @@ const sampleUsers = [
     status: 'active',
     moduleAccess: [
       { module: 'dashboard', access: true, permission: 'read' },
-      { module: 'customer_management', access: true, permission: 'write' },
+      { module: 'lead_management', access: true, permission: 'write' },
       { module: 'amc_management', access: true, permission: 'write' },
       { module: 'reports_analytics', access: true, permission: 'read' },
       { module: 'communications', access: true, permission: 'read' }
@@ -121,7 +121,7 @@ const sampleUsers = [
 //     password: 'admin123',
 //     role: UserRole.SUPER_ADMIN,
 //     status: 'active',
-//     moduleAccess: ['user_management', 'customer_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics', 'admin_settings']
+//     moduleAccess: ['user_management', 'lead_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics', 'admin_settings']
 //   },
 //   {
 //     firstName: 'John',
@@ -130,7 +130,7 @@ const sampleUsers = [
 //     password: 'manager123',
 //     role: UserRole.MANAGER,
 //     status: 'active',
-//     moduleAccess: ['customer_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics']
+//     moduleAccess: ['lead_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics']
 //   },
 //   {
 //     firstName: 'Sarah',
@@ -148,7 +148,7 @@ const sampleUsers = [
 //     password: 'sales123',
 //     role: UserRole.VIEWER,
 //     status: 'active',
-//     moduleAccess: ['customer_management', 'amc_management', 'reports_analytics']
+//     moduleAccess: ['lead_management', 'amc_management', 'reports_analytics']
 //   },
 //   {
 //     firstName: 'Lisa',

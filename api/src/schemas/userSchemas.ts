@@ -72,7 +72,7 @@ export const registerUserSchema = Joi.object<RegisterUserInput>({
     Joi.string().valid(
       'dashboard',
       'user_management',
-      'customer_management',
+      'lead_management',
       'product_management', 
       'inventory_management',
       'service_management',
@@ -113,7 +113,7 @@ export const updateUserSchema = Joi.object<UpdateUserInput>({
     Joi.string().valid(
       'dashboard',
       'user_management',
-      'customer_management',
+      'lead_management',
       'product_management', 
       'inventory_management',
       'service_management',

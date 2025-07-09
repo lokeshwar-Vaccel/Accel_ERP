@@ -32,7 +32,7 @@ const setup = async () => {
         address: 'Sun Power Services Head Office',
         moduleAccess: [
           { module: 'dashboard', access: true, permission: 'admin' },
-          { module: 'customer_management', access: true, permission: 'admin' },
+          { module: 'lead_management', access: true, permission: 'admin' },
           { module: 'user_management', access: true, permission: 'admin' },
           { module: 'product_management', access: true, permission: 'admin' },
           { module: 'inventory_management', access: true, permission: 'admin' },

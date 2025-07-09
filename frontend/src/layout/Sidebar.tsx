@@ -44,10 +44,10 @@ const menuItems = [
   },
   {
     id: 2,
-    name: 'Customer Management',
+    name: 'Lead Management',
     icon: <Users className="w-4 h-4" />,
-    path: '/customer-management',
-    key: 'customer_management',
+    path: '/lead-management',
+    key: 'lead_management',
   },
   {
     id: 3,
@@ -93,10 +93,10 @@ const menuItems = [
   },
   {
     id: 9,
-    name: 'Invoice Management',
+    name: 'Billing',
     icon: <FileText className="w-4 h-4" />,
-    path: '/invoice-management',
-    key: 'invoice_management',
+    path: '/billing',
+    key: 'billing',
   },
   {
     id: 10,
