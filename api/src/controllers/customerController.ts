@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { Customer } from '../models/Customer';
 import { AuthenticatedRequest, APIResponse, LeadStatus, CustomerType, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import { createAssignmentNotification, createStatusChangeNotification, createFollowUpNotification } from './notificationController';
 
 // @desc    Get all customers
 // @route   GET /api/v1/customers
@@ -168,6 +169,20 @@ export const createCustomer = async (
       .populate('assignedTo', 'firstName lastName email')
       .populate('createdBy', 'firstName lastName email');
 
+    // Create assignment notification if customer is assigned to someone
+    try {
+      if (customer.assignedTo) {
+        await createAssignmentNotification(
+          customer.assignedTo.toString(),
+          (customer as any)._id.toString(),
+          customer.name
+        );
+      }
+    } catch (notificationError) {
+      console.error('Error creating assignment notification:', notificationError);
+      // Don't fail the main request if notifications fail
+    }
+
     const response: APIResponse = {
       success: true,
       message: 'Customer created successfully',
@@ -194,6 +209,10 @@ export const updateCustomer = async (
       return next(new AppError('Customer not found', 404));
     }
 
+    // Store old values for notification comparison
+    const oldAssignedTo = customer.assignedTo;
+    const oldStatus = customer.status;
+
     const updatedCustomer = await Customer.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -201,6 +220,35 @@ export const updateCustomer = async (
     )
       .populate('assignedTo', 'firstName lastName email')
       .populate('createdBy', 'firstName lastName email');
+
+    // Create notifications for changes
+    try {
+      // Notification for assignment change
+      if (req.body.assignedTo && req.body.assignedTo !== oldAssignedTo?.toString()) {
+        await createAssignmentNotification(
+          req.body.assignedTo,
+          (customer as any)._id.toString(),
+          customer.name
+        );
+      }
+
+      // Notification for status change
+      if (req.body.status && req.body.status !== oldStatus) {
+        const assignedUserId = req.body.assignedTo || oldAssignedTo?.toString();
+        if (assignedUserId) {
+          await createStatusChangeNotification(
+            assignedUserId,
+            (customer as any)._id.toString(),
+            customer.name,
+            oldStatus,
+            req.body.status
+          );
+        }
+      }
+    } catch (notificationError) {
+      console.error('Error creating notifications:', notificationError);
+      // Don't fail the main request if notifications fail
+    }
 
     const response: APIResponse = {
       success: true,
@@ -431,4 +479,3 @@ export const scheduleFollowUp = async (
     next(error);
   }
 };
-

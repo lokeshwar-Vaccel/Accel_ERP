@@ -414,10 +414,15 @@ const AMCManagement: React.FC = () => {
       if (response.success && response.data && Array.isArray(response.data)) {
         customersData = response.data;
         console.log('Found customers:', customersData.length);
-      } else if (response.data && Array.isArray(response.data)) {
-        // Fallback for different response format
-        customersData = response.data;
-        console.log('Found customers (fallback format):', customersData.length);
+      } else if (
+        response.data &&
+        typeof response.data === 'object' &&
+        !Array.isArray(response.data) &&
+        response.data !== null &&
+        Array.isArray((response.data as any).customers)
+      ) {
+        customersData = (response.data as any).customers;
+        console.log('Found customers (nested):', customersData.length);
       } else {
         console.log('No customer data or unexpected format:', response);
       }
@@ -522,6 +527,15 @@ const AMCManagement: React.FC = () => {
       if (response.success && response.data && Array.isArray(response.data)) {
         productsData = response.data;
         console.log('Found products:', productsData.length);
+      } else if (
+        response.data &&
+        typeof response.data === 'object' &&
+        !Array.isArray(response.data) &&
+        response.data !== null &&
+        Array.isArray((response.data as any).products)
+      ) {
+        productsData = (response.data as any).products;
+        console.log('Found products (nested):', productsData.length);
       } else {
         console.log('No product data or unexpected format:', response);
       }
@@ -542,6 +556,15 @@ const AMCManagement: React.FC = () => {
       if (response.success && response.data && Array.isArray(response.data)) {
         usersData = response.data;
         console.log('Found users:', usersData.length);
+      } else if (
+        response.data &&
+        typeof response.data === 'object' &&
+        !Array.isArray(response.data) &&
+        response.data !== null &&
+        Array.isArray((response.data as any).users)
+      ) {
+        usersData = (response.data as any).users;
+        console.log('Found users (nested):', usersData.length);
       } else {
         console.log('No user data or unexpected format:', response);
       }
@@ -562,6 +585,15 @@ const AMCManagement: React.FC = () => {
       if (response.success && response.data && Array.isArray(response.data)) {
         serviceTicketsData = response.data;
         console.log('Found service tickets:', serviceTicketsData.length);
+      } else if (
+        response.data &&
+        typeof response.data === 'object' &&
+        !Array.isArray(response.data) &&
+        response.data !== null &&
+        Array.isArray((response.data as any).tickets)
+      ) {
+        serviceTicketsData = (response.data as any).tickets;
+        console.log('Found service tickets (nested):', serviceTicketsData.length);
       } else {
         console.log('No service ticket data or unexpected format:', response);
       }
@@ -582,6 +614,15 @@ const AMCManagement: React.FC = () => {
       if (response.success && response.data && Array.isArray(response.data)) {
         purchaseOrdersData = response.data;
         console.log('Found purchase orders:', purchaseOrdersData.length);
+      } else if (
+        response.data &&
+        typeof response.data === 'object' &&
+        !Array.isArray(response.data) &&
+        response.data !== null &&
+        Array.isArray((response.data as any).orders)
+      ) {
+        purchaseOrdersData = (response.data as any).orders;
+        console.log('Found purchase orders (nested):', purchaseOrdersData.length);
       } else {
         console.log('No purchase order data or unexpected format:', response);
       }
@@ -1619,7 +1660,7 @@ const AMCManagement: React.FC = () => {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div>
                         <div className="text-xs font-medium text-gray-900">{getCustomerName(amc.customer)}</div>
-                        {typeof amc.customer === 'object' && amc.customer.phone && (
+                        {typeof amc.customer === 'object' && amc.customer && amc.customer.phone && (
                           <div className="text-xs text-gray-500">{amc.customer.phone}</div>
                         )}
                       </div>

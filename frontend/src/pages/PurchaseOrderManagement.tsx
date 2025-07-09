@@ -1563,8 +1563,9 @@ const PurchaseOrderManagement: React.FC = () => {
                         <input
                           type="number"
                           value={item.quantity}
+                          placeholder='0'
                           onChange={(e) => {
-                            const quantity = parseInt(e.target.value) || 0;
+                            const quantity = parseInt(e.target.value);
                             const updates = {
                               quantity: quantity
                             };
@@ -1587,7 +1588,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           type="number"
                           value={item.unitPrice}
                           onChange={(e) => {
-                            const unitPrice = parseFloat(e.target.value) || 0;
+                            const unitPrice = parseFloat(e.target.value);
                             const updates = {
                               unitPrice: unitPrice
                             };
@@ -2309,6 +2310,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     <input
                       type="text"
                       value={receiveData.externalInvoiceNumber}
+                      required
                       onChange={(e) => setReceiveData({ ...receiveData, externalInvoiceNumber: e.target.value })}
 
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.externalInvoiceNumber ? 'border-red-500' : 'border-gray-300'

@@ -1,30 +1,30 @@
 import express from 'express';
 import {
   getUserNotifications,
-  markNotificationRead,
-  markAllNotificationsRead,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
   deleteNotification,
-  getUnreadCount,
+  getNotificationStats,
   createNotification
 } from '../controllers/notificationController';
 import { protect } from '../middleware/auth';
 
 const router = express.Router();
 
-// Apply authentication middleware to all routes
+// All routes require authentication
 router.use(protect);
 
-// Get user notifications with pagination
+// Get user notifications
 router.get('/', getUserNotifications);
 
-// Get unread notification count
-router.get('/unread-count', getUnreadCount);
+// Get notification statistics
+router.get('/stats', getNotificationStats);
 
 // Mark notification as read
-router.patch('/:id/read', markNotificationRead);
+router.patch('/:id/read', markNotificationAsRead);
 
 // Mark all notifications as read
-router.patch('/mark-all-read', markAllNotificationsRead);
+router.patch('/read-all', markAllNotificationsAsRead);
 
 // Delete notification
 router.delete('/:id', deleteNotification);
@@ -32,4 +32,4 @@ router.delete('/:id', deleteNotification);
 // Create notification (internal use)
 router.post('/create', createNotification);
 
-export default router; 
+export default router;

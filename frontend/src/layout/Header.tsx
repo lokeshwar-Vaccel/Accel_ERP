@@ -5,6 +5,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from '../store';
 import { logout, forceLogout } from '../redux/auth/authSlice';
 import toast from 'react-hot-toast';
+import NotificationBell from '../components/ui/NotificationBell';
 
 interface HeaderProps {
   onMenuToggle: () => void;
@@ -202,12 +203,7 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
            </div>
 
           {/* Notifications */}
-          <button className="relative p-1.5 hover:bg-gray-700/50 rounded-md transition-all duration-300 group">
-            <Bell className="w-3.5 h-3.5 text-gray-300 group-hover:text-white transition-colors duration-300" />
-            <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-gradient-to-r from-orange-500 to-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold shadow-lg animate-pulse">
-              3
-            </span>
-          </button>
+          <NotificationBell className="ml-2" />
         </div>
       </div>
     </header>

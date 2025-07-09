@@ -2,56 +2,53 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 // Notification Interface
 export interface INotification extends Document {
-  recipientId: mongoose.Types.ObjectId;
-  type: 'assignment' | 'status_change' | 'contact_update' | 'follow_up' | 'payment_received' | 'invoice_created';
-  content: string;
-  entityId: mongoose.Types.ObjectId; // Related customer/invoice/contact ID
-  entityType: 'customer' | 'invoice' | 'contact' | 'payment';
-  createdAt: Date;
+  userId: mongoose.Types.ObjectId;
+  customerId?: mongoose.Types.ObjectId;
+  type: 'assignment' | 'status_change' | 'contact_history' | 'follow_up' | 'general';
+  title: string;
+  message: string;
   isRead: boolean;
-  metadata?: Record<string, any>;
   priority: 'low' | 'medium' | 'high';
+  metadata?: Record<string, any>;
   expiresAt?: Date;
+  createdBy?: mongoose.Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 // Notification Schema
 const notificationSchema = new Schema<INotification>({
-  recipientId: {
+  userId: {
     type: Schema.Types.ObjectId,
     ref: 'User',
     required: true,
     index: true
   },
+  customerId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Customer',
+    index: true
+  },
   type: {
     type: String,
     required: true,
-    enum: ['assignment', 'status_change', 'contact_update', 'follow_up', 'payment_received', 'invoice_created'],
+    enum: ['assignment', 'status_change', 'contact_history', 'follow_up', 'general'],
     index: true
   },
-  content: {
+  title: {
     type: String,
     required: true,
     trim: true
   },
-  entityId: {
-    type: Schema.Types.ObjectId,
-    required: true,
-    index: true
-  },
-  entityType: {
+  message: {
     type: String,
     required: true,
-    enum: ['customer', 'invoice', 'contact', 'payment'],
-    index: true
+    trim: true
   },
   isRead: {
     type: Boolean,
     default: false,
     index: true
-  },
-  metadata: {
-    type: Schema.Types.Mixed,
-    default: {}
   },
   priority: {
     type: String,
@@ -59,36 +56,34 @@ const notificationSchema = new Schema<INotification>({
     default: 'medium',
     index: true
   },
+  metadata: {
+    type: Schema.Types.Mixed,
+    default: {}
+  },
   expiresAt: {
     type: Date,
     index: true
+  },
+  createdBy: {
+    type: Schema.Types.ObjectId,
+    ref: 'User'
   }
 }, {
   timestamps: true
 });
 
 // Indexes for better query performance
-notificationSchema.index({ recipientId: 1, isRead: 1, createdAt: -1 });
-notificationSchema.index({ recipientId: 1, type: 1 });
-notificationSchema.index({ entityId: 1, entityType: 1 });
+notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
+notificationSchema.index({ userId: 1, type: 1, createdAt: -1 });
+notificationSchema.index({ customerId: 1, createdAt: -1 });
+notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL index for expired notifications
 
-// Pre-save middleware to set expiration for certain notification types
+// Pre-save middleware to set default expiration (30 days)
 notificationSchema.pre('save', function(next) {
   if (!this.expiresAt) {
-    // Set expiration based on notification type
-    const now = new Date();
-    switch (this.type) {
-      case 'follow_up':
-        this.expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days
-        break;
-      case 'payment_received':
-        this.expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000); // 30 days
-        break;
-      default:
-        this.expiresAt = new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000); // 90 days
-    }
+    this.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
   }
   next();
 });
 
-export const Notification = mongoose.model<INotification>('Notification', notificationSchema); 
+export const Notification = mongoose.model<INotification>('Notification', notificationSchema);

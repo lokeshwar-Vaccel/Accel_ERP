@@ -1,9 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { Notification, INotification } from '../models/Notification';
+import { Customer } from '../models/Customer';
+import { User } from '../models/User';
 import { AuthenticatedRequest, APIResponse } from '../types';
 import { AppError } from '../middleware/errorHandler';
 
-// @desc    Get user notifications with pagination
+// @desc    Get user notifications
 // @route   GET /api/v1/notifications
 // @access  Private
 export const getUserNotifications = async (
@@ -12,37 +14,25 @@ export const getUserNotifications = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
-    const isRead = req.query.isRead ? req.query.isRead === 'true' : undefined;
-    const type = req.query.type as string;
-
-    const skip = (page - 1) * limit;
+    const { page = 1, limit = 20, type, isRead } = req.query;
     const userId = req.user!.id;
 
     // Build query
-    const query: any = { recipientId: userId };
-    if (isRead !== undefined) {
-      query.isRead = isRead;
-    }
-    if (type) {
-      query.type = type;
-    }
+    const query: any = { userId };
+    if (type) query.type = type;
+    if (isRead !== undefined) query.isRead = isRead === 'true';
 
-    // Get notifications with pagination
+    // Pagination
+    const skip = (Number(page) - 1) * Number(limit);
     const notifications = await Notification.find(query)
+      .populate('customerId', 'name email phone')
+      .populate('createdBy', 'firstName lastName email')
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit)
-      .populate('entityId', 'name email phone') // Populate related entity
-      .lean();
+      .limit(Number(limit));
 
-    // Get total count for pagination
     const total = await Notification.countDocuments(query);
-    const unreadCount = await Notification.countDocuments({ 
-      recipientId: userId, 
-      isRead: false 
-    });
+    const unreadCount = await Notification.countDocuments({ userId, isRead: false });
 
     const response: APIResponse = {
       success: true,
@@ -50,10 +40,10 @@ export const getUserNotifications = async (
       data: {
         notifications,
         pagination: {
-          page,
-          limit,
+          page: Number(page),
+          limit: Number(limit),
           total,
-          pages: Math.ceil(total / limit)
+          pages: Math.ceil(total / Number(limit))
         },
         unreadCount
       }
@@ -69,7 +59,7 @@ export const getUserNotifications = async (
 // @desc    Mark notification as read
 // @route   PATCH /api/v1/notifications/:id/read
 // @access  Private
-export const markNotificationRead = async (
+export const markNotificationAsRead = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -79,10 +69,10 @@ export const markNotificationRead = async (
     const userId = req.user!.id;
 
     const notification = await Notification.findOneAndUpdate(
-      { _id: id, recipientId: userId },
+      { _id: id, userId },
       { isRead: true },
       { new: true }
-    );
+    ).populate('customerId', 'name email phone');
 
     if (!notification) {
       return next(new AppError('Notification not found', 404));
@@ -102,9 +92,9 @@ export const markNotificationRead = async (
 };
 
 // @desc    Mark all notifications as read
-// @route   PATCH /api/v1/notifications/mark-all-read
+// @route   PATCH /api/v1/notifications/read-all
 // @access  Private
-export const markAllNotificationsRead = async (
+export const markAllNotificationsAsRead = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -113,7 +103,7 @@ export const markAllNotificationsRead = async (
     const userId = req.user!.id;
 
     const result = await Notification.updateMany(
-      { recipientId: userId, isRead: false },
+      { userId, isRead: false },
       { isRead: true }
     );
 
@@ -126,7 +116,7 @@ export const markAllNotificationsRead = async (
     res.status(200).json(response);
   } catch (error) {
     console.error('Error marking all notifications as read:', error);
-    next(new AppError('Failed to mark all notifications as read', 500));
+    next(new AppError('Failed to mark notifications as read', 500));
   }
 };
 
@@ -142,10 +132,7 @@ export const deleteNotification = async (
     const { id } = req.params;
     const userId = req.user!.id;
 
-    const notification = await Notification.findOneAndDelete({
-      _id: id,
-      recipientId: userId
-    });
+    const notification = await Notification.findOneAndDelete({ _id: id, userId });
 
     if (!notification) {
       return next(new AppError('Notification not found', 404));
@@ -153,7 +140,8 @@ export const deleteNotification = async (
 
     const response: APIResponse = {
       success: true,
-      message: 'Notification deleted successfully'
+      message: 'Notification deleted successfully',
+      data: { notification }
     };
 
     res.status(200).json(response);
@@ -163,10 +151,10 @@ export const deleteNotification = async (
   }
 };
 
-// @desc    Get unread count
-// @route   GET /api/v1/notifications/unread-count
+// @desc    Get notification statistics
+// @route   GET /api/v1/notifications/stats
 // @access  Private
-export const getUnreadCount = async (
+export const getNotificationStats = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -174,21 +162,32 @@ export const getUnreadCount = async (
   try {
     const userId = req.user!.id;
 
-    const unreadCount = await Notification.countDocuments({
-      recipientId: userId,
-      isRead: false
-    });
+    const [unreadCount, totalCount, typeStats] = await Promise.all([
+      Notification.countDocuments({ userId, isRead: false }),
+      Notification.countDocuments({ userId }),
+      Notification.aggregate([
+        { $match: { userId: new (require('mongoose')).Types.ObjectId(userId) } },
+        { $group: { _id: '$type', count: { $sum: 1 } } }
+      ])
+    ]);
 
     const response: APIResponse = {
       success: true,
-      message: 'Unread count retrieved',
-      data: { unreadCount }
+      message: 'Notification statistics retrieved successfully',
+      data: {
+        unreadCount,
+        totalCount,
+        typeStats: typeStats.reduce((acc: any, stat: any) => {
+          acc[stat._id] = stat.count;
+          return acc;
+        }, {})
+      }
     };
 
     res.status(200).json(response);
   } catch (error) {
-    console.error('Error fetching unread count:', error);
-    next(new AppError('Failed to fetch unread count', 500));
+    console.error('Error fetching notification stats:', error);
+    next(new AppError('Failed to fetch notification statistics', 500));
   }
 };
 
@@ -201,38 +200,35 @@ export const createNotification = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const {
-      recipientId,
-      type,
-      content,
-      entityId,
-      entityType,
-      priority = 'medium',
-      metadata = {}
-    } = req.body;
+    const { userId, customerId, type, title, message, priority = 'medium', metadata } = req.body;
 
     // Validate required fields
-    if (!recipientId || !type || !content || !entityId || !entityType) {
-      return next(new AppError('Missing required notification fields', 400));
+    if (!userId || !type || !title || !message) {
+      return next(new AppError('User ID, type, title, and message are required', 400));
     }
 
     const notification = new Notification({
-      recipientId,
+      userId,
+      customerId,
       type,
-      content,
-      entityId,
-      entityType,
+      title,
+      message,
       priority,
       metadata,
-      isRead: false
+      createdBy: req.user!.id
     });
 
     await notification.save();
 
+    const populatedNotification = await notification.populate([
+      { path: 'customerId', select: 'name email phone' },
+      { path: 'createdBy', select: 'firstName lastName email' }
+    ]);
+
     const response: APIResponse = {
       success: true,
       message: 'Notification created successfully',
-      data: { notification }
+      data: { notification: populatedNotification }
     };
 
     res.status(201).json(response);
@@ -242,65 +238,95 @@ export const createNotification = async (
   }
 };
 
-// Utility function to generate notifications (for internal use)
-export const generateNotification = async (
-  recipientId: string,
+// Utility function to create notifications (for internal use)
+export const createNotificationForUser = async (
+  userId: string,
   type: INotification['type'],
-  content: string,
-  entityId: string,
-  entityType: INotification['entityType'],
-  priority: 'low' | 'medium' | 'high' = 'medium',
-  metadata: Record<string, any> = {}
-): Promise<INotification | null> => {
+  title: string,
+  message: string,
+  options: {
+    customerId?: string;
+    priority?: 'low' | 'medium' | 'high';
+    metadata?: Record<string, any>;
+    createdBy?: string;
+  } = {}
+): Promise<INotification> => {
   try {
     const notification = new Notification({
-      recipientId,
+      userId,
+      customerId: options.customerId,
       type,
-      content,
-      entityId,
-      entityType,
-      priority,
-      metadata,
-      isRead: false
+      title,
+      message,
+      priority: options.priority || 'medium',
+      metadata: options.metadata || {},
+      createdBy: options.createdBy
     });
 
     await notification.save();
     return notification;
   } catch (error) {
-    console.error('Error generating notification:', error);
-    return null;
+    console.error('Error creating notification for user:', error);
+    throw error;
   }
 };
 
-// Utility function to generate multiple notifications
-export const generateMultipleNotifications = async (
-  notifications: Array<{
-    recipientId: string;
-    type: INotification['type'];
-    content: string;
-    entityId: string;
-    entityType: INotification['entityType'];
-    priority?: 'low' | 'medium' | 'high';
-    metadata?: Record<string, any>;
-  }>
-): Promise<INotification[]> => {
-  try {
-    const notificationPromises = notifications.map(notification =>
-      generateNotification(
-        notification.recipientId,
-        notification.type,
-        notification.content,
-        notification.entityId,
-        notification.entityType,
-        notification.priority,
-        notification.metadata
-      )
-    );
+// Utility function to create customer assignment notification
+export const createAssignmentNotification = async (
+  userId: string,
+  customerId: string,
+  customerName: string
+): Promise<INotification> => {
+  return createNotificationForUser(
+    userId,
+    'assignment',
+    'New Customer Assignment',
+    `You have been assigned a new customer: ${customerName}`,
+    {
+      customerId,
+      priority: 'high',
+      metadata: { assignmentType: 'new_customer' }
+    }
+  );
+};
 
-    const results = await Promise.all(notificationPromises);
-    return results.filter(Boolean) as INotification[];
-  } catch (error) {
-    console.error('Error generating multiple notifications:', error);
-    return [];
-  }
-}; 
+// Utility function to create status change notification
+export const createStatusChangeNotification = async (
+  userId: string,
+  customerId: string,
+  customerName: string,
+  oldStatus: string,
+  newStatus: string
+): Promise<INotification> => {
+  return createNotificationForUser(
+    userId,
+    'status_change',
+    'Customer Status Updated',
+    `Customer ${customerName} status changed from "${oldStatus}" to "${newStatus}"`,
+    {
+      customerId,
+      priority: 'medium',
+      metadata: { oldStatus, newStatus }
+    }
+  );
+};
+
+// Utility function to create follow-up reminder notification
+export const createFollowUpNotification = async (
+  userId: string,
+  customerId: string,
+  customerName: string,
+  followUpDate: Date
+): Promise<INotification> => {
+  return createNotificationForUser(
+    userId,
+    'follow_up',
+    'Follow-up Reminder',
+    `Follow-up reminder for customer ${customerName} on ${followUpDate.toLocaleDateString()}`,
+    {
+      customerId,
+      priority: 'high',
+      metadata: { followUpDate }
+    }
+  );
+};

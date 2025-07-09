@@ -735,6 +735,36 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: any }>('/communications/stats'),
   };
 
+  // Notifications APIs
+  notifications = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { notifications: any[]; pagination: any; unreadCount: number } }>(`/notifications${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/notifications/stats'),
+
+    markAsRead: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/notifications/${id}/read`, {
+        method: 'PATCH',
+      }),
+
+    markAllAsRead: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/notifications/read-all', {
+        method: 'PATCH',
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/notifications/${id}`, {
+        method: 'DELETE',
+      }),
+
+    create: (notificationData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/notifications/create', {
+        method: 'POST',
+        body: JSON.stringify(notificationData),
+      }),
+  };
+
   // Dashboard APIs
   dashboard = {
     getOverview: () =>
@@ -749,35 +779,7 @@ class ApiClient {
     getAlerts: () =>
       this.makeRequest<{ success: boolean; data: any[] }>('/dashboard/alerts'),
   };
-  // Notification APIs
-  notifications = {
-    getAll: (params?: any) =>
-      this.makeRequest<{ success: boolean; data: any }>(`/notifications${params ? `?${new URLSearchParams(params)}` : ''}`),
-
-    getUnreadCount: () =>
-      this.makeRequest<{ success: boolean; data: any }>('/notifications/unread-count'),
-
-    markAsRead: (id: string) =>
-      this.makeRequest<{ success: boolean; data: any }>(`/notifications/${id}/read`, {
-        method: 'PATCH',
-      }),
-
-    markAllAsRead: () =>
-      this.makeRequest<{ success: boolean; data: any }>('/notifications/mark-all-read', {
-        method: 'PATCH',
-      }),
-
-    delete: (id: string) =>
-      this.makeRequest<{ success: boolean }>(`/notifications/${id}`, {
-        method: 'DELETE',
-      }),
-
-    create: (notificationData: any) =>
-      this.makeRequest<{ success: boolean; data: any }>('/notifications/create', {
-        method: 'POST',
-        body: JSON.stringify(notificationData),
-      }),
-  };
+ 
 }
 
 export const apiClient = new ApiClient();

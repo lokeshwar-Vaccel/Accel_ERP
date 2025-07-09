@@ -16,6 +16,8 @@ import ledgerRoutes from './stockLedgerRoutes';
 import invoiceRoutes from './invoices';
 import paymentRoutes from './payments';
 import paymentLinkRoutes from './paymentLinks';
+import notificationRoutes from './notifications';
+
 
 const router = Router();
 
@@ -64,6 +66,7 @@ router.use('/communications', communicationRoutes);
 router.use('/ledger', ledgerRoutes);
 router.use('/invoices', invoiceRoutes);
 router.use('/payments', paymentRoutes);
+router.use('/notifications', notificationRoutes);
 router.use('/payment-links', paymentLinkRoutes);
 
-export default router; 
+export default router;

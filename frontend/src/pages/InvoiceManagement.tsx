@@ -1216,11 +1216,11 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const calculateItemTotal = (item: any) => {
-    return item.quantity * item.unitPrice;
+    return item.quantity * item.unitPrice || 0;
   };
 
   const calculateSubtotal = () => {
-    return newInvoice.items.reduce((sum, item) => sum + calculateItemTotal(item), 0);
+    return newInvoice.items.reduce((sum, item) => sum + calculateItemTotal(item), 0) || 0;
   };
 
   const calculateTotalTax = () => {
@@ -1230,7 +1230,7 @@ const InvoiceManagement: React.FC = () => {
     }, 0);
     console.log("_______parseFloat(totalTax.toFixed(2)", parseFloat(totalTax.toFixed(2)));
 
-    return parseFloat(totalTax.toFixed(2));
+    return parseFloat(totalTax.toFixed(2)) || 0;
   };
 
 
@@ -2193,7 +2193,8 @@ const InvoiceManagement: React.FC = () => {
                             type="number"
                             min="1"
                             value={item.quantity}
-                            onChange={(e) => updateInvoiceItem(index, 'quantity', parseInt(e.target.value) || 1)}
+                            placeholder='0'
+                            onChange={(e) => updateInvoiceItem(index, 'quantity', parseInt(e.target.value))}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_quantity`] || formErrors[`item_${index}_stock`] ? 'border-red-500' :
                               stockValidation[index] && !stockValidation[index].isValid ? 'border-red-500' : 'border-gray-300'
                               }`}
@@ -2215,7 +2216,8 @@ const InvoiceManagement: React.FC = () => {
                             min="0"
                             step="0.01"
                             value={item.unitPrice}
-                            onChange={(e) => updateInvoiceItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            placeholder='0'
+                            onChange={(e) => updateInvoiceItem(index, 'unitPrice', parseFloat(e.target.value))}
                             className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'
                               }`}
                           />
@@ -2233,7 +2235,8 @@ const InvoiceManagement: React.FC = () => {
                             min="0"
                             max="100"
                             value={item.taxRate}
-                            onChange={(e) => updateInvoiceItem(index, 'taxRate', parseFloat(e.target.value) || 0)}
+                            placeholder='0.00%'
+                            onChange={(e) => updateInvoiceItem(index, 'taxRate', parseFloat(e.target.value))}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           />
                         </div>
@@ -2244,7 +2247,7 @@ const InvoiceManagement: React.FC = () => {
                               Total
                             </label>
                             <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium">
-                              ₹{calculateItemTotal(item).toLocaleString()}
+                              ₹{calculateItemTotal(item).toLocaleString() || 0}
                             </div>
                           </div>
                           {newInvoice.items.length > 1 && (
@@ -2359,11 +2362,11 @@ const InvoiceManagement: React.FC = () => {
                   <div className="w-80 space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">₹{calculateSubtotal().toLocaleString()}</span>
+                      <span className="font-medium">₹{calculateSubtotal().toLocaleString()|| 0}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Total Tax:</span>
-                      <span className="font-medium">₹{calculateTotalTax().toLocaleString()}</span>
+                      <span className="font-medium">₹{calculateTotalTax().toLocaleString()||0}</span>
                     </div>
                     <div className="flex justify-between text-sm items-center">
                       <span className="text-gray-600">Discount:</span>
@@ -2576,7 +2579,7 @@ const InvoiceManagement: React.FC = () => {
                                 value={item.taxRate}
                                 onChange={(e) => handleItemEdit(index, 'taxRate', parseFloat(e.target.value) || 0)}
                                 onBlur={() => recalculateItem(index)}
-                                className="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 step="1"
                                 min="0"
                                 max="100"
@@ -2587,7 +2590,7 @@ const InvoiceManagement: React.FC = () => {
                           </td>
                           <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{((item.quantity ?? 0) * (item.unitPrice ?? 0) + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate || 0) / 100)).toFixed(2)}</td>
                           {editMode && (
-                            <td className="px-4 py-2 text-sm">
+                            <td className="px-4 py-2 flex text-sm">
                               <button
                                 onClick={autoAdjustTaxRates}
                                 className="ml-3 bg-indigo-600 text-white px-3 py-1 rounded-md text-sm hover:bg-indigo-700"

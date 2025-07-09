@@ -954,7 +954,7 @@ const ProductManagement: React.FC = () => {
                           name="minStockLevel"
                           value={formData.minStockLevel}
                           onChange={handleInputChange}
-                          min="0"
+                          // min="0"
                           className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.minStockLevel ? 'border-red-500' : 'border-gray-300'
                             }`}
                           placeholder="0"
@@ -969,11 +969,11 @@ const ProductManagement: React.FC = () => {
                           GNDP Price (₹) *
                         </label>
                         <input
-                          type="number"
+                          type="text"
                           name="gndp"
                           value={formData.gndp}
                           onChange={handleInputChange}
-                          min="0"
+                          // min="0"
                           step="0.01"
                           className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.gndp ? 'border-red-500' : 'border-gray-300'
                             }`}
@@ -989,12 +989,12 @@ const ProductManagement: React.FC = () => {
                           MRP (₹) *
                         </label>
                         <input
-                          type="number"
+                          type="text"
                           name="price"
                           value={formData.price}
                           onChange={handleInputChange}
-                          min="0"
-                          step="0.01"
+                          // min="0"
+                          // step="0.01"
                           className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.price ? 'border-red-500' : 'border-gray-300'
                             }`}
                           placeholder="0.00"
