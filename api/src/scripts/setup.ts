@@ -13,13 +13,11 @@ const setup = async () => {
     // Connect to MongoDB
     const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/sun-power-services-erp';
     await mongoose.connect(mongoURI);
-    console.log('Connected to MongoDB');
 
     // Create Super Admin user if it doesn't exist
     const existingSuperAdmin = await User.findOne({ role: UserRole.SUPER_ADMIN });
     
     if (!existingSuperAdmin) {
-      console.log('Creating Super Admin user...');
       
       const superAdmin = await User.create({
         firstName: 'Super',
@@ -46,13 +44,8 @@ const setup = async () => {
         ]
       });
 
-      console.log('Super Admin created:', {
-        email: superAdmin.email,
-        password: 'admin123',
-        role: superAdmin.role
-      });
     } else {
-      console.log('Super Admin already exists');
+      console.error('Super Admin already exists');
     }
 
     // Create default stock locations
@@ -84,7 +77,6 @@ const setup = async () => {
       const existingLocation = await StockLocation.findOne({ name: locationData.name });
       if (!existingLocation) {
         await StockLocation.create(locationData);
-        console.log(`Created stock location: ${locationData.name}`);
       }
     }
 
@@ -147,21 +139,13 @@ const setup = async () => {
       if (!existingProduct && superAdminUser) {
         productData.createdBy = (superAdminUser._id as mongoose.Types.ObjectId).toString();
         await Product.create(productData);
-        console.log(`Created sample product: ${productData.name}`);
       }
     }
-
-    console.log('\n🎉 Database setup completed successfully!');
-    console.log('\n📝 Default credentials:');
-    console.log('   Email: admin@sunpowerservices.com');
-    console.log('   Password: admin123');
-    console.log('\n🚀 You can now start the server with: npm run dev');
 
   } catch (error) {
     console.error('Setup failed:', error);
   } finally {
     await mongoose.disconnect();
-    console.log('Disconnected from MongoDB');
     process.exit(0);
   }
 };

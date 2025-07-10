@@ -372,7 +372,6 @@ const sampleCustomers = [
 
 // Function to fix existing stock availableQuantity data
 const fixExistingStockData = async () => {
-  console.log('🔧 Fixing existing stock availableQuantity data...');
   
   try {
     const result = await Stock.updateMany(
@@ -389,7 +388,6 @@ const fixExistingStockData = async () => {
       ]
     );
     
-    console.log(`✅ Fixed ${result.modifiedCount} stock records with correct availableQuantity`);
     
     // Show some sample fixed records
     const sampleFixedRecords = await Stock.find({}, {
@@ -397,11 +395,6 @@ const fixExistingStockData = async () => {
       reservedQuantity: 1, 
       availableQuantity: 1
     }).limit(3);
-    
-    console.log('📊 Sample fixed stock records:');
-    sampleFixedRecords.forEach((record, index) => {
-      console.log(`   ${index + 1}. Qty: ${record.quantity}, Reserved: ${record.reservedQuantity}, Available: ${record.availableQuantity}`);
-    });
     
   } catch (error) {
     console.error('❌ Error fixing stock data:', error);
@@ -411,7 +404,6 @@ const fixExistingStockData = async () => {
 
 const createSampleData = async () => {
   try {
-    console.log('🌱 Starting database seeding...');
 
     // Connect to database
     await connectDB();
@@ -420,7 +412,6 @@ const createSampleData = async () => {
     await fixExistingStockData();
 
     // Clear existing data
-    console.log('🗑️  Clearing existing data...');
     await Promise.all([
       User.deleteMany({}),
       Customer.deleteMany({}),
@@ -433,7 +424,6 @@ const createSampleData = async () => {
     ]);
 
     // Create Users
-    console.log('👥 Creating users...');
     const hashedUsers = await Promise.all(
       sampleUsers.map(async (user) => ({
         ...user,
@@ -441,24 +431,18 @@ const createSampleData = async () => {
       }))
     );
     const createdUsers = await User.insertMany(hashedUsers);
-    console.log(`✅ Created ${createdUsers.length} users`);
 
     // Create Stock Locations
-    console.log('🏢 Creating stock locations...');
     const createdLocations = await StockLocation.insertMany(sampleStockLocations);
-    console.log(`✅ Created ${createdLocations.length} stock locations`);
 
     // Create Products
-    console.log('📦 Creating products...');
     const productsWithCreator = sampleProducts.map(product => ({
       ...product,
       createdBy: createdUsers[0]._id // Admin user
     }));
     const createdProducts = await Product.insertMany(productsWithCreator);
-    console.log(`✅ Created ${createdProducts.length} products`);
 
     // Create Stock entries
-    console.log('📊 Creating stock entries...');
     const stockEntries = [];
     for (const product of createdProducts) {
       for (const location of createdLocations) {
@@ -486,10 +470,8 @@ const createSampleData = async () => {
       }
     }
     const createdStock = await Stock.insertMany(stockEntries);
-    console.log(`✅ Created ${createdStock.length} stock entries with correct availableQuantity`);
 
     // Create Customers
-    console.log('👔 Creating customers...');
     const customersWithUsers = sampleCustomers.map((customer, index) => ({
       ...customer,
       assignedTo: createdUsers[Math.floor(Math.random() * createdUsers.length)]._id,
@@ -504,10 +486,8 @@ const createSampleData = async () => {
       ]
     }));
     const createdCustomers = await Customer.insertMany(customersWithUsers);
-    console.log(`✅ Created ${createdCustomers.length} customers`);
 
     // Create Service Tickets
-    console.log('🎫 Creating service tickets...');
     const currentDate = new Date();
     const year = currentDate.getFullYear();
     const month = String(currentDate.getMonth() + 1).padStart(2, '0');
@@ -573,10 +553,8 @@ const createSampleData = async () => {
       }
     ];
     const createdTickets = await ServiceTicket.insertMany(serviceTickets);
-    console.log(`✅ Created ${createdTickets.length} service tickets`);
 
     // Create AMC Contracts
-    console.log('📋 Creating AMC contracts...');
     const amcContracts = [
       {
         contractNumber: `AMC-${year}${month}-0001`,
@@ -628,10 +606,8 @@ const createSampleData = async () => {
       }
     ];
     const createdAMCs = await AMC.insertMany(amcContracts);
-    console.log(`✅ Created ${createdAMCs.length} AMC contracts`);
 
     // Create Purchase Orders
-    console.log('🛒 Creating purchase orders...');
     const purchaseOrders = [
       {
         poNumber: `PO-${year}${month}-0001`,
@@ -690,48 +666,44 @@ const createSampleData = async () => {
       }
     ];
     const createdPOs = await PurchaseOrder.insertMany(purchaseOrders);
-    console.log(`✅ Created ${createdPOs.length} purchase orders`);
+    // console.log(`✅ Created ${createdPOs.length} purchase orders`);
 
-    console.log('\n🎉 Database seeding completed successfully!');
-    console.log('\n📊 Summary:');
-    console.log(`👥 Users: ${createdUsers.length}`);
-    console.log(`🏢 Stock Locations: ${createdLocations.length}`);
-    console.log(`📦 Products: ${createdProducts.length}`);
-    console.log(`📊 Stock Entries: ${createdStock.length}`);
-    console.log(`👔 Customers: ${createdCustomers.length}`);
-    console.log(`🎫 Service Tickets: ${createdTickets.length}`);
-    console.log(`📋 AMC Contracts: ${createdAMCs.length}`);
-    console.log(`🛒 Purchase Orders: ${createdPOs.length}`);
+    // console.log('\n🎉 Database seeding completed successfully!');
+    // console.log('\n📊 Summary:');
+    // console.log(`👥 Users: ${createdUsers.length}`);
+    // console.log(`🏢 Stock Locations: ${createdLocations.length}`);
+    // console.log(`📦 Products: ${createdProducts.length}`);
+    // console.log(`📊 Stock Entries: ${createdStock.length}`);
+    // console.log(`👔 Customers: ${createdCustomers.length}`);
+    // console.log(`🎫 Service Tickets: ${createdTickets.length}`);
+    // console.log(`📋 AMC Contracts: ${createdAMCs.length}`);
+    // console.log(`🛒 Purchase Orders: ${createdPOs.length}`);
 
-    console.log('\n🔑 Default Login Credentials:');
-    console.log('Admin: admin@sunpowerservices.com / admin123');
-    console.log('Manager: john.manager@sunpowerservices.com / manager123');
-    console.log('Technician: sarah.tech@sunpowerservices.com / tech123');
-    console.log('Sales: mike.sales@sunpowerservices.com / sales123');
-    console.log('HR: lisa.hr@sunpowerservices.com / hr123');
+    // console.log('\n🔑 Default Login Credentials:');
+    // console.log('Admin: admin@sunpowerservices.com / admin123');
+    // console.log('Manager: john.manager@sunpowerservices.com / manager123');
+    // console.log('Technician: sarah.tech@sunpowerservices.com / tech123');
+    // console.log('Sales: mike.sales@sunpowerservices.com / sales123');
+    // console.log('HR: lisa.hr@sunpowerservices.com / hr123');
 
   } catch (error) {
     console.error('❌ Error seeding database:', error);
     throw error;
   } finally {
     await mongoose.connection.close();
-    console.log('🔌 Database connection closed');
   }
 };
 
 // Standalone function to fix existing stock data without clearing database
 const fixStockDataOnly = async () => {
   try {
-    console.log('🔧 Starting stock data fix...');
     await connectDB();
     await fixExistingStockData();
-    console.log('✅ Stock data fix completed successfully');
   } catch (error) {
     console.error('❌ Stock data fix failed:', error);
     throw error;
   } finally {
     await mongoose.connection.close();
-    console.log('🔌 Database connection closed');
   }
 };
 
@@ -741,7 +713,6 @@ if (require.main === module) {
   if (process.argv.includes('--fix-stock-only')) {
     fixStockDataOnly()
       .then(() => {
-        console.log('✅ Stock fix completed successfully');
         process.exit(0);
       })
       .catch((error) => {
@@ -752,7 +723,6 @@ if (require.main === module) {
     // Run full seeding
     createSampleData()
       .then(() => {
-        console.log('✅ Seeding completed successfully');
         process.exit(0);
       })
       .catch((error) => {

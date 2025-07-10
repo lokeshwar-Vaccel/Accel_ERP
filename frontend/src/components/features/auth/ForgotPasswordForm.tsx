@@ -46,9 +46,16 @@ export const ForgotPasswordForm: React.FC = () => {
         setCountdown(Math.ceil(remaining / 1000));
         
         const timer = setInterval(() => {
+          // Ensure lastEmailSent is not null before using it
+          if (passwordResetState.lastEmailSent == null) {
+            clearInterval(timer);
+            setCanResend(true);
+            setCountdown(0);
+            return;
+          }
           const newElapsed = Date.now() - passwordResetState.lastEmailSent;
           const newRemaining = Math.max(0, 60000 - newElapsed);
-          
+
           if (newRemaining === 0) {
             setCanResend(true);
             setCountdown(0);
@@ -69,14 +76,19 @@ export const ForgotPasswordForm: React.FC = () => {
     if (!validateForm()) return;
     
     const res:any = await dispatch(forgotPassword({ email }));
-    
-    toast.success(res?.payload.message )
+    const message = res?.payload && typeof res.payload === 'object' && 'message' in res.payload ? (res.payload as any).message : undefined;
+    if (message) {
+      toast.success(message);
+    }
   };
 
   const handleResend = async () => {
     if (!canResend || !email) return;
-    const response = await dispatch(forgotPassword({ email }));
-      toast.success(response?.payload.message )
+    const response: any = await dispatch(forgotPassword({ email }));
+    const message = response?.payload && typeof response.payload === 'object' && 'message' in response.payload ? (response.payload as any).message : undefined;
+    if (message) {
+      toast.success(message);
+    }
   };
 
   const validateForm = () => {

@@ -292,21 +292,21 @@ async function main() {
     }))
   );
 
-  console.log('Inserted:', {
-    locations: locations.length,
-    rooms: rooms.length,
-    racks: racks.length,
-    customers: customers.length,
-    products: products.length,
-    stocks: stockResults.length,
-    amcs: amcs.length,
-    pos: pos.length,
-    invoices: invoices.length,
-    tickets: tickets.length,
-    notifications: 40,
-    payments: 40,
-    stockLedgers: 40
-  });
+  // console.log('Inserted:', {
+  //   locations: locations.length,
+  //   rooms: rooms.length,
+  //   racks: racks.length,
+  //   customers: customers.length,
+  //   products: products.length,
+  //   stocks: stockResults.length,
+  //   amcs: amcs.length,
+  //   pos: pos.length,
+  //   invoices: invoices.length,
+  //   tickets: tickets.length,
+  //   notifications: 40,
+  //   payments: 40,
+  //   stockLedgers: 40
+  // });
   await mongoose.disconnect();
 }
 

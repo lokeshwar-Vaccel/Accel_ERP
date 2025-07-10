@@ -266,7 +266,7 @@ const CommunicationManagement: React.FC = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll();
+      const response = await apiClient.customers.getAll({});
       let customersData: Customer[] = [];
       if (response.success && response.data && Array.isArray(response.data)) {
         customersData = response.data;
