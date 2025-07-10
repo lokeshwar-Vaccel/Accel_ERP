@@ -79,8 +79,6 @@ export const UserManagement: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const currentUser = useSelector((state: RootState) => state.auth.user?.role);
 
-  console.log("users:", users);
-
   const [searchTerm, setSearchTerm] = useState('');
 
   // Modal states
@@ -148,7 +146,6 @@ export const UserManagement: React.FC = () => {
 
       // Map API response to UserDisplay interface
       const usersData = response.data as any; // Type assertion since API client types aren't fully typed
-      console.log("usersData:", usersData);
 
       const mappedUsers: UserDisplay[] = usersData.users.map((user: any) => ({
         id: user.id || user._id,

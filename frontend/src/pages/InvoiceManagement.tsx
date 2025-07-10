@@ -211,10 +211,6 @@ const InvoiceManagement: React.FC = () => {
     useRazorpay: false
   });
 
-  console.log("selectedInvoice:", selectedInvoice);
-
-
-
   // Form states
   const [newInvoice, setNewInvoice] = useState<NewInvoice>({
     customer: '',
@@ -293,11 +289,11 @@ const autoAdjustTaxRates = () => {
   const targetTotal = selectedInvoice.externalInvoiceTotal ?? 0;
 
   const subtotal = items.reduce(
-    (sum, item) => sum + ((item.unitPrice ?? 0) * (item.quantity ?? 0)),
+    (sum: number, item: any) => sum + ((item.unitPrice ?? 0) * (item.quantity ?? 0)),
     0
   );
 
-  const adjustedItems = items.map((item) => {
+  const adjustedItems = items.map((item: any) => {
     const quantity = item.quantity ?? 0;
     const unitPrice = item.unitPrice ?? 0;
 
@@ -309,9 +305,8 @@ const autoAdjustTaxRates = () => {
     const share = subtotal > 0 ? base / subtotal : 0;
     const targetItemTotal = share * targetTotal;
 
-  const adjustedTaxRateRaw = calculateAdjustedTaxRate(unitPrice, quantity, targetItemTotal);
-  const adjustedTaxRate = Math.min(100, adjustedTaxRateRaw); // Limit to 100%
-  //     const truncateTo2 = (value: number) => Math.floor(value * 100) / 100;
+    const adjustedTaxRateRaw = calculateAdjustedTaxRate(unitPrice, quantity, targetItemTotal);
+    const adjustedTaxRate = Math.min(100, adjustedTaxRateRaw); // Limit to 100%
 
     let taxAmount = truncateTo2((base * adjustedTaxRate) / 100);
     const totalPrice = Number((base + taxAmount).toFixed(2));
@@ -324,13 +319,10 @@ const autoAdjustTaxRates = () => {
     };
   });
 
-  const taxAmount = adjustedItems.reduce((sum, item) => sum + (item.taxAmount ?? 0), 0);
-  const totalAmount = adjustedItems.reduce((sum, item) => sum + (item.totalPrice ?? 0), 0);
+  const taxAmount = adjustedItems.reduce((sum: number, item: any) => sum + (item.taxAmount ?? 0), 0);
+  const totalAmount = adjustedItems.reduce((sum: number, item: any) => sum + (item.totalPrice ?? 0), 0);
 
-  console.log("totalAmount---:",totalAmount);
-  
-
-  setSelectedInvoice((prev) => ({
+  setSelectedInvoice((prev: any) => ({
     ...prev,
     items: adjustedItems,
     subtotal: parseFloat(subtotal.toFixed(2)),
@@ -345,7 +337,7 @@ const autoAdjustUnitPrice = () => {
   const items = selectedInvoice.items ?? [];
   const targetTotal = selectedInvoice.externalInvoiceTotal ?? 0;
 
-  const currentTotal = items.reduce((sum, item) => {
+  const currentTotal = items.reduce((sum: number, item: any) => {
     const quantity = item.quantity ?? 0;
     const unitPrice = item.unitPrice ?? 0;
     const taxRate = item.taxRate ?? 0;
@@ -354,7 +346,7 @@ const autoAdjustUnitPrice = () => {
     return sum + base + tax;
   }, 0);
 
-  const adjustedItems = items.map((item) => {
+  const adjustedItems = items.map((item: any) => {
     const quantity = item.quantity ?? 0;
     const taxRate = item.taxRate ?? 0;
 
@@ -379,16 +371,13 @@ const autoAdjustUnitPrice = () => {
     };
   });
 
-  const subtotal = adjustedItems.reduce((sum, item) => sum + ((item.unitPrice ?? 0) * (item.quantity ?? 0)), 0);
-  const taxAmount = adjustedItems.reduce((sum, item) => sum + (item.taxAmount ?? 0), 0);
+  const subtotal = adjustedItems.reduce((sum: number, item: any) => sum + ((item.unitPrice ?? 0) * (item.quantity ?? 0)), 0);
+  const taxAmount = adjustedItems.reduce((sum: number, item: any) => sum + (item.taxAmount ?? 0), 0);
   const totalAmount = parseFloat((subtotal + taxAmount).toFixed(2));
   const paidAmount = selectedInvoice.paidAmount ?? 0;
   const remainingAmount = parseFloat((totalAmount - paidAmount).toFixed(2));
 
-    console.log("totalAmount--- 1212121:",totalAmount);
-
-
-  setSelectedInvoice((prev) => ({
+  setSelectedInvoice((prev: any) => ({
     ...prev,
     items: adjustedItems,
     subtotal: parseFloat(subtotal.toFixed(2)),
@@ -428,11 +417,7 @@ const autoAdjustUnitPrice = () => {
         })),
       };
 
-      console.log("payload:", payload);
-
-
       const res = await apiClient.invoices.priceUpdate(selectedInvoice._id, payload);
-      console.log("res:", res);
 
       if (res.success) {
         // Update the selected invoice with new data
@@ -530,7 +515,6 @@ const autoAdjustUnitPrice = () => {
   };
 
   const fetchInvoices = async () => {
-
     const params: any = {
       page: currentPage,
       limit,
@@ -539,19 +523,16 @@ const autoAdjustUnitPrice = () => {
       ...(paymentFilter !== 'all' && { paymentStatus: paymentFilter }),
       ...(statusFilter !== 'all' && { status: statusFilter }),
       ...(invoiceType !== 'all' && { invoiceType: invoiceType }),
-      // ...(leadSourceFilter && { leadSource: leadSourceFilter }),
-      // ...(dateFrom && { dateFrom }),
-      // ...(dateTo && { dateTo }),
-      // ...(assignedToParam && { assignedTo: assignedToParam }),
     };
 
     try {
       const response = await apiClient.invoices.getAll(params);
-
-      setCurrentPage(response.data.pagination.page);
-      setLimit(response.data.pagination.limit);
-      setTotalDatas(response.data.pagination.total);
-      setTotalPages(response.data.pagination.pages);
+      if (response.data.pagination) {
+        setCurrentPage(response.data.pagination.page);
+        setLimit(response.data.pagination.limit);
+        setTotalDatas(response.data.pagination.total);
+        setTotalPages(response.data.pagination.pages);
+      }
       setInvoices(response.data.invoices || []);
     } catch (error) {
       console.error('Error fetching invoices:', error);
@@ -565,7 +546,7 @@ const autoAdjustUnitPrice = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll();
+      const response = await apiClient.customers.getAll({});
       const responseData = response.data as any;
       const customersData = responseData.customers || responseData || [];
       setCustomers(customersData);
@@ -1230,7 +1211,6 @@ const autoAdjustUnitPrice = () => {
       const itemTotal = calculateItemTotal(item);
       return sum + (itemTotal * (item.taxRate || 0) / 100);
     }, 0);
-    // console.log("_______parseFloat(totalTax.toFixed(2)", parseFloat(totalTax.toFixed(2)));
 
     return parseFloat(totalTax.toFixed(2)) || 0;
   };
@@ -1501,7 +1481,7 @@ const autoAdjustUnitPrice = () => {
 
     // Items Table
     const tableStartY = 130;
-    const tableData = selectedInvoice.items.map(item => [
+    const tableData = selectedInvoice.items.map((item: any) => [
       item.description,
       item.quantity.toString(),
       `₹${item.unitPrice.toLocaleString()}`,
@@ -1520,9 +1500,10 @@ const autoAdjustUnitPrice = () => {
     });
 
     // Calculate totals
-    const subtotal = selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-    const totalTax = selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice * item.taxRate / 100), 0);
-    const finalY = doc.lastAutoTable.finalY + 20;
+    const subtotal = selectedInvoice.items.reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice), 0);
+    const totalTax = selectedInvoice.items.reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice * item.taxRate / 100), 0);
+    // @ts-ignore
+    const finalY = (doc as any).lastAutoTable?.finalY + 20;
 
     // Summary
     doc.setFont('helvetica', 'normal');
@@ -1609,7 +1590,7 @@ const autoAdjustUnitPrice = () => {
             </tr>
           </thead>
           <tbody>
-            ${selectedInvoice.items.map(item => `
+            ${(selectedInvoice.items as any[]).map((item: any) => `
               <tr>
                 <td>${item.description}</td>
                 <td>${item.quantity}</td>
@@ -1622,10 +1603,10 @@ const autoAdjustUnitPrice = () => {
         </table>
 
         <div class="total-section">
-          <p><strong>Subtotal:</strong> ₹${selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0).toLocaleString()}</p>
-          <p><strong>Total Tax:</strong> ₹${selectedInvoice.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice * item.taxRate / 100), 0).toLocaleString()}</p>
+          <p><strong>Subtotal:</strong> ₹${(selectedInvoice.items as any[]).reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice), 0).toLocaleString()}</p>
+          <p><strong>Total Tax:</strong> ₹${(selectedInvoice.items as any[]).reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice * item.taxRate / 100), 0).toLocaleString()}</p>
           <p><strong>Items Count:</strong> ${selectedInvoice.items.length}</p>
-          <p><strong>Total Quantity:</strong> ${selectedInvoice.items.reduce((sum, item) => sum + item.quantity, 0)}</p>
+          <p><strong>Total Quantity:</strong> ${(selectedInvoice.items as any[]).reduce((sum: number, item: any) => sum + item.quantity, 0)}</p>
           <h2><strong>Total Amount: ₹${selectedInvoice.totalAmount.toLocaleString()}</strong></h2>
           ${selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ?
         `<p class="mismatch-warning">External Total: ₹${selectedInvoice.externalInvoiceTotal?.toLocaleString()}</p>` : ''}
@@ -1635,9 +1616,11 @@ const autoAdjustUnitPrice = () => {
   `;
 
     const printWindow = window.open('', '_blank');
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.print();
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.print();
+    }
   };
 
   const truncateTo2 = (value: number) => Math.floor(value * 100) / 100;
@@ -2593,7 +2576,7 @@ const autoAdjustUnitPrice = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {(selectedInvoice.items || []).map((item, index) => (
+                      {(selectedInvoice.items || []).map((item: any, index: number) => (
                         <tr key={index}>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
@@ -2703,11 +2686,11 @@ const autoAdjustUnitPrice = () => {
                     <div className="text-sm text-gray-600 space-y-1">
                       <div className="flex justify-between">
                         <span>Subtotal:</span>
-                        <span>₹{(selectedInvoice.items || []).reduce((sum, item) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</span>
+                        <span>₹{(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Total Tax:</span>
-                        <span>₹{(selectedInvoice.items || []).reduce((sum, item) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</span>
+                        <span>₹{(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Items Count:</span>
@@ -2715,7 +2698,7 @@ const autoAdjustUnitPrice = () => {
                       </div>
                       <div className="flex justify-between">
                         <span>Total Quantity:</span>
-                        <span>{(selectedInvoice.items || []).reduce((sum, item) => sum + (item.quantity ?? 0), 0)}</span>
+                        <span>{(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + (item.quantity ?? 0), 0)}</span>
                       </div>
                     </div>
                     <div className="border-t pt-2">

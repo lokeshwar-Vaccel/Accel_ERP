@@ -193,9 +193,7 @@ const ServiceManagement: React.FC = () => {
 
   const fetchTickets = async () => {
     try {
-      console.log('Fetching service tickets...');
       const response = await apiClient.services.getAll();
-      console.log('Service tickets response:', response);
       
       let ticketsData: ServiceTicket[] = [];
       if (response.success && response.data) {
@@ -204,7 +202,6 @@ const ServiceManagement: React.FC = () => {
         } else if ((response.data as any).tickets && Array.isArray((response.data as any).tickets)) {
           ticketsData = (response.data as any).tickets;
         }
-        console.log('Found service tickets:', ticketsData.length);
       }
       
       // Set fallback data if no real data
@@ -303,7 +300,7 @@ const ServiceManagement: React.FC = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll();
+      const response = await apiClient.customers.getAll({});
       let customersData: Customer[] = [];
       if (response.success && response.data && Array.isArray(response.data)) {
         customersData = response.data;
@@ -674,7 +671,6 @@ const ServiceManagement: React.FC = () => {
       >
         <div className="flex space-x-3">
           <button
-            onClick={() => console.log('Export tickets')}
             className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Download className="w-4 h-4" />

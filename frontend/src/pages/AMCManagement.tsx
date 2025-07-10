@@ -368,9 +368,7 @@ const AMCManagement: React.FC = () => {
 
   const fetchAMCs = async () => {
     try {
-      console.log('Fetching AMCs from API...');
       const response = await apiClient.amc.getAll();
-      console.log('AMC API Response:', response);
       
       // Handle response format - API returns { success: boolean; data: { contracts: any[] }; pagination: any }
       let amcData: AMC[] = [];
@@ -378,27 +376,21 @@ const AMCManagement: React.FC = () => {
         const data = response.data as any;
         if (data.contracts && Array.isArray(data.contracts)) {
           amcData = data.contracts;
-          console.log('Found AMC data:', amcData.length, 'contracts');
         } else if (Array.isArray(response.data)) {
           // Fallback for different response format
           amcData = response.data;
-          console.log('Found AMC data (fallback format):', amcData.length, 'contracts');
         } else {
-          console.log('Unexpected response format for AMC data:', response.data);
         }
       } else {
-        console.log('No AMC data in response or unsuccessful response');
       }
       
       setAmcs(amcData);
       
       // Only show fallback data if there's no real data
       if (amcData.length === 0) {
-        console.log('No AMC data found, showing empty state instead of mock data');
       }
     } catch (error) {
       console.error('Error fetching AMCs:', error);
-      console.log('API call failed, showing empty state instead of mock data');
       // Don't show fallback data - show the actual error state
       setAmcs([]);
     }
@@ -406,14 +398,12 @@ const AMCManagement: React.FC = () => {
 
   const fetchCustomers = async () => {
     try {
-      console.log('Fetching customers from API...');
-      const response = await apiClient.customers.getAll();
-      console.log('Customers API Response:', response);
+      // Pass an empty object as argument to fix the missing argument error
+      const response = await apiClient.customers.getAll({});
       
       let customersData: Customer[] = [];
       if (response.success && response.data && Array.isArray(response.data)) {
         customersData = response.data;
-        console.log('Found customers:', customersData.length);
       } else if (
         response.data &&
         typeof response.data === 'object' &&
@@ -422,16 +412,13 @@ const AMCManagement: React.FC = () => {
         Array.isArray((response.data as any).customers)
       ) {
         customersData = (response.data as any).customers;
-        console.log('Found customers (nested):', customersData.length);
       } else {
-        console.log('No customer data or unexpected format:', response);
       }
       
       setCustomers(customersData);
       
       // If no customers found, create some sample data for development
       if (customersData.length === 0) {
-        console.log('No customers found, using sample data for development');
         const sampleCustomers: Customer[] = [
           {
             _id: 'cust-1',
@@ -519,14 +506,11 @@ const AMCManagement: React.FC = () => {
 
   const fetchProducts = async () => {
     try {
-      console.log('Fetching products from API...');
       const response = await apiClient.products.getAll();
-      console.log('Products API Response:', response);
       
       let productsData: Product[] = [];
       if (response.success && response.data && Array.isArray(response.data)) {
         productsData = response.data;
-        console.log('Found products:', productsData.length);
       } else if (
         response.data &&
         typeof response.data === 'object' &&
@@ -535,9 +519,7 @@ const AMCManagement: React.FC = () => {
         Array.isArray((response.data as any).products)
       ) {
         productsData = (response.data as any).products;
-        console.log('Found products (nested):', productsData.length);
       } else {
-        console.log('No product data or unexpected format:', response);
       }
       setProducts(productsData);
     } catch (error) {
@@ -548,14 +530,11 @@ const AMCManagement: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      console.log('Fetching users from API...');
       const response = await apiClient.users.getAll();
-      console.log('Users API Response:', response);
       
       let usersData: User[] = [];
       if (response.success && response.data && Array.isArray(response.data)) {
         usersData = response.data;
-        console.log('Found users:', usersData.length);
       } else if (
         response.data &&
         typeof response.data === 'object' &&
@@ -564,9 +543,7 @@ const AMCManagement: React.FC = () => {
         Array.isArray((response.data as any).users)
       ) {
         usersData = (response.data as any).users;
-        console.log('Found users (nested):', usersData.length);
       } else {
-        console.log('No user data or unexpected format:', response);
       }
       setUsers(usersData);
     } catch (error) {
@@ -577,14 +554,11 @@ const AMCManagement: React.FC = () => {
 
   const fetchServiceTickets = async () => {
     try {
-      console.log('Fetching service tickets from API...');
       const response = await apiClient.services.getAll();
-      console.log('Service Tickets API Response:', response);
       
       let serviceTicketsData: ServiceTicket[] = [];
       if (response.success && response.data && Array.isArray(response.data)) {
         serviceTicketsData = response.data;
-        console.log('Found service tickets:', serviceTicketsData.length);
       } else if (
         response.data &&
         typeof response.data === 'object' &&
@@ -593,9 +567,7 @@ const AMCManagement: React.FC = () => {
         Array.isArray((response.data as any).tickets)
       ) {
         serviceTicketsData = (response.data as any).tickets;
-        console.log('Found service tickets (nested):', serviceTicketsData.length);
       } else {
-        console.log('No service ticket data or unexpected format:', response);
       }
       setServiceTickets(serviceTicketsData);
     } catch (error) {
@@ -606,14 +578,11 @@ const AMCManagement: React.FC = () => {
 
   const fetchPurchaseOrders = async () => {
     try {
-      console.log('Fetching purchase orders from API...');
       const response = await apiClient.purchaseOrders.getAll();
-      console.log('Purchase Orders API Response:', response);
       
       let purchaseOrdersData: PurchaseOrder[] = [];
       if (response.success && response.data && Array.isArray(response.data)) {
         purchaseOrdersData = response.data;
-        console.log('Found purchase orders:', purchaseOrdersData.length);
       } else if (
         response.data &&
         typeof response.data === 'object' &&
@@ -622,9 +591,7 @@ const AMCManagement: React.FC = () => {
         Array.isArray((response.data as any).orders)
       ) {
         purchaseOrdersData = (response.data as any).orders;
-        console.log('Found purchase orders (nested):', purchaseOrdersData.length);
       } else {
-        console.log('No purchase order data or unexpected format:', response);
       }
       setPurchaseOrders(purchaseOrdersData);
     } catch (error) {
@@ -697,7 +664,6 @@ const AMCManagement: React.FC = () => {
 
   // New function to resume editing drafts in workflow mode
   const handleResumeDraft = (amc: AMC) => {
-    console.log('Resuming draft AMC:', amc);
     
     // Load the existing data
     setAmcFormData({
@@ -1333,7 +1299,6 @@ const AMCManagement: React.FC = () => {
     try {
       // Send to service management
       await apiClient.services.create(emergencyTicket);
-      console.log('Emergency service ticket created');
     } catch (error) {
       console.error('Error creating emergency service:', error);
     }
@@ -1356,7 +1321,6 @@ const AMCManagement: React.FC = () => {
     
     try {
       const response = await apiClient.purchaseOrders.create(poData);
-      console.log('Purchase order created for parts replenishment:', response.data);
       
       // Update AMC with linked PO
       const updatedAMC = {
@@ -1451,7 +1415,6 @@ const AMCManagement: React.FC = () => {
     
     try {
       const response = await apiClient.invoices.create(invoiceData);
-      console.log('Invoice generated for AMC:', response.data);
     } catch (error) {
       console.error('Error generating invoice:', error);
     }

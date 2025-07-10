@@ -94,11 +94,8 @@ const PaymentPage: React.FC = () => {
 
     try {
       setSubmitting(true);
-      console.log("paymentForm:",paymentForm);
-      
       
       const response = await apiClient.paymentLinks.processPayment(token, paymentForm);
-      console.log("response--:",response);
       
       if (response.success) {
         setSuccess(true);

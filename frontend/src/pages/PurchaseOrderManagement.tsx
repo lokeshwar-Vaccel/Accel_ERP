@@ -165,9 +165,6 @@ const PurchaseOrderManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  console.log("purchaseOrders:", purchaseOrders);
-
-
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | 'all'>('all');
@@ -314,7 +311,6 @@ const PurchaseOrderManagement: React.FC = () => {
 
     try {
       const response = await apiClient.purchaseOrders.getAll(params);
-      console.log("response-purchaseOrders:", response);
 
       setCurrentPage(response.pagination.page);
       setLimit(response.pagination.limit);
@@ -447,7 +443,6 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const handleEditPO = (po: PurchaseOrder) => {
     setEditingPO(po);
-    console.log("po:", po);
 
     setFormData({
       supplier: typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)._id,
@@ -475,8 +470,6 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const openReceiveModal = (po: PurchaseOrder) => {
-
-    console.log("po:", po);
 
     setSelectedPO(po);
     setReceiveSearchTerm(''); // Clear search when opening modal
@@ -574,9 +567,6 @@ const totalAmount = formData.items.reduce(
         }))
       };
 
-      console.log("poData:", poData);
-
-
       const response = await apiClient.purchaseOrders.create(poData);
 
       setPurchaseOrders([response.data, ...purchaseOrders]);
@@ -612,12 +602,7 @@ const totalAmount = formData.items.reduce(
         }))
       };
 
-      console.log("poData:", poData);
-
-
       const response = await apiClient.purchaseOrders.update(editingPO._id, poData);
-      console.log("response999:", response);
-      console.log("response--9:", purchaseOrders.map(po => po._id === editingPO._id ? response.data : po));
 
       setPurchaseOrders(purchaseOrders.map(po => po._id === editingPO._id ? response.data?.order : po));
       setShowEditModal(false);
@@ -676,11 +661,7 @@ const totalAmount = formData.items.reduce(
 
     setSubmitting(true);
     try {
-      console.log("receiveData:", receiveData);
-
       const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
-
-      console.log("response:", response);
 
       // Use the updated purchase order from the backend response
       const updatedPO = response.data.order;

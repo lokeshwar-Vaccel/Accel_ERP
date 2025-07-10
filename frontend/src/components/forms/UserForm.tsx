@@ -11,25 +11,36 @@ interface UserFormProps {
   onCancel: () => void;
 }
 
+// Define the type for the form state
+interface UserFormState {
+  name: string;
+  email: string;
+  phone: string;
+  role: UserRole;
+  department: string;
+  status: 'active' | 'inactive';
+  permissions: string[];
+}
+
 export const UserForm: React.FC<UserFormProps> = ({ user, onSubmit, onCancel }) => {
-  const [formData, setFormData] = useState({
-    name: user?.name || '',
+  const [formData, setFormData] = useState<UserFormState>({
+    name: user ? `${user.firstName} ${user.lastName}` : '',
     email: user?.email || '',
     phone: user?.phone || '',
-    role: user?.role || 'viewer' as UserRole,
-    department: user?.department || '',
-    status: user?.status || 'active' as 'active' | 'inactive',
-    permissions: user?.permissions || []
+    role: user?.role || UserRole.VIEWER,
+    department: '', // No department on User, so default to empty string
+    status: 'active', // No status on User, so default to 'active'
+    permissions: [], // No permissions on User, so default to []
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const roleOptions = [
-    { value: 'super_admin', label: 'Super Admin' },
-    { value: 'admin', label: 'Admin' },
-    { value: 'manager', label: 'Manager' },
-    { value: 'hr', label: 'HR Manager' },
-    { value: 'viewer', label: 'Viewer' }
+    { value: UserRole.SUPER_ADMIN, label: 'Super Admin' },
+    { value: UserRole.ADMIN, label: 'Admin' },
+    { value: UserRole.MANAGER, label: 'Manager' },
+    { value: UserRole.HR, label: 'HR Manager' },
+    { value: UserRole.VIEWER, label: 'Viewer' }
   ];
 
   const statusOptions = [
@@ -71,36 +82,41 @@ export const UserForm: React.FC<UserFormProps> = ({ user, onSubmit, onCancel }) 
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (validateForm()) {
       // Set permissions based on role
       const permissions = getPermissionsByRole(formData.role);
+      // Split name into firstName and lastName if needed
+      const [firstName, ...rest] = formData.name.split(' ');
+      const lastName = rest.join(' ');
       onSubmit({
         ...formData,
+        firstName,
+        lastName,
         permissions
-      });
+      } as any);
     }
   };
 
   const getPermissionsByRole = (role: UserRole): string[] => {
     switch (role) {
-      case 'super_admin':
+      case UserRole.SUPER_ADMIN:
         return ['all'];
-      case 'admin':
+      case UserRole.ADMIN:
         return ['users', 'crm', 'inventory', 'services', 'amc', 'reports', 'settings'];
-      case 'manager':
+      case UserRole.MANAGER:
         return ['users', 'crm', 'inventory', 'services', 'amc', 'reports'];
-      case 'hr':
+      case UserRole.HR:
         return ['users', 'inventory'];
-      case 'viewer':
+      case UserRole.VIEWER:
         return ['crm', 'services', 'reports'];
       default:
         return [];
     }
   };
 
-  const handleChange = (field: string, value: string) => {
+  const handleChange = (field: keyof UserFormState, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
@@ -113,7 +129,7 @@ export const UserForm: React.FC<UserFormProps> = ({ user, onSubmit, onCancel }) 
         <Input
           label="Full Name"
           value={formData.name}
-          onChange={(e) => handleChange('name', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('name', e.target.value)}
           error={errors.name}
           icon={<UserIcon size={16} />}
           placeholder="Enter full name"
@@ -123,7 +139,7 @@ export const UserForm: React.FC<UserFormProps> = ({ user, onSubmit, onCancel }) 
           label="Email Address"
           type="email"
           value={formData.email}
-          onChange={(e) => handleChange('email', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('email', e.target.value)}
           error={errors.email}
           icon={<Mail size={16} />}
           placeholder="Enter email address"
@@ -132,7 +148,7 @@ export const UserForm: React.FC<UserFormProps> = ({ user, onSubmit, onCancel }) 
         <Input
           label="Phone Number"
           value={formData.phone}
-          onChange={(e) => handleChange('phone', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleChange('phone', e.target.value)}
           error={errors.phone}
           icon={<Phone size={16} />}
           placeholder="Enter phone number"
@@ -141,14 +157,14 @@ export const UserForm: React.FC<UserFormProps> = ({ user, onSubmit, onCancel }) 
         <Select
           label="Role"
           value={formData.role}
-          onChange={(e) => handleChange('role', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleChange('role', e.target.value as UserRole)}
           options={roleOptions}
         />
 
         <Select
           label="Department"
           value={formData.department}
-          onChange={(e) => handleChange('department', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleChange('department', e.target.value)}
           error={errors.department}
           options={departmentOptions}
         />
@@ -156,7 +172,7 @@ export const UserForm: React.FC<UserFormProps> = ({ user, onSubmit, onCancel }) 
         <Select
           label="Status"
           value={formData.status}
-          onChange={(e) => handleChange('status', e.target.value)}
+          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleChange('status', e.target.value as 'active' | 'inactive')}
           options={statusOptions}
         />
       </div>

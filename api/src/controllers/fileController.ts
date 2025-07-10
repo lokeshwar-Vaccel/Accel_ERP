@@ -350,7 +350,7 @@ export const deleteFile = async (
     try {
       await fs.unlink(metadata.path);
     } catch (error) {
-      console.log('File not found on disk, removing from metadata store');
+      console.error('File not found on disk, removing from metadata store');
     }
 
     // Remove from metadata store

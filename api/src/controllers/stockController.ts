@@ -43,9 +43,6 @@ export const getStockLevels = async (
       overStocked?: string;
     };
 
-    console.log('Stock levels request query:', req.query);
-    console.log('Stock status filters - lowStock:', lowStock, 'outOfStock:', outOfStock, 'overStocked:', overStocked);
-
     // Build query
     const query: any = {};
     

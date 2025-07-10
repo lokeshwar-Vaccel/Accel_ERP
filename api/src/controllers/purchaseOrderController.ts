@@ -160,9 +160,6 @@ export const createPurchaseOrder = async (
     }
   }
 
-  console.log("totalAmount:",totalAmount);
-  
-  
   // Prepare order data
   const orderData = {
     ...req.body,
@@ -171,7 +168,6 @@ export const createPurchaseOrder = async (
     orderDate: new Date()
   };
   
-  console.log("orderData:",orderData);
     const order = await PurchaseOrder.create(orderData);
     
     const populatedOrder = await PurchaseOrder.findById(order._id)
@@ -213,9 +209,6 @@ export const updatePurchaseOrder = async (
       }
       req.body.totalAmount = totalAmount;
     }
-
-    console.log("req.body:",req.body);
-    
 
     const updatedOrder = await PurchaseOrder.findByIdAndUpdate(
       req.params.id,
@@ -281,11 +274,8 @@ export const receiveItems = async (
   try {
     const { receivedItems, location, receiptDate, inspectedBy, notes, externalInvoiceNumber, externalInvoiceTotal, supplierName, supplierEmail, items } = req.body;
 
-    console.log("items:",items);
-    
     const order = await PurchaseOrder.findById(req.params.id)
     .populate('items.product', 'name category brand partNo');
-    console.log("order------------:",order);
 
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
@@ -299,8 +289,6 @@ export const receiveItems = async (
     let totalReceivedQuantity = 0;
     const results: { errors: string[] } = { errors: [] };
 
-    console.log("receivedItems:",receivedItems);
-    
     // Process each received item
     for (const receivedItem of receivedItems) {
       const {
@@ -364,12 +352,8 @@ export const receiveItems = async (
         ));
       }
 
-      console.log("newReceivedQuantity:",newReceivedQuantity);
       // Update received quantity in PO
       poItem.receivedQuantity = newReceivedQuantity;
-
-      console.log("poItem:",poItem);
-      
 
       // Find or create stock record
       let stock = await Stock.findOne({
@@ -380,7 +364,6 @@ export const receiveItems = async (
       const currentTime = new Date();
 
       if (stock) {
-        console.log("stock1:",stock);
         
         stock.quantity += validQuantity;
         stock.reservedQuantity = stock.reservedQuantity || 0;
@@ -388,10 +371,8 @@ export const receiveItems = async (
         stock.lastUpdated = currentTime;
         
         const res = await stock.save();
-        console.log("res:",res,"stock:",stock);
         
       } else {
-        console.log("stock2:",stock);
        const ress = stock = await Stock.create({
           product: actualProductId,
           location: location,
@@ -400,7 +381,6 @@ export const receiveItems = async (
           availableQuantity: validQuantity,
           lastUpdated: currentTime
         });
-        console.log("ress:",ress,"stock4:",stock);
       }
 
 
@@ -661,9 +641,6 @@ export const updatePurchaseOrderStatus = async (
       return next(new AppError(`Cannot change status from ${order.status} to ${status}`, 400));
     }
 
-    console.log("order11:",order);
-    
-
     order.status = status;
     await order.save();
 
@@ -674,9 +651,6 @@ export const updatePurchaseOrderStatus = async (
         <p>Your purchase order <strong>${order.poNumber}</strong> has been sent.</p>
         <p>Thank you.</p>`;
       sendEmail(order.supplierEmail, subject, html)
-        .then(() => {
-          console.log('PO email sent to supplier:', order.supplierEmail);
-        })
         .catch((err) => {
           console.error('Error sending PO email:', err);
         });
@@ -759,12 +733,8 @@ const createInvoiceFromPO = async ({
   return Math.round(n * 100) / 100;
 }
 let ans = roundTo2(totalTax)
-console.log("_____ans",ans);
 
 const totalAmount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discountAmount;
-console.log("_______subtotal",subtotal , "_______totalTax",totalTax);
-
-console.log("____totalAmount",totalAmount);
 
   const invoice = new Invoice({
     invoiceNumber,
@@ -791,7 +761,6 @@ console.log("____totalAmount",totalAmount);
   });
 
  let myInvoice = await invoice.save();
-console.log("________myInvoice",myInvoice);
 
   if (reduceStock) {
     for (const item of calculatedItems) {

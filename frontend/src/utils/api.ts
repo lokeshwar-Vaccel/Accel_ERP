@@ -266,7 +266,7 @@ class ApiClient {
   // Billing APIs
   invoices = {
     getAll: (params?: any) =>
-      this.makeRequest<{ success: boolean; data: { invoices: any[] } }>(`/invoices${params ? `?${new URLSearchParams(params)}` : ''}`),
+      this.makeRequest<{ success: boolean; data: { invoices: any[],pagination: any } }>(`/invoices${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     create: (invoiceData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/invoices', {

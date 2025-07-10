@@ -25,9 +25,6 @@ const NotificationBell: React.FC<NotificationBellProps> = ({ className = '' }) =
         // isRead: true
       });
 
-      console.log("response:",response);
-      
-
       const newNotifications = response.data.notifications || [];
       
       if (append) {

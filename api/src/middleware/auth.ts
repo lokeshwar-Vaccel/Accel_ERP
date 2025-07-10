@@ -95,9 +95,6 @@ export const checkPermission = (action: 'read' | 'write' | 'delete') => {
 
     const requestedModule = req.baseUrl.split('/')[3]; // assumes format /api/v1/{module}
 
-    console.log("requestedModule---:",requestedModule);
-    
-
     // Super admin and admin have all permissions
     if (req.user.role === UserRole.SUPER_ADMIN || req.user.role === UserRole.ADMIN) {
       return next();

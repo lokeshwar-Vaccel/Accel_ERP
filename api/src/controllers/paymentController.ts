@@ -126,7 +126,6 @@ export const verifyRazorpayPayment = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    console.log('Payment verification request body:', req.body);
     
     const { 
       razorpay_order_id, 
@@ -135,53 +134,24 @@ export const verifyRazorpayPayment = async (
       paymentId 
     } = req.body as RazorpayPaymentVerification & { paymentId: string };
 
-    console.log('Extracted payment verification data:', {
-      razorpay_order_id,
-      razorpay_payment_id,
-      razorpay_signature: razorpay_signature ? 'PRESENT' : 'MISSING',
-      paymentId
-    });
-
     // Validate input
     if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature || !paymentId) {
-      console.log('Missing required parameters:', {
-        hasOrderId: !!razorpay_order_id,
-        hasPaymentId: !!razorpay_payment_id,
-        hasSignature: !!razorpay_signature,
-        hasPaymentRecordId: !!paymentId
-      });
       return next(new AppError('Missing required payment verification parameters', 400));
     }
 
     // Find payment record
-    console.log('Looking for payment record with ID:', paymentId);
     const payment = await Payment.findById(paymentId);
     if (!payment) {
-      console.log('Payment record not found for ID:', paymentId);
       return next(new AppError('Payment record not found', 404));
     }
-    console.log('Found payment record:', {
-      id: payment._id,
-      invoiceId: payment.invoiceId,
-      amount: payment.amount,
-      status: payment.paymentStatus
-    });
 
     // Verify signature
-    console.log('Verifying signature with key:', process.env.RAZORPAY_KEY_SECRET ? 'PRESENT' : 'MISSING');
     const expectedSignature = crypto
       .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest('hex');
 
-    console.log('Signature verification:', {
-      expected: expectedSignature,
-      received: razorpay_signature,
-      match: expectedSignature === razorpay_signature
-    });
-
     if (expectedSignature !== razorpay_signature) {
-      console.log('Signature verification failed');
       payment.paymentStatus = 'failed';
       payment.metadata = {
         ...payment.metadata,
@@ -193,7 +163,6 @@ export const verifyRazorpayPayment = async (
 
       return next(new AppError('Payment verification failed - invalid signature', 400));
     }
-    console.log('Signature verification successful');
 
     // Update payment record
     payment.razorpayPaymentId = razorpay_payment_id;
@@ -439,7 +408,7 @@ export const razorpayWebhook = async (
         await handleOrderPaid(payload);
         break;
       default:
-        console.log(`Unhandled webhook event: ${event}`);
+        console.error(`Unhandled webhook event: ${event}`);
     }
 
     res.status(200).json({ received: true });

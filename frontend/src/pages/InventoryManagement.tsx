@@ -501,7 +501,6 @@ const InventoryManagement: React.FC = () => {
         // Update existing location
         const response = await apiClient.stock.updateRack(selectedRack._id, rackFormData);
         const updatedRack = (response.data as any).rack || response.data;
-        console.log("updatedRack:", updatedRack);
 
         setRacks(racks.map(loc =>
           loc._id === selectedRack._id ? updatedRack : loc
@@ -611,9 +610,7 @@ const InventoryManagement: React.FC = () => {
     };
 
     try {
-      console.log('Fetching inventory with params:', params);
       const response = await apiClient.stock.getStock(params);
-      console.log('Inventory response:', response);
 
       setCurrentPage(response.pagination.page);
       setLimit(response.pagination.limit);
@@ -628,7 +625,6 @@ const InventoryManagement: React.FC = () => {
           stockData = response.data.stockLevels;
         }
       }
-      console.log('Processed stock data:', stockData);
       setInventory(stockData);
     } catch (error) {
       console.error('Error fetching inventory:', error);
@@ -710,7 +706,6 @@ const InventoryManagement: React.FC = () => {
 
 
       // const roomsInLocation = roomsData.filter(room => room.location._id === racks.location._id);
-      // console.log("rackFormData:",roomsInLocation);
       // setFilteredRooms(roomsInLocation);
       setRooms(roomsData);
     } catch (error) {

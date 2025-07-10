@@ -15,7 +15,7 @@ const HomeHeader: React.FC = () => {
 
   return (
     <div className="flex justify-end items-center p-4 bg-gray-50 border-b">
-      <span className="mr-4 text-gray-700">Hello, {user.name}</span>
+      <span className="mr-4 text-gray-700">Hello, {user.email}</span>
       <button
         onClick={handleLogout}
         className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600 transition"

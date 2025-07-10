@@ -56,7 +56,6 @@ const AdminSettings: React.FC = () => {
       setError(null);
       
       const response = await apiClient.admin.getSettings();
-      console.log('Settings API Response:', response);
       
       // Handle the correct response structure: response.data.settings
       const settingsData = response.data?.settings || [];

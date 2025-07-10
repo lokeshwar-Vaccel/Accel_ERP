@@ -193,9 +193,7 @@ const CommunicationManagement: React.FC = () => {
 
   const fetchMessages = async () => {
     try {
-      console.log('Fetching messages...');
       const response = await apiClient.communications.getHistory();
-      console.log('Messages response:', response);
       
       let messagesData: CommunicationMessage[] = [];
       if (response.success && response.data) {

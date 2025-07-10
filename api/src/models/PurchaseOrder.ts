@@ -181,7 +181,6 @@ purchaseOrderSchema.pre('save', async function (this: IPurchaseOrderSchema, next
       }
 
       this.poNumber = `PO-${year}${month}-${String(sequence).padStart(4, '0')}`;
-      console.log('Generated PO number:', this.poNumber);
     } catch (error) {
       console.error('Error generating PO number:', error);
       return next(error as Error);

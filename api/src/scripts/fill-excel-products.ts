@@ -28,7 +28,6 @@ const excelProducts = [
 
 async function main() {
   await mongoose.connect(MONGODB_URI);
-  console.log('Connected to MongoDB');
 
   let insertedProducts = 0;
   let insertedStocks = 0;
@@ -74,7 +73,6 @@ async function main() {
     insertedStocks++;
   }
 
-  console.log(`Inserted ${insertedProducts} products and ${insertedStocks} stocks from Excel screenshot.`);
   await mongoose.disconnect();
 }
 

@@ -320,7 +320,6 @@ const generatePaymentConfirmationTemplate = (
 // Main email service class
 export class InvoiceEmailService {
   private static async getCustomerInfo(invoice: IInvoice): Promise<any> {
-    console.log("invoice--2:",invoice);
     
     if (invoice.customer) {
       return await Customer.findById(invoice.customer).lean();
@@ -369,8 +368,6 @@ export class InvoiceEmailService {
       // Get customer information
       const customer = await this.getCustomerInfo(invoice);
 
-      console.log("customer:",customer);
-      
       if (!customer?.email) {
         return { success: false, message: 'Customer email not found' };
       }
@@ -419,7 +416,6 @@ export class InvoiceEmailService {
       }
 
       const customer = await this.getCustomerInfo(invoice);
-      console.log("customer--1:",invoice,customer);
       
       if (!customer?.email) {
         return { success: false, message: 'Customer email not found' };
@@ -430,8 +426,6 @@ export class InvoiceEmailService {
       const today = new Date();
       const daysOverdue = Math.floor((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
 
-      console.log("daysOverdue:",daysOverdue);
-      
       // if (daysOverdue <= 0) {
       //   return { success: false, message: 'Invoice is not overdue yet' };
       // }

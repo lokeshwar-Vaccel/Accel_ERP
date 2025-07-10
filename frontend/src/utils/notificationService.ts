@@ -1,6 +1,4 @@
 import { apiClient } from './api';
-import { generateNotification } from '../redux/notifications/notificationSlice';
-
 // Notification types
 export type NotificationType = 
   | 'assignment' 
@@ -204,7 +202,6 @@ class NotificationService {
       this.eventSource = new EventSource(`${baseUrl}/api/v1/notifications/stream?userId=${userId}`);
 
       this.eventSource.onopen = () => {
-        console.log('Real-time notification connection established');
         this.reconnectAttempts = 0;
       };
 
@@ -231,7 +228,6 @@ class NotificationService {
   private handleReconnect(userId: string, onNotification: (notification: any) => void) {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
       
       setTimeout(() => {
         this.initializeRealTimeNotifications(userId, onNotification);

@@ -1127,7 +1127,15 @@ const ReportsManagement: React.FC = () => {
             <div>
               <p className="text-xs text-gray-600">Avg Rating</p>
               <p className="text-xl font-bold text-purple-600">
-                {(engineerPerformance?.engineerStats.reduce((sum, eng) => sum + eng.customerRating, 0) / (engineerPerformance?.engineerStats.length || 1) || 0).toFixed(1)}/5
+                {engineerPerformance?.engineerStats
+                  ? (
+                      engineerPerformance.engineerStats.reduce(
+                        (sum, eng) => sum + (eng.customerRating ?? 0),
+                        0
+                      ) / (engineerPerformance.engineerStats.length || 1)
+                    ).toFixed(1)
+                  : "0.0"
+                }/5
               </p>
             </div>
             <CheckCircle className="w-6 h-6 text-purple-600" />

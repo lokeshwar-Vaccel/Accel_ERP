@@ -29,8 +29,6 @@ export const previewPurchaseOrderImport = async (
       return next(new AppError('No data found in file', 400));
     }
 
-    console.log('Previewing raw data:', rawData.length, 'rows');
-
     // Group data by ORDER NO (PO number)
     const groupedOrders = new Map<string, PurchaseOrderImportInput[]>();
     
@@ -46,8 +44,6 @@ export const previewPurchaseOrderImport = async (
       }
       groupedOrders.get(orderNo)!.push(row);
     }
-
-    console.log(`Found ${groupedOrders.size} unique orders to preview`);
 
     const preview = {
       ordersToCreate: [] as any[],
@@ -190,19 +186,6 @@ export const importPurchaseOrders = async (
       return next(new AppError('No data found in file', 400));
     }
 
-    console.log('Imported raw data:', rawData.length, 'rows');
-
-    // Debug: Show Excel column names
-    if (rawData.length > 0) {
-      console.log('Excel column names found:', Object.keys(rawData[0]));
-    }
-
-    // Debug: Show first few rows of raw data
-    console.log('First 3 rows of Excel data:');
-    rawData.slice(0, 3).forEach((row, index) => {
-      console.log(`Row ${index + 1}:`, JSON.stringify(row, null, 2));
-    });
-
     // Group data by ORDER NO (PO number)
     const groupedOrders = new Map<string, PurchaseOrderImportInput[]>();
     
@@ -218,8 +201,6 @@ export const importPurchaseOrders = async (
       }
       groupedOrders.get(orderNo)!.push(row);
     }
-
-    console.log(`Found ${groupedOrders.size} unique orders to import`);
 
     const results = {
       successful: 0,
@@ -249,7 +230,6 @@ export const importPurchaseOrders = async (
             let product = await Product.findOne({ partNo: item['Part No'] });
             
             if (!product) {
-              console.log(`Creating new product: ${item['Part No']}`);
               // Create product if it doesn't exist
               product = await Product.create({
                 name: item['Part Description'],
@@ -267,9 +247,6 @@ export const importPurchaseOrders = async (
                 rack: rackId,         // Use default rack ObjectId
                 createdBy: req.user!.id
               });
-              console.log(`Successfully created product: ${product._id}`);
-            } else {
-              console.log(`Using existing product: ${product._id} for ${item['Part No']}`);
             }
 
             processedItems.push({
@@ -285,12 +262,8 @@ export const importPurchaseOrders = async (
           }
         }
 
-        console.log(`Processed ${processedItems.length} items for order ${orderNo}`);
-
         // Calculate total amount
         const totalAmount = processedItems.reduce((sum, item) => sum + item.totalPrice, 0);
-
-        console.log(`Creating purchase order ${orderNo} with total amount: ${totalAmount}`);
 
         // Check if PO number already exists and generate unique one if needed
         let uniquePONumber = orderNo;
@@ -298,7 +271,6 @@ export const importPurchaseOrders = async (
         while (await PurchaseOrder.findOne({ poNumber: uniquePONumber })) {
           uniquePONumber = `${orderNo}-${counter}`;
           counter++;
-          console.log(`PO number ${orderNo} exists, trying ${uniquePONumber}`);
         }
 
         // Create purchase order
@@ -315,8 +287,6 @@ export const importPurchaseOrders = async (
           createdBy: req.user!.id,
           orderDate: new Date()
         };
-
-        console.log('Purchase order data:', JSON.stringify(purchaseOrderData, null, 2));
 
         // Validate required fields before creating
         if (!purchaseOrderData.poNumber) {
@@ -355,8 +325,6 @@ export const importPurchaseOrders = async (
           totalAmount: totalAmount,
           _id: purchaseOrder._id
         });
-
-        console.log(`Successfully created PO: ${orderNo} with ID: ${purchaseOrder._id} and ${processedItems.length} items`);
 
       } catch (error: any) {
         results.failed++;
@@ -436,8 +404,6 @@ const getExpectedDeliveryDate = (month: string, year: string): Date => {
   const futureDate = new Date();
   futureDate.setDate(futureDate.getDate() + 30); // 30 days from now
   
-  console.log(`Setting expected delivery date to: ${futureDate.toISOString()} (30 days from now)`);
-  
   return futureDate;
   
   // Original logic (kept for reference but commented out):
@@ -461,8 +427,6 @@ const getDefaultLocationRoomRack = async () => {
     let roomId = new mongoose.Types.ObjectId('60a6c8b5d0f2d8001c8e5002'); // Default ObjectId 
     let rackId = new mongoose.Types.ObjectId('60a6c8b5d0f2d8001c8e5003'); // Default ObjectId
 
-    console.log('Using default location/room/rack IDs for import');
-    
     return {
       locationId,
       roomId,
