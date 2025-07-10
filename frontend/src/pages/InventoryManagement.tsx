@@ -130,11 +130,7 @@ const InventoryManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Search and filter states
-  const [searchTerm, setSearchTerm] = useState('');
-  const [locationFilter, setLocationFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [categoryFilter, setCategoryFilter] = useState('all');
+  // Search and filter states - these are now handled by the filters object
 
   // Custom dropdown states
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
@@ -235,8 +231,9 @@ const InventoryManagement: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalItems, setTotalItems] = useState(0);
+  const [limit, setLimit] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalDatas, setTotalDatas] = useState(0);
 
   const [filters, setFilters] = useState<any>({
     search: '',
@@ -252,122 +249,6 @@ const InventoryManagement: React.FC = () => {
     setCurrentPage(1);
   }, []);
 
-  const itemsPerPage = 10;
-
-  const filteredInventory = React.useMemo(() => {
-    let items = [...inventory];
-
-    // Search filter
-    if (filters.search) {
-      items = items.filter(item =>
-      (item.product?.name?.toLowerCase().includes(filters.search.toLowerCase()) ||
-        item.product?.brand?.toLowerCase().includes(filters.search.toLowerCase()) ||
-        item.product?.partNo?.toLowerCase().includes(filters.search.toLowerCase()) ||
-        item.location?.name?.toLowerCase().includes(filters.search.toLowerCase()))
-      );
-    }
-
-
-    // Category filter
-    if (filters.category && filters.category !== 'all') {
-      items = items.filter(item => item.product?.category === filters.category);
-    }
-
-    // Location filter
-    if (filters.location) {
-      items = items.filter(item => item.location?._id === filters.location);
-    }
-    if (filters.room) {
-      items = items.filter(item => item.room?._id === filters.room);
-    }
-    if (filters.rack) {
-      items = items.filter(item => item.rack?._id === filters.rack);
-    }
-
-    if (filters.dept) {
-      items = items.filter(item => item.product?.dept === filters.dept);
-    }
-
-    if (filters.brand) {
-      items = items.filter(item => item.product?.brand === filters.brand);
-    }
-
-    // Stock status filter
-    if (filters.stockStatus && filters.stockStatus !== 'all') {
-      items = items.filter(item => {
-        if (filters.stockStatus === 'low_stock') {
-          return item.quantity <= (item.product?.minStockLevel || 0) && item.quantity > 0;
-        }
-        if (filters.stockStatus === 'out_of_stock') {
-          return item.quantity === 0;
-        }
-        return true;
-      });
-    }
-
-    // Sort items
-    if (filters.sortBy && filters.sortOrder) {
-      items.sort((a, b) => {
-        let aValue, bValue;
-
-        switch (filters.sortBy) {
-          case 'name':
-            aValue = a.product?.name || '';
-            bValue = b.product?.name || '';
-            break;
-          case 'category':
-            aValue = a.product?.category || '';
-            bValue = b.product?.category || '';
-            break;
-          case 'brand':
-            aValue = a.product?.brand || '';
-            bValue = b.product?.brand || '';
-            break;
-          case 'location':
-            aValue = a.location?.name || '';
-            bValue = b.location?.name || '';
-            break;
-          case 'quantity':
-            aValue = a.quantity || 0;
-            bValue = b.quantity || 0;
-            break;
-          case 'price':
-            aValue = a.product?.price || 0;
-            bValue = b.product?.price || 0;
-            break;
-          case 'lastUpdated':
-            aValue = new Date(a.lastUpdated || 0);
-            bValue = new Date(b.lastUpdated || 0);
-            break;
-          default:
-            aValue = a.product?.name || '';
-            bValue = b.product?.name || '';
-        }
-
-        if (filters.sortOrder === 'asc') {
-          return aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
-        } else {
-          return aValue > bValue ? -1 : aValue < bValue ? 1 : 0;
-        }
-      });
-    }
-
-    return items;
-  }, [inventory, filters]);
-
-  const paginatedInventory = React.useMemo(() => {
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    return filteredInventory.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredInventory, currentPage]);
-
-  React.useEffect(() => {
-    setTotalPages(Math.max(1, Math.ceil(filteredInventory.length / itemsPerPage)));
-    setTotalItems(filteredInventory.length);
-    if (currentPage > Math.ceil(filteredInventory.length / itemsPerPage)) {
-      setCurrentPage(1);
-    }
-  }, [filteredInventory]);
-
   // Fix getStockStatusTable: remove maxStockLevel check
   const getStockStatusTable = (item: StockItem) => {
     if (item.quantity === 0) {
@@ -376,40 +257,16 @@ const InventoryManagement: React.FC = () => {
     if (item.quantity <= (item.product?.minStockLevel || 0)) {
       return { label: 'Low Stock', variant: 'warning' as const, icon: TrendingDown };
     }
+    if (item.quantity > ((item.product?.minStockLevel || 0) * 3)) {
+      return { label: 'Overstocked', variant: 'info' as const, icon: TrendingUp };
+    }
     return { label: 'In Stock', variant: 'success' as const, icon: Package };
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0
-    }).format(amount);
-  };
-
-  const handlePageChange = (page: number) => {
+    const handlePageChange = (page: number) => {
     setCurrentPage(page);
-    if (true) {
-      // fetchStockItems(page);
-    } else {
-      // fetchTransactions(page);
-    }
   };
 
-  const rackOptions = [
-    { value: '', label: 'All Racks' },
-    { value: 'A2', label: 'Rack A2' },
-    { value: 'D2', label: 'Rack D2' },
-    { value: 'D3', label: 'Rack D3' },
-    { value: 'E1', label: 'Rack E1' },
-    { value: 'E2', label: 'Rack E2' },
-    { value: 'E3', label: 'Rack E3' },
-    { value: 'E6', label: 'Rack E6' },
-    { value: 'E7', label: 'Rack E7' },
-    { value: 'P2', label: 'Rack P2' },
-    { value: 'GD', label: 'Rack GD' }
-  ];
 
   const stockStatusOptions = [
     { value: 'all', label: 'All Stock Levels' },
@@ -419,12 +276,12 @@ const InventoryManagement: React.FC = () => {
   ];
 
   const sortByOptions = [
-    { value: 'name', label: 'Product Name' },
-    { value: 'category', label: 'Category' },
-    { value: 'brand', label: 'Brand' },
-    { value: 'location', label: 'Location' },
+    { value: 'product.name', label: 'Product Name' },
+    { value: 'product.category', label: 'Category' },
+    { value: 'product.brand', label: 'Brand' },
+    { value: 'location.name', label: 'Location' },
     { value: 'quantity', label: 'Quantity' },
-    { value: 'price', label: 'Price' },
+    { value: 'product.price', label: 'Price' },
     { value: 'lastUpdated', label: 'Last Updated' }
   ];
 
@@ -442,25 +299,6 @@ const InventoryManagement: React.FC = () => {
     const option = sortOrderOptions.find(opt => opt.value === filters.sortOrder);
     return option ? option.label : 'A-Z (Ascending)';
   };
-
-  const deptOptions = [
-    { value: '', label: 'All Departments' },
-    { value: 'RETAIL', label: 'Retail' },
-    { value: 'INDUSTRIAL', label: 'Industrial' },
-    { value: 'TELECOM', label: 'Telecom' },
-    { value: 'EV', label: 'EV' },
-    { value: 'RET/TEL', label: 'Retail/Telecom' }
-  ];
-
-  const makeOptions = [
-    { value: '', label: 'All Makes' },
-    { value: 'MAHINDRA', label: 'Mahindra' },
-    { value: 'KOEL', label: 'Koel' },
-    { value: 'CUMMINS', label: 'Cummins' },
-    { value: 'ASHOKLEYLAND', label: 'Ashok Leyland' },
-    { value: 'PHFL', label: 'PHFL' },
-    { value: 'EICHER', label: 'Eicher' }
-  ];
 
   const handleRoomModalClose = () => {
     setRoomFormData({
@@ -515,9 +353,9 @@ const InventoryManagement: React.FC = () => {
     }))
   ];
 
-  // Extract unique departments
+  // Extract unique departments from all products
   const uniqueDepts = Array.from(
-    new Set(inventory.map(item => item.product?.dept).filter(Boolean))
+    new Set(products.map(product => product.dept).filter(Boolean))
   ) as string[];
 
   const deptOptionsFilter = [
@@ -528,9 +366,9 @@ const InventoryManagement: React.FC = () => {
     }))
   ];
 
-  // Extract unique brands
+  // Extract unique brands from all products
   const uniqueBrands = Array.from(
-    new Set(inventory.map(item => item.product?.brand).filter(Boolean))
+    new Set(products.map(product => product.brand).filter(Boolean))
   ) as string[];
 
   const brandOptionsFilter = [
@@ -745,8 +583,36 @@ const InventoryManagement: React.FC = () => {
   };
 
   const fetchInventory = async () => {
+    // Build sort parameter from filters
+    const sortField = filters.sortBy || 'name';
+    const sortDirection = filters.sortOrder === 'desc' ? '-' : '';
+    const sortParam = `${sortDirection}${sortField}`;
+
+    const params: any = {
+      page: currentPage,
+      limit,
+      sort: sortParam,
+      search: filters.search,
+      ...(filters.category && { category: filters.category }),
+      ...(filters.dept && { dept: filters.dept }),
+      ...(filters.brand && { brand: filters.brand }),
+      ...(filters.location && { location: filters.location }),
+      ...(filters.room && { room: filters.room }),
+      ...(filters.rack && { rack: filters.rack }),
+      ...(filters.stockStatus === 'low_stock' && { lowStock: 'true' }),
+      ...(filters.stockStatus === 'out_of_stock' && { outOfStock: 'true' }),
+      ...(filters.stockStatus === 'overstocked' && { overStocked: 'true' }),
+    };
+
     try {
-      const response = await apiClient.stock.getStock();
+      console.log('Fetching inventory with params:', params);
+      const response = await apiClient.stock.getStock(params);
+      console.log('Inventory response:', response);
+
+      setCurrentPage(response.pagination.page);
+      setLimit(response.pagination.limit);
+      setTotalDatas(response.pagination.total);
+      setTotalPages(response.pagination.pages);
       // Handle different response formats from backend
       let stockData: any[] = [];
       if (response.data) {
@@ -756,6 +622,7 @@ const InventoryManagement: React.FC = () => {
           stockData = response.data.stockLevels;
         }
       }
+      console.log('Processed stock data:', stockData);
       setInventory(stockData);
     } catch (error) {
       console.error('Error fetching inventory:', error);
@@ -763,19 +630,40 @@ const InventoryManagement: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    fetchInventory();
+  }, [currentPage, limit, filters]);
+
   const fetchProducts = async () => {
     try {
-      const response = await apiClient.products.getAll();
-      // Handle response format like in ProductManagement
-      let productsData: any[] = [];
-      if (response.data) {
-        if (Array.isArray(response.data)) {
-          productsData = response.data;
-        } else if ((response.data as any).products && Array.isArray((response.data as any).products)) {
-          productsData = (response.data as any).products;
+      let allProducts: any[] = [];
+      let page = 1;
+      let hasMore = true;
+
+      
+      
+      while (hasMore) {
+        const response: any = await apiClient.products.getAll({ page, limit: 100 });
+        let productsData: any[] = [];
+        if (response?.data) {
+          if (Array.isArray(response.data)) {
+            productsData = response.data;
+          } else if (response.data.products && Array.isArray(response.data.products)) {
+            productsData = response.data.products;
+          }
+        }
+        allProducts = allProducts.concat(productsData);
+
+        // Check if there are more pages
+        const pagination = response?.pagination || response?.data?.pagination;
+        if (pagination && pagination.pages && page < pagination.pages) {
+          page += 1;
+        } else {
+          hasMore = false;
         }
       }
-      setProducts(productsData);
+
+      setProducts(allProducts);
     } catch (error) {
       console.error('Error fetching products:', error);
       setProducts([]);
@@ -1373,7 +1261,8 @@ const InventoryManagement: React.FC = () => {
     if (!product) return 'unknown';
 
     if (item.quantity <= 0) return 'out_of_stock';
-    if (item.quantity <= product.minStockLevel) return 'low_stock';
+    if (item.quantity <= (product.minStockLevel || 0)) return 'low_stock';
+    if (item.quantity > ((product.minStockLevel || 0) * 3)) return 'overstocked';
     return 'in_stock';
   };
 
@@ -1385,6 +1274,8 @@ const InventoryManagement: React.FC = () => {
         return 'text-yellow-800 bg-yellow-100';
       case 'out_of_stock':
         return 'text-red-800 bg-red-100';
+      case 'overstocked':
+        return 'text-blue-800 bg-blue-100';
       default:
         return 'text-gray-800 bg-gray-100';
     }
@@ -1529,10 +1420,10 @@ const InventoryManagement: React.FC = () => {
       color: 'red'
     },
     {
-      title: 'Total Locations',
-      value: Array.isArray(locations) ? locations.length.toString() : '0',
-      icon: <Truck className="w-6 h-6" />,
-      color: 'green'
+      title: 'Overstocked',
+      value: Array.isArray(inventory) ? inventory.filter(item => getStockStatus(item) === 'overstocked').length.toString() : '0',
+      icon: <TrendingUp className="w-6 h-6" />,
+      color: 'purple'
     }
   ];
 
@@ -1778,6 +1669,12 @@ const InventoryManagement: React.FC = () => {
                 Low Stock
               </button>
               <button
+                onClick={() => onFiltersChange({ stockStatus: 'overstocked' })}
+                className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-md hover:bg-purple-100 transition-colors border border-purple-200 text-xs font-medium"
+              >
+                Overstocked
+              </button>
+              <button
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                 className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-xs font-medium flex items-center gap-1.5"
               >
@@ -1949,8 +1846,8 @@ const InventoryManagement: React.FC = () => {
                         onClick={() => !filters.location ? null : setShowRoomFilterDropdown(!showRoomFilterDropdown)}
                         disabled={!filters.location}
                         className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${!filters.location
-                            ? 'cursor-not-allowed bg-gray-50 text-gray-400'
-                            : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                          ? 'cursor-not-allowed bg-gray-50 text-gray-400'
+                          : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                           }`}
                       >
                         <span className="truncate mr-1">
@@ -1989,8 +1886,8 @@ const InventoryManagement: React.FC = () => {
                         onClick={() => !filters.room ? null : setShowRackFilterDropdown(!showRackFilterDropdown)}
                         disabled={!filters.room}
                         className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${!filters.room
-                            ? 'cursor-not-allowed bg-gray-50 text-gray-400'
-                            : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                          ? 'cursor-not-allowed bg-gray-50 text-gray-400'
+                          : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                           }`}
                       >
                         <span className="truncate mr-1">
@@ -2175,7 +2072,7 @@ const InventoryManagement: React.FC = () => {
         {(filters.search || filters.category || filters.dept || filters.brand || filters.location || filters.room || filters.rack || filters.stockStatus !== 'all' || filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
           <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-100">
             <div className="flex items-center text-sm text-gray-600">
-              <span className="font-medium">{filteredInventory.length}</span>
+              <span className="font-medium">{inventory.length}</span>
               <span className="mx-1">of</span>
               <span>{inventory.length}</span>
               <span className="ml-1">items found</span>
@@ -2292,12 +2189,12 @@ const InventoryManagement: React.FC = () => {
                 <tr>
                   <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Loading inventory...</td>
                 </tr>
-              ) : paginatedInventory.length === 0 ? (
+              ) : inventory.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No inventory items found</td>
                 </tr>
               ) : (
-                paginatedInventory.map((item, idx) => {
+                inventory.map((item, idx) => {
                   const status = getStockStatusTable(item);
                   const StatusIcon = status.icon;
                   return (
@@ -2436,6 +2333,14 @@ const InventoryManagement: React.FC = () => {
 
         </div>
       </div>
+
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={handlePageChange}
+                    totalItems={totalDatas}
+                    itemsPerPage={limit}
+                  />
 
       {/* Add Location Modal */}
       {showLocationModal && (
@@ -4145,12 +4050,6 @@ const InventoryManagement: React.FC = () => {
           </div>
         </div>
       )}
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        totalItems={totalItems}
-        onPageChange={handlePageChange}
-      />
     </div>
   );
 };
