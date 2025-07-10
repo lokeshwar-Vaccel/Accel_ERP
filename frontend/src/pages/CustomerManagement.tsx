@@ -417,9 +417,18 @@ const CustomerManagement: React.FC = () => {
     if (!customerFormData.phone.trim()) {
       errors.phone = 'Phone number is required';
     }
-    // Validate at least one address and that all addresses are filled
-    if (!customerFormData.addresses.length || customerFormData.addresses.some(addr => !addr.address.trim())) {
-      errors.address = 'At least one address is required and all addresses must be filled';
+    // Enhanced address validation
+    if (!customerFormData.addresses.length) {
+      errors.address = 'At least one address is required';
+    } else {
+      const emptyAddress = customerFormData.addresses.some(addr => !addr.address.trim());
+      if (emptyAddress) {
+        errors.address = 'All address fields must be filled';
+      }
+      const primaryCount = customerFormData.addresses.filter(addr => addr.isPrimary).length;
+      if (primaryCount !== 1) {
+        errors.address = 'There must be exactly one primary address';
+      }
     }
     if (customerFormData.email && !/\S+@\S+\.\S+/.test(customerFormData.email)) {
       errors.email = 'Please enter a valid email address';
@@ -856,7 +865,7 @@ const CustomerManagement: React.FC = () => {
             />
           </div>
           {/* Tab Navigation inside filter card, right side */}
-          <div className="flex space-x-2">
+          {/* <div className="flex space-x-2">
             {tabOptions.map(tab => (
               <button
                 key={tab.value}
@@ -866,7 +875,7 @@ const CustomerManagement: React.FC = () => {
                 {tab.label}
               </button>
             ))}
-          </div>
+          </div> */}
         </div>
 
         <div className="mt-4 flex items-center justify-between">
@@ -1026,6 +1035,7 @@ const CustomerManagement: React.FC = () => {
               <button
                 onClick={() => {
                   setShowAddModal(false);
+                  resetCustomerForm();
                   setShowAssignedToDropdown(false);
                 }}
                 className="text-gray-400 hover:text-gray-600"
@@ -1033,17 +1043,20 @@ const CustomerManagement: React.FC = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitCustomer(); }} className="p-4">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitCustomer(); }}>
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
                 </div>
               )}
-              <div className="flex flex-col md:flex-row gap-6">
+              <div className="flex flex-1">
                 {/* Left: Main Fields */}
-                <div className="flex-1 space-y-4">
-                  <div className="grid grid-cols-3 gap-4">
-                    {/* Customer Name, Type, Email, Phone, Lead Source, Assigned To */}
+                <div className="w-1/2 border-r border-gray-200 flex flex-col p-4">
+                <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
+                    </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Customer Name, Type, Email, Phone */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Customer Name *
@@ -1093,6 +1106,8 @@ const CustomerManagement: React.FC = () => {
                         </div>
                       )}
                     </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Email
@@ -1114,7 +1129,7 @@ const CustomerManagement: React.FC = () => {
                         Phone Number *
                       </label>
                       <input
-                        type="tel"
+                        type="number"
                         value={customerFormData.phone}
                         onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
                         className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'
@@ -1125,7 +1140,8 @@ const CustomerManagement: React.FC = () => {
                         <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
                       )}
                     </div>
-
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Lead Source
@@ -1144,7 +1160,7 @@ const CustomerManagement: React.FC = () => {
                       </label>
                       <div className="relative dropdown-container">
                         <button
-
+                          disabled={user?.role === 'hr'}
                           type="button"
                           onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
                           className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
@@ -1188,10 +1204,9 @@ const CustomerManagement: React.FC = () => {
                         )}
                       </div>
                     </div>
-
                   </div>
 
-                  <div className='p-1'>
+                  <div className='mt-4'>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Notes
                     </label>
@@ -1204,62 +1219,9 @@ const CustomerManagement: React.FC = () => {
                     />
                   </div>
 
-
-                  {/* Addresses Section */}
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-lg font-semibold text-gray-800">Addresses</h3>
-                      <button
-                        type="button"
-                        onClick={addAddress}
-                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
-                      >
-                        Add Address
-                      </button>
-                    </div>
-                    {customerFormData.addresses.map((address, index) => (
-                      <div
-                        key={address.id}
-                        className="border rounded p-3 mb-2 bg-white flex flex-col"
-                      >
-                        <div className="flex justify-between my-1">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Address {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
-                          </label>
-                          {!address.isPrimary && (
-                            <button
-                              type="button"
-                              onClick={() => setPrimaryAddress(address.id)}
-                              className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
-                            >
-                              Set as Primary
-                            </button>
-                          )}
-                        </div>
-                        <textarea
-                          value={address.address}
-                          onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                          placeholder="Enter full address"
-                        />
-                        <div className="flex gap-2 mt-2">
-                          {customerFormData.addresses.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeAddress(address.id)}
-                              className="px-2 py-1 text-red-500 rounded text-xs"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
                 </div>
                 {/* Right: Addresses */}
-                <div className="w-full md:w-96">
+                <div className="w-1/2 p-4">
                   <div className="space-y-4">
                     <div className="flex items-center justify-between mb-2">
                       <h3 className="text-lg font-semibold text-gray-800">Addresses</h3>
@@ -1271,52 +1233,63 @@ const CustomerManagement: React.FC = () => {
                         Add Address
                       </button>
                     </div>
-                    {customerFormData.addresses.map((address, index) => (
-                      <div
-                        key={address.id}
-                        className="border rounded p-3 mb-2 bg-white flex flex-col"
-                      >
-                        <div className="flex justify-between my-1">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Address {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
-                          </label>
-                          {!address.isPrimary && (
-                            <button
-                              type="button"
-                              onClick={() => setPrimaryAddress(address.id)}
-                              className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
-                            >
-                              Set as Primary
-                            </button>
-                          )}
+
+                    {/* Scrollable container for address list */}
+                    <div className="max-h-80 overflow-y-auto pr-1 space-y-2">
+                      {customerFormData.addresses.map((address, index) => (
+                        <div
+                          key={address.id}
+                          className="border rounded px-3 pb-3 pt-2 bg-white flex justify-between"
+                        >
+                          <div className='flex-1'>
+                            <div className="flex justify-between my-1">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Address {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                              </label>
+                              {!address.isPrimary && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPrimaryAddress(address.id)}
+                                  className="px-2 py-1 mb-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
+                                >
+                                  Set as Primary
+                                </button>
+                              )}
+                            </div>
+                            <textarea
+                              value={address.address}
+                              onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                              placeholder="Enter full address"
+                            />
+                          </div>
+                          <div className="flex gap-2 ps-2 mt-10 mb-8">
+                            {customerFormData.addresses.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeAddress(address.id)}
+                                className="text-red-500 rounded text-xs"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <textarea
-                          value={address.address}
-                          onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                          placeholder="Enter full address"
-                        />
-                        <div className="flex gap-2 mt-2">
-                          {customerFormData.addresses.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeAddress(address.id)}
-                              className="px-2 py-1 text-red-500 rounded text-xs"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                      {formErrors.address && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
+
               </div>
-              <div className="flex space-x-3 pt-4">
+              <div className="flex space-x-3 p-4 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={() => {
                     setShowAddModal(false);
+                    resetCustomerForm();
                     setShowAssignedToDropdown(false);
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -1586,6 +1559,9 @@ const CustomerManagement: React.FC = () => {
                           </div>
                         </div>
                       ))}
+                      {formErrors.address && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
+                      )}
                     </div>
                   </div>
                 </div>

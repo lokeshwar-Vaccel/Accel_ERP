@@ -182,9 +182,9 @@ export const createInvoice = async (
       subtotal += itemTotal;
       totalTax += taxAmount;
     }
-      function roundTo2(n: number) {
-  return Math.round(n * 100) / 100;
-}
+    function roundTo2(n: number) {
+      return Math.round(n * 100) / 100;
+    }
 
     // Create invoice with ALL required schema fields
     let ans = roundTo2(totalTax)
@@ -198,7 +198,7 @@ export const createInvoice = async (
       subtotal,
       taxAmount: totalTax,
       discountAmount,
-      totalAmount:399,
+      totalAmount: 399,
       paidAmount: 0,
       remainingAmount: totalAmount,
       status: 'draft',
@@ -410,7 +410,7 @@ export const updateInvoiceProductPriceAndGST = async (
     let subtotal = 0;
     let totalTax = 0;
 
-     const truncateTo2 = (value: number) => Math.floor(value * 10) / 10;
+    const truncateTo2 = (value: number) => Math.floor(value * 10) / 10;
 
     // 2. Process each product update
     for (const { product: productId, price, gst } of products) {
@@ -425,7 +425,7 @@ export const updateInvoiceProductPriceAndGST = async (
       product.price = price;
       product.gst = gst;
       await product.save();
-     
+
 
       // Update matching Invoice item
       invoice.items = invoice.items.map(item => {
@@ -473,21 +473,26 @@ export const updateInvoiceProductPriceAndGST = async (
       return next(new AppError('No matching products found in invoice items', 404));
     }
     function roundTo2(n: number) {
-      return Math.round(n * 100) / 100;
+      return Math.floor(n * 100) / 100;
     }
+    function truncateTo(n: number) {
+      return Math.floor(n * 100) / 100;
+    }
+
 
     // 3. Recalculate invoice totals
     for (const item of invoice.items) {
       subtotal += item.totalPrice;
       totalTax += item.taxAmount ?? 0;
     }
+    // totalTax = truncateTo(totalTax)
     console.log("____subtotal", subtotal, "_____totalTax", totalTax, roundTo2(subtotal + totalTax), "______Number((subtotal + totalTax).toFixed(2))", Number((subtotal + totalTax).toFixed(2)));
 
     invoice.subtotal = subtotal;
     invoice.taxAmount = Number(totalTax.toFixed(2));
     invoice.totalAmount = Number((subtotal + totalTax).toFixed(2)) - invoice.discountAmount;
     invoice.remainingAmount = invoice.totalAmount - invoice.paidAmount;
-console.log("_____nvoice.totalAmount",invoice.totalAmount);
+    console.log("_____nvoice.totalAmount", invoice.totalAmount);
 
     await invoice.save();
 

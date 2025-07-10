@@ -218,10 +218,18 @@ const invoiceSchema = new Schema<IInvoice>({
 
 // Pre-save middleware to calculate totals
 invoiceSchema.pre('save', function(this: IInvoice, next) {
+
+  function truncateTo(n: number): number {
+  return Math.floor(n * 100) / 100;
+}
+
   // Calculate subtotal and taxes
   this.subtotal = this.items.reduce((sum, item) => sum + item.totalPrice, 0);
   this.taxAmount = this.items.reduce((sum, item) => sum + (item.taxAmount || 0), 0);
   // this.totalAmount = this.subtotal + this.taxAmount - this.discountAmount;
+  console.log("____step 2", this.totalAmount ,this.taxAmount);
+
+  // this.taxAmount = truncateTo(this.taxAmount)
   const discount = this.discountAmount || 0;
   this.totalAmount = parseFloat((this.subtotal + this.taxAmount - discount).toFixed(2));
 console.log("____step 1", this.totalAmount);

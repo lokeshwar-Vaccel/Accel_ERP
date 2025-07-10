@@ -655,8 +655,24 @@ const totalAmount = formData.items.reduce(
     }
   };
 
+  // Add validation for Receive Items form
+  const validateReceiveForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    if (!receiveData.externalInvoiceNumber || receiveData.externalInvoiceNumber.trim() === '') {
+      errors.externalInvoiceNumber = 'External Invoice Number is required';
+    }
+    // Add other validations as needed
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
   const handleReceiveItems = async () => {
     if (!selectedPO) return;
+
+    // Validate form before submitting
+    if (!validateReceiveForm()) return;
 
     setSubmitting(true);
     try {
@@ -1381,10 +1397,10 @@ const totalAmount = formData.items.reduce(
                     Supplier Email
                   </label>
                   <input
-                    type="text"
+                    type="email"
                     value={formData.supplierEmail}
                     onChange={(e) => setFormData({ ...formData, supplierEmail: e.target.value })}
-
+                  required
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplierEmail ? 'border-red-500' : 'border-gray-300'
                       }`}
                     placeholder="Enter Supplier Email"
@@ -1503,7 +1519,7 @@ const totalAmount = formData.items.reduce(
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-12 gap-3 items-start p-4 bg-gray-50 rounded-lg">
-                      <div className="col-span-4">
+                      <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
                         {/* <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label> */}
                         <select
@@ -1765,10 +1781,10 @@ const totalAmount = formData.items.reduce(
                     Supplier Email
                   </label>
                   <input
-                    type="text"
+                    type="email"
                     value={formData.supplierEmail}
                     onChange={(e) => setFormData({ ...formData, supplierEmail: e.target.value })}
-
+                    required
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplierEmail ? 'border-red-500' : 'border-gray-300'
                       }`}
                     placeholder="Enter Supplier Email"
@@ -1816,7 +1832,7 @@ const totalAmount = formData.items.reduce(
                 <div className="space-y-3">
                   {formData.items.map((item, index) => (
                     <div key={index} className="grid grid-cols-12 gap-3 items-start p-4 bg-gray-50 rounded-lg">
-                      <div className="col-span-4">
+                      <div className="col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
                         <select
                           value={item.product}
@@ -1899,9 +1915,36 @@ const totalAmount = formData.items.reduce(
                             };
                             updateItem(index, updates);
                           }}
+                          disabled
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
                             }`}
                           min="0"
+                          step="0.01"
+                        />
+                        {/* Fixed height container for error message */}
+                        <div className="h-5 mt-1">
+                          {formErrors[`items.${index}.unitPrice`] && (
+                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.unitPrice`]}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Tax *</label>
+                        <input
+                          type="number"
+                          value={item.taxRate}
+                          onChange={(e) => {
+                            const taxRate = parseFloat(e.target.value);
+                            const updates = {
+                              taxRate: taxRate
+                            };
+                            updateItem(index, updates);
+                          }}
+                          disabled
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          min="0"
+                          placeholder='0'
                           step="0.01"
                         />
                         {/* Fixed height container for error message */}
@@ -2257,7 +2300,18 @@ const totalAmount = formData.items.reduce(
                 </p>
               </div>
               <button
-                onClick={() => setShowReceiveModal(false)}
+                onClick={() => {
+                  setShowReceiveModal(false);
+                  setDebouncedExternalTotal('')
+                  setReceiveData({
+                    externalInvoiceNumber: '',
+                    location: '',
+                    receiptDate: '',
+                    inspectedBy: '',
+                    receivedItems: [],
+                    items: []
+                  });
+                }}
                 className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-6 h-6" />
@@ -2906,7 +2960,18 @@ const totalAmount = formData.items.reduce(
               {/* Action Buttons */}
               <div className="flex space-x-4 pt-6 border-t border-gray-200">
                 <button
-                  onClick={() => setShowReceiveModal(false)}
+                  onClick={() => {
+                  setShowReceiveModal(false);
+                  setDebouncedExternalTotal('')
+                  setReceiveData({
+                    externalInvoiceNumber: '',
+                    location: '',
+                    receiptDate: '',
+                    inspectedBy: '',
+                    receivedItems: [],
+                    items: []
+                  });
+                }}
                   className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
                 >
                   Cancel

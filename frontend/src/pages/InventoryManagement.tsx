@@ -463,11 +463,15 @@ const InventoryManagement: React.FC = () => {
         setRooms(rooms.map(loc =>
           loc._id === selectedRoom._id ? updatedRoom : loc
         ));
+        fetchLocations();
+      fetchRooms();
       } else {
         // Create new location
         const response = await apiClient.stock.createRoom(roomFormData);
         const newRoom = (response.data as any).room || response.data;
         setRooms([...rooms, newRoom]);
+        fetchLocations();
+      fetchRooms();
       }
 
       // setShowLocationModal(false);
@@ -509,6 +513,8 @@ const InventoryManagement: React.FC = () => {
         const newRack = (response.data as any).rack || response.data;
         setRacks([...racks, newRack]);
       }
+      fetchLocations();
+      fetchRooms();
 
       // setShowLocationModal(false);
       setRackFormData({
@@ -872,7 +878,7 @@ const InventoryManagement: React.FC = () => {
         setLocations([...locations, newLocation]);
       }
 
-      setShowLocationModal(false);
+      // setShowLocationModal(false);
       setLocationFormData({
         name: '',
         address: '',
@@ -1403,7 +1409,7 @@ const InventoryManagement: React.FC = () => {
   const stats = [
     {
       title: 'Total Products',
-      value: Array.isArray(inventory) ? inventory.length.toString() : '0',
+      value: Array.isArray(inventory) ? totalDatas : '0',
       icon: <Package className="w-6 h-6" />,
       color: 'blue'
     },
@@ -2519,7 +2525,7 @@ const InventoryManagement: React.FC = () => {
 
                 {activeTab === 'rooms' && <div className="p-4 overflow-y-auto flex-1">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">
-                    {isEditingLocation ? 'Edit Location' : 'Add New Location'}
+                    {isEditingLocation ? 'Edit Room' : 'Add New Room'}
                   </h3>
                   <form onSubmit={handleRoomSubmit} className="space-y-4">
                     <Select

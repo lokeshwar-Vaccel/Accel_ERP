@@ -211,9 +211,7 @@ const InvoiceManagement: React.FC = () => {
     useRazorpay: false
   });
 
-  // console.log("statusUpdate:", statusUpdate);
-  // console.log("paymentUpdate:", paymentUpdate);
-  // console.log("selectedInvoice:", selectedInvoice);
+  console.log("selectedInvoice:", selectedInvoice);
 
 
 
@@ -311,8 +309,9 @@ const autoAdjustTaxRates = () => {
     const share = subtotal > 0 ? base / subtotal : 0;
     const targetItemTotal = share * targetTotal;
 
-    const adjustedTaxRate = calculateAdjustedTaxRate(unitPrice, quantity, targetItemTotal);
-    const truncateTo2 = (value: number) => Math.floor(value * 100) / 100;
+  const adjustedTaxRateRaw = calculateAdjustedTaxRate(unitPrice, quantity, targetItemTotal);
+  const adjustedTaxRate = Math.min(100, adjustedTaxRateRaw); // Limit to 100%
+  //     const truncateTo2 = (value: number) => Math.floor(value * 100) / 100;
 
     let taxAmount = truncateTo2((base * adjustedTaxRate) / 100);
     const totalPrice = Number((base + taxAmount).toFixed(2));
@@ -327,6 +326,9 @@ const autoAdjustTaxRates = () => {
 
   const taxAmount = adjustedItems.reduce((sum, item) => sum + (item.taxAmount ?? 0), 0);
   const totalAmount = adjustedItems.reduce((sum, item) => sum + (item.totalPrice ?? 0), 0);
+
+  console.log("totalAmount---:",totalAmount);
+  
 
   setSelectedInvoice((prev) => ({
     ...prev,
@@ -383,6 +385,9 @@ const autoAdjustUnitPrice = () => {
   const paidAmount = selectedInvoice.paidAmount ?? 0;
   const remainingAmount = parseFloat((totalAmount - paidAmount).toFixed(2));
 
+    console.log("totalAmount--- 1212121:",totalAmount);
+
+
   setSelectedInvoice((prev) => ({
     ...prev,
     items: adjustedItems,
@@ -414,8 +419,6 @@ const autoAdjustUnitPrice = () => {
     setSavingChanges(true);
     try {
       if (!selectedInvoice) return;
-      console.log("selectedInvoice:", selectedInvoice);
-
 
       const payload = {
         products: selectedInvoice.items.map((item: any) => ({
@@ -451,7 +454,6 @@ const autoAdjustUnitPrice = () => {
           const taxAmount = subtotal * (item.taxRate / 100);
           return sum + subtotal + taxAmount;
         }, 0);
-        console.log("________updatedInvoice.totalAmount", (updatedInvoice.totalAmount).toFixed(1));
 
         // Update remaining amount
         updatedInvoice.remainingAmount = updatedInvoice.totalAmount - (updatedInvoice.paidAmount || 0);
@@ -644,8 +646,6 @@ const autoAdjustUnitPrice = () => {
   };
 
   const handleViewInvoice = (invoice: Invoice) => {
-    console.log("invoice:", invoice);
-
     setSelectedInvoice(invoice);
     setOriginalInvoiceData(JSON.parse(JSON.stringify(invoice))); // Deep copy for backup
     setShowViewModal(true);
@@ -769,9 +769,6 @@ const autoAdjustUnitPrice = () => {
         order_id: orderId,
         handler: async function (response: any) {
           try {
-            // console.log('Payment response from Razorpay:', response);
-            // console.log('Payment ID for verification:', paymentId);
-
             // Verify payment
             const verificationResponse = await apiClient.payments.verifyRazorpayPayment({
               razorpay_order_id: response.razorpay_order_id,
@@ -779,8 +776,6 @@ const autoAdjustUnitPrice = () => {
               razorpay_signature: response.razorpay_signature,
               paymentId: paymentId
             });
-
-            // console.log('Verification response:', verificationResponse);
 
             if (verificationResponse.success) {
               await fetchInvoices();
@@ -875,11 +870,7 @@ const autoAdjustUnitPrice = () => {
 
   const sendPaymentReminder = async (invoice: Invoice) => {
     try {
-      // console.log("check-----:");
       const response = await apiClient.invoices.sendReminder(invoice._id);
-
-      // console.log("response-----:", response);
-
 
       if (response.success) {
         toast.success('Payment reminder sent successfully!');
@@ -1186,7 +1177,6 @@ const autoAdjustUnitPrice = () => {
     // Validate Razorpay configuration
     if (paymentUpdate.useRazorpay) {
       const razorpayKey = "rzp_test_vlWs0Sr2LECorO";
-      // console.log("razorpayKey:", razorpayKey);
 
       if (!razorpayKey) {
         errors.razorpay = 'Razorpay key not configured. Please check environment variables.';
@@ -1240,7 +1230,7 @@ const autoAdjustUnitPrice = () => {
       const itemTotal = calculateItemTotal(item);
       return sum + (itemTotal * (item.taxRate || 0) / 100);
     }, 0);
-    console.log("_______parseFloat(totalTax.toFixed(2)", parseFloat(totalTax.toFixed(2)));
+    // console.log("_______parseFloat(totalTax.toFixed(2)", parseFloat(totalTax.toFixed(2)));
 
     return parseFloat(totalTax.toFixed(2)) || 0;
   };
@@ -1332,8 +1322,6 @@ const autoAdjustUnitPrice = () => {
   };
 
   const filteredInvoices = invoices.filter(invoice => {
-    // console.log("invoices--9:", invoices);
-    console.log("filteredInvoices: _____Data", invoice.externalInvoiceTotal, invoice.totalAmount);
     const matchesSearch =
       invoice?.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -2560,15 +2548,15 @@ const autoAdjustUnitPrice = () => {
               </div>
 
               {/* Total Amount Mismatch Warning */}
-              {selectedInvoice.externalInvoiceTotal !== 0 && selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal && (
+              {selectedInvoice.externalInvoiceTotal.toFixed(2) !== 0 && selectedInvoice.totalAmount.toFixed(2) !== selectedInvoice.externalInvoiceTotal.toFixed(2) && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <div className="flex items-center">
                     <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
                     <div className="flex-1">
                       <h4 className="text-sm font-medium text-yellow-800">Amount Mismatch Detected</h4>
                       <p className="text-sm text-yellow-700 mt-1">
-                        Calculated Total: ₹{(selectedInvoice?.totalAmount ?? 0).toLocaleString()} |
-                        External Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toLocaleString()}
+                        Calculated Total: ₹{(selectedInvoice?.totalAmount ?? 0).toFixed(2)} |
+                        External Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toFixed(2)}
                       </p>
                     </div>
                     <button
@@ -2733,11 +2721,11 @@ const autoAdjustUnitPrice = () => {
                     <div className="border-t pt-2">
                       <div className="flex justify-between text-lg font-bold">
                         <span>Total Amount:</span>
-                        <span className={selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount !== selectedInvoice?.externalInvoiceTotal ? 'text-red-600' : 'text-gray-900'}>
+                        <span className={selectedInvoice?.externalInvoiceTotal.toFixed(2) !== 0 && selectedInvoice?.totalAmount.toFixed(2) !== selectedInvoice?.externalInvoiceTotal.toFixed(2) ? 'text-red-600' : 'text-gray-900'}>
                           ₹{safeToFixed(selectedInvoice?.totalAmount)}
                         </span>
                       </div>
-                      {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount !== selectedInvoice?.externalInvoiceTotal && (
+                      {selectedInvoice?.externalInvoiceTotal.toFixed(2) !== 0 && selectedInvoice?.totalAmount.toFixed(2) !== selectedInvoice?.externalInvoiceTotal.toFixed(2) && (
                         <div className="flex justify-between text-sm text-gray-600 mt-1">
                           <span>External Total:</span>
                           <span>₹{safeToFixed(selectedInvoice?.externalInvoiceTotal)}</span>
