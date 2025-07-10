@@ -6,7 +6,7 @@ export interface CreateCustomerInput {
   name: string;
   email?: string;
   phone: string;
-  address: string;
+  addresses: { id: number; address: string; isPrimary: boolean }[];
   customerType: CustomerType;
   leadSource?: string;
   assignedTo?: string;
@@ -18,7 +18,7 @@ export interface UpdateCustomerInput {
   name?: string;
   email?: string;
   phone?: string;
-  address?: string;
+  addresses?: { id: number; address: string; isPrimary: boolean }[];
   customerType?: CustomerType;
   leadSource?: string;
   assignedTo?: string;
@@ -70,19 +70,26 @@ export interface CustomerImportInput {
   name: string;
   email?: string;
   phone: string;
-  address: string;
+  addresses: { id: number; address: string; isPrimary: boolean }[];
   customerType: CustomerType;
   leadSource?: string;
   status?: LeadStatus;
   notes?: string;
 }
 
+// Address Joi schema
+const addressJoiSchema = Joi.object({
+  id: Joi.number().required(),
+  address: Joi.string().max(500).required(),
+  isPrimary: Joi.boolean().default(false)
+});
+
 // Base customer fields
 const baseCustomerFields = {
   name: Joi.string().min(2).max(100).trim(),
   email: Joi.string().email().lowercase().allow(null),
   phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
-  address: Joi.string().max(500).trim(),
+  addresses: Joi.array().items(addressJoiSchema).min(1).required(),
   customerType: Joi.string().valid(...Object.values(CustomerType)),
   leadSource: Joi.string().max(100).trim().allow(''),
   assignedTo: Joi.string().hex().length(24), // MongoDB ObjectId
@@ -95,7 +102,7 @@ export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   name: baseCustomerFields.name.required(),
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone.required(),
-  address: baseCustomerFields.address.required(),
+  addresses: baseCustomerFields.addresses,
   customerType: baseCustomerFields.customerType.required(),
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
@@ -108,7 +115,7 @@ export const updateCustomerSchema = Joi.object<UpdateCustomerInput>({
   name: baseCustomerFields.name,
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone,
-  address: baseCustomerFields.address,
+  addresses: baseCustomerFields.addresses,
   customerType: baseCustomerFields.customerType,
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
@@ -169,7 +176,7 @@ export const customerImportSchema = Joi.object<CustomerImportInput>({
   name: baseCustomerFields.name.required(),
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone.required(),
-  address: baseCustomerFields.address.required(),
+  addresses: baseCustomerFields.addresses,
   customerType: baseCustomerFields.customerType.required(),
   leadSource: baseCustomerFields.leadSource,
   status: baseCustomerFields.status.default(LeadStatus.NEW),

@@ -26,6 +26,23 @@ const contactHistorySchema = new Schema({
   }
 }, { timestamps: true });
 
+// Address sub-schema
+const addressSchema = new Schema({
+  id: {
+    type: Number,
+    required: true
+  },
+  address: {
+    type: String,
+    required: [true, 'Address is required'],
+    maxlength: [500, 'Address cannot exceed 500 characters']
+  },
+  isPrimary: {
+    type: Boolean,
+    default: false
+  }
+}, { _id: false });
+
 const customerSchema = new Schema({
   name: {
     type: String,
@@ -46,10 +63,10 @@ const customerSchema = new Schema({
     required: [true, 'Phone number is required'],
     match: [/^\+?[1-9]\d{1,14}$/, 'Please provide a valid phone number']
   },
-  address: {
-    type: String,
-    required: [true, 'Address is required'],
-    maxlength: [500, 'Address cannot exceed 500 characters']
+  addresses: {
+    type: [addressSchema],
+    required: true,
+    validate: [(arr: any[]) => arr.length > 0, 'At least one address is required']
   },
   customerType: {
     type: String,

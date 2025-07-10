@@ -432,7 +432,7 @@ export const updateInvoiceProductPriceAndGST = async (
         if (item.product.toString() === productId.toString()) {
           const totalPrice = item.quantity * price;
           let taxAmount = (gst * totalPrice) / 100;
-          taxAmount = truncateTo2(taxAmount)
+          // taxAmount = truncateTo2(taxAmount)
           console.log("_______taxAmount", taxAmount, "_____totalPrice", totalPrice);
 
           item.unitPrice = price;
@@ -484,8 +484,8 @@ export const updateInvoiceProductPriceAndGST = async (
     console.log("____subtotal", subtotal, "_____totalTax", totalTax, roundTo2(subtotal + totalTax), "______Number((subtotal + totalTax).toFixed(2))", Number((subtotal + totalTax).toFixed(2)));
 
     invoice.subtotal = subtotal;
-    invoice.taxAmount = totalTax;
-    invoice.totalAmount = Math.round(truncateTo2(subtotal + totalTax)) - invoice.discountAmount;
+    invoice.taxAmount = Number(totalTax.toFixed(2));
+    invoice.totalAmount = Number((subtotal + totalTax).toFixed(2)) - invoice.discountAmount;
     invoice.remainingAmount = invoice.totalAmount - invoice.paidAmount;
 console.log("_____nvoice.totalAmount",invoice.totalAmount);
 

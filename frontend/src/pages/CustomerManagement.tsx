@@ -97,12 +97,7 @@ interface Customer {
 // Address type
 interface Address {
   id: number;
-  type: string;
-  street: string;
-  city: string;
-  state: string;
-  zipCode: string;
-  country: string;
+  address: string; // single string field
   isPrimary: boolean;
 }
 
@@ -192,12 +187,7 @@ const CustomerManagement: React.FC = () => {
     notes: '',
     addresses: [{
       id: Date.now(),
-      type: 'shipping',
-      street: '',
-      city: '',
-      state: '',
-      zipCode: '',
-      country: '',
+      address: '',
       isPrimary: true
     }]
   });
@@ -244,12 +234,7 @@ const CustomerManagement: React.FC = () => {
   const addAddress = () => {
     const newAddress: Address = {
       id: Date.now(),
-      type: 'shipping',
-      street: '',
-      city: '',
-      state: '',
-      zipCode: '',
-      country: '',
+      address: '',
       isPrimary: false
     };
     setCustomerFormData(prev => ({
@@ -432,8 +417,9 @@ const CustomerManagement: React.FC = () => {
     if (!customerFormData.phone.trim()) {
       errors.phone = 'Phone number is required';
     }
-    if (!customerFormData.address.trim()) {
-      errors.address = 'Address is required';
+    // Validate at least one address and that all addresses are filled
+    if (!customerFormData.addresses.length || customerFormData.addresses.some(addr => !addr.address.trim())) {
+      errors.address = 'At least one address is required and all addresses must be filled';
     }
     if (customerFormData.email && !/\S+@\S+\.\S+/.test(customerFormData.email)) {
       errors.email = 'Please enter a valid email address';
@@ -569,12 +555,7 @@ const CustomerManagement: React.FC = () => {
       notes: '',
       addresses: [{
         id: Date.now(),
-        type: 'shipping',
-        street: '',
-        city: '',
-        state: '',
-        zipCode: '',
-        country: '',
+        address: '',
         isPrimary: true
       }]
     });
@@ -609,12 +590,7 @@ const CustomerManagement: React.FC = () => {
         ? (customer as any).addresses
         : [{
           id: Date.now(),
-          type: 'shipping',
-          street: '',
-          city: '',
-          state: '',
-          zipCode: '',
-          country: '',
+          address: '',
           isPrimary: true
         }]
     });
@@ -1057,311 +1033,285 @@ const CustomerManagement: React.FC = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitCustomer(); }} className="p-4 space-y-3">
+            <form onSubmit={(e) => { e.preventDefault(); handleSubmitCustomer(); }} className="p-4">
               {formErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
                 </div>
               )}
-
-              <div className="grid grid-cols-3 gap-4 p-1">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={customerFormData.name}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    placeholder="Enter customer name"
-                  />
-                  {formErrors.name && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
-                  )}
-                </div>
-                <div className="relative dropdown-container">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer Type *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowCustomerTypeDropdown((v) => !v)}
-                    className="flex items-center justify-between w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                  >
-                    <span className="text-gray-700 truncate mr-1">
-                      {getTypeLabel(customerFormData.customerType)}
-                    </span>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerTypeDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showCustomerTypeDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                      {typeOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => {
-                            setCustomerFormData({ ...customerFormData, customerType: option.value as CustomerType });
-                            setShowCustomerTypeDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
+              <div className="flex flex-col md:flex-row gap-6">
+                {/* Left: Main Fields */}
+                <div className="flex-1 space-y-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    {/* Customer Name, Type, Email, Phone, Lead Source, Assigned To */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Customer Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.name}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
+                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="Enter customer name"
+                      />
+                      {formErrors.name && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={customerFormData.email}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.email ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    placeholder="Enter email address"
-                  />
-                  {formErrors.email && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone Number *
-                  </label>
-                  <input
-                    type="tel"
-                    value={customerFormData.phone}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    placeholder="Enter phone number"
-                  />
-                  {formErrors.phone && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Lead Source
-                  </label>
-                  <input
-                    type="text"
-                    value={customerFormData.leadSource}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, leadSource: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., Website, Referral, Trade Show"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Assigned To
-                  </label>
-                  <div className="relative dropdown-container">
-                    <button
-
-                      type="button"
-                      onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
-                      className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    >
-                      <span className="text-gray-700 truncate mr-1">
-                        {getAssignedToLabel(customerFormData.assignedTo)}
-                      </span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAssignedToDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showAssignedToDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomerFormData({ ...customerFormData, assignedTo: '' });
-                            setShowAssignedToDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          Unassigned
-                        </button>
-                        {users.map(user => (
-                          <button
-                            key={user.id}
-                            type="button"
-                            onClick={() => {
-                              setCustomerFormData({ ...customerFormData, assignedTo: user.id });
-                              setShowAssignedToDropdown(false);
-                            }}
-                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.assignedTo === user.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                              }`}
-                          >
-                            <div>
-                              <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`}</div>
-                              <div className="text-xs text-gray-500">{user.email}</div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-              </div>
-
-              <div className='p-1'>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  value={customerFormData.notes}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, notes: e.target.value })}
-                  rows={3}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Additional notes about the customer"
-                />
-              </div>
-
-
-              {/* Addresses Section */}
-              <div className="space-y-6 p-1">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-teal-500 rounded-full flex items-center justify-center">
-                      <MapPin className="w-4 h-4 text-white" />
-                    </div>
-                    <h3 className="text-xl font-semibold text-gray-900">Addresses</h3>
-                    <div className="flex-1 h-px bg-gradient-to-r from-green-200 to-transparent"></div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={addAddress}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-xl hover:from-green-600 hover:to-teal-600 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200 font-medium"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Address
-                  </button>
-                </div>
-
-                <div className="space-y-6">
-                  {customerFormData?.addresses.map((address, index) => (
-                    <div key={address.id} className="bg-gradient-to-r from-gray-50 to-white border-2 border-gray-100 rounded-2xl p-6 hover:shadow-lg transition-all duration-300">
-                      <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-4">
-                          <div className={`w-3 h-3 rounded-full ${getAddressTypeColor(address.type)}`}></div>
-                          <select
-                            value={address.type}
-                            onChange={(e) => updateAddress(address.id, 'type', e.target.value)}
-                            className="px-4 py-2 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 bg-white font-medium transition-all duration-200"
-                          >
-                            {addressTypes.map(type => (
-                              <option key={type.value} value={type.value}>
-                                {type.label}
-                              </option>
-                            ))}
-                          </select>
-                          {address.isPrimary && (
-                            <div className="flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-blue-500 to-purple-500 text-white text-sm rounded-full shadow-md">
-                              <Sparkles className="w-3 h-3" />
-                              Primary
-                            </div>
-                          )}
+                    <div className="relative dropdown-container">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Customer Type *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomerTypeDropdown((v) => !v)}
+                        className="flex items-center justify-between w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                      >
+                        <span className="text-gray-700 truncate mr-1">
+                          {getTypeLabel(customerFormData.customerType)}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerTypeDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showCustomerTypeDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                          {typeOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                setCustomerFormData({ ...customerFormData, customerType: option.value as CustomerType });
+                                setShowCustomerTypeDropdown(false);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
                         </div>
-                        <div className="flex items-center gap-3">
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={customerFormData.email}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
+                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.email ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="Enter email address"
+                      />
+                      {formErrors.email && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Phone Number *
+                      </label>
+                      <input
+                        type="tel"
+                        value={customerFormData.phone}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
+                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="Enter phone number"
+                      />
+                      {formErrors.phone && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Lead Source
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.leadSource}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, leadSource: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., Website, Referral, Trade Show"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Assigned To
+                      </label>
+                      <div className="relative dropdown-container">
+                        <button
+
+                          type="button"
+                          onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
+                          className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                        >
+                          <span className="text-gray-700 truncate mr-1">
+                            {getAssignedToLabel(customerFormData.assignedTo)}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAssignedToDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showAssignedToDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomerFormData({ ...customerFormData, assignedTo: '' });
+                                setShowAssignedToDropdown(false);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              Unassigned
+                            </button>
+                            {users.map(user => (
+                              <button
+                                key={user.id}
+                                type="button"
+                                onClick={() => {
+                                  setCustomerFormData({ ...customerFormData, assignedTo: user.id });
+                                  setShowAssignedToDropdown(false);
+                                }}
+                                className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.assignedTo === user.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                  }`}
+                              >
+                                <div>
+                                  <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`}</div>
+                                  <div className="text-xs text-gray-500">{user.email}</div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+
+                  <div className='p-1'>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Notes
+                    </label>
+                    <textarea
+                      value={customerFormData.notes}
+                      onChange={(e) => setCustomerFormData({ ...customerFormData, notes: e.target.value })}
+                      rows={3}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Additional notes about the customer"
+                    />
+                  </div>
+
+
+                  {/* Addresses Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-semibold text-gray-800">Addresses</h3>
+                      <button
+                        type="button"
+                        onClick={addAddress}
+                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                      >
+                        Add Address
+                      </button>
+                    </div>
+                    {customerFormData.addresses.map((address, index) => (
+                      <div
+                        key={address.id}
+                        className="border rounded p-3 mb-2 bg-white flex flex-col"
+                      >
+                        <div className="flex justify-between my-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Address {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                          </label>
                           {!address.isPrimary && (
                             <button
                               type="button"
                               onClick={() => setPrimaryAddress(address.id)}
-                              className="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
+                              className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
                             >
                               Set as Primary
                             </button>
                           )}
+                        </div>
+                        <textarea
+                          value={address.address}
+                          onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                          placeholder="Enter full address"
+                        />
+                        <div className="flex gap-2 mt-2">
                           {customerFormData.addresses.length > 1 && (
                             <button
                               type="button"
                               onClick={() => removeAddress(address.id)}
-                              className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors"
+                              className="px-2 py-1 text-red-500 rounded text-xs"
                             >
-                              <Trash2 className="w-5 h-5" />
+                              <Trash2 className="w-4 h-4" />
                             </button>
                           )}
                         </div>
                       </div>
+                    ))}
+                  </div>
 
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="block text-sm font-semibold text-gray-700">
-                            Street Address *
-                          </label>
-                          <input
-                            type="text"
-                            value={address.street}
-                            onChange={(e) => updateAddress(address.id, 'street', e.target.value)}
-                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300 transition-all duration-200"
-                            placeholder="Enter street address"
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <label className="block text-sm font-semibold text-gray-700">
-                            City *
-                          </label>
-                          <input
-                            type="text"
-                            value={address.city}
-                            onChange={(e) => updateAddress(address.id, 'city', e.target.value)}
-                            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300 transition-all duration-200"
-                            placeholder="Enter city"
-                          />
-                        </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                          <div className="space-y-2">
-                            <label className="block text-sm font-semibold text-gray-700">
-                              State/Province *
-                            </label>
-                            <input
-                              type="text"
-                              value={address.state}
-                              onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
-                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300 transition-all duration-200"
-                              placeholder="Enter state/province"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="block text-sm font-semibold text-gray-700">
-                              ZIP/Postal Code *
-                            </label>
-                            <input
-                              type="text"
-                              value={address.zipCode}
-                              onChange={(e) => updateAddress(address.id, 'zipCode', e.target.value)}
-                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300 transition-all duration-200"
-                              placeholder="Enter ZIP/postal code"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="block text-sm font-semibold text-gray-700">
-                              Country *
-                            </label>
-                            <input
-                              type="text"
-                              value={address.country}
-                              onChange={(e) => updateAddress(address.id, 'country', e.target.value)}
-                              className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 hover:border-gray-300 transition-all duration-200"
-                              placeholder="Enter country"
-                            />
-                          </div>
-                        </div>
+                </div>
+                {/* Right: Addresses */}
+                <div className="w-full md:w-96">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-semibold text-gray-800">Addresses</h3>
+                      <button
+                        type="button"
+                        onClick={addAddress}
+                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                      >
+                        Add Address
+                      </button>
                     </div>
-                  ))}
+                    {customerFormData.addresses.map((address, index) => (
+                      <div
+                        key={address.id}
+                        className="border rounded p-3 mb-2 bg-white flex flex-col"
+                      >
+                        <div className="flex justify-between my-1">
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Address {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                          </label>
+                          {!address.isPrimary && (
+                            <button
+                              type="button"
+                              onClick={() => setPrimaryAddress(address.id)}
+                              className="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
+                            >
+                              Set as Primary
+                            </button>
+                          )}
+                        </div>
+                        <textarea
+                          value={address.address}
+                          onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
+                          className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                          placeholder="Enter full address"
+                        />
+                        <div className="flex gap-2 mt-2">
+                          {customerFormData.addresses.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeAddress(address.id)}
+                              className="px-2 py-1 text-red-500 rounded text-xs"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
-
               <div className="flex space-x-3 pt-4">
                 <button
                   type="button"
@@ -1389,13 +1339,13 @@ const CustomerManagement: React.FC = () => {
       {/* Edit Customer Modal */}
       {showEditModal && editingCustomer && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-xl m-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Edit Customer</h2>
               <button
                 onClick={() => {
                   setShowEditModal(false);
-                  resetCustomerForm()
+                  resetCustomerForm();
                   setShowAssignedToDropdown(false);
                 }}
                 className="text-gray-400 hover:text-gray-600"
@@ -1403,202 +1353,250 @@ const CustomerManagement: React.FC = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-
-            <form onSubmit={(e) => { e.preventDefault(); handleUpdateCustomer(); }} className="p-4 space-y-3">
+            <form onSubmit={(e) => { e.preventDefault(); handleUpdateCustomer(); }}>
               {formErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
                 </div>
               )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer Name *
-                  </label>
-                  <input
-                    type="text"
-                    value={customerFormData.name}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    placeholder="Enter customer name"
-                  />
-                  {formErrors.name && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
-                  )}
-                </div>
-                <div className="relative dropdown-container">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer Type *
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowCustomerTypeDropdown((v) => !v)}
-                    className="flex items-center justify-between w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                  >
-                    <span className="text-gray-700 truncate mr-1">
-                      {getTypeLabel(customerFormData.customerType)}
-                    </span>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerTypeDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showCustomerTypeDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                      {typeOptions.map((option) => (
+              <div className="flex flex-1">
+                {/* Left: Main Fields */}
+                <div className="w-1/2 border-r border-gray-200 flex flex-col p-4">
+                <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
+                    </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* Customer Name, Type, Email, Phone */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Customer Name *
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.name}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
+                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="Enter customer name"
+                      />
+                      {formErrors.name && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
+                      )}
+                    </div>
+                    <div className="relative dropdown-container">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Customer Type *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomerTypeDropdown((v) => !v)}
+                        className="flex items-center justify-between w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                      >
+                        <span className="text-gray-700 truncate mr-1">
+                          {getTypeLabel(customerFormData.customerType)}
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerTypeDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showCustomerTypeDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                          {typeOptions.map((option) => (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => {
+                                setCustomerFormData({ ...customerFormData, customerType: option.value as CustomerType });
+                                setShowCustomerTypeDropdown(false);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              {option.label}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        value={customerFormData.email}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
+                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.email ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="Enter email address"
+                      />
+                      {formErrors.email && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Phone Number *
+                      </label>
+                      <input
+                        type="tel"
+                        value={customerFormData.phone}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
+                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        placeholder="Enter phone number"
+                      />
+                      {formErrors.phone && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Lead Source
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.leadSource}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, leadSource: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., Website, Referral, Trade Show"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Assigned To
+                      </label>
+                      <div className="relative dropdown-container">
                         <button
-                          key={option.value}
+                          disabled={user?.role === 'hr'}
                           type="button"
-                          onClick={() => {
-                            setCustomerFormData({ ...customerFormData, customerType: option.value as CustomerType });
-                            setShowCustomerTypeDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
+                          onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
+                          className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                         >
-                          {option.label}
+                          <span className="text-gray-700 truncate mr-1">
+                            {getAssignedToLabel(customerFormData.assignedTo)}
+                          </span>
+                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAssignedToDropdown ? 'rotate-180' : ''}`} />
                         </button>
+                        {showAssignedToDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomerFormData({ ...customerFormData, assignedTo: '' });
+                                setShowAssignedToDropdown(false);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                }`}
+                            >
+                              Unassigned
+                            </button>
+                            {users.map(user => (
+                              <button
+                                key={user.id}
+                                type="button"
+                                onClick={() => {
+                                  setCustomerFormData({ ...customerFormData, assignedTo: user.id });
+                                  setShowAssignedToDropdown(false);
+                                }}
+                                className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.assignedTo === user.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                  }`}
+                              >
+                                <div>
+                                  <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`}</div>
+                                  <div className="text-xs text-gray-500">{user.email}</div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className='mt-4'>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Notes
+                    </label>
+                    <textarea
+                      value={customerFormData.notes}
+                      onChange={(e) => setCustomerFormData({ ...customerFormData, notes: e.target.value })}
+                      rows={3}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Additional notes about the customer"
+                    />
+                  </div>
+
+                </div>
+                {/* Right: Addresses */}
+                <div className="w-1/2 p-4">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-lg font-semibold text-gray-800">Addresses</h3>
+                      <button
+                        type="button"
+                        onClick={addAddress}
+                        className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                      >
+                        Add Address
+                      </button>
+                    </div>
+
+                    {/* Scrollable container for address list */}
+                    <div className="max-h-80 overflow-y-auto pr-1 space-y-2">
+                      {customerFormData.addresses.map((address, index) => (
+                        <div
+                          key={address.id}
+                          className="border rounded px-3 pb-3 pt-2 bg-white flex justify-between"
+                        >
+                          <div className='flex-1'>
+                            <div className="flex justify-between my-1">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Address {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                              </label>
+                              {!address.isPrimary && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPrimaryAddress(address.id)}
+                                  className="px-2 py-1 mb-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
+                                >
+                                  Set as Primary
+                                </button>
+                              )}
+                            </div>
+                            <textarea
+                              value={address.address}
+                              onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
+                              className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                              placeholder="Enter full address"
+                            />
+                          </div>
+                          <div className="flex gap-2 ps-2 mt-10 mb-8">
+                            {customerFormData.addresses.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeAddress(address.id)}
+                                className="text-red-500 rounded text-xs"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       ))}
                     </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={customerFormData.email}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.email ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    placeholder="Enter email address"
-                  />
-                  {formErrors.email && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Phone Number *
-                  </label>
-                  <input
-                    type="tel"
-                    value={customerFormData.phone}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    placeholder="Enter phone number"
-                  />
-                  {formErrors.phone && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Address *
-                </label>
-                <textarea
-                  value={customerFormData.address}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, address: e.target.value })}
-                  rows={3}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.address ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  placeholder="Enter complete address"
-                />
-                {formErrors.address && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Lead Source
-                  </label>
-                  <input
-                    type="text"
-                    value={customerFormData.leadSource}
-                    onChange={(e) => setCustomerFormData({ ...customerFormData, leadSource: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="e.g., Website, Referral, Trade Show"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Assigned To
-                  </label>
-                  <div className="relative dropdown-container">
-                    <button
-                      disabled={user?.role === 'hr'}
-                      type="button"
-                      onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
-                      className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                    >
-                      <span className="text-gray-700 truncate mr-1">
-                        {getAssignedToLabel(customerFormData.assignedTo)}
-                      </span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAssignedToDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showAssignedToDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setCustomerFormData({ ...customerFormData, assignedTo: '' });
-                            setShowAssignedToDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          Unassigned
-                        </button>
-                        {users.map(user => (
-                          <button
-                            key={user.id}
-                            type="button"
-                            onClick={() => {
-                              setCustomerFormData({ ...customerFormData, assignedTo: user.id });
-                              setShowAssignedToDropdown(false);
-                            }}
-                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.assignedTo === user.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                              }`}
-                          >
-                            <div>
-                              <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`}</div>
-                              <div className="text-xs text-gray-500">{user.email}</div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  value={customerFormData.notes}
-                  onChange={(e) => setCustomerFormData({ ...customerFormData, notes: e.target.value })}
-                  rows={3}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Additional notes about the customer"
-                />
               </div>
-
-              <div className="flex space-x-3 pt-4">
+              <div className="flex space-x-3 p-4 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={() => {
                     setShowEditModal(false);
-                    resetCustomerForm()
+                    resetCustomerForm();
                     setShowAssignedToDropdown(false);
                   }}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"

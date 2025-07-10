@@ -190,18 +190,25 @@ purchaseOrderSchema.pre('save', async function (this: IPurchaseOrderSchema, next
   next();
 });
 
-// Calculate total amount from items
 purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {
   if (this.items && this.items.length > 0) {
-    this.totalAmount = this.items.reduce((total: number, item: IPOItemSchema) => total + item.totalPrice, 0);
-
-    // Ensure each item's total price is correct
+    // First: calculate and update each item's totalPrice with tax
     this.items.forEach((item: IPOItemSchema) => {
-      item.totalPrice = item.quantity * item.unitPrice;
+      const quantity = item.quantity || 0;
+      const unitPrice = item.unitPrice || 0;
+      const taxRate = item.taxRate || 0;
+      item.totalPrice = quantity * unitPrice * (1 + taxRate / 100);
     });
+
+    // Then: sum up totalAmount from updated item.totalPrice
+    this.totalAmount = this.items.reduce(
+      (total: number, item: IPOItemSchema) => total + (item.totalPrice || 0),
+      0
+    );
   }
   next();
 });
+
 
 // Validate that delivery date is not in the past for new orders
 purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {

@@ -148,22 +148,30 @@ export const createPurchaseOrder = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Calculate total amount from items
-    let totalAmount = 0;
-    if (req.body.items && Array.isArray(req.body.items)) {
-      for (const item of req.body.items) {
-        totalAmount += (item.quantity || 0) * (item.unitPrice || 0);
-      }
+    // Calculate total amount from items (including taxRate)
+  let totalAmount = 0;
+  if (req.body.items && Array.isArray(req.body.items)) {
+    for (const item of req.body.items) {
+      const quantity = item.quantity || 0;
+      const unitPrice = item.unitPrice || 0;
+      const taxRate = item.taxRate || 0;
+      const itemTotal = quantity * unitPrice * (1 + taxRate / 100);
+      totalAmount += itemTotal;
     }
+  }
 
-    // Prepare order data - let the model handle poNumber generation via pre-save hook
-    const orderData = {
-      ...req.body,
-      totalAmount,
-      createdBy: req.user!.id,
-      orderDate: new Date()
-    };
-
+  console.log("totalAmount:",totalAmount);
+  
+  
+  // Prepare order data
+  const orderData = {
+    ...req.body,
+    totalAmount,
+    createdBy: req.user!.id,
+    orderDate: new Date()
+  };
+  
+  console.log("orderData:",orderData);
     const order = await PurchaseOrder.create(orderData);
     
     const populatedOrder = await PurchaseOrder.findById(order._id)

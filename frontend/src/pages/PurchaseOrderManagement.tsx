@@ -165,19 +165,19 @@ const PurchaseOrderManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  console.log("purchaseOrders:",purchaseOrders);
-  
+  console.log("purchaseOrders:", purchaseOrders);
+
 
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | 'all'>('all');
   const [supplierFilter, setSupplierFilter] = useState('');
 
-    const [currentPage, setCurrentPage] = useState(1);
-    const [limit, setLimit] = useState(10);
-    const [totalPages, setTotalPages] = useState(0);
-    const [totalDatas, setTotalDatas] = useState(0);
-    const [sort, setSort] = useState('-createdAt');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalDatas, setTotalDatas] = useState(0);
+  const [sort, setSort] = useState('-createdAt');
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -275,7 +275,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const [previewData, setPreviewData] = useState<any>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-    const handlePageChange = (page: number) => {
+  const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
 
@@ -316,7 +316,7 @@ const PurchaseOrderManagement: React.FC = () => {
       const response = await apiClient.purchaseOrders.getAll(params);
       console.log("response-purchaseOrders:", response);
 
-       setCurrentPage(response.pagination.page);
+      setCurrentPage(response.pagination.page);
       setLimit(response.pagination.limit);
       setTotalDatas(response.pagination.total);
       setTotalPages(response.pagination.pages);
@@ -337,9 +337,9 @@ const PurchaseOrderManagement: React.FC = () => {
     }
   };
 
-    useEffect(() => {
-      fetchPurchaseOrders();
-    }, [currentPage, limit, sort, searchTerm, statusFilter]);
+  useEffect(() => {
+    fetchPurchaseOrders();
+  }, [currentPage, limit, sort, searchTerm, statusFilter]);
 
 
   const fetchProducts = async () => {
@@ -447,8 +447,8 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const handleEditPO = (po: PurchaseOrder) => {
     setEditingPO(po);
-    console.log("po:",po);
-    
+    console.log("po:", po);
+
     setFormData({
       supplier: typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)._id,
       supplierEmail: typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)._id,
@@ -559,7 +559,11 @@ const PurchaseOrderManagement: React.FC = () => {
     try {
       setFormErrors({});
 
-      const totalAmount = formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+const totalAmount = formData.items.reduce(
+  (sum, item) =>
+    sum + (item.quantity * item.unitPrice * (1 + (item.taxRate || 0) / 100)),
+  0
+);
 
       const poData = {
         ...formData,
@@ -608,13 +612,13 @@ const PurchaseOrderManagement: React.FC = () => {
         }))
       };
 
-      console.log("poData:",poData);
-      
+      console.log("poData:", poData);
+
 
       const response = await apiClient.purchaseOrders.update(editingPO._id, poData);
-      console.log("response999:",response);
-      console.log("response--9:",purchaseOrders.map(po => po._id === editingPO._id ? response.data : po));
-      
+      console.log("response999:", response);
+      console.log("response--9:", purchaseOrders.map(po => po._id === editingPO._id ? response.data : po));
+
       setPurchaseOrders(purchaseOrders.map(po => po._id === editingPO._id ? response.data?.order : po));
       setShowEditModal(false);
       setEditingPO(null);
@@ -917,13 +921,13 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(amount);
-};
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
 
 
   const formatDate = (dateString: string) => {
@@ -1325,13 +1329,13 @@ const PurchaseOrderManagement: React.FC = () => {
         </div>
       </div>
 
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={handlePageChange}
-              totalItems={totalDatas}
-              itemsPerPage={limit}
-            />
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
+        totalItems={totalDatas}
+        itemsPerPage={limit}
+      />
 
       {/* Create PO Modal */}
       {showCreateModal && (
@@ -1594,6 +1598,33 @@ const PurchaseOrderManagement: React.FC = () => {
                             };
                             updateItem(index, updates);
                           }}
+                          disabled
+                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          min="0"
+                          placeholder='0'
+                          step="0.01"
+                        />
+                        {/* Fixed height container for error message */}
+                        <div className="h-5 mt-1">
+                          {formErrors[`items.${index}.unitPrice`] && (
+                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.unitPrice`]}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Tax *</label>
+                        <input
+                          type="number"
+                          value={item.taxRate}
+                          onChange={(e) => {
+                            const taxRate = parseFloat(e.target.value);
+                            const updates = {
+                              taxRate: taxRate
+                            };
+                            updateItem(index, updates);
+                          }}
+                          disabled
                           className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
                             }`}
                           min="0"
@@ -1609,8 +1640,9 @@ const PurchaseOrderManagement: React.FC = () => {
                       </div>
                       <div className="col-span-2">
                         <div className="text-sm font-bold text-gray-900 mb-1">
-                          Total: {formatCurrency(item.quantity * item.unitPrice || 0)}
+                          Total: {formatCurrency((item.quantity * item.unitPrice || 0) * (1 + (item.taxRate || 0) / 100))}
                         </div>
+
                         {formData.items.length > 1 && (
                           <button
                             type="button"
@@ -1655,8 +1687,15 @@ const PurchaseOrderManagement: React.FC = () => {
                     <div className="text-right">
                       <p className="text-sm text-blue-700">Subtotal</p>
                       <p className="text-xl font-bold text-blue-900">
-                        {formatCurrency(formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0) || 0)}
+                        {formatCurrency(
+                          formData.items.reduce(
+                            (sum, item) =>
+                              sum + (item.quantity * item.unitPrice * (1 + (item.taxRate || 0) / 100)),
+                            0
+                          ) || 0
+                        )}
                       </p>
+
                     </div>
                   </div>
                 </div>
@@ -1685,7 +1724,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
       {/* Edit PO Modal */}
       {showEditModal && editingPO && (
-<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Edit Purchase Order - {editingPO.poNumber}</h2>
@@ -1950,7 +1989,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
       {/* PO Details Modal */}
       {showDetailsModal && selectedPO && (
-<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[50]">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[50]">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div>

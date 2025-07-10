@@ -136,12 +136,18 @@ export interface IStockLedger extends Document {
   updatedAt?: Date;
 }
 
+// Address Interface
+export interface Address {
+  id: number;
+  address: string;
+  isPrimary: boolean;
+}
 // Customer Interface
 export interface ICustomer extends Document {
   name: string;
   email?: string;
   phone: string;
-  address: string;
+  addresses: Address[];
   customerType: CustomerType;
   leadSource?: string;
   assignedTo?: string;
