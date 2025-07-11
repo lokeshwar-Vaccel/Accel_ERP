@@ -41,6 +41,7 @@ import { Pagination } from 'components/ui/Pagination';
 
 // Customer types matching backend enums
 type CustomerType = 'retail' | 'telecom';
+type CustomerMainType = 'customer' | 'supplier';
 type LeadStatus = 'new' | 'qualified' | 'contacted' | 'converted' | 'lost';
 type ContactType = 'call' | 'meeting' | 'email' | 'whatsapp';
 
@@ -78,6 +79,9 @@ interface User {
 interface Customer {
   _id: string;
   name: string;
+  designation?: string;
+  contactPersonName?: string;
+  gstNumber?: string;
   email?: string;
   phone: string;
   address: string;
@@ -92,17 +96,24 @@ interface Customer {
   updatedAt: string;
   latestContact?: ContactHistory;
   addresses?: Address[];
+  type?: CustomerMainType;
 }
 
 // Address type
 interface Address {
   id: number;
-  address: string; // single string field
+  address: string;
+  state: string;
+  district: string;
+  pincode: string;
   isPrimary: boolean;
 }
 
 interface CustomerFormData {
   name: string;
+  designation: string;
+  contactPersonName: string;
+  gstNumber: string;
   email: string;
   phone: string;
   address: string;
@@ -111,6 +122,7 @@ interface CustomerFormData {
   assignedTo: string;
   notes: string;
   addresses: Address[];
+  type: CustomerMainType;
 }
 
 interface ContactFormData {
@@ -178,6 +190,9 @@ const CustomerManagement: React.FC = () => {
   // Form data
   const [customerFormData, setCustomerFormData] = useState<CustomerFormData>({
     name: '',
+    designation: '',
+    contactPersonName: '',
+    gstNumber: '',
     email: '',
     phone: '',
     address: '',
@@ -188,8 +203,12 @@ const CustomerManagement: React.FC = () => {
     addresses: [{
       id: Date.now(),
       address: '',
+      state: '',
+      district: '',
+      pincode: '',
       isPrimary: true
-    }]
+    }],
+    type: 'customer'
   });
 
   const [contactFormData, setContactFormData] = useState<ContactFormData>({
@@ -208,6 +227,7 @@ const CustomerManagement: React.FC = () => {
   const [showAssignedToDropdown, setShowAssignedToDropdown] = useState(false);
   const [showCustomerTypeDropdown, setShowCustomerTypeDropdown] = useState(false);
   const [showContactTypeDropdown, setShowContactTypeDropdown] = useState(false);
+  const [showQuickActionsDropdown, setShowQuickActionsDropdown] = useState(false);
 
   const user = useSelector((state: RootState) => state.auth.user);
 
@@ -218,6 +238,9 @@ const CustomerManagement: React.FC = () => {
     // Add more tabs here if needed
   ];
   const [activeTab, setActiveTab] = useState<'customer' | 'supplier'>('customer');
+
+  // Add at the top, after useState imports
+  const [customerTypeTab, setCustomerTypeTab] = useState<'customer' | 'supplier'>('customer');
 
   const getTypeIcon = (value: string) => {
     // Optionally return a string or a default icon name
@@ -235,6 +258,9 @@ const CustomerManagement: React.FC = () => {
     const newAddress: Address = {
       id: Date.now(),
       address: '',
+      state: '',
+      district: '',
+      pincode: '',
       isPrimary: false
     };
     setCustomerFormData(prev => ({
@@ -326,32 +352,29 @@ const CustomerManagement: React.FC = () => {
 
   const fetchCustomers = async () => {
     let assignedToParam = assignedToFilter;
-
-    // If HR, always use their own ID for assignedTo
     if (user?.role === 'hr' && user?.id) {
       assignedToParam = user.id;
       if (assignedToFilter !== user.id) setAssignedToFilter(user.id);
     }
-
-    // Only fetch when assignedTo is set for HR
     if (user?.role === 'hr' && !assignedToParam) return;
-
     const params: any = {
       page: currentPage,
       limit,
       sort,
       search: searchTerm,
+      type: customerTypeTab, // always send type
       ...(typeFilter !== 'all' && { customerType: typeFilter }),
       ...(statusFilter !== 'all' && { status: statusFilter }),
-      // ...(leadSourceFilter && { leadSource: leadSourceFilter }),
       ...(dateFrom && { dateFrom }),
       ...(dateTo && { dateTo }),
       ...(assignedToParam && { assignedTo: assignedToParam }),
     };
-
+    console.log('Fetching customers with type:', customerTypeTab);
+    console.log('Params sent to API:', params);
     try {
       setLoading(true);
       const response = await apiClient.customers.getAll(params);
+      console.log('API response data:', response);
       setCounts(response.data.counts);
       setCurrentPage(response.pagination.page);
       setLimit(response.pagination.limit);
@@ -360,13 +383,11 @@ const CustomerManagement: React.FC = () => {
       let customersData: Customer[] = [];
       if (response && response.data) {
         if (Array.isArray(response.data)) {
-
           customersData = response.data as Customer[];
         } else if (typeof response.data === 'object' && Array.isArray((response.data as any).customers)) {
           customersData = (response.data as { customers: Customer[] }).customers;
         }
       }
-
       setCustomers(customersData);
     } catch (error) {
       console.error('Error fetching customers:', error);
@@ -381,7 +402,7 @@ const CustomerManagement: React.FC = () => {
     if (user?.role !== 'hr') {
       fetchUsers();
     }
-  }, [user, currentPage, limit, sort, searchTerm, typeFilter, statusFilter, dateFrom, dateTo, assignedToFilter]);
+  }, [user, currentPage, limit, sort, searchTerm, typeFilter, statusFilter, dateFrom, dateTo, assignedToFilter, customerTypeTab]);
 
   const handleDeleteCustomer = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this customer?')) {
@@ -421,13 +442,25 @@ const CustomerManagement: React.FC = () => {
     if (!customerFormData.addresses.length) {
       errors.address = 'At least one address is required';
     } else {
-      const emptyAddress = customerFormData.addresses.some(addr => !addr.address.trim());
-      if (emptyAddress) {
-        errors.address = 'All address fields must be filled';
+      // Check for empty required fields in addresses
+      const invalidAddresses = customerFormData.addresses.some(addr => 
+        !addr.address.trim() || !addr.state.trim() || !addr.district.trim() || !addr.pincode.trim()
+      );
+      if (invalidAddresses) {
+        errors.address = 'All address fields (address, state, district, pincode) are required';
       }
+      
       const primaryCount = customerFormData.addresses.filter(addr => addr.isPrimary).length;
       if (primaryCount !== 1) {
         errors.address = 'There must be exactly one primary address';
+      }
+      
+      // Validate pincode for each address
+      const invalidPincode = customerFormData.addresses.some(addr => {
+        return addr.pincode && !/^\d{6}$/.test(addr.pincode);
+      });
+      if (invalidPincode) {
+        errors.address = 'Pincode must be exactly 6 digits';
       }
     }
     if (customerFormData.email && !/\S+@\S+\.\S+/.test(customerFormData.email)) {
@@ -440,21 +473,15 @@ const CustomerManagement: React.FC = () => {
 
   const handleSubmitCustomer = async () => {
     if (!validateCustomerForm()) return;
-
     setSubmitting(true);
     try {
       setFormErrors({});
-
-      // Prepare form data, excluding assignedTo if it's empty to avoid ObjectId validation error
-      const submitData = { ...customerFormData };
+      const submitData = { ...customerFormData, type: customerTypeTab };
       if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
         delete (submitData as any).assignedTo;
       }
-
       const response = await apiClient.customers.create(submitData);
-
-      fetchCustomers()
-      // setCustomers([...customers, response.data]);
+      fetchCustomers();
       setShowAddModal(false);
       resetCustomerForm();
     } catch (error: any) {
@@ -555,6 +582,9 @@ const CustomerManagement: React.FC = () => {
   const resetCustomerForm = () => {
     setCustomerFormData({
       name: '',
+      designation: '',
+      contactPersonName: '',
+      gstNumber: '',
       email: '',
       phone: '',
       address: '',
@@ -565,8 +595,12 @@ const CustomerManagement: React.FC = () => {
       addresses: [{
         id: Date.now(),
         address: '',
+        state: '',
+        district: '',
+        pincode: '',
         isPrimary: true
-      }]
+      }],
+      type: customerTypeTab
     });
     setShowAssignedToDropdown(false);
   };
@@ -588,6 +622,9 @@ const CustomerManagement: React.FC = () => {
     setEditingCustomer(customer);
     setCustomerFormData({
       name: customer.name,
+      designation: customer.designation || '',
+      contactPersonName: customer.contactPersonName || '',
+      gstNumber: customer.gstNumber || '',
       email: customer.email || '',
       phone: customer.phone,
       address: customer.address,
@@ -600,8 +637,12 @@ const CustomerManagement: React.FC = () => {
         : [{
           id: Date.now(),
           address: '',
+          state: '',
+          district: '',
+          pincode: '',
           isPrimary: true
-        }]
+        }],
+      type: (customer as any).type || customerTypeTab // <-- ensure type is set
     });
     setFormErrors({});
     setShowEditModal(true);
@@ -826,13 +867,15 @@ const CustomerManagement: React.FC = () => {
               className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
             >
               <Plus className="w-4 h-4" />
-              <span className="text-sm">Add Customer</span>
+              <span className="text-sm">{customerTypeTab === 'customer' ? 'Add Customer' : 'Add Supplier'}</span>
             </button>
           }
 
 
         </div>
       </PageHeader>
+
+  
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -854,6 +897,8 @@ const CustomerManagement: React.FC = () => {
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 md:space-x-4">
+
+          <div>
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -864,6 +909,16 @@ const CustomerManagement: React.FC = () => {
               className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
+
+          <div className="mt-4 flex items-center justify-between">
+          <span className="text-xs text-gray-600">
+            Showing {customers.length} customers
+          </span>
+        </div>
+
+
+          </div>
+         
           {/* Tab Navigation inside filter card, right side */}
           {/* <div className="flex space-x-2">
             {tabOptions.map(tab => (
@@ -876,13 +931,28 @@ const CustomerManagement: React.FC = () => {
               </button>
             ))}
           </div> */}
-        </div>
+       
 
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-xs text-gray-600">
-            Showing {customers.length} customers
-          </span>
-        </div>
+      
+
+            {/* Insert this above the filters section, after <PageHeader ... /> */}
+      <div className="flex space-x-2 mb-4">
+        <button
+          className={`px-4 py-2 rounded-lg font-semibold focus:outline-none transition-colors border-b-2 ${customerTypeTab === 'customer' ? 'border-blue-600 text-blue-700 bg-white' : 'border-transparent text-gray-500 bg-gray-100 hover:text-blue-600'}`}
+          onClick={() => setCustomerTypeTab('customer')}
+          type="button"
+        >
+          Customer
+        </button>
+        <button
+          className={`px-4 py-2 rounded-lg font-semibold focus:outline-none transition-colors border-b-2 ${customerTypeTab === 'supplier' ? 'border-blue-600 text-blue-700 bg-white' : 'border-transparent text-gray-500 bg-gray-100 hover:text-blue-600'}`}
+          onClick={() => setCustomerTypeTab('supplier')}
+          type="button"
+        >
+          Supplier
+        </button>
+      </div>
+      </div>
       </div>
 
       {/* Customer Table */}
@@ -1031,7 +1101,7 @@ const CustomerManagement: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Add New Customer</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Add New {customerTypeTab === 'customer' ? 'Customer' : 'Supplier'}</h2>
               <button
                 onClick={() => {
                   setShowAddModal(false);
@@ -1056,10 +1126,10 @@ const CustomerManagement: React.FC = () => {
                       <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
                     </div>
                   <div className="grid grid-cols-2 gap-4">
-                    {/* Customer Name, Type, Email, Phone */}
+                    {/* Customer Name, Type */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Customer Name *
+                        Name *
                       </label>
                       <input
                         type="text"
@@ -1067,7 +1137,7 @@ const CustomerManagement: React.FC = () => {
                         onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
                         className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
                           }`}
-                        placeholder="Enter customer name"
+                        placeholder="Enter name"
                       />
                       {formErrors.name && (
                         <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
@@ -1075,7 +1145,7 @@ const CustomerManagement: React.FC = () => {
                     </div>
                     <div className="relative dropdown-container">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Customer Type *
+                        Type *
                       </label>
                       <button
                         type="button"
@@ -1105,6 +1175,48 @@ const CustomerManagement: React.FC = () => {
                           ))}
                         </div>
                       )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    {/* Designation, Contact Person */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Designation
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.designation}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, designation: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter designation"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Contact Person Name
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.contactPersonName}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, contactPersonName: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter contact person name"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    {/* GST Number */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        GST Number
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.gstNumber}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, gstNumber: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter gst number"
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
@@ -1244,7 +1356,7 @@ const CustomerManagement: React.FC = () => {
                           <div className='flex-1'>
                             <div className="flex justify-between my-1">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Address {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                                Address * {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
                               </label>
                               {!address.isPrimary && (
                                 <button
@@ -1262,6 +1374,35 @@ const CustomerManagement: React.FC = () => {
                               className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
                               placeholder="Enter full address"
                             />
+                            {/* New fields for state, district, pincode */}
+                            <div className="grid grid-cols-3 gap-2 mt-2">
+                              <input
+                                type="text"
+                                value={address.state}
+                                onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                placeholder="State *"
+                              />
+                              <input
+                                type="text"
+                                value={address.district}
+                                onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                placeholder="District *"
+                              />
+                              <input
+                                type="text"
+                                value={address.pincode}
+                                onChange={(e) => {
+                                  const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                  updateAddress(address.id, 'pincode', value);
+                                }}
+                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                placeholder="Pincode *"
+                                pattern="[0-9]{6}"
+                                maxLength={6}
+                              />
+                            </div>
                           </div>
                           <div className="flex gap-2 ps-2 mt-10 mb-8">
                             {customerFormData.addresses.length > 1 && (
@@ -1314,7 +1455,7 @@ const CustomerManagement: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Edit Customer</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Edit {customerTypeTab === 'customer' ? 'Customer' : 'Supplier'}</h2>
               <button
                 onClick={() => {
                   setShowEditModal(false);
@@ -1339,10 +1480,10 @@ const CustomerManagement: React.FC = () => {
                       <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
                     </div>
                   <div className="grid grid-cols-2 gap-4">
-                    {/* Customer Name, Type, Email, Phone */}
+                    {/* Customer Name, Type */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Customer Name *
+                        Name *
                       </label>
                       <input
                         type="text"
@@ -1350,7 +1491,7 @@ const CustomerManagement: React.FC = () => {
                         onChange={(e) => setCustomerFormData({ ...customerFormData, name: e.target.value })}
                         className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.name ? 'border-red-500' : 'border-gray-300'
                           }`}
-                        placeholder="Enter customer name"
+                        placeholder="Enter name"
                       />
                       {formErrors.name && (
                         <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
@@ -1358,7 +1499,7 @@ const CustomerManagement: React.FC = () => {
                     </div>
                     <div className="relative dropdown-container">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Customer Type *
+                        Type *
                       </label>
                       <button
                         type="button"
@@ -1388,6 +1529,48 @@ const CustomerManagement: React.FC = () => {
                           ))}
                         </div>
                       )}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-4">
+                    {/* Designation, Contact Person */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Designation
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.designation}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, designation: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter designation"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Contact Person Name
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.contactPersonName}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, contactPersonName: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter contact person name"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-4">
+                    {/* GST Number */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        GST Number
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.gstNumber}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, gstNumber: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter gst number"
+                      />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
@@ -1527,7 +1710,7 @@ const CustomerManagement: React.FC = () => {
                           <div className='flex-1'>
                             <div className="flex justify-between my-1">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Address {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                                Address * {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
                               </label>
                               {!address.isPrimary && (
                                 <button
@@ -1545,6 +1728,35 @@ const CustomerManagement: React.FC = () => {
                               className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
                               placeholder="Enter full address"
                             />
+                            {/* New fields for state, district, pincode */}
+                            <div className="grid grid-cols-3 gap-2 mt-2">
+                              <input
+                                type="text"
+                                value={address.state}
+                                onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                placeholder="State *"
+                              />
+                              <input
+                                type="text"
+                                value={address.district}
+                                onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                placeholder="District *"
+                              />
+                              <input
+                                type="text"
+                                value={address.pincode}
+                                onChange={(e) => {
+                                  const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                  updateAddress(address.id, 'pincode', value);
+                                }}
+                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                placeholder="Pincode *"
+                                pattern="[0-9]{6}"
+                                maxLength={6}
+                              />
+                            </div>
                           </div>
                           <div className="flex gap-2 ps-2 mt-10 mb-8">
                             {customerFormData.addresses.length > 1 && (
@@ -1618,7 +1830,7 @@ const CustomerManagement: React.FC = () => {
                 {/* Customer Information */}
                 <div className="space-y-3">
                   <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Customer Information</h3>
-                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-gray-500">Customer Type</p>
                       <p className="font-medium capitalize">{selectedCustomer.customerType}</p>
@@ -1627,6 +1839,24 @@ const CustomerManagement: React.FC = () => {
                       <p className="text-xs text-gray-500">Lead Source</p>
                       <p className="font-medium">{selectedCustomer.leadSource || 'Direct'}</p>
                     </div>
+                    {selectedCustomer.designation && (
+                      <div>
+                        <p className="text-xs text-gray-500">Designation</p>
+                        <p className="font-medium text-sm">{selectedCustomer.designation}</p>
+                      </div>
+                    )}
+                    {selectedCustomer.contactPersonName && (
+                      <div>
+                        <p className="text-xs text-gray-500">Contact Person</p>
+                        <p className="font-medium text-sm">{selectedCustomer.contactPersonName}</p>
+                      </div>
+                    )}
+                    {selectedCustomer.gstNumber && (
+                      <div>
+                        <p className="text-xs text-gray-500">GST Number</p>
+                        <p className="font-medium text-sm">{selectedCustomer.gstNumber}</p>
+                      </div>
+                    )}
                     {selectedCustomer.email && (
                       <div>
                         <p className="text-xs text-gray-500">Email</p>
@@ -1645,10 +1875,120 @@ const CustomerManagement: React.FC = () => {
                       <p className="text-xs text-gray-500">Created</p>
                       <p className="font-medium">{new Date(selectedCustomer.createdAt).toLocaleDateString()}</p>
                     </div>
+                    <div className="relative dropdown-container">
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickActionsDropdown(!showQuickActionsDropdown)}
+                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      >
+                        <span className="text-sm font-medium text-gray-700">Quick Actions</span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showQuickActionsDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showQuickActionsDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              openEditModal(selectedCustomer);
+                              setShowDetailsModal(false);
+                              setShowQuickActionsDropdown(false);
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-gray-300 transition-colors text-sm text-gray-700"
+                          >
+                            Edit Customer
+                          </button>
+                          {selectedCustomer.status !== 'qualified' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleStatusChange(selectedCustomer._id, 'qualified');
+                                setShowDetailsModal(false);
+                                setShowQuickActionsDropdown(false);
+                              }}
+                              className="w-full px-3 py-2 text-left hover:bg-gray-300 transition-colors text-sm text-gray-700"
+                            >
+                              Mark Qualified
+                            </button>
+                          )}
+                          {selectedCustomer.status !== 'contacted' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleStatusChange(selectedCustomer._id, 'contacted');
+                                setShowDetailsModal(false);
+                                setShowQuickActionsDropdown(false);
+                              }}
+                              className="w-full px-3 py-2 text-left hover:bg-gray-300 transition-colors text-sm text-gray-700"
+                            >
+                              Mark Contacted
+                            </button>
+                          )}
+                          {selectedCustomer.status !== 'converted' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleStatusChange(selectedCustomer._id, 'converted');
+                                setShowDetailsModal(false);
+                                setShowQuickActionsDropdown(false);
+                              }}
+                              className="w-full px-3 py-2 text-left hover:bg-gray-300 transition-colors text-sm text-gray-700"
+                            >
+                              Mark Converted
+                            </button>
+                          )}
+                          {selectedCustomer.status !== 'lost' && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                handleStatusChange(selectedCustomer._id, 'lost');
+                                setShowDetailsModal(false);
+                                setShowQuickActionsDropdown(false);
+                              }}
+                              className="w-full px-3 py-2 text-left hover:bg-gray-300 transition-colors text-sm text-gray-700"
+                            >
+                              Mark Lost
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
+                  
+                
+                  {/* Addresses Section */}
                   <div className="col-span-2">
-                    <p className="text-xs text-gray-500">Address</p>
-                    <p className="font-medium text-sm">{selectedCustomer.address}</p>
+                    <h4 className="text-sm font-medium text-gray-700 mb-2">Addresses</h4>
+                    {selectedCustomer.addresses && selectedCustomer.addresses.length > 0 ? (
+                      <div className="space-y-3">
+                        {selectedCustomer.addresses.map((address, index) => (
+                          <div key={address.id || index} className={`border rounded-lg p-3 ${address.isPrimary ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-medium text-gray-700">
+                                Address {index + 1}
+                              </span>
+                              {address.isPrimary && (
+                                <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                                  Primary
+                                </span>
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <p className="text-sm text-gray-900">{address.address}</p>
+                              <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
+                                <span><strong>State:</strong> {address.state}</span>
+                                <span><strong>District:</strong> {address.district}</span>
+                                <span><strong>Pincode:</strong> {address.pincode}</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-gray-500">
+                        <p className="font-medium text-sm">{selectedCustomer.address}</p>
+                        <p className="text-xs text-gray-400 mt-1">(Legacy address format)</p>
+                      </div>
+                    )}
                   </div>
                   {selectedCustomer.notes && (
                     <div className="col-span-2">
@@ -1705,68 +2045,7 @@ const CustomerManagement: React.FC = () => {
                 )}
               </div>
 
-              {/* Quick Actions */}
-              <div className="mt-8 border-t pt-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Quick Actions</h3>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => {
-                      openEditModal(selectedCustomer);
-                      setShowDetailsModal(false);
-                    }}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors"
-                  >
-                    Edit Customer
-                  </button>
-                  <div className="flex space-x-2">
-                    {selectedCustomer.status !== 'qualified' && (
-                      <button
-                        onClick={() => {
-                          handleStatusChange(selectedCustomer._id, 'qualified');
-                          setShowDetailsModal(false);
-                        }}
-                        className="bg-yellow-600 text-white px-3 py-2 rounded-lg hover:bg-yellow-700 transition-colors text-sm"
-                      >
-                        Mark Qualified
-                      </button>
-                    )}
-                    {selectedCustomer.status !== 'contacted' && (
-                      <button
-                        onClick={() => {
-                          handleStatusChange(selectedCustomer._id, 'contacted');
-                          setShowDetailsModal(false);
-                        }}
-                        className="bg-purple-600 text-white px-3 py-2 rounded-lg hover:bg-purple-700 transition-colors text-sm"
-                      >
-                        Mark Contacted
-                      </button>
-                    )}
-                    {selectedCustomer.status !== 'converted' && (
-                      <button
-                        onClick={() => {
-                          handleStatusChange(selectedCustomer._id, 'converted');
-                          setShowDetailsModal(false);
-                        }}
-                        className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm"
-                      >
-                        Mark Converted
-                      </button>
-                    )}
 
-                    {selectedCustomer.status !== 'lost' && (
-                      <button
-                        onClick={() => {
-                          handleStatusChange(selectedCustomer._id, 'lost');
-                          setShowDetailsModal(false);
-                        }}
-                        className="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 transition-colors text-sm"
-                      >
-                        Mark Lost
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
             </div>
           </div>
         </div>

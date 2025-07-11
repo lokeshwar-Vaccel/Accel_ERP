@@ -37,6 +37,21 @@ const addressSchema = new Schema({
     required: [true, 'Address is required'],
     maxlength: [500, 'Address cannot exceed 500 characters']
   },
+  state: {
+    type: String,
+    required: [true, 'State is required'],
+    maxlength: [100, 'State cannot exceed 100 characters']
+  },
+  district: {
+    type: String,
+    required: [true, 'District is required'],
+    maxlength: [100, 'District cannot exceed 100 characters']
+  },
+  pincode: {
+    type: String,
+    required: [true, 'Pincode is required'],
+    match: [/^\d{6}$/, 'Pincode must be 6 digits']
+  },
   isPrimary: {
     type: Boolean,
     default: false
@@ -49,6 +64,21 @@ const customerSchema = new Schema({
     required: [true, 'Customer name is required'],
     trim: true,
     maxlength: [100, 'Customer name cannot exceed 100 characters']
+  },
+  designation: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Designation cannot exceed 100 characters']
+  },
+  contactPersonName: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Contact person name cannot exceed 100 characters']
+  },
+  gstNumber: {
+    type: String,
+    trim: true,
+    maxlength: [50, 'GST number cannot exceed 50 characters']
   },
   email: {
     type: String,

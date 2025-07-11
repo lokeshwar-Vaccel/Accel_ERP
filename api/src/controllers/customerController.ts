@@ -34,6 +34,8 @@ export const getCustomers = async (
       dateTo?: string;
       type?: string;
     };
+    console.log('Full req.query:', req.query);
+    console.log('All query keys:', Object.keys(req.query));
 
     
 
@@ -73,6 +75,7 @@ export const getCustomers = async (
     if (type) {
       query.type = type;
     }
+    console.log('MongoDB query object:', query);
 
     // Execute query with pagination
     let customers = await Customer.find(query)
@@ -89,6 +92,7 @@ export const getCustomers = async (
       }
       return customer;
     });
+    console.log('Number of customers returned:', customers.length);
 
     const total = await Customer.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));
