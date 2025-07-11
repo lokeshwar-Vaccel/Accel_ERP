@@ -24,6 +24,12 @@ export enum CustomerType {
   TELECOM = 'telecom'
 }
 
+// Customer Main Type (customer or supplier)
+export enum CustomerMainType {
+  CUSTOMER = 'customer',
+  SUPPLIER = 'supplier'
+}
+
 // Lead Status
 export enum LeadStatus {
   NEW = 'new',
@@ -149,6 +155,7 @@ export interface ICustomer extends Document {
   phone: string;
   addresses: Address[];
   customerType: CustomerType;
+  type: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
   assignedTo?: string;
   status: LeadStatus;

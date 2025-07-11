@@ -1,5 +1,5 @@
 import mongoose, { Schema, Types } from 'mongoose';
-import { ICustomer, IContactHistory, CustomerType, LeadStatus } from '../types';
+import { ICustomer, IContactHistory, CustomerType, LeadStatus, CustomerMainType } from '../types';
 
 const contactHistorySchema = new Schema({
   type: {
@@ -72,6 +72,11 @@ const customerSchema = new Schema({
     type: String,
     enum: Object.values(CustomerType),
     required: [true, 'Customer type is required']
+  },
+  type: {
+    type: String,
+    enum: Object.values(CustomerMainType),
+    required: [true, 'Type is required']
   },
   leadSource: {
     type: String,
