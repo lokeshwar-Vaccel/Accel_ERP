@@ -677,6 +677,7 @@ const ProductManagement: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part No</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
@@ -704,6 +705,7 @@ const ProductManagement: React.FC = () => {
                         {/* <div className="text-xs text-gray-500">Code: {product.productCode || 'N/A'}</div> */}
                       </div>
                     </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.partNo}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.category}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.brand || 'N/A'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">

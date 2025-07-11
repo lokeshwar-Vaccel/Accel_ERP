@@ -2566,6 +2566,7 @@ const autoAdjustUnitPrice = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                        {/* <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th> */}
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
@@ -2579,6 +2580,7 @@ const autoAdjustUnitPrice = () => {
                       {(selectedInvoice.items || []).map((item: any, index: number) => (
                         <tr key={index}>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
+                          {/* <td className="px-4 py-2 text-sm text-gray-900">{item.partNo}</td> */}
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode ? (
@@ -2704,11 +2706,11 @@ const autoAdjustUnitPrice = () => {
                     <div className="border-t pt-2">
                       <div className="flex justify-between text-lg font-bold">
                         <span>Total Amount:</span>
-                        <span className={selectedInvoice?.externalInvoiceTotal.toFixed(2) !== 0 && selectedInvoice?.totalAmount.toFixed(2) !== selectedInvoice?.externalInvoiceTotal.toFixed(2) ? 'text-red-600' : 'text-gray-900'}>
+                        <span className={selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount !== selectedInvoice?.externalInvoiceTotal ? 'text-red-600' : 'text-gray-900'}>
                           ₹{safeToFixed(selectedInvoice?.totalAmount)}
                         </span>
                       </div>
-                      {selectedInvoice?.externalInvoiceTotal.toFixed(2) !== 0 && selectedInvoice?.totalAmount.toFixed(2) !== selectedInvoice?.externalInvoiceTotal.toFixed(2) && (
+                      {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount !== selectedInvoice?.externalInvoiceTotal && (
                         <div className="flex justify-between text-sm text-gray-600 mt-1">
                           <span>External Total:</span>
                           <span>₹{safeToFixed(selectedInvoice?.externalInvoiceTotal)}</span>
