@@ -7,6 +7,7 @@ import { AppError } from '../middleware/errorHandler';
 import { generateReferenceId } from '../utils/generateReferenceId';
 import { Product } from '../models/Product';
 import { Invoice } from '../models/Invoice';
+import { Customer } from '../models/Customer';
 import mongoose, { Types } from 'mongoose';
 import { sendEmail } from '../utils/email';
 
@@ -148,31 +149,60 @@ export const createPurchaseOrder = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Calculate total amount from items (including taxRate)
-  let totalAmount = 0;
-  if (req.body.items && Array.isArray(req.body.items)) {
-    for (const item of req.body.items) {
-      const quantity = item.quantity || 0;
-      const unitPrice = item.unitPrice || 0;
-      const taxRate = item.taxRate || 0;
-      const itemTotal = quantity * unitPrice * (1 + taxRate / 100);
-      totalAmount += itemTotal;
-    }
-  }
+    // Handle supplier data from customers collection
+    let supplierName = req.body.supplier;
+    let supplierEmail = req.body.supplierEmail;
 
-  // Prepare order data
-  const orderData = {
-    ...req.body,
-    totalAmount,
-    createdBy: req.user!.id,
-    orderDate: new Date()
-  };
-  
+    // If supplier is an ObjectId, fetch supplier details from customers collection
+    if (mongoose.Types.ObjectId.isValid(req.body.supplier)) {
+      const supplier = await Customer.findById(req.body.supplier);
+      if (!supplier) {
+        return next(new AppError('Supplier not found', 404));
+      }
+      
+      // Use supplier details from customers collection
+      supplierName = supplier.name;
+      supplierEmail = supplier.email || req.body.supplierEmail;
+    }
+
+    // Calculate total amount from items (including taxRate)
+    let totalAmount = 0;
+    if (req.body.items && Array.isArray(req.body.items)) {
+      for (const item of req.body.items) {
+        const quantity = item.quantity || 0;
+        const unitPrice = item.unitPrice || 0;
+        const taxRate = item.taxRate || 0;
+        const itemTotal = quantity * unitPrice * (1 + taxRate / 100);
+        totalAmount += itemTotal;
+      }
+    }
+
+    // Prepare order data
+    const orderData = {
+      ...req.body,
+      supplier: supplierName, // Use the resolved supplier name
+      supplierEmail: supplierEmail, // Use the resolved supplier email
+      totalAmount,
+      createdBy: req.user!.id,
+      orderDate: new Date()
+    };
+
+    // Convert date strings to Date objects for new fields
+    if (req.body.shipDate) {
+      orderData.shipDate = new Date(req.body.shipDate);
+    }
+    if (req.body.invoiceDate) {
+      orderData.invoiceDate = new Date(req.body.invoiceDate);
+    }
+    if (req.body.documentDate) {
+      orderData.documentDate = new Date(req.body.documentDate);
+    }
+    
     const order = await PurchaseOrder.create(orderData);
     
     const populatedOrder = await PurchaseOrder.findById(order._id)
-    .populate('items.product', 'name category brand modelNumber partNo price gst')
-    .populate('createdBy', 'firstName lastName email');
+      .populate('items.product', 'name category brand modelNumber partNo price gst')
+      .populate('createdBy', 'firstName lastName email');
     
     const response: APIResponse = {
       success: true,
@@ -201,13 +231,52 @@ export const updatePurchaseOrder = async (
       return next(new AppError('Purchase order not found', 404));
     }
 
+    // Handle supplier data from customers collection
+    let supplierName = req.body.supplier;
+    let supplierEmail = req.body.supplierEmail;
+
+    // If supplier is an ObjectId, fetch supplier details from customers collection
+    if (req.body.supplier && mongoose.Types.ObjectId.isValid(req.body.supplier)) {
+      const supplier = await Customer.findById(req.body.supplier);
+      if (!supplier) {
+        return next(new AppError('Supplier not found', 404));
+      }
+      
+      // Use supplier details from customers collection
+      supplierName = supplier.name;
+      supplierEmail = supplier.email || req.body.supplierEmail;
+    }
+
     // Recalculate total if items are updated
     if (req.body.items) {
       let totalAmount = 0;
       for (const item of req.body.items) {
-        totalAmount += item.quantity * item.unitPrice;
+        const quantity = item.quantity || 0;
+        const unitPrice = item.unitPrice || 0;
+        const taxRate = item.taxRate || 0;
+        const itemTotal = quantity * unitPrice * (1 + taxRate / 100);
+        totalAmount += itemTotal;
       }
       req.body.totalAmount = totalAmount;
+    }
+
+    // Update supplier information
+    if (supplierName) {
+      req.body.supplier = supplierName;
+    }
+    if (supplierEmail) {
+      req.body.supplierEmail = supplierEmail;
+    }
+
+    // Convert date strings to Date objects for new fields
+    if (req.body.shipDate) {
+      req.body.shipDate = new Date(req.body.shipDate);
+    }
+    if (req.body.invoiceDate) {
+      req.body.invoiceDate = new Date(req.body.invoiceDate);
+    }
+    if (req.body.documentDate) {
+      req.body.documentDate = new Date(req.body.documentDate);
     }
 
     const updatedOrder = await PurchaseOrder.findByIdAndUpdate(
@@ -272,7 +341,25 @@ export const receiveItems = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { receivedItems, location, receiptDate, inspectedBy, notes, externalInvoiceNumber, externalInvoiceTotal, supplierName, supplierEmail, items } = req.body;
+    const { 
+      receivedItems, 
+      location, 
+      receiptDate, 
+      inspectedBy, 
+      notes, 
+      externalInvoiceTotal, 
+      supplierName, 
+      supplierEmail, 
+      items,
+      // New shipping and documentation fields
+      shipDate,
+      docketNumber,
+      noOfPackages,
+      gstInvoiceNumber,
+      invoiceDate,
+      documentNumber,
+      documentDate
+    } = req.body;
 
     const order = await PurchaseOrder.findById(req.params.id)
     .populate('items.product', 'name category brand partNo');
@@ -425,6 +512,15 @@ export const receiveItems = async (
       }
     }
 
+    // Save shipping and documentation fields to the purchase order
+    if (shipDate) order.shipDate = new Date(shipDate);
+    if (docketNumber) order.docketNumber = docketNumber;
+    if (noOfPackages) order.noOfPackages = noOfPackages;
+    if (gstInvoiceNumber) order.gstInvoiceNumber = gstInvoiceNumber;
+    if (invoiceDate) order.invoiceDate = new Date(invoiceDate);
+    if (documentNumber) order.documentNumber = documentNumber;
+    if (documentDate) order.documentDate = new Date(documentDate);
+
     await order.save();
 
     // Populate the order with product details for frontend
@@ -442,6 +538,7 @@ export const receiveItems = async (
 
     const invoice = await createInvoiceFromPO({
       items: items,
+      gstInvoiceNumber: gstInvoiceNumber,
       supplierName: supplierName,
       supplierEmail: supplierEmail,
       dueDate: receiptDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -451,7 +548,6 @@ export const receiveItems = async (
       invoiceType: 'purchase',
       location: location,
       poNumber: order.poNumber,
-      externalInvoiceNumber: externalInvoiceNumber,
       externalInvoiceTotal: externalInvoiceTotal
     });
 
@@ -674,6 +770,7 @@ export const updatePurchaseOrderStatus = async (
 const createInvoiceFromPO = async ({
   items,
   supplierName,
+  gstInvoiceNumber,
   supplierEmail,
   dueDate,
   discountAmount = 0,
@@ -683,7 +780,6 @@ const createInvoiceFromPO = async ({
   location,
   poNumber,
   reduceStock = true,
-  externalInvoiceNumber,
   externalInvoiceTotal
 }: {
   items: InvoiceItemInput[],
@@ -697,10 +793,10 @@ const createInvoiceFromPO = async ({
   location: any,
   poNumber: string,
   reduceStock?: boolean,
-  externalInvoiceNumber?: string,
-  externalInvoiceTotal?: number
+  externalInvoiceTotal?: number,
+  gstInvoiceNumber: string
 }) => {
-  const invoiceNumber = externalInvoiceNumber;
+  const invoiceNumber = gstInvoiceNumber;
 
   let calculatedItems = [];
   let subtotal = 0;
@@ -756,7 +852,6 @@ const totalAmount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discou
     invoiceType,
     location,
     poNumber,
-    externalInvoiceNumber,
     externalInvoiceTotal
   });
 

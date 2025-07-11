@@ -23,7 +23,8 @@ export const getCustomers = async (
       assignedTo,
       leadSource,
       dateFrom,
-      dateTo 
+      dateTo,
+      type
     } = req.query as QueryParams & {
       customerType?: CustomerType;
       status?: LeadStatus;
@@ -31,7 +32,10 @@ export const getCustomers = async (
       leadSource?: string;
       dateFrom?: string;
       dateTo?: string;
+      type?: string;
     };
+    console.log('Full req.query:', req.query);
+    console.log('All query keys:', Object.keys(req.query));
 
     
 
@@ -68,13 +72,27 @@ export const getCustomers = async (
       if (dateTo) query.createdAt.$lte = new Date(dateTo);
     }
 
+    if (type) {
+      query.type = type;
+    }
+    console.log('MongoDB query object:', query);
+
     // Execute query with pagination
-    const customers = await Customer.find(query)
+    let customers = await Customer.find(query)
       .populate('assignedTo', 'firstName lastName email')
       .populate('createdBy', 'firstName lastName email')
       .sort(sort as string)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
+
+    // Ensure 'type' is set to 'customer' if missing
+    customers = customers.map((customer: any) => {
+      if (!customer.type) {
+        customer.type = 'customer';
+      }
+      return customer;
+    });
+    console.log('Number of customers returned:', customers.length);
 
     const total = await Customer.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));

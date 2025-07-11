@@ -21,14 +21,22 @@ export interface POItemInput {
 }
 
 export interface CreatePurchaseOrderInput {
-  supplier: string;
-  supplierEmail: string;
+  supplier: string; // Can be ObjectId (from customers collection) or supplier name string
+  supplierEmail?: string; // Optional, will be fetched from customer if supplier is ObjectId
   items: POItemInput[];
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   deliveryLocation?: string;
   paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
   shippingMethod?: 'standard' | 'express' | 'overnight' | 'pickup';
+  // New fields for shipping and documentation
+  shipDate?: string;
+  docketNumber?: string;
+  noOfPackages?: number;
+  gstInvoiceNumber?: string;
+  invoiceDate?: string;
+  documentNumber?: string;
+  documentDate?: string;
   supplierContact?: {
     name?: string;
     email?: string;
@@ -53,8 +61,8 @@ export interface CreatePurchaseOrderInput {
 }
 
 export interface UpdatePurchaseOrderInput {
-  supplier?: string;
-  supplierEmail?: string;
+  supplier?: string; // Can be ObjectId (from customers collection) or supplier name string
+  supplierEmail?: string; // Optional, will be fetched from customer if supplier is ObjectId
   items: POItemInput[];
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
@@ -62,6 +70,14 @@ export interface UpdatePurchaseOrderInput {
   deliveryLocation?: string;
   paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
   shippingMethod?: 'standard' | 'express' | 'overnight' | 'pickup';
+  // New fields for shipping and documentation
+  shipDate?: string;
+  docketNumber?: string;
+  noOfPackages?: number;
+  gstInvoiceNumber?: string;
+  invoiceDate?: string;
+  documentNumber?: string;
+  documentDate?: string;
   supplierContact?: {
     name?: string;
     email?: string;
@@ -233,13 +249,24 @@ export interface PurchaseOrderImportInput {
 
 // Base purchase order fields
 const basePOFields = {
-  supplier: Joi.string().max(200).trim(),
-  supplierEmail: Joi.string().max(200).trim(),
+  supplier: Joi.alternatives().try(
+    Joi.string().hex().length(24), // ObjectId for supplier from customers collection
+    Joi.string().max(200).trim()   // String for supplier name
+  ),
+  supplierEmail: Joi.string().email().max(200).trim(),
   totalAmount: Joi.number().min(0).precision(2),
   status: Joi.string().valid('draft', 'sent', 'confirmed', 'received', 'cancelled'),
   orderDate: Joi.date().iso(),
   expectedDeliveryDate: Joi.date().iso(),
   actualDeliveryDate: Joi.date().iso(),
+  // New fields for shipping and documentation
+  shipDate: Joi.date().iso(),
+  docketNumber: Joi.string().max(100).trim(),
+  noOfPackages: Joi.number().min(0).integer(),
+  gstInvoiceNumber: Joi.string().max(100).trim(),
+  invoiceDate: Joi.date().iso(),
+  documentNumber: Joi.string().max(100).trim(),
+  documentDate: Joi.date().iso(),
   priority: Joi.string().valid('low', 'medium', 'high', 'urgent'),
   deliveryLocation: Joi.string().hex().length(24), // Stock location ID
   paymentTerms: Joi.string().valid('cod', 'net_30', 'net_60', 'advance', 'credit'),
@@ -269,13 +296,21 @@ const poItemSchema = Joi.object<POItemInput>({
 // Create purchase order schema
 export const createPurchaseOrderSchema = Joi.object<CreatePurchaseOrderInput>({
   supplier: basePOFields.supplier.required(),
-  supplierEmail: basePOFields.supplier.required(),
+  supplierEmail: basePOFields.supplierEmail.optional(), // Optional since it can be fetched from customer
   items: Joi.array().items(poItemSchema).min(1).max(100).required(),
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
   priority: basePOFields.priority.default('medium'),
   deliveryLocation: basePOFields.deliveryLocation,
   paymentTerms: basePOFields.paymentTerms.default('net_30'),
   shippingMethod: basePOFields.shippingMethod.default('standard'),
+  // New fields for shipping and documentation
+  shipDate: basePOFields.shipDate,
+  docketNumber: basePOFields.docketNumber,
+  noOfPackages: basePOFields.noOfPackages,
+  gstInvoiceNumber: basePOFields.gstInvoiceNumber,
+  invoiceDate: basePOFields.invoiceDate,
+  documentNumber: basePOFields.documentNumber,
+  documentDate: basePOFields.documentDate,
   supplierContact: Joi.object({
     name: Joi.string().max(100),
     email: Joi.string().email(),
@@ -310,6 +345,14 @@ export const updatePurchaseOrderSchema = Joi.object<UpdatePurchaseOrderInput>({
   deliveryLocation: basePOFields.deliveryLocation,
   paymentTerms: basePOFields.paymentTerms,
   shippingMethod: basePOFields.shippingMethod,
+  // New fields for shipping and documentation
+  shipDate: basePOFields.shipDate,
+  docketNumber: basePOFields.docketNumber,
+  noOfPackages: basePOFields.noOfPackages,
+  gstInvoiceNumber: basePOFields.gstInvoiceNumber,
+  invoiceDate: basePOFields.invoiceDate,
+  documentNumber: basePOFields.documentNumber,
+  documentDate: basePOFields.documentDate,
   supplierContact: Joi.object({
     name: Joi.string().max(100),
     email: Joi.string().email(),
