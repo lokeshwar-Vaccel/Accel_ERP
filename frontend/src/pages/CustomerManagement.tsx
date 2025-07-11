@@ -1830,11 +1830,47 @@ const CustomerManagement: React.FC = () => {
                 {/* Customer Information */}
                 <div className="space-y-3">
                   <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Customer Information</h3>
-                                    <div className="grid grid-cols-2 gap-4">
+                  {/* Status Dropdown as Tag - moved here above the grid */}
+                  
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-gray-500">Customer Type</p>
                       <p className="font-medium capitalize">{selectedCustomer.customerType}</p>
                     </div>
+                    <div className="mb-2">
+                    <div className="relative dropdown-container inline-block">
+                      <button
+                        type="button"
+                        onClick={() => setShowStatusDropdown((v) => !v)}
+                        className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(selectedCustomer.status)} ${showStatusDropdown ? 'ring-2 ring-blue-400 border-blue-300' : 'border-transparent'}`}
+                      >
+                        {getStatusIcon(selectedCustomer.status)}
+                        <span className="ml-2 capitalize">{getStatusLabel(selectedCustomer.status)}</span>
+                        <ChevronDown className={`w-4 h-4 ml-2 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showStatusDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white p-2 border border-gray-200 rounded-md shadow-lg z-50 py-1 min-w-[160px] flex flex-col">
+                          {statusOptions
+                            .filter(opt => opt.value !== 'all' && opt.value !== selectedCustomer.status)
+                            .map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={async () => {
+                                  await handleStatusChange(selectedCustomer._id, option.value as LeadStatus);
+                                  setSelectedCustomer(prev => prev ? { ...prev, status: option.value as LeadStatus } : prev);
+                                  setShowStatusDropdown(false);
+                                }}
+                                className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full w-full mb-2 focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(option.value as LeadStatus)} border-transparent hover:opacity-80 hover:scale-105`}
+                              >
+                                {getStatusIcon(option.value as LeadStatus)}
+                                <span className="ml-2 capitalize">{option.label}</span>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                     <div>
                       <p className="text-xs text-gray-500">Lead Source</p>
                       <p className="font-medium">{selectedCustomer.leadSource || 'Direct'}</p>
@@ -1875,128 +1911,50 @@ const CustomerManagement: React.FC = () => {
                       <p className="text-xs text-gray-500">Created</p>
                       <p className="font-medium">{new Date(selectedCustomer.createdAt).toLocaleDateString()}</p>
                     </div>
-                    <div className="relative dropdown-container">
-                      <button
-                        type="button"
-                        onClick={() => setShowQuickActionsDropdown(!showQuickActionsDropdown)}
-                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-gray-50 border border-gray-300 rounded-lg hover:bg-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                      >
-                        <span className="text-sm font-medium text-gray-700">Quick Actions</span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showQuickActionsDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showQuickActionsDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              openEditModal(selectedCustomer);
-                              setShowDetailsModal(false);
-                              setShowQuickActionsDropdown(false);
-                            }}
-                            className="w-full px-3 py-2 text-left hover:bg-gray-300 transition-colors text-sm text-gray-700"
-                          >
-                            Edit Customer
-                          </button>
-                          {selectedCustomer.status !== 'qualified' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleStatusChange(selectedCustomer._id, 'qualified');
-                                setShowDetailsModal(false);
-                                setShowQuickActionsDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-left hover:bg-gray-300 transition-colors text-sm text-gray-700"
-                            >
-                              Mark Qualified
-                            </button>
-                          )}
-                          {selectedCustomer.status !== 'contacted' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleStatusChange(selectedCustomer._id, 'contacted');
-                                setShowDetailsModal(false);
-                                setShowQuickActionsDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-left hover:bg-gray-300 transition-colors text-sm text-gray-700"
-                            >
-                              Mark Contacted
-                            </button>
-                          )}
-                          {selectedCustomer.status !== 'converted' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleStatusChange(selectedCustomer._id, 'converted');
-                                setShowDetailsModal(false);
-                                setShowQuickActionsDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-left hover:bg-gray-300 transition-colors text-sm text-gray-700"
-                            >
-                              Mark Converted
-                            </button>
-                          )}
-                          {selectedCustomer.status !== 'lost' && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                handleStatusChange(selectedCustomer._id, 'lost');
-                                setShowDetailsModal(false);
-                                setShowQuickActionsDropdown(false);
-                              }}
-                              className="w-full px-3 py-2 text-left hover:bg-gray-300 transition-colors text-sm text-gray-700"
-                            >
-                              Mark Lost
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
                   </div>
-                  
-                
-                  {/* Addresses Section */}
-                  <div className="col-span-2">
-                    <h4 className="text-sm font-medium text-gray-700 mb-2">Addresses</h4>
-                    {selectedCustomer.addresses && selectedCustomer.addresses.length > 0 ? (
-                      <div className="space-y-3">
-                        {selectedCustomer.addresses.map((address, index) => (
-                          <div key={address.id || index} className={`border rounded-lg p-3 ${address.isPrimary ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-medium text-gray-700">
-                                Address {index + 1}
+                  {/* Removed Quick Actions dropdown here */}
+                </div>
+                {/* Addresses Section */}
+                <div className="col-span-2">
+                  <h4 className="text-sm font-medium text-gray-700 mb-2">Addresses</h4>
+                  {selectedCustomer.addresses && selectedCustomer.addresses.length > 0 ? (
+                    <div className="space-y-3">
+                      {selectedCustomer.addresses.map((address, index) => (
+                        <div key={address.id || index} className={`border rounded-lg p-3 ${address.isPrimary ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs font-medium text-gray-700">
+                              Address {index + 1}
+                            </span>
+                            {address.isPrimary && (
+                              <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                                Primary
                               </span>
-                              {address.isPrimary && (
-                                <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
-                                  Primary
-                                </span>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <p className="text-sm text-gray-900">{address.address}</p>
-                              <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
-                                <span><strong>State:</strong> {address.state}</span>
-                                <span><strong>District:</strong> {address.district}</span>
-                                <span><strong>Pincode:</strong> {address.pincode}</span>
-                              </div>
+                            )}
+                          </div>
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-900">{address.address}</p>
+                            <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
+                              <span><strong>State:</strong> {address.state}</span>
+                              <span><strong>District:</strong> {address.district}</span>
+                              <span><strong>Pincode:</strong> {address.pincode}</span>
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-sm text-gray-500">
-                        <p className="font-medium text-sm">{selectedCustomer.address}</p>
-                        <p className="text-xs text-gray-400 mt-1">(Legacy address format)</p>
-                      </div>
-                    )}
-                  </div>
-                  {selectedCustomer.notes && (
-                    <div className="col-span-2">
-                      <p className="text-xs text-gray-500">Notes</p>
-                      <p className="font-medium text-sm">{selectedCustomer.notes}</p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500">
+                      <p className="font-medium text-sm">{selectedCustomer.address}</p>
+                      <p className="text-xs text-gray-400 mt-1">(Legacy address format)</p>
                     </div>
                   )}
                 </div>
+                {selectedCustomer.notes && (
+                  <div className="col-span-2">
+                    <p className="text-xs text-gray-500">Notes</p>
+                    <p className="font-medium text-sm">{selectedCustomer.notes}</p>
+                  </div>
+                )}
               </div>
 
               {/* Contact History */}
@@ -2044,8 +2002,6 @@ const CustomerManagement: React.FC = () => {
                   </div>
                 )}
               </div>
-
-
             </div>
           </div>
         </div>
