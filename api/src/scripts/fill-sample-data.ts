@@ -212,7 +212,7 @@ async function main() {
       referenceId: '',
       location: pickRandom(locations)._id,
       createdBy: FIXED_USER_ID,
-      externalInvoiceNumber: '',
+
       supplierName: '',
       supplierEmail: '',
       poNumber: `PO${1000 + randomInt(0, 19)}`,

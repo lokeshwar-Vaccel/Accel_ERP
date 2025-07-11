@@ -21,6 +21,14 @@ interface IPurchaseOrderSchema extends Document {
   orderDate: Date;
   expectedDeliveryDate?: Date;
   actualDeliveryDate?: Date;
+  // New fields for shipping and documentation
+  shipDate?: Date;
+  docketNumber?: string;
+  noOfPackages?: number;
+  gstInvoiceNumber?: string;
+  invoiceDate?: Date;
+  documentNumber?: string;
+  documentDate?: Date;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -108,6 +116,35 @@ const purchaseOrderSchema = new Schema({
     type: Date
   },
   actualDeliveryDate: {
+    type: Date
+  },
+  // New fields for shipping and documentation
+  shipDate: {
+    type: Date
+  },
+  docketNumber: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Docket number cannot exceed 100 characters']
+  },
+  noOfPackages: {
+    type: Number,
+    min: [0, 'Number of packages cannot be negative']
+  },
+  gstInvoiceNumber: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'GST invoice number cannot exceed 100 characters']
+  },
+  invoiceDate: {
+    type: Date
+  },
+  documentNumber: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Document number cannot exceed 100 characters']
+  },
+  documentDate: {
     type: Date
   },
   createdBy: {

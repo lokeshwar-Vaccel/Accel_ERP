@@ -136,8 +136,15 @@ interface ReceiveItemsData {
   notes?: string;
   supplierName?: string;
   supplierEmail?: string;
-  externalInvoiceNumber?: string;
   externalInvoiceTotal?: number;
+  // New shipping and documentation fields
+  shipDate: string;
+  docketNumber: string;
+  noOfPackages: number;
+  gstInvoiceNumber: string;
+  invoiceDate: string;
+  documentNumber: string;
+  documentDate: string;
 }
 
 interface POFormData {
@@ -162,6 +169,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -169,6 +177,9 @@ const PurchaseOrderManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<PurchaseOrderStatus | 'all'>('all');
   const [supplierFilter, setSupplierFilter] = useState('');
+  const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
+  const [showCreateSupplierDropdown, setShowCreateSupplierDropdown] = useState(false);
+  const [showEditSupplierDropdown, setShowEditSupplierDropdown] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -204,7 +215,7 @@ const PurchaseOrderManagement: React.FC = () => {
       }
     ],
     // discountAmount: 0,
-    // externalInvoiceNumber: '',
+
     // externalInvoiceTotal: 0,
     // reduceStock: true
   });
@@ -248,9 +259,16 @@ const PurchaseOrderManagement: React.FC = () => {
     inspectedBy: '',
     supplierName: '',
     supplierEmail: '',
-    externalInvoiceNumber: '',
     externalInvoiceTotal: 0,
     notes: '',
+    // New shipping and documentation fields
+    shipDate: new Date().toISOString().split('T')[0],
+    docketNumber: '',
+    noOfPackages: 1,
+    gstInvoiceNumber: '',
+    invoiceDate: new Date().toISOString().split('T')[0],
+    documentNumber: '',
+    documentDate: new Date().toISOString().split('T')[0],
   });
 
 
@@ -286,7 +304,8 @@ const PurchaseOrderManagement: React.FC = () => {
       await Promise.all([
         fetchPurchaseOrders(),
         fetchProducts(),
-        fetchLocations()
+        fetchLocations(),
+        fetchSuppliers()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -385,6 +404,35 @@ const PurchaseOrderManagement: React.FC = () => {
     }
   };
 
+  const fetchSuppliers = async () => {
+    try {
+      console.log('Fetching suppliers...');
+      const response = await apiClient.customers.getAll({ 
+        type: 'supplier',
+        limit: 100 // Use valid limit
+      });
+      console.log('Suppliers API response:', response);
+      
+      let suppliersData: Supplier[] = [];
+      if (response && response.data) {
+        if (Array.isArray(response.data)) {
+          suppliersData = response.data as Supplier[];
+        } else if (typeof response.data === 'object' && Array.isArray((response.data as any).customers)) {
+          suppliersData = (response.data as { customers: Supplier[] }).customers;
+        } else if (response.success && response.data && Array.isArray(response.data)) {
+          suppliersData = response.data as Supplier[];
+        } else if (response.success && response.data && typeof response.data === 'object' && (response.data as any).customers) {
+          suppliersData = (response.data as any).customers as Supplier[];
+        }
+      }
+      console.log('Processed suppliers data:', suppliersData);
+      setSuppliers(suppliersData);
+    } catch (error) {
+      console.error('Error fetching suppliers:', error);
+      setSuppliers([]);
+    }
+  };
+
 
   // Helper functions
   const getCreatedByName = (createdBy: string | { firstName: string; lastName: string; email: string }) => {
@@ -433,15 +481,20 @@ const PurchaseOrderManagement: React.FC = () => {
     });
     setFormErrors({});
 
-    // Ensure products are loaded when modal opens
+    // Ensure products and suppliers are loaded when modal opens
     if (products.length === 0) {
       await fetchProducts();
+    }
+    if (suppliers.length === 0) {
+      console.log('No suppliers found, fetching...');
+      await fetchSuppliers();
+      console.log('Suppliers after fetch:', suppliers);
     }
 
     setShowCreateModal(true);
   };
 
-  const handleEditPO = (po: PurchaseOrder) => {
+  const handleEditPO = async (po: PurchaseOrder) => {
     setEditingPO(po);
 
     setFormData({
@@ -460,6 +513,12 @@ const PurchaseOrderManagement: React.FC = () => {
       }))
     });
     setFormErrors({});
+
+    // Ensure suppliers are loaded when editing
+    if (suppliers.length === 0) {
+      await fetchSuppliers();
+    }
+
     setShowEditModal(true);
   };
 
@@ -508,9 +567,16 @@ const PurchaseOrderManagement: React.FC = () => {
       inspectedBy: 'Admin',
       supplierName: extractedSupplierName, // Set supplier name from purchase order
       supplierEmail: extractedSupplierEmail,
-      externalInvoiceNumber: '',
       externalInvoiceTotal: 0,
       notes: '',
+      // New shipping and documentation fields
+      shipDate: new Date().toISOString().split('T')[0],
+      docketNumber: '',
+      noOfPackages: 1,
+      gstInvoiceNumber: '',
+      invoiceDate: new Date().toISOString().split('T')[0],
+      documentNumber: '',
+      documentDate: new Date().toISOString().split('T')[0],
     });
 
     setShowReceiveModal(true);
@@ -519,8 +585,8 @@ const PurchaseOrderManagement: React.FC = () => {
   const validatePOForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (!formData.supplier.trim()) {
-      errors.supplier = 'Supplier is required';
+    if (!formData.supplier) {
+      errors.supplier = 'Please select a supplier';
     }
     if (!formData.expectedDeliveryDate) {
       errors.expectedDeliveryDate = 'Expected delivery date is required';
@@ -644,10 +710,27 @@ const totalAmount = formData.items.reduce(
   const validateReceiveForm = (): boolean => {
     const errors: Record<string, string> = {};
 
-    if (!receiveData.externalInvoiceNumber || receiveData.externalInvoiceNumber.trim() === '') {
-      errors.externalInvoiceNumber = 'External Invoice Number is required';
+    if (!receiveData.shipDate || receiveData.shipDate.trim() === '') {
+      errors.shipDate = 'Ship Date is required';
     }
-    // Add other validations as needed
+    if (!receiveData.docketNumber || receiveData.docketNumber.trim() === '') {
+      errors.docketNumber = 'Docket Number is required';
+    }
+    if (!receiveData.noOfPackages || receiveData.noOfPackages <= 0) {
+      errors.noOfPackages = 'Number of Packages must be greater than 0';
+    }
+    if (!receiveData.gstInvoiceNumber || receiveData.gstInvoiceNumber.trim() === '') {
+      errors.gstInvoiceNumber = 'GST Invoice Number is required';
+    }
+    if (!receiveData.invoiceDate || receiveData.invoiceDate.trim() === '') {
+      errors.invoiceDate = 'Invoice Date is required';
+    }
+    if (!receiveData.documentNumber || receiveData.documentNumber.trim() === '') {
+      errors.documentNumber = 'Document Number is required';
+    }
+    if (!receiveData.documentDate || receiveData.documentDate.trim() === '') {
+      errors.documentDate = 'Document Date is required';
+    }
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -682,9 +765,16 @@ const totalAmount = formData.items.reduce(
         inspectedBy: 'Admin',
         supplierName: '',
         supplierEmail: '',
-        externalInvoiceNumber: '',
         externalInvoiceTotal: 0,
         notes: '',
+        // New shipping and documentation fields
+        shipDate: new Date().toISOString().split('T')[0],
+        docketNumber: '',
+        noOfPackages: 1,
+        gstInvoiceNumber: '',
+        invoiceDate: new Date().toISOString().split('T')[0],
+        documentNumber: '',
+        documentDate: new Date().toISOString().split('T')[0],
       });
 
       setShowReceiveModal(false);
@@ -819,6 +909,11 @@ const totalAmount = formData.items.reduce(
       notes: '',
       items: [{ product: '', quantity: 1, unitPrice: 0, taxRate: 0 }]
     });
+    setFormErrors({});
+    setShowSupplierDropdown(false);
+    setShowCreateSupplierDropdown(false);
+    setShowEditSupplierDropdown(false);
+    setSupplierSearchTerm('');
   };
 
   const addItem = () => {
@@ -991,6 +1086,9 @@ const totalAmount = formData.items.reduce(
       if (!target.closest('.dropdown-container')) {
         setShowStatusDropdown(false);
         setShowSupplierDropdown(false);
+        setShowCreateSupplierDropdown(false);
+        setShowEditSupplierDropdown(false);
+        setSupplierSearchTerm('');
       }
     };
 
@@ -1144,7 +1242,7 @@ const totalAmount = formData.items.reduce(
           </div>
 
           {/* Supplier Custom Dropdown */}
-          {/* <div className="relative dropdown-container">
+          <div className="relative dropdown-container">
             <button
               onClick={() => {
                 setShowSupplierDropdown(!showSupplierDropdown);
@@ -1169,7 +1267,7 @@ const totalAmount = formData.items.reduce(
                 </button>
               </div>
             )}
-          </div> */}
+          </div>
         </div>
 
         <div className="mt-4 flex items-center justify-between">
@@ -1357,37 +1455,82 @@ const totalAmount = formData.items.reduce(
 
               {/* Basic Information */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
+                <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Supplier *
+                    Select Supplier *
                   </label>
-                  <input
-                    type="text"
-                    value={formData.supplier}
-                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplier ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    placeholder="Enter supplier name"
-                  />
+                  <div className="relative dropdown-container">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (suppliers.length === 0) {
+                          fetchSuppliers();
+                        }
+                        setShowSupplierDropdown(!showSupplierDropdown);
+                      }}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.supplier ? 'border-red-500' : 'border-gray-300'}`}
+                    >
+                      <span className="text-gray-700 truncate mr-1">
+                        {formData.supplier ? 
+                          suppliers.find(s => s._id === formData.supplier)?.name || 'Select Supplier' :
+                          'Select Supplier'
+                        }
+                      </span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSupplierDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showSupplierDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-60 overflow-y-auto">
+                        {/* Search Input */}
+                        <div className="px-3 py-2 border-b border-gray-200">
+                          <input
+                            type="text"
+                            placeholder="Search suppliers..."
+                            value={supplierSearchTerm}
+                            onChange={(e) => setSupplierSearchTerm(e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                        {/* Supplier List */}
+                        <div className="max-h-48 overflow-y-auto">
+                          {suppliers.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                              {supplierSearchTerm ? 'No suppliers found' : 'Loading suppliers...'}
+                            </div>
+                          ) : (
+                            suppliers
+                              .filter(supplier => 
+                                supplier.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
+                                supplier.email?.toLowerCase().includes(supplierSearchTerm.toLowerCase())
+                              )
+                              .map(supplier => (
+                                <button
+                                  key={supplier._id}
+                                  type="button"
+                                  onClick={() => {
+                                    setFormData({
+                                      ...formData,
+                                      supplier: supplier._id,
+                                      supplierEmail: supplier.email || ''
+                                    });
+                                    setShowSupplierDropdown(false);
+                                    setSupplierSearchTerm('');
+                                  }}
+                                  className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
+                                >
+                                  <div className="font-medium text-gray-900">{supplier.name}</div>
+                                  {supplier.email && (
+                                    <div className="text-xs text-gray-500">{supplier.email}</div>
+                                  )}
+                                </button>
+                              ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   {formErrors.supplier && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.supplier}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Supplier Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.supplierEmail}
-                    onChange={(e) => setFormData({ ...formData, supplierEmail: e.target.value })}
-                  required
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplierEmail ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    placeholder="Enter Supplier Email"
-                  />
-                  {formErrors.supplierEmail && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.supplierEmail}</p>
                   )}
                 </div>
                 <div>
@@ -1743,35 +1886,80 @@ const totalAmount = formData.items.reduce(
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Supplier *
+                    Select Supplier *
                   </label>
-                  <input
-                    type="text"
-                    value={formData.supplier}
-                    onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplier ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    placeholder="Enter supplier name"
-                  />
+                  <div className="relative dropdown-container">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (suppliers.length === 0) {
+                          fetchSuppliers();
+                        }
+                        setShowSupplierDropdown(!showSupplierDropdown);
+                      }}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.supplier ? 'border-red-500' : 'border-gray-300'}`}
+                    >
+                      <span className="text-gray-700 truncate mr-1">
+                        {formData.supplier ? 
+                          suppliers.find(s => s._id === formData.supplier)?.name || 'Select Supplier' :
+                          'Select Supplier'
+                        }
+                      </span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSupplierDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showSupplierDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-60 overflow-y-auto">
+                        {/* Search Input */}
+                        <div className="px-3 py-2 border-b border-gray-200">
+                          <input
+                            type="text"
+                            placeholder="Search suppliers..."
+                            value={supplierSearchTerm}
+                            onChange={(e) => setSupplierSearchTerm(e.target.value)}
+                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </div>
+                        {/* Supplier List */}
+                        <div className="max-h-48 overflow-y-auto">
+                          {suppliers.length === 0 ? (
+                            <div className="px-3 py-2 text-sm text-gray-500">
+                              {supplierSearchTerm ? 'No suppliers found' : 'Loading suppliers...'}
+                            </div>
+                          ) : (
+                            suppliers
+                              .filter(supplier => 
+                                supplier.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
+                                supplier.email?.toLowerCase().includes(supplierSearchTerm.toLowerCase())
+                              )
+                              .map(supplier => (
+                                <button
+                                  key={supplier._id}
+                                  type="button"
+                                  onClick={() => {
+                                    setFormData({
+                                      ...formData,
+                                      supplier: supplier._id,
+                                      supplierEmail: supplier.email || ''
+                                    });
+                                    setShowSupplierDropdown(false);
+                                    setSupplierSearchTerm('');
+                                  }}
+                                  className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
+                                >
+                                  <div className="font-medium text-gray-900">{supplier.name}</div>
+                                  {supplier.email && (
+                                    <div className="text-xs text-gray-500">{supplier.email}</div>
+                                  )}
+                                </button>
+                              ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   {formErrors.supplier && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.supplier}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Supplier Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.supplierEmail}
-                    onChange={(e) => setFormData({ ...formData, supplierEmail: e.target.value })}
-                    required
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.supplierEmail ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    placeholder="Enter Supplier Email"
-                  />
-                  {formErrors.supplierEmail && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.supplierEmail}</p>
                   )}
                 </div>
                 <div>
@@ -2280,21 +2468,28 @@ const totalAmount = formData.items.reduce(
                   )}
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setShowReceiveModal(false);
-                  setDebouncedExternalTotal('')
-                  setReceiveData({
-                    externalInvoiceNumber: '',
-                    location: '',
-                    receiptDate: '',
-                    inspectedBy: '',
-                    receivedItems: [],
-                    items: []
-                  });
-                }}
-                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
+                              <button
+                  onClick={() => {
+                    setShowReceiveModal(false);
+                    setDebouncedExternalTotal('')
+                    setReceiveData({
+                      location: '',
+                      receiptDate: '',
+                      inspectedBy: '',
+                      receivedItems: [],
+                      items: [],
+                      // New shipping and documentation fields
+                      shipDate: new Date().toISOString().split('T')[0],
+                      docketNumber: '',
+                      noOfPackages: 1,
+                      gstInvoiceNumber: '',
+                      invoiceDate: new Date().toISOString().split('T')[0],
+                      documentNumber: '',
+                      documentDate: new Date().toISOString().split('T')[0],
+                    });
+                  }}
+                  className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                >
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -2377,22 +2572,116 @@ const totalAmount = formData.items.reduce(
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                     />
                   </div>
+
+
+                  {/* New Shipping and Documentation Fields */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      External Invoice No
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Ship Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={receiveData.shipDate}
+                      onChange={(e) => setReceiveData({ ...receiveData, shipDate: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.shipDate ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {formErrors.shipDate && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.shipDate}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Docket Number <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
-                      value={receiveData.externalInvoiceNumber}
-                      required
-                      onChange={(e) => setReceiveData({ ...receiveData, externalInvoiceNumber: e.target.value })}
-
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.externalInvoiceNumber ? 'border-red-500' : 'border-gray-300'
-                        }`}
-                      placeholder="External Invoice No"
+                      value={receiveData.docketNumber}
+                      onChange={(e) => setReceiveData({ ...receiveData, docketNumber: e.target.value })}
+                      placeholder="Docket Number"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.docketNumber ? 'border-red-500' : 'border-gray-300'}`}
                     />
-                    {formErrors.externalInvoiceNumber && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.externalInvoiceNumber}</p>
+                    {formErrors.docketNumber && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.docketNumber}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Number of Packages <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={receiveData.noOfPackages}
+                      onChange={(e) => setReceiveData({ ...receiveData, noOfPackages: parseInt(e.target.value) || 1 })}
+                      placeholder="1"
+                      min="1"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.noOfPackages ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {formErrors.noOfPackages && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.noOfPackages}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      GST Invoice Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={receiveData.gstInvoiceNumber}
+                      onChange={(e) => setReceiveData({ ...receiveData, gstInvoiceNumber: e.target.value })}
+                      placeholder="GST Invoice Number"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.gstInvoiceNumber ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {formErrors.gstInvoiceNumber && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.gstInvoiceNumber}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Invoice Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={receiveData.invoiceDate}
+                      onChange={(e) => setReceiveData({ ...receiveData, invoiceDate: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.invoiceDate ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {formErrors.invoiceDate && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.invoiceDate}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Document Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={receiveData.documentNumber}
+                      onChange={(e) => setReceiveData({ ...receiveData, documentNumber: e.target.value })}
+                      placeholder="Document Number"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.documentNumber ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {formErrors.documentNumber && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.documentNumber}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Document Date <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={receiveData.documentDate}
+                      onChange={(e) => setReceiveData({ ...receiveData, documentDate: e.target.value })}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.documentDate ? 'border-red-500' : 'border-gray-300'}`}
+                    />
+                    {formErrors.documentDate && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.documentDate}</p>
                     )}
                   </div>
 
@@ -2945,12 +3234,19 @@ const totalAmount = formData.items.reduce(
                   setShowReceiveModal(false);
                   setDebouncedExternalTotal('')
                   setReceiveData({
-                    externalInvoiceNumber: '',
                     location: '',
                     receiptDate: '',
                     inspectedBy: '',
                     receivedItems: [],
-                    items: []
+                    items: [],
+                    // New shipping and documentation fields
+                    shipDate: new Date().toISOString().split('T')[0],
+                    docketNumber: '',
+                    noOfPackages: 1,
+                    gstInvoiceNumber: '',
+                    invoiceDate: new Date().toISOString().split('T')[0],
+                    documentNumber: '',
+                    documentDate: new Date().toISOString().split('T')[0],
                   });
                 }}
                   className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
