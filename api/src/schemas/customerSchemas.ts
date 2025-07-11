@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import { CustomerType, LeadStatus } from '../types';
+import { CustomerType, LeadStatus, CustomerMainType } from '../types';
 
 // TypeScript interfaces for validation results
 export interface CreateCustomerInput {
@@ -8,6 +8,7 @@ export interface CreateCustomerInput {
   phone: string;
   addresses: { id: number; address: string; isPrimary: boolean }[];
   customerType: CustomerType;
+  type: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
   assignedTo?: string;
   status?: LeadStatus;
@@ -20,6 +21,7 @@ export interface UpdateCustomerInput {
   phone?: string;
   addresses?: { id: number; address: string; isPrimary: boolean }[];
   customerType?: CustomerType;
+  type?: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
   assignedTo?: string;
   status?: LeadStatus;
@@ -72,6 +74,7 @@ export interface CustomerImportInput {
   phone: string;
   addresses: { id: number; address: string; isPrimary: boolean }[];
   customerType: CustomerType;
+  type: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
   status?: LeadStatus;
   notes?: string;
@@ -91,6 +94,7 @@ const baseCustomerFields = {
   phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
   addresses: Joi.array().items(addressJoiSchema).min(1).required(),
   customerType: Joi.string().valid(...Object.values(CustomerType)),
+  type: Joi.string().valid(...Object.values(CustomerMainType)),
   leadSource: Joi.string().max(100).trim().allow(''),
   assignedTo: Joi.string().hex().length(24), // MongoDB ObjectId
   status: Joi.string().valid(...Object.values(LeadStatus)),
@@ -104,6 +108,7 @@ export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   phone: baseCustomerFields.phone.required(),
   addresses: baseCustomerFields.addresses,
   customerType: baseCustomerFields.customerType.required(),
+  type: baseCustomerFields.type.required(),
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
   status: baseCustomerFields.status.default(LeadStatus.NEW),
@@ -117,6 +122,7 @@ export const updateCustomerSchema = Joi.object<UpdateCustomerInput>({
   phone: baseCustomerFields.phone,
   addresses: baseCustomerFields.addresses,
   customerType: baseCustomerFields.customerType,
+  type: baseCustomerFields.type,
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
   status: baseCustomerFields.status,
@@ -178,6 +184,7 @@ export const customerImportSchema = Joi.object<CustomerImportInput>({
   phone: baseCustomerFields.phone.required(),
   addresses: baseCustomerFields.addresses,
   customerType: baseCustomerFields.customerType.required(),
+  type: baseCustomerFields.type.required(),
   leadSource: baseCustomerFields.leadSource,
   status: baseCustomerFields.status.default(LeadStatus.NEW),
   notes: baseCustomerFields.notes
