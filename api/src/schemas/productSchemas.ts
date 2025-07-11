@@ -156,6 +156,7 @@ const baseProductFields = {
   gndp: Joi.number().min(0),
   mrp: Joi.number().min(0),
   gndpTotal: Joi.number().min(0),
+  cpcbNo: Joi.number().min(0),
   createdBy: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required()
 };
 
@@ -188,10 +189,11 @@ export const createProductSchema = Joi.object({
   make: baseProductFields.make,
   gst: baseProductFields.gst,
   gndp: baseProductFields.gndp,
+  cpcbNo: baseProductFields.cpcbNo,
   // mrp: baseProductFields.mrp,
   gndpTotal: baseProductFields.gndpTotal,
   createdBy: baseProductFields.createdBy,
-  stockUnit: Joi.string().valid(...allowedStockUnits).allow(null)
+  uom: Joi.string().valid(...allowedStockUnits).allow(null)
 });
 
 // Update product schema

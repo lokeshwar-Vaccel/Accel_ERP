@@ -130,7 +130,11 @@ const InventoryManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // Search and filter states - these are now handled by the filters object
+  // Search and filter states
+  const [searchTerm, setSearchTerm] = useState('');
+  const [locationFilter, setLocationFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
 
   // Custom dropdown states
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
@@ -231,23 +235,90 @@ const InventoryManagement: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [limit, setLimit] = useState(10);
-  const [totalPages, setTotalPages] = useState(0);
-  const [totalDatas, setTotalDatas] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
 
   const [filters, setFilters] = useState<any>({
     search: '',
     category: '',
     location: '',
-    stockStatus: 'all',
-    sortBy: 'name',
-    sortOrder: 'asc'
+    stockStatus: 'all'
   });
 
   const onFiltersChange = useCallback((newFilters: Partial<any>) => {
     setFilters((prev: any) => ({ ...prev, ...newFilters }));
     setCurrentPage(1);
   }, []);
+
+  const itemsPerPage = 10;
+
+  const filteredInventory = React.useMemo(() => {
+    let items = [...inventory];
+
+    // Search filter
+    if (filters.search) {
+      items = items.filter(item =>
+        (item.product?.name?.toLowerCase().includes(filters.search.toLowerCase()) ||
+          item.product?.brand?.toLowerCase().includes(filters.search.toLowerCase()) ||
+          item.product?.partNo?.toLowerCase().includes(filters.search.toLowerCase()) ||
+          item.location?.name?.toLowerCase().includes(filters.search.toLowerCase()))
+      );
+    }
+
+
+    // Category filter
+    if (filters.category && filters.category !== 'all') {
+      items = items.filter(item => item.product?.category === filters.category);
+    }
+
+    // Location filter
+    if (filters.location) {
+      items = items.filter(item => item.location?._id === filters.location);
+    }
+    if (filters.room) {
+      items = items.filter(item => item.room?._id === filters.room);
+    }
+    if (filters.rack) {
+      items = items.filter(item => item.rack?._id === filters.rack);
+    }
+
+        if (filters.dept) {
+      items = items.filter(item => item.product?.dept === filters.dept);
+    }
+
+    if (filters.brand) {
+      items = items.filter(item => item.product?.brand === filters.brand);
+    }
+
+    // Stock status filter
+    if (filters.stockStatus && filters.stockStatus !== 'all') {
+      items = items.filter(item => {
+        if (filters.stockStatus === 'low_stock') {
+          return item.quantity <= (item.product?.minStockLevel || 0) && item.quantity > 0;
+        }
+        if (filters.stockStatus === 'out_of_stock') {
+          return item.quantity === 0;
+        }
+        return true;
+      });
+    }
+
+
+    return items;
+  }, [inventory, filters]);
+
+  const paginatedInventory = React.useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredInventory.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredInventory, currentPage]);
+
+  React.useEffect(() => {
+    setTotalPages(Math.max(1, Math.ceil(filteredInventory.length / itemsPerPage)));
+    setTotalItems(filteredInventory.length);
+    if (currentPage > Math.ceil(filteredInventory.length / itemsPerPage)) {
+      setCurrentPage(1);
+    }
+  }, [filteredInventory]);
 
   // Fix getStockStatusTable: remove maxStockLevel check
   const getStockStatusTable = (item: StockItem) => {
@@ -257,16 +328,40 @@ const InventoryManagement: React.FC = () => {
     if (item.quantity <= (item.product?.minStockLevel || 0)) {
       return { label: 'Low Stock', variant: 'warning' as const, icon: TrendingDown };
     }
-    if (item.quantity > ((item.product?.minStockLevel || 0) * 3)) {
-      return { label: 'Overstocked', variant: 'info' as const, icon: TrendingUp };
-    }
     return { label: 'In Stock', variant: 'success' as const, icon: Package };
   };
 
-    const handlePageChange = (page: number) => {
-    setCurrentPage(page);
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0
+    }).format(amount);
   };
 
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    if (true) {
+      // fetchStockItems(page);
+    } else {
+      // fetchTransactions(page);
+    }
+  };
+
+  const rackOptions = [
+    { value: '', label: 'All Racks' },
+    { value: 'A2', label: 'Rack A2' },
+    { value: 'D2', label: 'Rack D2' },
+    { value: 'D3', label: 'Rack D3' },
+    { value: 'E1', label: 'Rack E1' },
+    { value: 'E2', label: 'Rack E2' },
+    { value: 'E3', label: 'Rack E3' },
+    { value: 'E6', label: 'Rack E6' },
+    { value: 'E7', label: 'Rack E7' },
+    { value: 'P2', label: 'Rack P2' },
+    { value: 'GD', label: 'Rack GD' }
+  ];
 
   const stockStatusOptions = [
     { value: 'all', label: 'All Stock Levels' },
@@ -275,30 +370,24 @@ const InventoryManagement: React.FC = () => {
     { value: 'overstocked', label: 'Overstocked' }
   ];
 
-  const sortByOptions = [
-    { value: 'product.name', label: 'Product Name' },
-    { value: 'product.category', label: 'Category' },
-    { value: 'product.brand', label: 'Brand' },
-    { value: 'location.name', label: 'Location' },
-    { value: 'quantity', label: 'Quantity' },
-    { value: 'product.price', label: 'Price' },
-    { value: 'lastUpdated', label: 'Last Updated' }
+  const deptOptions = [
+    { value: '', label: 'All Departments' },
+    { value: 'RETAIL', label: 'Retail' },
+    { value: 'INDUSTRIAL', label: 'Industrial' },
+    { value: 'TELECOM', label: 'Telecom' },
+    { value: 'EV', label: 'EV' },
+    { value: 'RET/TEL', label: 'Retail/Telecom' }
   ];
 
-  const sortOrderOptions = [
-    { value: 'asc', label: 'A-Z (Ascending)' },
-    { value: 'desc', label: 'Z-A (Descending)' }
+  const makeOptions = [
+    { value: '', label: 'All Makes' },
+    { value: 'MAHINDRA', label: 'Mahindra' },
+    { value: 'KOEL', label: 'Koel' },
+    { value: 'CUMMINS', label: 'Cummins' },
+    { value: 'ASHOKLEYLAND', label: 'Ashok Leyland' },
+    { value: 'PHFL', label: 'PHFL' },
+    { value: 'EICHER', label: 'Eicher' }
   ];
-
-  const getSortByLabel = () => {
-    const option = sortByOptions.find(opt => opt.value === filters.sortBy);
-    return option ? option.label : 'Product Name';
-  };
-
-  const getSortOrderLabel = () => {
-    const option = sortOrderOptions.find(opt => opt.value === filters.sortOrder);
-    return option ? option.label : 'A-Z (Ascending)';
-  };
 
   const handleRoomModalClose = () => {
     setRoomFormData({
@@ -339,45 +428,45 @@ const InventoryManagement: React.FC = () => {
     }))
   ];
   const roomOptionsFilter = [
-    { value: '', label: 'Select a room' },
+    { value: '', label: 'Select a room'},
     ...rooms.map(room => ({
       value: room._id,
       label: room.name
     }))
   ];
   const rackOptionsFilter = [
-    { value: '', label: 'Select a rack' },
+    { value: '', label: 'Select a rack'},
     ...racks.map(room => ({
       value: room._id,
       label: room.name
     }))
   ];
 
-  // Extract unique departments from all products
-  const uniqueDepts = Array.from(
-    new Set(products.map(product => product.dept).filter(Boolean))
-  ) as string[];
+// Extract unique departments
+const uniqueDepts = Array.from(
+  new Set(inventory.map(item => item.product?.dept).filter(Boolean))
+) as string[];
 
-  const deptOptionsFilter = [
-    { value: '', label: 'Select a department' },
-    ...uniqueDepts.map(dept => ({
-      value: dept,
-      label: dept
-    }))
-  ];
+const deptOptionsFilter = [
+  { value: '', label: 'Select a department' },
+  ...uniqueDepts.map(dept => ({
+    value: dept,
+    label: dept
+  }))
+];
 
-  // Extract unique brands from all products
-  const uniqueBrands = Array.from(
-    new Set(products.map(product => product.brand).filter(Boolean))
-  ) as string[];
+// Extract unique brands
+const uniqueBrands = Array.from(
+  new Set(inventory.map(item => item.product?.brand).filter(Boolean))
+) as string[];
 
-  const brandOptionsFilter = [
-    { value: '', label: 'Select a brand' },
-    ...uniqueBrands.map(brand => ({
-      value: brand,
-      label: brand
-    }))
-  ];
+const brandOptionsFilter = [
+  { value: '', label: 'Select a brand' },
+  ...uniqueBrands.map(brand => ({
+    value: brand,
+    label: brand
+  }))
+];
 
 
   useEffect(() => {
@@ -463,15 +552,11 @@ const InventoryManagement: React.FC = () => {
         setRooms(rooms.map(loc =>
           loc._id === selectedRoom._id ? updatedRoom : loc
         ));
-        fetchLocations();
-      fetchRooms();
       } else {
         // Create new location
         const response = await apiClient.stock.createRoom(roomFormData);
         const newRoom = (response.data as any).room || response.data;
         setRooms([...rooms, newRoom]);
-        fetchLocations();
-      fetchRooms();
       }
 
       // setShowLocationModal(false);
@@ -512,8 +597,6 @@ const InventoryManagement: React.FC = () => {
         const newRack = (response.data as any).rack || response.data;
         setRacks([...racks, newRack]);
       }
-      fetchLocations();
-      fetchRooms();
 
       // setShowLocationModal(false);
       setRackFormData({
@@ -560,8 +643,6 @@ const InventoryManagement: React.FC = () => {
         setShowRoomFilterDropdown(false);
         setShowRackFilterDropdown(false);
         setShowStockStatusFilterDropdown(false);
-        setShowSortFilterDropdown(false);
-        setShowSortOrderFilterDropdown(false);
       }
     };
 
@@ -588,34 +669,8 @@ const InventoryManagement: React.FC = () => {
   };
 
   const fetchInventory = async () => {
-    // Build sort parameter from filters
-    const sortField = filters.sortBy || 'name';
-    const sortDirection = filters.sortOrder === 'desc' ? '-' : '';
-    const sortParam = `${sortDirection}${sortField}`;
-
-    const params: any = {
-      page: currentPage,
-      limit,
-      sort: sortParam,
-      search: filters.search,
-      ...(filters.category && { category: filters.category }),
-      ...(filters.dept && { dept: filters.dept }),
-      ...(filters.brand && { brand: filters.brand }),
-      ...(filters.location && { location: filters.location }),
-      ...(filters.room && { room: filters.room }),
-      ...(filters.rack && { rack: filters.rack }),
-      ...(filters.stockStatus === 'low_stock' && { lowStock: 'true' }),
-      ...(filters.stockStatus === 'out_of_stock' && { outOfStock: 'true' }),
-      ...(filters.stockStatus === 'overstocked' && { overStocked: 'true' }),
-    };
-
     try {
-      const response = await apiClient.stock.getStock(params);
-
-      setCurrentPage(response.pagination.page);
-      setLimit(response.pagination.limit);
-      setTotalDatas(response.pagination.total);
-      setTotalPages(response.pagination.pages);
+      const response = await apiClient.stock.getStock();
       // Handle different response formats from backend
       let stockData: any[] = [];
       if (response.data) {
@@ -632,40 +687,19 @@ const InventoryManagement: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    fetchInventory();
-  }, [currentPage, limit, filters]);
-
   const fetchProducts = async () => {
     try {
-      let allProducts: any[] = [];
-      let page = 1;
-      let hasMore = true;
-
-      
-      
-      while (hasMore) {
-        const response: any = await apiClient.products.getAll({ page, limit: 100 });
-        let productsData: any[] = [];
-        if (response?.data) {
-          if (Array.isArray(response.data)) {
-            productsData = response.data;
-          } else if (response.data.products && Array.isArray(response.data.products)) {
-            productsData = response.data.products;
-          }
-        }
-        allProducts = allProducts.concat(productsData);
-
-        // Check if there are more pages
-        const pagination = response?.pagination || response?.data?.pagination;
-        if (pagination && pagination.pages && page < pagination.pages) {
-          page += 1;
-        } else {
-          hasMore = false;
+      const response = await apiClient.products.getAll();
+      // Handle response format like in ProductManagement
+      let productsData: any[] = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          productsData = response.data;
+        } else if ((response.data as any).products && Array.isArray((response.data as any).products)) {
+          productsData = (response.data as any).products;
         }
       }
-
-      setProducts(allProducts);
+      setProducts(productsData);
     } catch (error) {
       console.error('Error fetching products:', error);
       setProducts([]);
@@ -873,7 +907,7 @@ const InventoryManagement: React.FC = () => {
         setLocations([...locations, newLocation]);
       }
 
-      // setShowLocationModal(false);
+      setShowLocationModal(false);
       setLocationFormData({
         name: '',
         address: '',
@@ -965,14 +999,14 @@ const InventoryManagement: React.FC = () => {
     if (!transferFormData.toLocation) {
       errors.toLocation = 'Destination location is required';
     }
-
+    
     // Check if transfer is to exact same location/room/rack
     if (transferFormData.fromLocation === transferFormData.toLocation &&
-      transferFormData.fromRoom === transferFormData.toRoom &&
-      transferFormData.fromRack === transferFormData.toRack) {
+        transferFormData.fromRoom === transferFormData.toRoom &&
+        transferFormData.fromRack === transferFormData.toRack) {
       errors.toLocation = 'Destination must be different from source (location, room, or rack)';
     }
-
+    
     if (transferFormData.quantity <= 0) {
       errors.quantity = 'Quantity must be greater than 0';
     }
@@ -1262,8 +1296,7 @@ const InventoryManagement: React.FC = () => {
     if (!product) return 'unknown';
 
     if (item.quantity <= 0) return 'out_of_stock';
-    if (item.quantity <= (product.minStockLevel || 0)) return 'low_stock';
-    if (item.quantity > ((product.minStockLevel || 0) * 3)) return 'overstocked';
+    if (item.quantity <= product.minStockLevel) return 'low_stock';
     return 'in_stock';
   };
 
@@ -1275,8 +1308,6 @@ const InventoryManagement: React.FC = () => {
         return 'text-yellow-800 bg-yellow-100';
       case 'out_of_stock':
         return 'text-red-800 bg-red-100';
-      case 'overstocked':
-        return 'text-blue-800 bg-blue-100';
       default:
         return 'text-gray-800 bg-gray-100';
     }
@@ -1404,7 +1435,7 @@ const InventoryManagement: React.FC = () => {
   const stats = [
     {
       title: 'Total Products',
-      value: Array.isArray(inventory) ? totalDatas : '0',
+      value: Array.isArray(inventory) ? inventory.length.toString() : '0',
       icon: <Package className="w-6 h-6" />,
       color: 'blue'
     },
@@ -1421,10 +1452,10 @@ const InventoryManagement: React.FC = () => {
       color: 'red'
     },
     {
-      title: 'Overstocked',
-      value: Array.isArray(inventory) ? inventory.filter(item => getStockStatus(item) === 'overstocked').length.toString() : '0',
-      icon: <TrendingUp className="w-6 h-6" />,
-      color: 'purple'
+      title: 'Total Locations',
+      value: Array.isArray(locations) ? locations.length.toString() : '0',
+      icon: <Truck className="w-6 h-6" />,
+      color: 'green'
     }
   ];
 
@@ -1579,7 +1610,7 @@ const InventoryManagement: React.FC = () => {
   };
 
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-
+  
   // Custom dropdown states for filters
   const [showCategoryFilterDropdown, setShowCategoryFilterDropdown] = useState(false);
   const [showDeptFilterDropdown, setShowDeptFilterDropdown] = useState(false);
@@ -1588,8 +1619,6 @@ const InventoryManagement: React.FC = () => {
   const [showRoomFilterDropdown, setShowRoomFilterDropdown] = useState(false);
   const [showRackFilterDropdown, setShowRackFilterDropdown] = useState(false);
   const [showStockStatusFilterDropdown, setShowStockStatusFilterDropdown] = useState(false);
-  const [showSortFilterDropdown, setShowSortFilterDropdown] = useState(false);
-  const [showSortOrderFilterDropdown, setShowSortOrderFilterDropdown] = useState(false);
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
@@ -1654,7 +1683,7 @@ const InventoryManagement: React.FC = () => {
                 className="pl-9 text-sm h-9"
               />
             </div>
-
+            
             {/* Quick Actions */}
             <div className="flex gap-2">
               <button
@@ -1668,12 +1697,6 @@ const InventoryManagement: React.FC = () => {
                 className="px-3 py-1.5 bg-yellow-50 text-yellow-700 rounded-md hover:bg-yellow-100 transition-colors border border-yellow-200 text-xs font-medium"
               >
                 Low Stock
-              </button>
-              <button
-                onClick={() => onFiltersChange({ stockStatus: 'overstocked' })}
-                className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-md hover:bg-purple-100 transition-colors border border-purple-200 text-xs font-medium"
-              >
-                Overstocked
               </button>
               <button
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
@@ -1691,389 +1714,324 @@ const InventoryManagement: React.FC = () => {
         {showAdvancedFilters && (
           <div className="p-4 bg-gray-50 border-b border-gray-100">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Product Filters */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-gray-900 flex items-center">
-                  <Package className="w-4 h-4 mr-2 text-blue-500" />
-                  Product Filters
-                </h4>
-                <div className="space-y-3">
-                  {/* Category Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                    <div className="relative dropdown-container">
-                      <button
-                        onClick={() => setShowCategoryFilterDropdown(!showCategoryFilterDropdown)}
-                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {categoryOptions.find(opt => opt.value === (filters.category || ''))?.label || 'All Categories'}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCategoryFilterDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showCategoryFilterDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                          {categoryOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => {
-                                onFiltersChange({ category: option.value === 'all' ? '' : option.value });
-                                setShowCategoryFilterDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.category || 'all') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                             {/* Product Filters */}
+               <div className="space-y-3">
+                 <h4 className="text-sm font-semibold text-gray-900 flex items-center">
+                   <Package className="w-4 h-4 mr-2 text-blue-500" />
+                   Product Filters
+                 </h4>
+                 <div className="space-y-3">
+                   {/* Category Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowCategoryFilterDropdown(!showCategoryFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {categoryOptions.find(opt => opt.value === (filters.category || ''))?.label || 'All Categories'}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCategoryFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showCategoryFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {categoryOptions.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ category: option.value === 'all' ? '' : option.value });
+                                 setShowCategoryFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.category || 'all') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
 
-                  {/* Department Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-                    <div className="relative dropdown-container">
-                      <button
-                        onClick={() => setShowDeptFilterDropdown(!showDeptFilterDropdown)}
-                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {deptOptionsFilter.find(opt => opt.value === (filters.dept || ''))?.label || 'Select a department'}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showDeptFilterDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showDeptFilterDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                          {deptOptionsFilter.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => {
-                                onFiltersChange({ dept: option.value });
-                                setShowDeptFilterDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.dept || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                   {/* Department Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowDeptFilterDropdown(!showDeptFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {deptOptionsFilter.find(opt => opt.value === (filters.dept || ''))?.label || 'Select a department'}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showDeptFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showDeptFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {deptOptionsFilter.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ dept: option.value });
+                                 setShowDeptFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.dept || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
 
-                  {/* Brand Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
-                    <div className="relative dropdown-container">
-                      <button
-                        onClick={() => setShowBrandFilterDropdown(!showBrandFilterDropdown)}
-                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {brandOptionsFilter.find(opt => opt.value === (filters.brand || ''))?.label || 'Select a brand'}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showBrandFilterDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showBrandFilterDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                          {brandOptionsFilter.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => {
-                                onFiltersChange({ brand: option.value });
-                                setShowBrandFilterDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.brand || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                   {/* Brand Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowBrandFilterDropdown(!showBrandFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {brandOptionsFilter.find(opt => opt.value === (filters.brand || ''))?.label || 'Select a brand'}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showBrandFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showBrandFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {brandOptionsFilter.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ brand: option.value });
+                                 setShowBrandFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.brand || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
+                 </div>
+               </div>
 
-              {/* Location Filters */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-gray-900 flex items-center">
-                  <MapPin className="w-4 h-4 mr-2 text-green-500" />
-                  Location Hierarchy
-                </h4>
-                <div className="space-y-3">
-                  {/* Location Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                    <div className="relative dropdown-container">
-                      <button
-                        onClick={() => setShowLocationFilterDropdown(!showLocationFilterDropdown)}
-                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {locationOptions.find(opt => opt.value === (filters.location || ''))?.label || 'Select a location'}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationFilterDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showLocationFilterDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                          {locationOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => {
-                                onFiltersChange({ location: option.value, room: '', rack: '' }); // Reset dependent filters
-                                setShowLocationFilterDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.location || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                             {/* Location Filters */}
+               <div className="space-y-3">
+                 <h4 className="text-sm font-semibold text-gray-900 flex items-center">
+                   <MapPin className="w-4 h-4 mr-2 text-green-500" />
+                   Location Hierarchy
+                 </h4>
+                 <div className="space-y-3">
+                   {/* Location Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowLocationFilterDropdown(!showLocationFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {locationOptions.find(opt => opt.value === (filters.location || ''))?.label || 'Select a location'}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showLocationFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {locationOptions.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ location: option.value, room: '', rack: '' }); // Reset dependent filters
+                                 setShowLocationFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.location || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
 
-                  {/* Room Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
-                    <div className="relative dropdown-container">
-                      <button
-                        onClick={() => !filters.location ? null : setShowRoomFilterDropdown(!showRoomFilterDropdown)}
-                        disabled={!filters.location}
-                        className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${!filters.location
-                          ? 'cursor-not-allowed bg-gray-50 text-gray-400'
-                          : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
-                          }`}
-                      >
-                        <span className="truncate mr-1">
-                          {!filters.location
-                            ? 'Select location first'
-                            : roomOptionsFilter.find(opt => opt.value === (filters.room || ''))?.label || 'Select a room'
-                          }
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showRoomFilterDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showRoomFilterDropdown && filters.location && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                          {roomOptionsFilter.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => {
-                                onFiltersChange({ room: option.value, rack: '' }); // Reset dependent filter
-                                setShowRoomFilterDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.room || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                   {/* Room Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => !filters.location ? null : setShowRoomFilterDropdown(!showRoomFilterDropdown)}
+                         disabled={!filters.location}
+                         className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${
+                           !filters.location 
+                             ? 'cursor-not-allowed bg-gray-50 text-gray-400' 
+                             : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                         }`}
+                       >
+                         <span className="truncate mr-1">
+                           {!filters.location 
+                             ? 'Select location first'
+                             : roomOptionsFilter.find(opt => opt.value === (filters.room || ''))?.label || 'Select a room'
+                           }
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showRoomFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showRoomFilterDropdown && filters.location && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {roomOptionsFilter.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ room: option.value, rack: '' }); // Reset dependent filter
+                                 setShowRoomFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.room || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
 
-                  {/* Rack Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Rack</label>
-                    <div className="relative dropdown-container">
-                      <button
-                        onClick={() => !filters.room ? null : setShowRackFilterDropdown(!showRackFilterDropdown)}
-                        disabled={!filters.room}
-                        className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${!filters.room
-                          ? 'cursor-not-allowed bg-gray-50 text-gray-400'
-                          : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
-                          }`}
-                      >
-                        <span className="truncate mr-1">
-                          {!filters.room
-                            ? 'Select room first'
-                            : rackOptionsFilter.find(opt => opt.value === (filters.rack || ''))?.label || 'Select a rack'
-                          }
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showRackFilterDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showRackFilterDropdown && filters.room && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                          {rackOptionsFilter.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => {
-                                onFiltersChange({ rack: option.value });
-                                setShowRackFilterDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${(filters.rack || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                   {/* Rack Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Rack</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => !filters.room ? null : setShowRackFilterDropdown(!showRackFilterDropdown)}
+                         disabled={!filters.room}
+                         className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md transition-colors text-sm ${
+                           !filters.room 
+                             ? 'cursor-not-allowed bg-gray-50 text-gray-400' 
+                             : 'hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                         }`}
+                       >
+                         <span className="truncate mr-1">
+                           {!filters.room 
+                             ? 'Select room first'
+                             : rackOptionsFilter.find(opt => opt.value === (filters.rack || ''))?.label || 'Select a rack'
+                           }
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showRackFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showRackFilterDropdown && filters.room && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {rackOptionsFilter.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ rack: option.value });
+                                 setShowRackFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 (filters.rack || '') === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
+                 </div>
+               </div>
 
-              {/* Stock Status & Actions */}
-              <div className="space-y-3">
-                <h4 className="text-sm font-semibold text-gray-900 flex items-center">
-                  <BarChart3 className="w-4 h-4 mr-2 text-purple-500" />
-                  Stock Status & Sort
-                </h4>
-                <div className="space-y-3">
-                  {/* Stock Level Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Stock Level</label>
-                    <div className="relative dropdown-container">
-                      <button
-                        onClick={() => setShowStockStatusFilterDropdown(!showStockStatusFilterDropdown)}
-                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {stockStatusOptions.find(opt => opt.value === filters.stockStatus)?.label || 'All Stock Levels'}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStockStatusFilterDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showStockStatusFilterDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                          {stockStatusOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => {
-                                onFiltersChange({ stockStatus: option.value });
-                                setShowStockStatusFilterDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${filters.stockStatus === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
+                             {/* Stock Status & Actions */}
+               <div className="space-y-3">
+                 <h4 className="text-sm font-semibold text-gray-900 flex items-center">
+                   <BarChart3 className="w-4 h-4 mr-2 text-purple-500" />
+                   Stock Status
+                 </h4>
+                 <div className="space-y-3">
+                   {/* Stock Level Dropdown */}
+                   <div>
+                     <label className="block text-sm font-medium text-gray-700 mb-1">Stock Level</label>
+                     <div className="relative dropdown-container">
+                       <button
+                         onClick={() => setShowStockStatusFilterDropdown(!showStockStatusFilterDropdown)}
+                         className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                       >
+                         <span className="text-gray-700 truncate mr-1">
+                           {stockStatusOptions.find(opt => opt.value === filters.stockStatus)?.label || 'All Stock Levels'}
+                         </span>
+                         <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStockStatusFilterDropdown ? 'rotate-180' : ''}`} />
+                       </button>
+                       {showStockStatusFilterDropdown && (
+                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
+                           {stockStatusOptions.map((option) => (
+                             <button
+                               key={option.value}
+                               onClick={() => {
+                                 onFiltersChange({ stockStatus: option.value });
+                                 setShowStockStatusFilterDropdown(false);
+                               }}
+                               className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                 filters.stockStatus === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                               }`}
+                             >
+                               {option.label}
+                             </button>
+                           ))}
+                         </div>
+                       )}
+                     </div>
+                   </div>
 
-                  {/* Sort By Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
-                    <div className="relative dropdown-container">
-                      <button
-                        onClick={() => setShowSortFilterDropdown(!showSortFilterDropdown)}
-                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {getSortByLabel()}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSortFilterDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showSortFilterDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                          {sortByOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => {
-                                onFiltersChange({
-                                  sortBy: option.value
-                                });
-                                setShowSortFilterDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${filters.sortBy === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Sort Order Dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Sort Order</label>
-                    <div className="relative dropdown-container">
-                      <button
-                        onClick={() => setShowSortOrderFilterDropdown(!showSortOrderFilterDropdown)}
-                        className="flex items-center justify-between w-full px-3 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {getSortOrderLabel()}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSortOrderFilterDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showSortOrderFilterDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-48 overflow-y-auto">
-                          {sortOrderOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              onClick={() => {
-                                onFiltersChange({
-                                  sortOrder: option.value
-                                });
-                                setShowSortOrderFilterDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${filters.sortOrder === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="pt-2">
-                    <button
-                      onClick={() => {
-                        onFiltersChange({
-                          search: '',
-                          category: '',
-                          dept: '',
-                          brand: '',
-                          location: '',
-                          room: '',
-                          rack: '',
-                          stockStatus: 'all',
-                          sortBy: 'name',
-                          sortOrder: 'asc'
-                        });
-                        setShowAdvancedFilters(false);
-                        // Close all filter dropdowns
-                        setShowCategoryFilterDropdown(false);
-                        setShowDeptFilterDropdown(false);
-                        setShowBrandFilterDropdown(false);
-                        setShowLocationFilterDropdown(false);
-                        setShowRoomFilterDropdown(false);
-                        setShowRackFilterDropdown(false);
-                        setShowStockStatusFilterDropdown(false);
-                        setShowSortFilterDropdown(false);
-                        setShowSortOrderFilterDropdown(false);
-                      }}
-                      className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-                    >
-                      Clear All Filters
-                    </button>
-                  </div>
-                </div>
-              </div>
+                   <div className="pt-2">
+                     <button
+                       onClick={() => {
+                         onFiltersChange({
+                           search: '',
+                           category: '',
+                           dept: '',
+                           brand: '',
+                           location: '',
+                           room: '',
+                           rack: '',
+                           stockStatus: 'all'
+                         });
+                         setShowAdvancedFilters(false);
+                         // Close all filter dropdowns
+                         setShowCategoryFilterDropdown(false);
+                         setShowDeptFilterDropdown(false);
+                         setShowBrandFilterDropdown(false);
+                         setShowLocationFilterDropdown(false);
+                         setShowRoomFilterDropdown(false);
+                         setShowRackFilterDropdown(false);
+                         setShowStockStatusFilterDropdown(false);
+                       }}
+                       className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                     >
+                       Clear All Filters
+                     </button>
+                   </div>
+                 </div>
+               </div>
             </div>
           </div>
         )}
 
         {/* Active Filters & Results Summary - Only show when filters are active */}
-        {(filters.search || filters.category || filters.dept || filters.brand || filters.location || filters.room || filters.rack || filters.stockStatus !== 'all' || filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
+        {(filters.search || filters.category || filters.dept || filters.brand || filters.location || filters.room || filters.rack || filters.stockStatus !== 'all') && (
           <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-100">
             <div className="flex items-center text-sm text-gray-600">
-              <span className="font-medium">{inventory.length}</span>
+              <span className="font-medium">{filteredInventory.length}</span>
               <span className="mx-1">of</span>
               <span>{inventory.length}</span>
               <span className="ml-1">items found</span>
@@ -2081,7 +2039,7 @@ const InventoryManagement: React.FC = () => {
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs text-gray-500 font-medium">Active filters:</span>
-
+              
               {filters.search && (
                 <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
                   "{filters.search}"
@@ -2093,7 +2051,7 @@ const InventoryManagement: React.FC = () => {
                   </button>
                 </span>
               )}
-
+              
               {filters.category && (
                 <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
                   {filters.category}
@@ -2105,7 +2063,7 @@ const InventoryManagement: React.FC = () => {
                   </button>
                 </span>
               )}
-
+              
               {filters.dept && (
                 <span className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
                   {filters.dept}
@@ -2117,7 +2075,7 @@ const InventoryManagement: React.FC = () => {
                   </button>
                 </span>
               )}
-
+              
               {filters.location && (
                 <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
                   {locations.find(l => l._id === filters.location)?.name}
@@ -2129,25 +2087,13 @@ const InventoryManagement: React.FC = () => {
                   </button>
                 </span>
               )}
-
+              
               {filters.stockStatus !== 'all' && (
                 <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
                   {stockStatusOptions.find(s => s.value === filters.stockStatus)?.label}
                   <button
                     onClick={() => onFiltersChange({ stockStatus: 'all' })}
                     className="ml-1 text-orange-600 hover:text-orange-800 font-bold"
-                  >
-                    ×
-                  </button>
-                </span>
-              )}
-
-              {(filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
-                <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
-                  {getSortByLabel()} - {getSortOrderLabel()}
-                  <button
-                    onClick={() => onFiltersChange({ sortBy: 'name', sortOrder: 'asc' })}
-                    className="ml-1 text-indigo-600 hover:text-indigo-800 font-bold"
                   >
                     ×
                   </button>
@@ -2161,27 +2107,19 @@ const InventoryManagement: React.FC = () => {
       {/* Inventory Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full table-fixed min-w-[1100px]">
+          <table className="w-full min-w-[1600px] table-fixed">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-72">
-                  Product Details
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">
-                  Location
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">
-                  Stock Levels
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">
-                  Pricing
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">
-                  Status & Department
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
-                  Technical Info
-                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Product Details</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Part No</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">CPCB No</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">UOM</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Location</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Stock Levels</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">MRP</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Pricing</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">Status & Department</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Technical Info</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Actions</th>
               </tr>
             </thead>
@@ -2207,15 +2145,18 @@ const InventoryManagement: React.FC = () => {
                             <div className="text-sm font-medium text-gray-900 truncate">
                               {item.product?.name}
                             </div>
-                            <div className="text-xs text-gray-500">
+                            {/* <div className="text-xs text-gray-500">
                               {item.product?.partNo}
-                            </div>
+                            </div> */}
                             <div className="text-xs text-gray-400 mt-1">
                               {item.product?.brand} • {item.product?.category}
                             </div>
                           </div>
                         </div>
                       </td>
+                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.partNo || 'N/A'}</td>
+                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.cpcbNo || 'N/A'}</td>
+                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.uom || 'N/A'}</td>
 
                       <td className="px-4 py-4 w-40">
                         <div className="space-y-1">
@@ -2228,13 +2169,13 @@ const InventoryManagement: React.FC = () => {
                           <div className="flex items-center">
                             <Archive className="w-3 h-3 text-green-500 mr-1" />
                             <span className="text-xs text-gray-700 truncate">
-                              {item.room?.name || <span className="text-red-500">Unassigned</span>}
+                              Room: {item.room?.name || <span className="text-red-500">Unassigned</span>}
                             </span>
                           </div>
                           <div className="flex items-center">
                             <MapPin className="w-3 h-3 text-purple-500 mr-1" />
                             <span className="text-xs text-gray-600 truncate">
-                              {item.rack?.name || <span className="text-red-500">Unassigned</span>}
+                              Rack: {item.rack?.name || <span className="text-red-500">Unassigned</span>}
                             </span>
                           </div>
                         </div>
@@ -2255,19 +2196,23 @@ const InventoryManagement: React.FC = () => {
                             <span className="text-xs text-green-600 font-medium">{item.availableQuantity}</span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Stock Unit:</span>
-                            <span className="text-xs text-green-600 font-medium">{item.product?.stockUnit}</span>
+                            {/* <span className="text-xs text-gray-500">UOM:</span>
+                            <span className="text-xs text-green-600 font-medium">{item.product?.uom || 'N/A'}</span> */}
                           </div>
                         </div>
                       </td>
+                      <td className="px-4 py-4 text-sm font-medium text-gray-900">{item.product?.price !== undefined ? `₹${item.product.price}` : 'N/A'}</td>
 
-                      <td className="px-4 py-4 w-28">
+                      <td className="px-4 py-4 w-36">
                         <div className="space-y-1">
-                          <div className="text-sm font-medium text-gray-900">
-                            ₹{(item.product?.price || 0).toFixed(2)}
+                          {/* <div className="text-sm font-medium text-gray-900">
+                          MRP: ₹{(item.product?.price || 0).toFixed(2)}
+                          </div> */}
+                          <div className="text-xs text-gray-500">
+                            GST: {item.product?.gst}% 
                           </div>
                           <div className="text-xs text-gray-500">
-                            GST: {item.product?.gst}%
+                            GNDP: ₹{(item.product?.gndp || 0).toFixed(2)}
                           </div>
                         </div>
                       </td>
@@ -2334,14 +2279,6 @@ const InventoryManagement: React.FC = () => {
 
         </div>
       </div>
-
-                  <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={handlePageChange}
-                    totalItems={totalDatas}
-                    itemsPerPage={limit}
-                  />
 
       {/* Add Location Modal */}
       {showLocationModal && (
@@ -2520,7 +2457,7 @@ const InventoryManagement: React.FC = () => {
 
                 {activeTab === 'rooms' && <div className="p-4 overflow-y-auto flex-1">
                   <h3 className="text-lg font-medium text-gray-900 mb-4">
-                    {isEditingLocation ? 'Edit Room' : 'Add New Room'}
+                    {isEditingLocation ? 'Edit Location' : 'Add New Location'}
                   </h3>
                   <form onSubmit={handleRoomSubmit} className="space-y-4">
                     <Select
@@ -3012,7 +2949,7 @@ const InventoryManagement: React.FC = () => {
                     <ArrowUpDown className="w-5 h-5 mr-2" />
                     From (Source)
                   </h3>
-
+                  
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
@@ -3057,20 +2994,21 @@ const InventoryManagement: React.FC = () => {
                     <MapPin className="w-5 h-5 mr-2" />
                     To (Destination)
                   </h3>
-
+                  
                   <div className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Location *</label>
                       <select
                         value={transferFormData.toLocation}
-                        onChange={(e) => setTransferFormData({
-                          ...transferFormData,
+                        onChange={(e) => setTransferFormData({ 
+                          ...transferFormData, 
                           toLocation: e.target.value,
                           toRoom: '', // Reset room when location changes
                           toRack: ''  // Reset rack when location changes
                         })}
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          formErrors.toLocation ? 'border-red-500' : 'border-gray-300'
+                        }`}
                       >
                         <option value="">Select destination location</option>
                         {locations.map((location) => (
@@ -3088,8 +3026,8 @@ const InventoryManagement: React.FC = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Room (Optional)</label>
                       <select
                         value={transferFormData.toRoom}
-                        onChange={(e) => setTransferFormData({
-                          ...transferFormData,
+                        onChange={(e) => setTransferFormData({ 
+                          ...transferFormData, 
                           toRoom: e.target.value,
                           toRack: '' // Reset rack when room changes
                         })}
@@ -3124,7 +3062,7 @@ const InventoryManagement: React.FC = () => {
               {/* Transfer Details */}
               <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                 <h3 className="text-lg font-medium text-yellow-900 mb-4">Transfer Details</h3>
-
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3143,8 +3081,9 @@ const InventoryManagement: React.FC = () => {
                         onChange={(e) => setTransferFormData({ ...transferFormData, quantity: Number(e.target.value) })}
                         min="1"
                         max={selectedItem ? (selectedItem.availableQuantity || (selectedItem.quantity - (selectedItem.reservedQuantity || 0))) : undefined}
-                        className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.quantity ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                        className={`flex-1 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                          formErrors.quantity ? 'border-red-500' : 'border-gray-300'
+                        }`}
                         placeholder="Enter quantity to transfer"
                       />
                       {selectedItem && (
@@ -3190,17 +3129,17 @@ const InventoryManagement: React.FC = () => {
                       <div className="flex items-center justify-between">
                         <span>
                           From: {locations.find(l => l._id === transferFormData.fromLocation)?.name}
-                          {transferFormData.fromRoom && rooms.find(r => r._id === transferFormData.fromRoom) &&
+                          {transferFormData.fromRoom && rooms.find(r => r._id === transferFormData.fromRoom) && 
                             ` → ${rooms.find(r => r._id === transferFormData.fromRoom)?.name}`}
-                          {transferFormData.fromRack && racks.find(r => r._id === transferFormData.fromRack) &&
+                          {transferFormData.fromRack && racks.find(r => r._id === transferFormData.fromRack) && 
                             ` → ${racks.find(r => r._id === transferFormData.fromRack)?.name}`}
                         </span>
                         <ArrowUpDown className="w-4 h-4 text-gray-400" />
                         <span>
                           To: {locations.find(l => l._id === transferFormData.toLocation)?.name}
-                          {transferFormData.toRoom && rooms.find(r => r._id === transferFormData.toRoom) &&
+                          {transferFormData.toRoom && rooms.find(r => r._id === transferFormData.toRoom) && 
                             ` → ${rooms.find(r => r._id === transferFormData.toRoom)?.name}`}
-                          {transferFormData.toRack && racks.find(r => r._id === transferFormData.toRack) &&
+                          {transferFormData.toRack && racks.find(r => r._id === transferFormData.toRack) && 
                             ` → ${racks.find(r => r._id === transferFormData.toRack)?.name}`}
                         </span>
                       </div>
@@ -4051,6 +3990,12 @@ const InventoryManagement: React.FC = () => {
           </div>
         </div>
       )}
+            <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={totalItems}
+        onPageChange={handlePageChange}
+      />
     </div>
   );
 };

@@ -197,6 +197,9 @@ const InvoiceManagement: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [invoiceType, setInvoiceType] = useState('purchase');
 
+  console.log("selectedInvoice:",selectedInvoice);
+  
+
   // Status update states
   const [statusUpdate, setStatusUpdate] = useState<StatusUpdate>({
     status: '',
@@ -627,6 +630,8 @@ const autoAdjustUnitPrice = () => {
   };
 
   const handleViewInvoice = (invoice: Invoice) => {
+    console.log("invoice:",invoice);
+    
     setSelectedInvoice(invoice);
     setOriginalInvoiceData(JSON.parse(JSON.stringify(invoice))); // Deep copy for backup
     setShowViewModal(true);
@@ -1041,6 +1046,9 @@ const autoAdjustUnitPrice = () => {
         location: newInvoice.location
       });
 
+      console.log("stockItem-3:",response);
+      
+
       let stockData: any[] = [];
       if (response.data) {
         if (Array.isArray(response.data)) {
@@ -1052,6 +1060,10 @@ const autoAdjustUnitPrice = () => {
 
       const stockItem = stockData.length > 0 ? stockData[0] : null;
       const available = stockItem ? (stockItem.availableQuantity || (stockItem.quantity - (stockItem.reservedQuantity || 0))) : 0;
+
+      console.log("stockItem-1:",stockItem);
+      console.log("stockItem-2:",quantity,available);
+      
 
       const isValid = quantity <= available;
       const message = !isValid
@@ -2566,7 +2578,7 @@ const autoAdjustUnitPrice = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                        {/* <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th> */}
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
@@ -2580,7 +2592,7 @@ const autoAdjustUnitPrice = () => {
                       {(selectedInvoice.items || []).map((item: any, index: number) => (
                         <tr key={index}>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                          {/* <td className="px-4 py-2 text-sm text-gray-900">{item.partNo}</td> */}
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.product?.partNo}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode ? (

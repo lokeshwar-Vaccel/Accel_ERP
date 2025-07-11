@@ -69,7 +69,7 @@ export const getInvoices = async (
       .populate('customer', 'name email phone address')
       .populate('location', 'name address')
       .populate('createdBy', 'firstName lastName')
-      .populate('items.product', 'name category brand')
+      .populate('items.product', 'name category brand partNo')
       .sort(sort as string)
       .skip(skip)
       .limit(Number(limit));

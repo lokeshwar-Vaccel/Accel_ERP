@@ -31,6 +31,8 @@ export interface Product {
   price?: number;
   stockUnit?: string;
   gndpTotal?: number;
+  cpcbNo?: string; // Added
+  uom?: string; // Added
   createdAt: string;
   updatedAt: string;
   createdBy?: string | { _id: string; firstName?: string; lastName?: string };
@@ -101,8 +103,9 @@ const ProductManagement: React.FC = () => {
     gst: 0,
     gndp: 0,
     price: 0,
-    stockUnit: 'pcs',
+    uom: 'pcs',
     gndpTotal: 0,
+    cpcbNo: '', // Added
     createdBy: currentUser
   });
 
@@ -143,7 +146,7 @@ const ProductManagement: React.FC = () => {
   }, [formData.room, racks]);
 
   const departments = [
-    'RETAIL', 'INDUSTRIAL', 'TELECOM', 'EV', 'RET/TEL'
+    'RETAIL', 'INDUSTRIAL', 'IE', 'TELECOM', 'EV', 'RET/TEL'
   ];
 
   const stockUnit = [
@@ -205,8 +208,9 @@ const ProductManagement: React.FC = () => {
       gst: 0,
       gndp: 0,
       price: 0,
-      stockUnit: 'pcs',
+      uom: 'pcs',
       gndpTotal: 0,
+      cpcbNo: '', // Added
       createdBy: currentUser
     });
     setFormErrors({});
@@ -238,8 +242,9 @@ const ProductManagement: React.FC = () => {
       gst: product.gst || 0,
       gndp: product.gndp || 0,
       price: product.price || 0,
-      stockUnit: product.stockUnit || 'pcs',
+      uom: product.uom || 'pcs',
       gndpTotal: product.gndpTotal || 0,
+      cpcbNo: product.cpcbNo || '', // Added
       createdBy: typeof product.createdBy === 'string' ? product.createdBy : product.createdBy?._id || ''
     });
 
@@ -272,8 +277,9 @@ const ProductManagement: React.FC = () => {
       gst: 0,
       gndp: 0,
       price: 0,
-      stockUnit: 'pcs',
+      uom: 'pcs',
       gndpTotal: 0,
+      cpcbNo: '', // Added
       createdBy: ''
     });
     setFormErrors({});
@@ -682,7 +688,8 @@ const ProductManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Unit</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UOM</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPCB No</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -690,11 +697,11 @@ const ProductManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Loading products...</td>
+                  <td colSpan={11} className="px-6 py-8 text-center text-gray-500">Loading products...</td>
                 </tr>
               ) : filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No products found</td>
+                  <td colSpan={11} className="px-6 py-8 text-center text-gray-500">No products found</td>
                 </tr>
               ) : (
                 filteredProducts.map((product) => (
@@ -715,7 +722,10 @@ const ProductManagement: React.FC = () => {
                       {product.minStockLevel}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product?.stockUnit}
+                      {product?.uom}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                      {product.cpcbNo || 'N/A'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${product.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
@@ -756,6 +766,7 @@ const ProductManagement: React.FC = () => {
         totalItems={totalDatas}
         itemsPerPage={limit}
       />
+
 
       {/* Product Form Modal */}
       {showProductModal && (
@@ -1008,23 +1019,36 @@ const ProductManagement: React.FC = () => {
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Stock Unit *
+                          Unit of Measure (UOM) *
                         </label>
                         <select
-                          name="stockUnit"
-                          value={formData.stockUnit}
+                          name="uom"
+                          value={formData.uom}
                           onChange={handleInputChange}
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.stockUnit ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.uom ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
                             }`}
                         >
-                          <option value="">Select Unit</option>
-                          {stockUnit.map(unit => (
+                          <option value="">Select UOM</option>
+                          {["pcs", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll"].map(unit => (
                             <option key={unit} value={unit}>{unit}</option>
                           ))}
                         </select>
-                        {formErrors.quantity && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors.quantity}</p>
+                        {formErrors.uom && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.uom}</p>
                         )}
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          CPCB Number
+                        </label>
+                        <input
+                          type="text"
+                          name="cpcbNo"
+                          value={formData.cpcbNo}
+                          onChange={handleInputChange}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Enter CPCB Number"
+                        />
                       </div>
                     </div>
                     {/* Tax Information Section */}

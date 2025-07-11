@@ -102,10 +102,14 @@ const productSchema = new Schema({
     type: Number,
     min: [0, 'GNDP Total cannot be negative'],
   },
-  stockUnit: {
+  uom: {
     type: String,
     enum: ['pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'],
     default: null
+  },
+  cpcbNo: {
+    type: String,
+    maxlength: [100, 'CPCB number cannot exceed 100 characters'],
   },
   createdBy: {
     type: Schema.Types.ObjectId,
