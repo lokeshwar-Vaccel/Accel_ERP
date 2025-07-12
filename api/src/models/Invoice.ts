@@ -9,6 +9,8 @@ export interface IInvoiceItem {
   totalPrice: number;
   taxRate?: number;
   taxAmount?: number;
+  uom?: string;
+  discount?: number;
 }
 
 // Invoice Interface
@@ -31,7 +33,7 @@ export interface IInvoice extends mongoose.Document {
   paymentDate?: Date;
   notes?: string;
   terms?: string;
-  invoiceType: 'sale' | 'purchase' | 'service' | 'amc' | 'other';
+  invoiceType: 'sale' | 'purchase' | 'challan' | 'quotation' ;
   referenceId?: string; // Service ticket, AMC contract, etc.
   location: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
@@ -42,6 +44,21 @@ export interface IInvoice extends mongoose.Document {
   supplierEmail: string;
   externalInvoiceNumber?: string; // External/hardcopy invoice number
   externalInvoiceTotal?: number;  // External/hardcopy invoice total
+  // Bank details and PAN
+  pan?: string;
+  bankName?: string;
+  bankAccountNo?: string;
+  bankIFSC?: string;
+  bankBranch?: string;
+  // Customer address details
+  customerAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+  };
+  referenceNo?: string;
+  referenceDate?: string;
 }
 
 // Invoice Item Schema
@@ -81,6 +98,17 @@ const invoiceItemSchema = new Schema({
     type: Number,
     default: 0,
     min: 0
+  },
+  uom: {
+    type: String,
+    enum: ['pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'],
+    default: 'pcs'
+  },
+  discount: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100
   }
 });
 
@@ -173,7 +201,7 @@ const invoiceSchema = new Schema<IInvoice>({
   },
   invoiceType: {
     type: String,
-    enum: ['sale', 'service', 'purchase', 'amc', 'other'],
+    enum: ['sale', 'quotation', 'purchase', 'challan'],
     required: true
   },
   referenceId: {
@@ -211,6 +239,54 @@ const invoiceSchema = new Schema<IInvoice>({
     type: Number,
     required: false,
     min: 0
+  },
+  // Bank details and PAN
+  pan: {
+    type: String,
+    trim: true
+  },
+  bankName: {
+    type: String,
+    trim: true
+  },
+  bankAccountNo: {
+    type: String,
+    trim: true
+  },
+  bankIFSC: {
+    type: String,
+    trim: true
+  },
+  bankBranch: {
+    type: String,
+    trim: true
+  },
+  // Customer address details
+  customerAddress: {
+    address: {
+      type: String,
+      trim: true
+    },
+    state: {
+      type: String,
+      trim: true
+    },
+    district: {
+      type: String,
+      trim: true
+    },
+    pincode: {
+      type: String,
+      trim: true
+    }
+  },
+  referenceNo: {
+    type: String,
+    trim: true
+  },
+  referenceDate: {
+    type: String,
+    trim: true
   }
 }, {
   timestamps: true

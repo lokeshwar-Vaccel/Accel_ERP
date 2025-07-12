@@ -699,6 +699,34 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: any }>('/admin/system-info'),
   };
 
+  // General Settings APIs
+  generalSettings = {
+    getAll: () =>
+      this.makeRequest<{ success: boolean; data: { companies: any[]; pagination: any } }>('/generalSettings'),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/generalSettings/${id}`),
+
+    create: (companyData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/generalSettings', {
+        method: 'POST',
+        body: JSON.stringify(companyData),
+      }),
+
+    update: (id: string, companyData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/generalSettings/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(companyData),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean }>(`/generalSettings/${id}`, {
+        method: 'DELETE',
+      }),
+  };
+
+
+
   // Communications APIs
   communications = {
     sendEmail: (emailData: any) =>

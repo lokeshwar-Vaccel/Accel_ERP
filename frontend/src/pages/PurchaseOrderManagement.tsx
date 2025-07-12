@@ -1104,7 +1104,7 @@ const totalAmount = formData.items.reduce(
       const foundProduct = products.find(p => p._id === product);
       return foundProduct?.gst || 0;
     }
-    return product.gst || 0;
+    return product?.gst || 0;
   };
 
   // Helper to calculate GST amount and total for an item

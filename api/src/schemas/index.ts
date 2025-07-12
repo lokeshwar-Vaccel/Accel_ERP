@@ -184,3 +184,17 @@ export const errorResponseSchema = Joi.object({
   }),
   stack: Joi.string() // Only in development
 }); 
+
+// Company validation schema
+export const companySchema = Joi.object({
+  companyName: Joi.string().max(200).required(),
+  companyAddress: addressSchema.required(),
+  companyPan: Joi.string().max(20),
+  companyBankDetails: Joi.object({
+    accountNumber: Joi.string().max(30),
+    ifsc: Joi.string().max(20),
+    bankName: Joi.string().max(100),
+    branch: Joi.string().max(100)
+  }),
+  contactInfo: contactInfoSchema,
+}); 

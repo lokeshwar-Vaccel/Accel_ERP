@@ -5,6 +5,7 @@ import { AuthenticatedRequest, APIResponse, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { generateReferenceId } from '../utils/generateReferenceId';
 import { StockLedger } from '../models/StockLedger';
+import mongoose from 'mongoose';
 
 // @desc    Get all stock levels
 // @route   GET /api/v1/stock
@@ -15,47 +16,136 @@ export const getStockLevels = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      sort = '-lastUpdated', 
+    const {
+      page = 1,
+      limit = 10,
+      sort = 'product.name',
       search,
       location,
+      room,
+      rack,
       lowStock,
-      product
+      product,
+      category,
+      dept,
+      brand,
+      outOfStock,
+      overStocked
     } = req.query as QueryParams & {
       location?: string;
+      room?: string;
+      rack?: string;
       lowStock?: string;
       product?: string;
+      category?: string;
+      dept?: string;
+      brand?: string;
+      outOfStock?: string;
+      overStocked?: string;
     };
 
     // Build query
     const query: any = {};
-    
+
     if (location) {
       query.location = location;
     }
-    
+
+    if (room) {
+      query.room = room;
+    }
+
+    if (rack) {
+      query.rack = rack;
+    }
+
     if (product) {
       query.product = product;
     }
 
-    console.log("query:",query);
-    
+    // Handle search and product-based filters
+    let productFilters: any = {};
 
-    // Execute query with pagination
-    let stockQuery = Stock.find(query)
-      .populate('product', 'name partNo brand category hsnNumber dept productType1 productType2 productType3 make gst gndp price')
-      .populate('location', 'name address type')
-      .populate('room', 'name ')
-      .populate('rack', 'name ')
-      .sort(sort as string);
+    if (search) {
+      productFilters.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { brand: { $regex: search, $options: 'i' } },
+        { modelNumber: { $regex: search, $options: 'i' } },
+        { partNo: { $regex: search, $options: 'i' } }
+      ];
+    }
 
-    // Filter by low stock if requested
-    if (lowStock === 'true') {
-      // We need to use aggregate pipeline for this complex query
-      const lowStockItems = await Stock.aggregate([
-        { $match: query },
+    if (category) {
+      productFilters.category = category;
+    }
+
+    if (dept) {
+      productFilters.dept = dept;
+    }
+
+    if (brand) {
+      productFilters.brand = { $regex: brand, $options: 'i' };
+    }
+
+    //     const queryData :any  = {
+    //  _id: new mongoose.Types.ObjectId(query.product),
+    // location: new mongoose.Types.ObjectId(query.location)
+
+    //     }
+
+    const _id = typeof query.product === 'string' ? new mongoose.Types.ObjectId(query.product) : query.product;
+
+    const mydata: any = { _id, location, ...productFilters };
+
+    if (Object.keys(productFilters).length > 0) {
+
+      const products = await Product.find(mydata).select('_id');
+
+      if (products.length > 0) {
+        query.product = { $in: products.map(p => p._id) };
+
+      } else {
+        // If no products match the search criteria, return empty result
+        const response: APIResponse = {
+          success: true,
+          message: 'No stock found matching search criteria',
+          data: { stockLevels: [] },
+          pagination: {
+            page: Number(page),
+            limit: Number(limit),
+            total: 0,
+            pages: 0
+          }
+        };
+        res.status(200).json(response);
+        return;
+      }
+    }
+
+    // Determine if we need to use aggregation (for nested sort fields or stock status filters)
+    const useAggregation = sort.includes('.') || lowStock === 'true' || outOfStock === 'true' || overStocked === 'true';
+
+    if (useAggregation) {
+      // Support nested sort fields 
+      // loglike 'product.name'
+      const sortField = sort.replace('-', '');
+      const sortOrder = sort.startsWith('-') ? -1 : 1;
+      const sortObj: any = {};
+
+
+
+      const match_datas = {
+        location: new mongoose.Types.ObjectId(query.location),
+      };
+
+      const querys = {
+        product: {
+          $in: [new mongoose.Types.ObjectId(query.product)],
+        },
+      };
+
+      let pipeline: any[] = [
+        { $match: { ...match_datas, ...querys } },
         {
           $lookup: {
             from: 'products',
@@ -73,57 +163,118 @@ export const getStockLevels = async (
           }
         },
         {
-          $addFields: {
-            productInfo: { $arrayElemAt: ['$productInfo', 0] },
-            locationInfo: { $arrayElemAt: ['$locationInfo', 0] }
+          $lookup: {
+            from: 'rooms',
+            localField: 'room',
+            foreignField: '_id',
+            as: 'roomInfo'
           }
         },
-        {
-          $match: {
-            $expr: {
-              $lte: ['$quantity', '$productInfo.minStockLevel']
-            }
-          }
-        },
-        { $sort: { [sort.replace('-', '')]: sort.startsWith('-') ? -1 : 1 } },
-        { $skip: (Number(page) - 1) * Number(limit) },
-        { $limit: Number(limit) }
-      ]);
-
-      const total = await Stock.aggregate([
-        { $match: query },
         {
           $lookup: {
-            from: 'products',
-            localField: 'product',
+            from: 'racks',
+            localField: 'rack',
             foreignField: '_id',
-            as: 'productInfo'
+            as: 'rackInfo'
           }
         },
         {
           $addFields: {
-            productInfo: { $arrayElemAt: ['$productInfo', 0] }
+            product: { $arrayElemAt: ['$productInfo', 0] },
+            location: { $arrayElemAt: ['$locationInfo', 0] },
+            room: { $arrayElemAt: ['$roomInfo', 0] },
+            rack: { $arrayElemAt: ['$rackInfo', 0] }
           }
-        },
-        {
+        }
+      ];
+
+      // If filtering by stock status, add $match for status
+      if (lowStock === 'true' || outOfStock === 'true' || overStocked === 'true') {
+        console.log("_______query.product", query.product);
+
+        pipeline.push({
           $match: {
             $expr: {
-              $lte: ['$quantity', '$productInfo.minStockLevel']
+              $or: [
+                {
+                  $and: [
+                    { $eq: [outOfStock, 'true'] },
+                    { $eq: ['$quantity', 0] }
+                  ]
+                },
+                {
+                  $and: [
+                    { $eq: [lowStock, 'true'] },
+                    { $ne: [outOfStock, 'true'] },
+                    { $ne: [overStocked, 'true'] },
+                    { $lte: ['$quantity', { $ifNull: ['$product.minStockLevel', 0] }] },
+                    { $gt: ['$quantity', 0] }
+                  ]
+                },
+                {
+                  $and: [
+                    { $eq: [overStocked, 'true'] },
+                    { $ne: [outOfStock, 'true'] },
+                    { $ne: [lowStock, 'true'] },
+                    { $gt: ['$quantity', { $multiply: [{ $ifNull: ['$product.minStockLevel', 0] }, 3] }] }
+                  ]
+                }
+              ]
             }
           }
-        },
-        { $count: 'total' }
-      ]);
+        });
+      }
+
+      // Case-insensitive sorting for string fields
+      const stringSortFields = [
+        'product.name', 'product.category', 'product.brand', 'location.name', 'room.name', 'rack.name',
+        'product.partNo', 'product.hsnNumber', 'product.dept', 'product.productType1', 'product.productType2', 'product.productType3', 'product.make', 'location.type'
+      ];
+      if (stringSortFields.includes(sortField)) {
+        pipeline.push({
+          $addFields: {
+            sortFieldLower: { $toLower: `$${sortField}` }
+          }
+        });
+        pipeline.push({ $sort: { sortFieldLower: sortOrder } });
+      } else {
+        // For non-string fields, sort as usual
+        sortObj[sortField] = sortOrder;
+        pipeline.push({ $sort: sortObj });
+      }
+      pipeline.push({ $skip: (Number(page) - 1) * Number(limit) });
+      pipeline.push({ $limit: Number(limit) });
+
+      const stockStatusItems = await Stock.aggregate(pipeline);
+      console.log("_______stockStatusItems", stockStatusItems);
+
+      // Get total count for pagination
+      const countPipeline = [...pipeline];
+      // Remove $skip, $limit, $sort, and $addFields for sortFieldLower for count
+      const countPipelineFiltered = countPipeline.filter(stage => !('$skip' in stage) && !('$limit' in stage) && !('$sort' in stage) && !(stage.$addFields && stage.$addFields.sortFieldLower));
+      countPipelineFiltered.push({ $count: 'total' });
+      const totalResult = await Stock.aggregate(countPipelineFiltered);
+      const total = totalResult[0]?.total || 0;
+      const pages = Math.ceil(total / Number(limit));
+
+      let message = 'Stock items retrieved successfully';
+      if (outOfStock === 'true') {
+        message = 'Out of stock items retrieved successfully';
+      } else if (lowStock === 'true') {
+        message = 'Low stock items retrieved successfully';
+      } else if (overStocked === 'true') {
+        message = 'Overstocked items retrieved successfully';
+      }
 
       const response: APIResponse = {
         success: true,
-        message: 'Low stock items retrieved successfully',
-        data: { stockLevels: lowStockItems },
+        message,
+        data: { stockLevels: stockStatusItems },
         pagination: {
           page: Number(page),
           limit: Number(limit),
-          total: total[0]?.total || 0,
-          pages: Math.ceil((total[0]?.total || 0) / Number(limit))
+          total,
+          pages
         }
       };
 
@@ -131,33 +282,18 @@ export const getStockLevels = async (
       return;
     }
 
-    console.log("stockQuery:",stockQuery);
-    
-
-    // Handle search
-    if (search) {
-      // Get products matching search criteria
-      const products = await Product.find({
-        $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { brand: { $regex: search, $options: 'i' } },
-          { modelNumber: { $regex: search, $options: 'i' } }
-        ]
-      }).select('_id');
-      
-      query.product = { $in: products.map(p => p._id) };
-    }
-
-    // Regular query
-    const stockLevels = await stockQuery
+    // Regular query with proper population
+    const stockLevels = await Stock.find(query)
+      .populate('product', 'name partNo brand category hsnNumber dept productType1 productType2 productType3 make gst gndp price stockUnit minStockLevel')
+      .populate('location', 'name address type')
+      .populate('room', 'name')
+      .populate('rack', 'name')
+      .sort(sort as string)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
 
     const total = await Stock.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));
-
-    console.log("stockLevels:",stockLevels);
-    
 
     const response: APIResponse = {
       success: true,
@@ -297,12 +433,12 @@ export const adjustStock = async (
     const referenceId = await generateReferenceId(
       adjustmentType === 'reserve' || adjustmentType === 'release' ? 'reservation' : 'adjustment'
     );
-    
+
     // Determine transaction type and quantity for ledger
     let transactionType: string;
     let ledgerQuantity: number;
     let ledgerReason = reason;
-    
+
     if (adjustmentType === 'reserve') {
       transactionType = 'reservation';
       ledgerQuantity = quantity; // Positive for reservations
@@ -322,7 +458,7 @@ export const adjustStock = async (
       transactionType,
       quantity: ledgerQuantity,
       reason: ledgerReason,
-      notes: adjustmentType === 'reserve' && reservationReferenceId 
+      notes: adjustmentType === 'reserve' && reservationReferenceId
         ? `${notes || ''} [Ref: ${reservationReferenceId}]${reservedUntil ? ` [Until: ${new Date(reservedUntil).toLocaleDateString()}]` : ''}`.trim()
         : notes,
       performedBy: req.user!.id,
@@ -338,10 +474,10 @@ export const adjustStock = async (
 
     const response: APIResponse = {
       success: true,
-      message: adjustmentType === 'reserve' ? 'Stock reserved successfully' : 
-               adjustmentType === 'release' ? 'Reserved stock released successfully' : 
-               'Stock adjusted successfully',
-      data: { 
+      message: adjustmentType === 'reserve' ? 'Stock reserved successfully' :
+        adjustmentType === 'release' ? 'Reserved stock released successfully' :
+          'Stock adjusted successfully',
+      data: {
         stock: populatedStock,
         adjustment: {
           type: adjustmentType,
@@ -402,7 +538,7 @@ export const adjustStock = async (
 //     } else {
 //       destStock.quantity += quantity;
 //     }
-    
+
 //     destStock.availableQuantity = destStock.quantity - destStock.reservedQuantity;
 //     destStock.lastUpdated = new Date();
 //     await destStock.save();
@@ -438,16 +574,16 @@ export const transferStock = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { 
-      product, 
-      fromLocation, 
-      fromRoom, 
-      fromRack, 
-      toLocation, 
-      toRoom, 
-      toRack, 
-      quantity, 
-      notes 
+    const {
+      product,
+      fromLocation,
+      fromRoom,
+      fromRack,
+      toLocation,
+      toRoom,
+      toRack,
+      quantity,
+      notes
     } = req.body;
 
     const sourceStock = await Stock.findOne({ product, location: fromLocation });
@@ -457,7 +593,7 @@ export const transferStock = async (
 
     // Check if this is a location change (not just room/rack reorganization)
     const isLocationChange = fromLocation !== toLocation;
-    
+
     if (isLocationChange) {
       // Update source stock (subtract quantity)
       sourceStock.quantity -= quantity;
@@ -481,7 +617,7 @@ export const transferStock = async (
         if (toRoom) destStock.room = toRoom;
         if (toRack) destStock.rack = toRack;
       }
-      
+
       destStock.availableQuantity = destStock.quantity - destStock.reservedQuantity;
       destStock.lastUpdated = new Date();
       await destStock.save();
@@ -494,20 +630,20 @@ export const transferStock = async (
     }
 
     const referenceId = await generateReferenceId('transfer');
-    
+
     // Create transfer ledger entries - get location names for descriptions
     const [fromLocationDoc, toLocationDoc] = await Promise.all([
       Stock.populate(sourceStock, { path: 'location', select: 'name' }),
-      toLocation !== fromLocation ? 
-        require('../models/Stock').StockLocation.findById(toLocation).select('name') : 
+      toLocation !== fromLocation ?
+        require('../models/Stock').StockLocation.findById(toLocation).select('name') :
         Stock.populate(sourceStock, { path: 'location', select: 'name' })
     ]);
-    
+
     const fromLocationName = (fromLocationDoc.location as any)?.name || 'Unknown Location';
-    const toLocationName = isLocationChange ? 
-      (toLocationDoc as any)?.name || 'Unknown Location' : 
+    const toLocationName = isLocationChange ?
+      (toLocationDoc as any)?.name || 'Unknown Location' :
       fromLocationName;
-    
+
     const fromDesc = `${fromLocationName}${fromRoom ? ` → ${fromRoom}` : ''}${fromRack ? ` → ${fromRack}` : ''}`;
     const toDesc = `${toLocationName}${toRoom ? ` → ${toRoom}` : ''}${toRack ? ` → ${toRack}` : ''}`;
 

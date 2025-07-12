@@ -69,7 +69,7 @@ export const getInvoices = async (
       .populate('customer', 'name email phone address')
       .populate('location', 'name address')
       .populate('createdBy', 'firstName lastName')
-      .populate('items.product', 'name category brand partNo')
+      .populate('items.product', 'name category brand')
       .sort(sort as string)
       .skip(skip)
       .limit(Number(limit));
@@ -149,7 +149,17 @@ export const createInvoice = async (
       location,
       reduceStock = true,
       externalInvoiceNumber,
-      externalInvoiceTotal
+      externalInvoiceTotal,
+      // Bank details and PAN
+      pan,
+      bankName,
+      bankAccountNo,
+      bankIFSC,
+      bankBranch,
+      // Customer address details
+      customerAddress,
+      referenceNo,
+      referenceDate,
     } = req.body;
 
     // Generate invoice number
@@ -167,19 +177,25 @@ export const createInvoice = async (
       }
 
       const itemTotal = item.quantity * item.unitPrice;
-      const taxAmount = (item.taxRate || 0) * itemTotal / 100;
+      const itemDiscount = (item.discount || 0) * itemTotal / 100;
+      const discountedTotal = itemTotal - itemDiscount;
+      const taxAmount = (item.taxRate || 0) * discountedTotal / 100;
 
       calculatedItems.push({
         product: item.product,
         description: item.description || product.name,
         quantity: item.quantity,
         unitPrice: item.unitPrice,
-        totalPrice: itemTotal,
+        totalPrice: discountedTotal,
         taxRate: item.taxRate || 0,
-        taxAmount: taxAmount
+        taxAmount: taxAmount,
+        discount: item.discount || 0,
+        uom: item.uom || 'pcs',
+        partNo: item.partNo || '',
+        hsnSac: item.hsnSac || ''
       });
 
-      subtotal += itemTotal;
+      subtotal += discountedTotal;
       totalTax += taxAmount;
     }
       function roundTo2(n: number) {
@@ -210,7 +226,17 @@ export const createInvoice = async (
       location,
       createdBy: req.user!.id,
       externalInvoiceNumber,
-      externalInvoiceTotal
+      externalInvoiceTotal,
+      // Bank details and PAN
+      pan,
+      bankName,
+      bankAccountNo,
+      bankIFSC,
+      bankBranch,
+      // Customer address details
+      customerAddress,
+      referenceNo,
+      referenceDate,
     });
 
     await invoice.save();

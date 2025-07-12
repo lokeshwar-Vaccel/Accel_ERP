@@ -59,8 +59,30 @@ interface Invoice {
   remainingAmount: number;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
-  invoiceType: 'sale' | 'service' | 'amc' | 'other';
+  invoiceType: 'quotation' | 'sale' | 'purchase' | 'challan';
   items: InvoiceItem[];
+  referenceNo?: string;
+  referenceDate?: string;
+  buyersOrderNo?: string;
+  buyersOrderDate?: string;
+  dispatchDocNo?: string;
+  deliveryNoteDate?: string;
+  dispatchedThrough?: string;
+  destination?: string;
+  termsOfDelivery?: string;
+  sellerGSTIN?: string;
+  sellerState?: string;
+  sellerStateCode?: string;
+  buyerGSTIN?: string;
+  buyerState?: string;
+  buyerStateCode?: string;
+  pan?: string;
+  bankName?: string;
+  bankAccountNo?: string;
+  bankIFSC?: string;
+  bankBranch?: string;
+  declaration?: string;
+  signature?: string;
 }
 
 interface InvoiceItem {
@@ -70,6 +92,12 @@ interface InvoiceItem {
   unitPrice: number;
   taxRate: number;
   // totalPrice and taxAmount are calculated, not needed in form state
+  hsnSac?: string;
+  gstRate?: number;
+  partNo?: string;
+  uom?: string;
+  discount?: number;
+  location?: string;
 }
 
 interface Customer {
@@ -78,6 +106,14 @@ interface Customer {
   email: string;
   phone: string;
   address: string;
+  addresses?: Array<{
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+  }>;
 }
 
 interface Product {
@@ -86,6 +122,10 @@ interface Product {
   price: number;
   category: string;
   brand: string;
+  gst?: number;
+  partNo?: string;
+  hsnNumber?: string;
+  uom?: string;
 }
 
 interface StockLocationData {
@@ -110,13 +150,20 @@ interface NewInvoiceItem {
   description: string;
   quantity: number;
   unitPrice: number;
-  taxRate: number;
+  taxRate?: number;
+  hsnSac?: string;
+  gstRate?: number;
+  partNo?: string;
+  uom?: string;
+  discount?: number;
+  location?: string;
 }
 
 interface NewInvoice {
   customer: string;
+  address?: string;
   dueDate: string;
-  invoiceType: 'sale' | 'purchase' | 'service' | 'amc' | 'other';
+  invoiceType: 'quotation' | 'sale' | 'purchase' | 'challan';
   location: string;
   notes: string;
   items: NewInvoiceItem[];
@@ -124,6 +171,28 @@ interface NewInvoice {
   externalInvoiceNumber: string;
   externalInvoiceTotal: number;
   reduceStock: boolean;
+  referenceNo?: string;
+  referenceDate?: string;
+  buyersOrderNo?: string;
+  buyersOrderDate?: string;
+  dispatchDocNo?: string;
+  deliveryNoteDate?: string;
+  dispatchedThrough?: string;
+  destination?: string;
+  termsOfDelivery?: string;
+  sellerGSTIN?: string;
+  sellerState?: string;
+  sellerStateCode?: string;
+  buyerGSTIN?: string;
+  buyerState?: string;
+  buyerStateCode?: string;
+  pan?: string;
+  bankName?: string;
+  bankAccountNo?: string;
+  bankIFSC?: string;
+  bankBranch?: string;
+  declaration?: string;
+  signature?: string;
 }
 
 interface StatusUpdate {
@@ -149,6 +218,13 @@ function safeToFixed(val: any, digits = 2) {
   return num.toFixed(digits);
 }
 
+const INVOICE_TYPES = [
+  { value: 'quotation', label: 'Quotation', icon: <FileText /> },
+  { value: 'sale', label: 'Sales Invoice', icon: <TrendingUp /> },
+  { value: 'purchase', label: 'Purchase Invoice', icon: <TrendingDown /> },
+  { value: 'challan', label: 'Delivery Challan', icon: <Package /> },
+];
+
 const InvoiceManagement: React.FC = () => {
   // Get current user from Redux
   const currentUser = useSelector((state: RootState) => state.auth.user);
@@ -156,8 +232,10 @@ const InvoiceManagement: React.FC = () => {
   // State management
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [addresses, setAddresses] = useState<any[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<StockLocationData[]>([]);
+  const [generalSettings, setGeneralSettings] = useState<any>(null);
   const [stats, setStats] = useState<InvoiceStats>({
     totalInvoices: 0,
     paidInvoices: 0,
@@ -178,10 +256,14 @@ const InvoiceManagement: React.FC = () => {
   const [totalDatas, setTotalDatas] = useState(0);
   const [sort, setSort] = useState('-createdAt');
 
+  console.log("invoices111111111111111:", invoices);
+
+
   // Custom dropdown states
   const [showStatusFilterDropdown, setShowStatusFilterDropdown] = useState(false);
   const [showPaymentFilterDropdown, setShowPaymentFilterDropdown] = useState(false);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [showAddressDropdown, setShowAddressDropdown] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showInvoiceTypeDropdown, setShowInvoiceTypeDropdown] = useState(false);
   const [showProductDropdowns, setShowProductDropdowns] = useState<Record<number, boolean>>({});
@@ -195,10 +277,10 @@ const InvoiceManagement: React.FC = () => {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
-  const [invoiceType, setInvoiceType] = useState('purchase');
+  const [invoiceType, setInvoiceType] = useState<'quotation' | 'sale' | 'purchase' | 'challan'>('sale');
 
-  console.log("selectedInvoice:",selectedInvoice);
-  
+  console.log("selectedInvoice:", selectedInvoice);
+
 
   // Status update states
   const [statusUpdate, setStatusUpdate] = useState<StatusUpdate>({
@@ -220,6 +302,7 @@ const InvoiceManagement: React.FC = () => {
     dueDate: '',
     invoiceType: 'sale',
     location: '',
+    address: '',
     notes: '',
     items: [
       {
@@ -227,14 +310,30 @@ const InvoiceManagement: React.FC = () => {
         description: '',
         quantity: 1,
         unitPrice: 0,
-        taxRate: 18
+        taxRate: 0,
+        gstRate: 0,
+        partNo: '',
+        hsnSac: '',
+        uom: 'pcs',
+        discount: 0
       }
     ],
     discountAmount: 0,
     externalInvoiceNumber: '',
     externalInvoiceTotal: 0,
-    reduceStock: true
+    reduceStock: true,
+    referenceNo: '',
+    referenceDate: '',
+    pan: '',
+    bankName: '',
+    bankAccountNo: '',
+    bankIFSC: '',
+    bankBranch: '',
+    declaration: '',
   });
+
+  console.log("newInvoice:", newInvoice);
+
 
   // Stock validation states
   const [stockValidation, setStockValidation] = useState<Record<number, {
@@ -287,108 +386,108 @@ const InvoiceManagement: React.FC = () => {
     return Math.max(0, parseFloat(taxRate.toFixed(2)));
   };
 
-const autoAdjustTaxRates = () => {
-  const items = selectedInvoice.items ?? [];
-  const targetTotal = selectedInvoice.externalInvoiceTotal ?? 0;
+  const autoAdjustTaxRates = () => {
+    const items = selectedInvoice.items ?? [];
+    const targetTotal = selectedInvoice.externalInvoiceTotal ?? 0;
 
-  const subtotal = items.reduce(
-    (sum: number, item: any) => sum + ((item.unitPrice ?? 0) * (item.quantity ?? 0)),
-    0
-  );
+    const subtotal = items.reduce(
+      (sum: number, item: any) => sum + ((item.unitPrice ?? 0) * (item.quantity ?? 0)),
+      0
+    );
 
-  const adjustedItems = items.map((item: any) => {
-    const quantity = item.quantity ?? 0;
-    const unitPrice = item.unitPrice ?? 0;
+    const adjustedItems = items.map((item: any) => {
+      const quantity = item.quantity ?? 0;
+      const unitPrice = item.unitPrice ?? 0;
 
-    if (quantity === 0 || unitPrice === 0) {
-      return item; // Leave the item as-is if not applicable
-    }
+      if (quantity === 0 || unitPrice === 0) {
+        return item; // Leave the item as-is if not applicable
+      }
 
-    const base = unitPrice * quantity;
-    const share = subtotal > 0 ? base / subtotal : 0;
-    const targetItemTotal = share * targetTotal;
+      const base = unitPrice * quantity;
+      const share = subtotal > 0 ? base / subtotal : 0;
+      const targetItemTotal = share * targetTotal;
 
-    const adjustedTaxRateRaw = calculateAdjustedTaxRate(unitPrice, quantity, targetItemTotal);
-    const adjustedTaxRate = Math.min(100, adjustedTaxRateRaw); // Limit to 100%
+      const adjustedTaxRateRaw = calculateAdjustedTaxRate(unitPrice, quantity, targetItemTotal);
+      const adjustedTaxRate = Math.min(100, adjustedTaxRateRaw); // Limit to 100%
 
-    let taxAmount = truncateTo2((base * adjustedTaxRate) / 100);
-    const totalPrice = Number((base + taxAmount).toFixed(2));
+      let taxAmount = truncateTo2((base * adjustedTaxRate) / 100);
+      const totalPrice = Number((base + taxAmount).toFixed(2));
 
-    return {
-      ...item,
-      taxRate: adjustedTaxRate,
-      taxAmount,
-      totalPrice,
-    };
-  });
+      return {
+        ...item,
+        taxRate: adjustedTaxRate,
+        taxAmount,
+        totalPrice,
+      };
+    });
 
-  const taxAmount = adjustedItems.reduce((sum: number, item: any) => sum + (item.taxAmount ?? 0), 0);
-  const totalAmount = adjustedItems.reduce((sum: number, item: any) => sum + (item.totalPrice ?? 0), 0);
+    const taxAmount = adjustedItems.reduce((sum: number, item: any) => sum + (item.taxAmount ?? 0), 0);
+    const totalAmount = adjustedItems.reduce((sum: number, item: any) => sum + (item.totalPrice ?? 0), 0);
 
-  setSelectedInvoice((prev: any) => ({
-    ...prev,
-    items: adjustedItems,
-    subtotal: parseFloat(subtotal.toFixed(2)),
-    taxAmount: parseFloat(taxAmount.toFixed(2)),
-    totalAmount: parseFloat(totalAmount.toFixed(2)),
-    remainingAmount: parseFloat(((totalAmount - (prev.paidAmount ?? 0))).toFixed(2)),
-  }));
-};
+    setSelectedInvoice((prev: any) => ({
+      ...prev,
+      items: adjustedItems,
+      subtotal: parseFloat(subtotal.toFixed(2)),
+      taxAmount: parseFloat(taxAmount.toFixed(2)),
+      totalAmount: parseFloat(totalAmount.toFixed(2)),
+      remainingAmount: parseFloat(((totalAmount - (prev.paidAmount ?? 0))).toFixed(2)),
+    }));
+  };
 
 
-const autoAdjustUnitPrice = () => {
-  const items = selectedInvoice.items ?? [];
-  const targetTotal = selectedInvoice.externalInvoiceTotal ?? 0;
+  const autoAdjustUnitPrice = () => {
+    const items = selectedInvoice.items ?? [];
+    const targetTotal = selectedInvoice.externalInvoiceTotal ?? 0;
 
-  const currentTotal = items.reduce((sum: number, item: any) => {
-    const quantity = item.quantity ?? 0;
-    const unitPrice = item.unitPrice ?? 0;
-    const taxRate = item.taxRate ?? 0;
-    const base = unitPrice * quantity;
-    const tax = (base * taxRate) / 100;
-    return sum + base + tax;
-  }, 0);
+    const currentTotal = items.reduce((sum: number, item: any) => {
+      const quantity = item.quantity ?? 0;
+      const unitPrice = item.unitPrice ?? 0;
+      const taxRate = item.taxRate ?? 0;
+      const base = unitPrice * quantity;
+      const tax = (base * taxRate) / 100;
+      return sum + base + tax;
+    }, 0);
 
-  const adjustedItems = items.map((item: any) => {
-    const quantity = item.quantity ?? 0;
-    const taxRate = item.taxRate ?? 0;
+    const adjustedItems = items.map((item: any) => {
+      const quantity = item.quantity ?? 0;
+      const taxRate = item.taxRate ?? 0;
 
-    if (quantity === 0) {
-      return item; // Skip adjustment for zero quantity
-    }
+      if (quantity === 0) {
+        return item; // Skip adjustment for zero quantity
+      }
 
-    const itemBase = (item.unitPrice ?? 0) * quantity;
-    const itemShare = currentTotal > 0 ? (itemBase + (itemBase * taxRate) / 100) / currentTotal : 0;
-    const targetItemTotal = itemShare * targetTotal;
+      const itemBase = (item.unitPrice ?? 0) * quantity;
+      const itemShare = currentTotal > 0 ? (itemBase + (itemBase * taxRate) / 100) / currentTotal : 0;
+      const targetItemTotal = itemShare * targetTotal;
 
-    const adjustedUnitPrice = parseFloat(((targetItemTotal / quantity) / (1 + taxRate / 100)).toFixed(2));
-    const basePrice = adjustedUnitPrice * quantity;
-    const taxAmount = parseFloat(((basePrice * taxRate) / 100).toFixed(2));
-    const totalPrice = parseFloat((basePrice + taxAmount).toFixed(2));
+      const adjustedUnitPrice = parseFloat(((targetItemTotal / quantity) / (1 + taxRate / 100)).toFixed(2));
+      const basePrice = adjustedUnitPrice * quantity;
+      const taxAmount = parseFloat(((basePrice * taxRate) / 100).toFixed(2));
+      const totalPrice = parseFloat((basePrice + taxAmount).toFixed(2));
 
-    return {
-      ...item,
-      unitPrice: adjustedUnitPrice,
-      taxAmount,
-      totalPrice,
-    };
-  });
+      return {
+        ...item,
+        unitPrice: adjustedUnitPrice,
+        taxAmount,
+        totalPrice,
+      };
+    });
 
-  const subtotal = adjustedItems.reduce((sum: number, item: any) => sum + ((item.unitPrice ?? 0) * (item.quantity ?? 0)), 0);
-  const taxAmount = adjustedItems.reduce((sum: number, item: any) => sum + (item.taxAmount ?? 0), 0);
-  const totalAmount = parseFloat((subtotal + taxAmount).toFixed(2));
-  const paidAmount = selectedInvoice.paidAmount ?? 0;
-  const remainingAmount = parseFloat((totalAmount - paidAmount).toFixed(2));
+    const subtotal = adjustedItems.reduce((sum: number, item: any) => sum + ((item.unitPrice ?? 0) * (item.quantity ?? 0)), 0);
+    const taxAmount = adjustedItems.reduce((sum: number, item: any) => sum + (item.taxAmount ?? 0), 0);
+    const totalAmount = parseFloat((subtotal + taxAmount).toFixed(2));
+    const paidAmount = selectedInvoice.paidAmount ?? 0;
+    const remainingAmount = parseFloat((totalAmount - paidAmount).toFixed(2));
 
-  setSelectedInvoice((prev: any) => ({
-    ...prev,
-    items: adjustedItems,
-    subtotal: parseFloat(subtotal.toFixed(2)),
-    taxAmount: parseFloat(taxAmount.toFixed(2)),
-    totalAmount,
-    remainingAmount,
-  }));
-};
+    setSelectedInvoice((prev: any) => ({
+      ...prev,
+      items: adjustedItems,
+      subtotal: parseFloat(subtotal.toFixed(2)),
+      taxAmount: parseFloat(taxAmount.toFixed(2)),
+      totalAmount,
+      remainingAmount,
+    }));
+  };
 
 
 
@@ -407,14 +506,17 @@ const autoAdjustUnitPrice = () => {
     });
   };
 
+  console.log("selectedInvoice3344:", selectedInvoice);
   const handleSaveChanges = async () => {
     setSavingChanges(true);
     try {
       if (!selectedInvoice) return;
 
+      console.log("selectedInvoice33:", selectedInvoice);
+
       const payload = {
         products: selectedInvoice.items.map((item: any) => ({
-          product: item.product._id || item.product, // Handles populated or plain ID
+          product: item.product?._id || item.product, // Handles populated or plain ID
           price: item.unitPrice,
           gst: item.taxRate,
         })),
@@ -508,7 +610,8 @@ const autoAdjustUnitPrice = () => {
         fetchCustomers(),
         fetchProducts(),
         fetchLocations(),
-        fetchStats()
+        fetchStats(),
+        fetchGeneralSettings()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -525,11 +628,13 @@ const autoAdjustUnitPrice = () => {
       search: searchTerm,
       ...(paymentFilter !== 'all' && { paymentStatus: paymentFilter }),
       ...(statusFilter !== 'all' && { status: statusFilter }),
-      ...(invoiceType !== 'all' && { invoiceType: invoiceType }),
+      ...(invoiceType && { invoiceType }),
     };
 
     try {
       const response = await apiClient.invoices.getAll(params);
+      console.log("response555:",response);
+      
       if (response.data.pagination) {
         setCurrentPage(response.data.pagination.page);
         setLimit(response.data.pagination.limit);
@@ -553,6 +658,7 @@ const autoAdjustUnitPrice = () => {
       const responseData = response.data as any;
       const customersData = responseData.customers || responseData || [];
       setCustomers(customersData);
+      setAddresses(customersData);
     } catch (error) {
       console.error('Error fetching customers:', error);
       setCustomers([]);
@@ -598,6 +704,34 @@ const autoAdjustUnitPrice = () => {
     }
   };
 
+  const fetchGeneralSettings = async () => {
+    try {
+      const response = await apiClient.generalSettings.getAll();
+      console.log("response=============:", response);
+      if (response.success && response.data && response.data.companies && response.data.companies.length > 0) {
+        // Get the first company settings (assuming single company setup)
+        const companySettings = response.data.companies[0];
+        
+        setGeneralSettings(companySettings);
+        
+        // Auto-populate default values in newInvoice if it exists
+        if (newInvoice) {
+          console.log("companySettings11:", companySettings);
+          setNewInvoice(prev => ({
+            ...prev,
+            pan: companySettings.companyPan || prev.pan,
+            bankName: companySettings.companyBankDetails?.bankName || prev.bankName,
+            bankAccountNo: companySettings.companyBankDetails?.accNo || prev.bankAccountNo,
+            bankIFSC: companySettings.companyBankDetails?.ifscCode || prev.bankIFSC,
+            bankBranch: companySettings.companyBankDetails?.branch || prev.bankBranch
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching general settings:', error);
+    }
+  };
+
   const handleCreateInvoice = () => {
     setNewInvoice({
       customer: '',
@@ -611,13 +745,40 @@ const autoAdjustUnitPrice = () => {
           description: '',
           quantity: 1,
           unitPrice: 0,
-          taxRate: 18
+          taxRate: 0,
+          gstRate: 0,
+          partNo: '',
+          hsnSac: '',
+          uom: 'pcs',
+          discount: 0
         }
       ],
       discountAmount: 0,
       reduceStock: true,
       externalInvoiceNumber: '',
       externalInvoiceTotal: 0,
+      referenceNo: '',
+      referenceDate: '',
+      buyersOrderNo: '',
+      buyersOrderDate: '',
+      dispatchDocNo: '',
+      deliveryNoteDate: '',
+      dispatchedThrough: '',
+      destination: '',
+      termsOfDelivery: '',
+      sellerGSTIN: '',
+      sellerState: '',
+      sellerStateCode: '',
+      buyerGSTIN: '',
+      buyerState: '',
+      buyerStateCode: '',
+      pan: generalSettings?.companyPan || '',
+      bankName: generalSettings?.companyBankDetails?.bankName || '',
+      bankAccountNo: generalSettings?.companyBankDetails?.accNo || '',
+      bankIFSC: generalSettings?.companyBankDetails?.ifscCode || '',
+      bankBranch: generalSettings?.companyBankDetails?.branch || '',
+      declaration: '',
+      signature: ''
     });
     setStockValidation({});
     setFormErrors({});
@@ -630,8 +791,8 @@ const autoAdjustUnitPrice = () => {
   };
 
   const handleViewInvoice = (invoice: Invoice) => {
-    console.log("invoice:",invoice);
-    
+    console.log("invoice12:", invoice);
+
     setSelectedInvoice(invoice);
     setOriginalInvoiceData(JSON.parse(JSON.stringify(invoice))); // Deep copy for backup
     setShowViewModal(true);
@@ -921,6 +1082,7 @@ const autoAdjustUnitPrice = () => {
       color: 'text-blue-600 hover:text-blue-900 hover:bg-blue-50'
     });
 
+    // Only show payment-related actions for sales invoices
     if (invoice.invoiceType === 'sale') {
 
       // Edit Status - Available for all invoices except cancelled
@@ -980,6 +1142,25 @@ const autoAdjustUnitPrice = () => {
           color: 'text-red-600 hover:text-red-900 hover:bg-red-50'
         });
       }
+    } else {
+      // For non-sales invoices, only show basic actions
+      if (invoice.status !== 'cancelled') {
+        actions.push({
+          icon: <Edit className="w-4 h-4" />,
+          label: 'Edit Status',
+          action: () => handleUpdateStatus(invoice, invoice.status),
+          color: 'text-purple-600 hover:text-purple-900 hover:bg-purple-50'
+        });
+      }
+
+      if (invoice.status !== 'cancelled') {
+        actions.push({
+          icon: <X className="w-4 h-4" />,
+          label: 'Cancel',
+          action: () => quickCancelInvoice(invoice),
+          color: 'text-red-600 hover:text-red-900 hover:bg-red-50'
+        });
+      }
     }
 
     return actions;
@@ -995,7 +1176,12 @@ const autoAdjustUnitPrice = () => {
           description: '',
           quantity: 1,
           unitPrice: 0,
-          taxRate: 18
+          taxRate: 0,
+          gstRate: 0,
+          partNo: '',
+          hsnSac: '',
+          uom: 'pcs',
+          discount: 0
         }
       ]
     }));
@@ -1012,12 +1198,18 @@ const autoAdjustUnitPrice = () => {
     setNewInvoice(prev => {
       const updatedItems = [...prev.items];
       updatedItems[index] = { ...updatedItems[index], [field]: value };
-      // Auto-populate price when product is selected
+      // Auto-populate price, description, gst, and partNo when product is selected
       if (field === 'product') {
         const productObj = products.find(p => p._id === value);
+        console.log("productObj:", productObj);
+
         if (productObj) {
           updatedItems[index].unitPrice = productObj.price;
           updatedItems[index].description = productObj.name;
+          updatedItems[index].taxRate = productObj.gst;
+          updatedItems[index].partNo = productObj.partNo;
+          updatedItems[index].hsnSac = productObj.hsnNumber;
+          updatedItems[index].uom = productObj.uom || 'pcs';
         }
         // Validate stock when product or quantity changes
         validateStockForItem(index, value, updatedItems[index].quantity);
@@ -1046,8 +1238,8 @@ const autoAdjustUnitPrice = () => {
         location: newInvoice.location
       });
 
-      console.log("stockItem-3:",response);
-      
+      console.log("stockItem-3:", response);
+
 
       let stockData: any[] = [];
       if (response.data) {
@@ -1061,9 +1253,9 @@ const autoAdjustUnitPrice = () => {
       const stockItem = stockData.length > 0 ? stockData[0] : null;
       const available = stockItem ? (stockItem.availableQuantity || (stockItem.quantity - (stockItem.reservedQuantity || 0))) : 0;
 
-      console.log("stockItem-1:",stockItem);
-      console.log("stockItem-2:",quantity,available);
-      
+      console.log("stockItem-1:", stockItem);
+      console.log("stockItem-2:", quantity, available);
+
 
       const isValid = quantity <= available;
       const message = !isValid
@@ -1211,7 +1403,9 @@ const autoAdjustUnitPrice = () => {
   };
 
   const calculateItemTotal = (item: any) => {
-    return item.quantity * item.unitPrice || 0;
+    const subtotal = item.quantity * item.unitPrice || 0;
+    const itemDiscount = (item.discount || 0) * subtotal / 100; // Calculate discount amount
+    return subtotal - itemDiscount;
   };
 
   const calculateSubtotal = () => {
@@ -1227,9 +1421,27 @@ const autoAdjustUnitPrice = () => {
     return parseFloat(totalTax.toFixed(2)) || 0;
   };
 
+  const calculateItemDiscounts = () => {
+    const itemDiscounts = newInvoice.items.reduce((sum, item) => {
+      const subtotal = item.quantity * item.unitPrice || 0;
+      const itemDiscount = (item.discount || 0) * subtotal / 100;
+      return sum + itemDiscount;
+    }, 0);
+    return parseFloat(itemDiscounts.toFixed(2)) || 0;
+  };
+
+  const calculateTotalDiscount = () => {
+    const itemDiscounts = calculateItemDiscounts();
+    // const invoiceDiscount = newInvoice.discountAmount || 0;
+    return parseFloat((itemDiscounts ).toFixed(2)) || 0;
+  };
+
 
   const calculateGrandTotal = () => {
-    return calculateSubtotal() + calculateTotalTax() - (newInvoice.discountAmount || 0);
+    const subtotal = calculateSubtotal();
+    const tax = calculateTotalTax();
+    // const invoiceDiscount = newInvoice.discountAmount || 0;
+    return subtotal + tax;
   };
 
   const handleSubmitInvoice = async () => {
@@ -1245,6 +1457,10 @@ const autoAdjustUnitPrice = () => {
       const subtotal = calculateSubtotal();
       const taxAmount = calculateTotalTax();
 
+      // Get selected customer details
+      const selectedCustomer = customers.find(c => c._id === newInvoice.customer);
+      const selectedAddress = addresses.find(a => a.id === parseInt(newInvoice.address || '0'));
+
       // Simple payload - backend controller now provides all required fields
       const invoiceData = {
         customer: newInvoice.customer,
@@ -1256,12 +1472,47 @@ const autoAdjustUnitPrice = () => {
         notes: newInvoice.notes,
         discountAmount: newInvoice.discountAmount || 0,
         reduceStock: newInvoice.reduceStock,
+        // Bank details and PAN from general settings
+        pan: newInvoice.pan || '',
+        bankName: newInvoice.bankName || '',
+        bankAccountNo: newInvoice.bankAccountNo || '',
+        bankIFSC: newInvoice.bankIFSC || '',
+        bankBranch: newInvoice.bankBranch || '',
+        // Customer address details
+        customerAddress: selectedAddress ? {
+          address: selectedAddress.address,
+          state: selectedAddress.state,
+          district: selectedAddress.district,
+          pincode: selectedAddress.pincode
+        } : null,
+        // Additional invoice fields
+        referenceNo: newInvoice.referenceNo || '',
+        referenceDate: newInvoice.referenceDate || '',
+        buyersOrderNo: newInvoice.buyersOrderNo || '',
+        buyersOrderDate: newInvoice.buyersOrderDate || '',
+        dispatchDocNo: newInvoice.dispatchDocNo || '',
+        deliveryNoteDate: newInvoice.deliveryNoteDate || '',
+        dispatchedThrough: newInvoice.dispatchedThrough || '',
+        destination: newInvoice.destination || '',
+        termsOfDelivery: newInvoice.termsOfDelivery || '',
+        sellerGSTIN: newInvoice.sellerGSTIN || '',
+        sellerState: newInvoice.sellerState || '',
+        sellerStateCode: newInvoice.sellerStateCode || '',
+        buyerGSTIN: newInvoice.buyerGSTIN || '',
+        buyerState: newInvoice.buyerState || '',
+        buyerStateCode: newInvoice.buyerStateCode || '',
+        declaration: newInvoice.declaration || '',
+        signature: newInvoice.signature || '',
         items: newInvoice.items.map(item => ({
           product: item.product,
           description: item.description,
           quantity: Number(item.quantity),
           unitPrice: Number(item.unitPrice),
-          taxRate: Number(item.taxRate || 0)
+          taxRate: Number(item.taxRate || 0),
+          discount: Number(item.discount || 0),
+          uom: item.uom || 'pcs',
+          partNo: item.partNo || '',
+          hsnSac: item.hsnSac || ''
         }))
       };
 
@@ -1316,7 +1567,8 @@ const autoAdjustUnitPrice = () => {
   const filteredInvoices = invoices.filter(invoice => {
     const matchesSearch =
       invoice?.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+      invoice?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      invoice?.supplierName?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
     const matchesPayment = paymentFilter === 'all' || invoice.paymentStatus === paymentFilter;
     const matchesType = invoice.invoiceType === invoiceType;
@@ -1402,21 +1654,24 @@ const autoAdjustUnitPrice = () => {
 
   const getInvoiceTypeLabel = (value: string) => {
     const options = [
-      { value: 'sale', label: 'Sale' },
-      { value: 'purchase', label: 'Purchase' },
-      { value: 'service', label: 'Service' },
-      { value: 'amc', label: 'AMC' },
-      { value: 'quotation', label: 'Quotation' },
-      { value: 'challan', label: 'Delivery Challan' },
-      { value: 'other', label: 'Other' }
+      { value: 'quotation', label: 'Quotation', icon: <FileText /> },
+      { value: 'sale', label: 'Sales Invoice', icon: <TrendingUp /> },
+      { value: 'purchase', label: 'Purchase Invoice', icon: <TrendingDown /> },
+      { value: 'challan', label: 'Delivery Challan', icon: <Package /> },
     ];
-    return options.find(opt => opt.value === value)?.label || 'Sale';
+    return options.find(opt => opt.value === value)?.label || 'Sales Invoices';
   };
 
   const getProductLabel = (value: string) => {
     if (!value) return 'Select product';
     const product = products.find(p => p._id === value);
     return product ? `${product?.name} - ₹${product?.price?.toLocaleString()}` : 'Select product';
+  };
+
+  const getAddressLabel = (value: string | undefined) => {
+    if (!value) return 'Select address';
+    const address = addresses.find(a => a.id === parseInt(value));
+    return address ? `${address.address} (${address.district}, ${address.pincode})` : 'Unknown address';
   };
 
   const getStatusUpdateLabel = (value: string) => {
@@ -1643,13 +1898,18 @@ const autoAdjustUnitPrice = () => {
         title="Billing"
         subtitle="Create and manage customer invoices"
       >
-        <Button
-          onClick={handleCreateInvoice}
-          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Create Invoice</span>
-        </Button>
+        {(invoiceType === 'sale' || invoiceType === 'challan') && (
+          <Button
+            onClick={handleCreateInvoice}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <Plus className="w-4 h-4" />
+            <span>
+              {invoiceType === 'sale' ? 'Create Invoice' :
+               invoiceType === 'challan' ? 'Create Challan' : 'Create Invoice'}
+            </span>
+          </Button>
+        )}
       </PageHeader>
 
       {/* Stats Cards */}
@@ -1755,50 +2015,19 @@ const autoAdjustUnitPrice = () => {
           </div>
           {/* Invoice Type Toggle */}
           <div className="flex bg-gray-100 rounded-xl p-0">
-            <button
-              onClick={() => setInvoiceType('quotation')}
-              className={`px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-all duration-200 ${
-                invoiceType === 'quotation'
+            {INVOICE_TYPES.map(type => (
+              <button
+                key={type.value}
+                onClick={() => setInvoiceType(type.value as 'quotation' | 'sale' | 'purchase' | 'challan')}
+                className={`px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-all duration-200 ${invoiceType === type.value
                   ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-500'
                   : 'text-gray-600 hover:text-blue-700'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>Quotation</span>
-            </button>
-            <button
-              onClick={() => setInvoiceType('purchase')}
-              className={`px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-all duration-200 ${
-                invoiceType === 'purchase'
-                  ? 'bg-purple-50 text-purple-700 shadow-sm border border-purple-500'
-                  : 'text-gray-600 hover:text-purple-700'
-              }`}
-            >
-              <TrendingDown className="w-4 h-4" />
-              <span>Purchase Invoices</span>
-            </button>
-            <button
-              onClick={() => setInvoiceType('sale')}
-              className={`px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-all duration-200 ${
-                invoiceType === 'sale'
-                  ? 'bg-green-50 text-green-700 shadow-sm border border-green-500'
-                  : 'text-gray-600 hover:text-green-700'
-              }`}
-            >
-              <TrendingUp className="w-4 h-4" />
-              <span>Sales Invoices</span>
-            </button>
-            <button
-              onClick={() => setInvoiceType('challan')}
-              className={`px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-all duration-200 ${
-                invoiceType === 'challan'
-                  ? 'bg-orange-50 text-orange-700 shadow-sm border border-orange-500'
-                  : 'text-gray-600 hover:text-orange-700'
-              }`}
-            >
-              <Package className="w-4 h-4" />
-              <span>Delivery Challan</span>
-            </button>
+                  }`}
+              >
+                {type.icon}
+                <span>{type.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -1820,13 +2049,11 @@ const autoAdjustUnitPrice = () => {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {invoiceType === 'quotation' ? 'Quotation No' :
-                   invoiceType === 'challan' ? 'Challan No' :
-                   'Invoice'}
+                    invoiceType === 'challan' ? 'Challan No' :
+                      'Invoice No'}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {invoiceType === 'purchase' ? 'Supplier' :
-                   invoiceType === 'challan' ? 'Recipient' :
-                   'Customer'}
+                  {invoiceType === 'purchase' ? 'Supplier' : 'Customer'}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                 {invoiceType === 'sale' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>}
@@ -1866,10 +2093,10 @@ const autoAdjustUnitPrice = () => {
                     <td className="px-4 py-3">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
-                          {invoice.customer ? invoice.customer.name : invoice?.supplierName}
+                          {invoiceType === 'purchase' ? invoice.supplierName : invoice.customer?.name}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {invoice.customer ? invoice.customer.email : invoice?.supplierEmail}
+                          {invoiceType === 'purchase' ? invoice.supplierEmail : invoice.customer?.email}
                         </div>
                       </div>
                     </td>
@@ -1892,9 +2119,9 @@ const autoAdjustUnitPrice = () => {
                     </td> : <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
                         {getStatusIcon(invoice.status)}
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(invoice.externalInvoiceTotal.toFixed(1) === invoice.totalAmount.toFixed(1))
-                          ? "bg-green-100 text-green-800" :invoice.externalInvoiceTotal === 0 ?"bg-green-100 text-green-800" :"bg-red-100 text-red-800"}`}>
-                          {invoice.externalInvoiceTotal.toFixed(1) === invoice.totalAmount.toFixed(1) ? "Not Mismatch" : invoice.externalInvoiceTotal === 0?"Not Mismatch": "Amount Mismatch"}
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(invoice.externalInvoiceTotal?.toFixed(1) === invoice.totalAmount?.toFixed(1))
+                          ? "bg-green-100 text-green-800" : invoice.externalInvoiceTotal === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                          {invoice.externalInvoiceTotal?.toFixed(1) === invoice.totalAmount?.toFixed(1) ? "Not Mismatch" : invoice.externalInvoiceTotal === 0 ? "Not Mismatch" : "Amount Mismatch"}
                         </span>
                       </div>
                     </td>}
@@ -1942,16 +2169,16 @@ const autoAdjustUnitPrice = () => {
       {/* Create Invoice Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">
                 {invoiceType === 'quotation'
                   ? 'Create New Quotation'
-                  : invoiceType === 'challan'
-                  ? 'Create New Delivery Challan'
-                  : invoiceType === 'purchase'
-                  ? 'Create New Purchase Invoice'
-                  : 'Create New Sales Invoice'}
+                  : invoiceType === 'sale'
+                    ? 'Create New Sales Invoice'
+                    : invoiceType === 'purchase'
+                      ? 'Create New Purchase Invoice'
+                      : 'Create New Delivery Challan'}
               </h2>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -1970,59 +2197,11 @@ const autoAdjustUnitPrice = () => {
               )}
 
               {/* Customer and Basic Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer *
-                  </label>
-                  <div className="relative dropdown-container">
-                    <button
-                      onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.customer ? 'border-red-500' : 'border-gray-300'
-                        } hover:border-gray-400`}
-                    >
-                      <span className="text-gray-700 truncate mr-1">{getCustomerLabel(newInvoice.customer)}</span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCustomerDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showCustomerDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                        <button
-                          onClick={() => {
-                            setNewInvoice({ ...newInvoice, customer: '' });
-                            setShowCustomerDropdown(false);
-                          }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!newInvoice.customer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          Select customer
-                        </button>
-                        {customers.map(customer => (
-                          <button
-                            key={customer._id}
-                            onClick={() => {
-                              setNewInvoice({ ...newInvoice, customer: customer._id });
-                              setShowCustomerDropdown(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.customer === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                              }`}
-                          >
-                            <div>
-                              <div className="font-medium">{customer.name}</div>
-                              <div className="text-xs text-gray-500">{customer.email}</div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {formErrors.customer && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.customer}</p>
-                  )}
-                </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Location *
+                    From Location *
                   </label>
                   <div className="relative dropdown-container">
                     <button
@@ -2077,6 +2256,106 @@ const autoAdjustUnitPrice = () => {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Customer *
+                  </label>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.customer ? 'border-red-500' : 'border-gray-300'
+                        } hover:border-gray-400`}
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getCustomerLabel(newInvoice.customer)}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCustomerDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showCustomerDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                        <button
+                          onClick={() => {
+                            setNewInvoice({ ...newInvoice, customer: '', address: '' });
+                            setShowCustomerDropdown(false);
+                            setAddresses([]);
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!newInvoice.customer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
+                        >
+                          Select customer
+                        </button>
+                        {customers.map(customer => (
+                          <button
+                            key={customer._id}
+                            onClick={() => {
+                              setNewInvoice({ ...newInvoice, customer: customer._id, address: '' });
+                              setShowCustomerDropdown(false);
+                              setAddresses(customer.addresses || []);
+                            }}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.customer === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                              }`}
+                          >
+                            <div>
+                              <div className="font-medium">{customer.name}</div>
+                              <div className="text-xs text-gray-500">{customer.email}</div>
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {formErrors.customer && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.customer}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Delivery Address
+                  </label>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => setShowAddressDropdown(!showAddressDropdown)}
+                      disabled={!newInvoice.customer}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${!newInvoice.customer ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300 hover:border-gray-400'}`}
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getAddressLabel(newInvoice.address)}</span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAddressDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showAddressDropdown && newInvoice.customer && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                        <button
+                          onClick={() => {
+                            setNewInvoice({ ...newInvoice, address: '' });
+                            setShowAddressDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!newInvoice.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
+                        >
+                          Select address
+                        </button>
+                        {addresses.map(address => (
+                          <button
+                            key={address.id}
+                            onClick={() => {
+                              setNewInvoice({ ...newInvoice, address: address.id.toString() });
+                              setShowAddressDropdown(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.address === address.id.toString() ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                              }`}
+                          >
+                            <div>
+                              <div className="font-medium">{address.address}</div>
+                              <div className="text-xs text-gray-500">{address.district}, {address.pincode}</div>
+                              {address.isPrimary && (
+                                <div className="text-xs text-blue-600 font-medium">Primary</div>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Due Date *
                   </label>
                   <input
@@ -2091,7 +2370,29 @@ const autoAdjustUnitPrice = () => {
                     <p className="text-red-500 text-xs mt-1">{formErrors.dueDate}</p>
                   )}
                 </div>
-
+                
+                {/* Reference No. & Date */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Reference No
+                  </label>
+                  <input
+                    type="text"
+                    placeholder='Reference No'
+                    value={newInvoice.referenceNo}
+                    onChange={e => setNewInvoice({ ...newInvoice, referenceNo: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.referenceNo ? 'border-red-500' : 'border-gray-300'
+                      }`} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700">Reference Date</label>
+                  <input
+                    type="date"
+                    value={newInvoice.referenceDate}
+                    onChange={e => setNewInvoice({ ...newInvoice, referenceDate: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.referenceDate ? 'border-red-500' : 'border-gray-300'
+                      }`} />
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Invoice Type
@@ -2106,15 +2407,7 @@ const autoAdjustUnitPrice = () => {
                     </button>
                     {showInvoiceTypeDropdown && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                        {[
-                          { value: 'sale', label: 'Sale' },
-                          { value: 'purchase', label: 'Purchase' },
-                          { value: 'service', label: 'Service' },
-                          { value: 'amc', label: 'AMC' },
-                          { value: 'quotation', label: 'Quotation' },
-                          { value: 'challan', label: 'Delivery Challan' },
-                          { value: 'other', label: 'Other' }
-                        ].map((option) => (
+                        {INVOICE_TYPES.map((option) => (
                           <button
                             key={option.value}
                             onClick={() => {
@@ -2131,6 +2424,7 @@ const autoAdjustUnitPrice = () => {
                     )}
                   </div>
                 </div>
+
               </div>
 
               {/* Stock Reduction Option */}
@@ -2166,8 +2460,8 @@ const autoAdjustUnitPrice = () => {
                 <div className="space-y-4">
                   {newInvoice.items.map((item, index) => (
                     <div key={index} className="border border-gray-200 rounded-lg p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-3">
-                        <div>
+                      <div className="grid grid-cols-1 md:grid-cols-10 gap-4 mb-3">
+                        <div className="md:col-span-2">
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Product
                           </label>
@@ -2219,6 +2513,54 @@ const autoAdjustUnitPrice = () => {
                           )}
                         </div>
 
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            HSN/SAC
+                          </label>
+                          <input
+                            type="text"
+                            value={item.hsnSac}
+                            placeholder='0'
+                            onChange={(e) => updateInvoiceItem(index, 'hsnSac', parseFloat(e.target.value))}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'
+                              }`}
+                          />
+                          {formErrors[`item_${index}_price`] && (
+                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            GST %
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            value={item.taxRate}
+                            placeholder='0.00%'
+                            onChange={(e) => updateInvoiceItem(index, 'taxRate', parseFloat(e.target.value))}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Part No
+                          </label>
+                          <input
+                            type="text"
+                            value={item.partNo}
+                            placeholder='0'
+                            onChange={(e) => updateInvoiceItem(index, 'partNo', parseFloat(e.target.value))}
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'
+                              }`}
+                          />
+                          {formErrors[`item_${index}_price`] && (
+                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
+                          )}
+                        </div>
+                        
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Quantity
@@ -2240,7 +2582,27 @@ const autoAdjustUnitPrice = () => {
                             <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_stock`]}</p>
                           )}
                         </div>
-
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            UOM
+                          </label>
+                          <select
+                            value={item.uom || 'pcs'}
+                            onChange={(e) => updateInvoiceItem(index, 'uom', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="pcs">pcs</option>
+                            <option value="kg">kg</option>
+                            <option value="litre">litre</option>
+                            <option value="meter">meter</option>
+                            <option value="sq.ft">sq.ft</option>
+                            <option value="hour">hour</option>
+                            <option value="set">set</option>
+                            <option value="box">box</option>
+                            <option value="can">can</option>
+                            <option value="roll">roll</option>
+                          </select>
+                        </div>
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
                             Unit Price (₹)
@@ -2259,21 +2621,44 @@ const autoAdjustUnitPrice = () => {
                             <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
                           )}
                         </div>
-
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Tax (%)
+                           Discount (%)
                           </label>
                           <input
                             type="number"
                             min="0"
                             max="100"
-                            value={item.taxRate}
+                            
+                            step="1"
+                            value={item.discount}
                             placeholder='0.00%'
-                            onChange={(e) => updateInvoiceItem(index, 'taxRate', parseFloat(e.target.value))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            onChange={(e) => {
+                              updateInvoiceItem(index, 'discount', parseFloat(e.target.value));
+                              // Auto-calculate discountAmount based on item discounts
+                              const updatedItems = [...newInvoice.items];
+                              updatedItems[index] = { ...updatedItems[index], discount: parseFloat(e.target.value) || 0 };
+                              
+                              const totalItemDiscounts = updatedItems.reduce((sum, item) => {
+                                const subtotal = item.quantity * item.unitPrice || 0;
+                                const itemDiscount = (item.discount || 0) * subtotal / 100;
+                                return sum + itemDiscount;
+                              }, 0);
+                              
+                              setNewInvoice(prev => ({
+                                ...prev,
+                                discountAmount: totalItemDiscounts
+                              }));
+                            }}
+
+                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'
+                              }`}
                           />
+                          {formErrors[`item_${index}_price`] && (
+                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
+                          )}
                         </div>
+
 
                         <div className="flex items-end">
                           <div className="w-full">
@@ -2333,6 +2718,45 @@ const autoAdjustUnitPrice = () => {
                     </div>
                   ))}
                 </div>
+                {/* --- ITEMS TABLE SECTION --- */}
+                {/* <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                <h3 className="font-bold text-lg mb-2">Goods and Services</h3>
+                <table className="w-full border">
+                  <thead className="bg-gray-100">
+                    <tr>
+                      <th className="border px-2 py-1 text-xs">No.</th>
+                      <th className="border px-2 py-1 text-xs">Description</th>
+                      <th className="border px-2 py-1 text-xs">HSN/SAC</th>
+                      <th className="border px-2 py-1 text-xs">GST %</th>
+                      <th className="border px-2 py-1 text-xs">Part No.</th>
+                      <th className="border px-2 py-1 text-xs">Quantity</th>
+                      <th className="border px-2 py-1 text-xs">Rate</th>
+                      <th className="border px-2 py-1 text-xs">Disc. %</th>
+                      <th className="border px-2 py-1 text-xs">Amount</th>
+                      <th className="border px-2 py-1 text-xs">Location</th>
+                      <th className="border px-2 py-1 text-xs"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {newInvoice.items.map((item, idx) => (
+                      <tr key={idx}>
+                        <td className="border px-2 py-1 text-xs">{idx + 1}</td>
+                        <td className="border px-2 py-1"><input type="text" value={item.description} onChange={e => updateInvoiceItem(idx, 'description', e.target.value)} className="w-full px-1 py-0.5 border rounded" /></td>
+                        <td className="border px-2 py-1"><input type="text" value={item.hsnSac || ''} onChange={e => updateInvoiceItem(idx, 'hsnSac', e.target.value)} className="w-full px-1 py-0.5 border rounded" /></td>
+                        <td className="border px-2 py-1"><input type="number" value={item.gstRate || ''} onChange={e => updateInvoiceItem(idx, 'gstRate', Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></td>
+                        <td className="border px-2 py-1"><input type="text" value={item.partNo || ''} onChange={e => updateInvoiceItem(idx, 'partNo', e.target.value)} className="w-full px-1 py-0.5 border rounded" /></td>
+                        <td className="border px-2 py-1"><input type="number" value={item.quantity} onChange={e => updateInvoiceItem(idx, 'quantity', Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></td>
+                        <td className="border px-2 py-1"><input type="number" value={item.unitPrice} onChange={e => updateInvoiceItem(idx, 'unitPrice', Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></td>
+                        <td className="border px-2 py-1"><input type="number" value={item.discount || ''} onChange={e => updateInvoiceItem(idx, 'discount', Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></td>
+                        <td className="border px-2 py-1">₹{calculateItemTotal(item).toLocaleString()}</td>
+                        <td className="border px-2 py-1"><input type="text" value={item.location || ''} onChange={e => updateInvoiceItem(idx, 'location', e.target.value)} className="w-full px-1 py-0.5 border rounded" /></td>
+                        <td className="border px-2 py-1"><button onClick={() => removeInvoiceItem(idx)} className="text-red-500">Remove</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <button onClick={addInvoiceItem} className="mt-2 px-3 py-1 bg-blue-600 text-white rounded">Add Item</button>
+              </div> */}
               </div>
 
               {/* Notes */}
@@ -2396,29 +2820,23 @@ const autoAdjustUnitPrice = () => {
                   <div className="w-80 space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">₹{calculateSubtotal().toLocaleString()|| 0}</span>
+                      <span className="font-medium">₹{calculateSubtotal().toLocaleString() || 0}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Total Tax:</span>
-                      <span className="font-medium">₹{calculateTotalTax().toLocaleString()||0}</span>
+                      <span className="font-medium">₹{calculateTotalTax().toLocaleString() || 0}</span>
                     </div>
-                    <div className="flex justify-between text-sm items-center">
-                      <span className="text-gray-600">Discount:</span>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-gray-500">₹</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={newInvoice.discountAmount}
-                          onChange={(e) => setNewInvoice({ ...newInvoice, discountAmount: parseFloat(e.target.value) || 0 })}
-                          className="w-24 px-2 py-1 border border-gray-300 rounded text-right text-sm"
-                        />
-                      </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Total Discount:</span>
+                      <span className="font-medium text-green-600">-₹{calculateTotalDiscount().toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between font-bold text-lg border-t pt-3">
                       <span>Grand Total:</span>
                       <span className="text-blue-600">₹{calculateGrandTotal().toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Amount in Words:</span>
+                      <span>{/* TODO: Convert to words */}</span>
                     </div>
                   </div>
                 </div>
@@ -2451,7 +2869,12 @@ const autoAdjustUnitPrice = () => {
                   ) : (
                     <>
                       <FileText className="w-4 h-4" />
-                      <span>Create Invoice</span>
+                      <span>
+                        {invoiceType === 'quotation' ? 'Create Quotation' :
+                         invoiceType === 'sale' ? 'Create Invoice' :
+                         invoiceType === 'purchase' ? 'Create Purchase' :
+                         invoiceType === 'challan' ? 'Create Challan' : 'Create Invoice'}
+                      </span>
                     </>
                   )}
                 </button>
@@ -2543,7 +2966,7 @@ const autoAdjustUnitPrice = () => {
               </div>
 
               {/* Total Amount Mismatch Warning */}
-              {selectedInvoice.externalInvoiceTotal.toFixed(2) !== 0 && selectedInvoice.totalAmount.toFixed(2) !== selectedInvoice.externalInvoiceTotal.toFixed(2) && (
+              {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount !== selectedInvoice?.externalInvoiceTotal &&(
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <div className="flex items-center">
                     <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
@@ -2592,7 +3015,7 @@ const autoAdjustUnitPrice = () => {
                       {(selectedInvoice.items || []).map((item: any, index: number) => (
                         <tr key={index}>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.product?.partNo}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item?.partNo}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode ? (
@@ -2646,6 +3069,8 @@ const autoAdjustUnitPrice = () => {
                   </table>
                 </div>
               </div>
+
+
 
               {/* Edit Mode Actions */}
               {editMode && (
