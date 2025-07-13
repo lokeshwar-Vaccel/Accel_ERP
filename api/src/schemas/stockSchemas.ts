@@ -56,6 +56,7 @@ export interface UpdateRackInput {
 
 
 export interface StockAdjustmentInput {
+  stockId: string;
   product: string;
   location: string;
   adjustmentType: 'add' | 'subtract' | 'set' | 'reserve' | 'release';
@@ -264,6 +265,7 @@ export const updateRackSchema = Joi.object<UpdateRackInput>({
 
 // Stock adjustment schema
 export const stockAdjustmentSchema = Joi.object<StockAdjustmentInput>({
+  stockId: Joi.string().hex().length(24).required(),
   product: Joi.string().hex().length(24).required(),
   location: Joi.string().hex().length(24).required(),
   adjustmentType: Joi.string().valid('add', 'subtract', 'set', 'reserve', 'release').required(),

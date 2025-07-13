@@ -101,6 +101,7 @@ interface LocationFormData {
 }
 
 interface StockAdjustmentFormData {
+  stockId: string;
   product: string;
   location: string;
   adjustmentType: string;
@@ -113,6 +114,7 @@ interface StockAdjustmentFormData {
 }
 
 interface StockTransferFormData {
+  stockId:string,
   product: string;
   fromLocation: string;
   fromRoom: string;
@@ -209,6 +211,7 @@ const InventoryManagement: React.FC = () => {
     isActive: true
   });
   const [adjustmentFormData, setAdjustmentFormData] = useState<StockAdjustmentFormData>({
+    stockId: '',
     product: '',
     location: '',
     adjustmentType: 'add',
@@ -220,6 +223,7 @@ const InventoryManagement: React.FC = () => {
     reservedUntil: ''
   });
   const [transferFormData, setTransferFormData] = useState<StockTransferFormData>({
+    stockId: '',
     product: '',
     fromLocation: '',
     fromRoom: '',
@@ -797,8 +801,11 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleUpdateStock = (stockItem: StockItem) => {
+    console.log("stockItem:",stockItem);
+    
     setSelectedItem(stockItem);
     setAdjustmentFormData({
+      stockId: stockItem._id,
       product: typeof stockItem.product === 'string' ? stockItem.product : stockItem.product._id,
       location: typeof stockItem.location === 'string' ? stockItem.location : stockItem.location._id,
       adjustmentType: 'add',
@@ -815,6 +822,7 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleTransferStock = (stockItem: StockItem) => {
+        console.log("stockItem--22:",stockItem);
     setSelectedItem(stockItem); // Store the selected item for access to stock details
 
     // Calculate available quantity and set reasonable default
@@ -822,6 +830,7 @@ const InventoryManagement: React.FC = () => {
     const defaultQty = availableQty <= 10 ? availableQty : 1;
 
     setTransferFormData({
+      stockId: stockItem._id,
       product: typeof stockItem.product === 'string' ? stockItem.product : stockItem.product._id,
       fromLocation: typeof stockItem.location === 'string' ? stockItem.location : stockItem.location._id,
       fromRoom: stockItem.room?._id || '',
@@ -997,9 +1006,10 @@ const InventoryManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const { product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId, reservedUntil } = adjustmentFormData;
+      const { stockId,product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId, reservedUntil } = adjustmentFormData;
 
       const adjustmentData: any = {
+        stockId,
         product,
         location,
         adjustmentType,
@@ -1019,6 +1029,7 @@ const InventoryManagement: React.FC = () => {
       await fetchInventory(); // Refresh inventory
       setShowAdjustmentModal(false);
       setAdjustmentFormData({
+        stockId: '',
         product: '',
         location: '',
         adjustmentType: 'add',
@@ -1041,9 +1052,9 @@ const InventoryManagement: React.FC = () => {
     }
   };
 
-  const getCurrentStockStatus = async (productId: string, locationId: string) => {
+  const getCurrentStockStatus = async (stockId: string, productId: string, locationId: string) => {
     try {
-      const response = await apiClient.stock.getStock({ product: productId, location: locationId });
+      const response = await apiClient.stock.getStock({ stockId: stockId, product: productId, location: locationId });
 
       console.log("response1:",response);
       
@@ -1068,10 +1079,11 @@ const InventoryManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const { product, fromLocation, fromRoom, fromRack, toLocation, toRoom, toRack, quantity, notes } = transferFormData;
+      const { stockId, product, fromLocation, fromRoom, fromRack, toLocation, toRoom, toRack, quantity, notes } = transferFormData;
+      console.log("stockId:",stockId);
 
       // Get fresh stock data before transfer
-      const currentStock = await getCurrentStockStatus(product, fromLocation);
+      const currentStock = await getCurrentStockStatus(stockId, product, fromLocation);
       console.log("currentStock:",currentStock);
       
 
@@ -1093,6 +1105,7 @@ const InventoryManagement: React.FC = () => {
 
       // Prepare transfer data with room and rack info
       const transferData: any = {
+        stockId,
         product,
         fromLocation,
         toLocation,
@@ -1112,6 +1125,7 @@ const InventoryManagement: React.FC = () => {
       await fetchInventory(); // Refresh inventory
       setShowTransferModal(false);
       setTransferFormData({
+        stockId: '',
         product: '',
         fromLocation: '',
         fromRoom: '',
@@ -2980,7 +2994,7 @@ const InventoryManagement: React.FC = () => {
                         <button
                           type="button"
                           onClick={async () => {
-                            const freshStock = await getCurrentStockStatus(transferFormData.product, transferFormData.fromLocation);
+                            const freshStock = await getCurrentStockStatus(transferFormData.stockId, transferFormData.product, transferFormData.fromLocation);
                             if (freshStock) {
                               setSelectedItem(freshStock);
                             }
@@ -3222,6 +3236,7 @@ const InventoryManagement: React.FC = () => {
                   onClick={() => {
                     setShowTransferModal(false);
                     setTransferFormData({
+                      stockId:'',
                       product: '',
                       fromLocation: '',
                       fromRoom: '',

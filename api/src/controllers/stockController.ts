@@ -30,7 +30,8 @@ export const getStockLevels = async (
       dept,
       brand,
       outOfStock,
-      overStocked
+      overStocked,
+      stockId
     } = req.query as QueryParams & {
       location?: string;
       room?: string;
@@ -42,26 +43,37 @@ export const getStockLevels = async (
       brand?: string;
       outOfStock?: string;
       overStocked?: string;
+       stockId?: string; 
     };
+
+    console.log('Stock levels request query:', req.query);
+    console.log('Stock status filters - lowStock:', lowStock, 'outOfStock:', outOfStock, 'overStocked:', overStocked);
 
     // Build query
     const query: any = {};
 
+    // FIX 1: Convert string IDs to ObjectId for proper MongoDB querying
     if (location) {
-      query.location = location;
+      query.location = new mongoose.Types.ObjectId(location);
     }
 
     if (room) {
-      query.room = room;
+      query.room = new mongoose.Types.ObjectId(room);
     }
 
     if (rack) {
-      query.rack = rack;
+      query.rack = new mongoose.Types.ObjectId(rack);
     }
 
     if (product) {
-      query.product = product;
+      query.product = new mongoose.Types.ObjectId(product);
     }
+
+    if (stockId) {
+      query._id = new mongoose.Types.ObjectId(stockId);
+    }
+
+    console.log('Built query:', query); // Debug log
 
     // Handle search and product-based filters
     let productFilters: any = {};
@@ -87,23 +99,11 @@ export const getStockLevels = async (
       productFilters.brand = { $regex: brand, $options: 'i' };
     }
 
-    //     const queryData :any  = {
-    //  _id: new mongoose.Types.ObjectId(query.product),
-    // location: new mongoose.Types.ObjectId(query.location)
-
-    //     }
-
-    const _id = typeof query.product === 'string' ? new mongoose.Types.ObjectId(query.product) : query.product;
-
-    const mydata: any = { _id, location, ...productFilters };
-
-    if (Object.keys(productFilters).length > 0) {
-
-      const products = await Product.find(mydata).select('_id');
-
+    // FIX 2: Only apply product filters if we don't already have a direct product ID
+    if (Object.keys(productFilters).length > 0 && !product) {
+      const products = await Product.find(productFilters).select('_id');
       if (products.length > 0) {
         query.product = { $in: products.map(p => p._id) };
-
       } else {
         // If no products match the search criteria, return empty result
         const response: APIResponse = {
@@ -122,30 +122,21 @@ export const getStockLevels = async (
       }
     }
 
+    // FIX 3: Debug - Check if stock exists with the query
+    const stockExists = await Stock.findOne(query);
+    console.log('Stock exists check:', stockExists ? 'Found' : 'Not found');
+    console.log('Query used:', JSON.stringify(query));
+
     // Determine if we need to use aggregation (for nested sort fields or stock status filters)
     const useAggregation = sort.includes('.') || lowStock === 'true' || outOfStock === 'true' || overStocked === 'true';
 
     if (useAggregation) {
-      // Support nested sort fields 
-      // loglike 'product.name'
+      // Support nested sort fields like 'product.name'
       const sortField = sort.replace('-', '');
       const sortOrder = sort.startsWith('-') ? -1 : 1;
       const sortObj: any = {};
-
-
-
-      const match_datas = {
-        location: new mongoose.Types.ObjectId(query.location),
-      };
-
-      const querys = {
-        product: {
-          $in: [new mongoose.Types.ObjectId(query.product)],
-        },
-      };
-
       let pipeline: any[] = [
-        { $match: { ...match_datas, ...querys } },
+        { $match: query },
         {
           $lookup: {
             from: 'products',
@@ -188,41 +179,38 @@ export const getStockLevels = async (
         }
       ];
 
-      // If filtering by stock status, add $match for status
+      // FIX 4: Improve stock status filtering logic
       if (lowStock === 'true' || outOfStock === 'true' || overStocked === 'true') {
-        console.log("_______query.product", query.product);
+        const statusConditions = [];
 
-        pipeline.push({
-          $match: {
-            $expr: {
-              $or: [
-                {
-                  $and: [
-                    { $eq: [outOfStock, 'true'] },
-                    { $eq: ['$quantity', 0] }
-                  ]
-                },
-                {
-                  $and: [
-                    { $eq: [lowStock, 'true'] },
-                    { $ne: [outOfStock, 'true'] },
-                    { $ne: [overStocked, 'true'] },
-                    { $lte: ['$quantity', { $ifNull: ['$product.minStockLevel', 0] }] },
-                    { $gt: ['$quantity', 0] }
-                  ]
-                },
-                {
-                  $and: [
-                    { $eq: [overStocked, 'true'] },
-                    { $ne: [outOfStock, 'true'] },
-                    { $ne: [lowStock, 'true'] },
-                    { $gt: ['$quantity', { $multiply: [{ $ifNull: ['$product.minStockLevel', 0] }, 3] }] }
-                  ]
-                }
-              ]
+        if (outOfStock === 'true') {
+          statusConditions.push({ $eq: ['$quantity', 0] });
+        }
+
+        if (lowStock === 'true') {
+          statusConditions.push({
+            $and: [
+              { $gt: ['$quantity', 0] },
+              { $lte: ['$quantity', { $ifNull: ['$product.minStockLevel', 0] }] }
+            ]
+          });
+        }
+
+        if (overStocked === 'true') {
+          statusConditions.push({
+            $gt: ['$quantity', { $multiply: [{ $ifNull: ['$product.minStockLevel', 0] }, 3] }]
+          });
+        }
+
+        if (statusConditions.length > 0) {
+          pipeline.push({
+            $match: {
+              $expr: {
+                $or: statusConditions
+              }
             }
-          }
-        });
+          });
+        }
       }
 
       // Case-insensitive sorting for string fields
@@ -242,16 +230,24 @@ export const getStockLevels = async (
         sortObj[sortField] = sortOrder;
         pipeline.push({ $sort: sortObj });
       }
+
+      // FIX 5: Add debug for aggregation pipeline
+      console.log('Aggregation pipeline:', JSON.stringify(pipeline, null, 2));
+
       pipeline.push({ $skip: (Number(page) - 1) * Number(limit) });
       pipeline.push({ $limit: Number(limit) });
 
       const stockStatusItems = await Stock.aggregate(pipeline);
-      console.log("_______stockStatusItems", stockStatusItems);
 
       // Get total count for pagination
       const countPipeline = [...pipeline];
       // Remove $skip, $limit, $sort, and $addFields for sortFieldLower for count
-      const countPipelineFiltered = countPipeline.filter(stage => !('$skip' in stage) && !('$limit' in stage) && !('$sort' in stage) && !(stage.$addFields && stage.$addFields.sortFieldLower));
+      const countPipelineFiltered = countPipeline.filter(stage =>
+        !('$skip' in stage) &&
+        !('$limit' in stage) &&
+        !('$sort' in stage) &&
+        !(stage.$addFields && stage.$addFields.sortFieldLower)
+      );
       countPipelineFiltered.push({ $count: 'total' });
       const totalResult = await Stock.aggregate(countPipelineFiltered);
       const total = totalResult[0]?.total || 0;
@@ -295,6 +291,8 @@ export const getStockLevels = async (
     const total = await Stock.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));
 
+    console.log('Final stock levels found:', stockLevels.length); // Debug log
+
     const response: APIResponse = {
       success: true,
       message: 'Stock levels retrieved successfully',
@@ -309,10 +307,10 @@ export const getStockLevels = async (
 
     res.status(200).json(response);
   } catch (error) {
+    console.error('Error in getStockLevels:', error);
     next(error);
   }
 };
-
 
 // @desc    Adjust stock levels
 // @route   POST /api/v1/stock/adjust
@@ -391,40 +389,38 @@ export const adjustStock = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId: reservationReferenceId, reservedUntil } = req.body;
+    const { stockId,product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId: reservationReferenceId, reservedUntil } = req.body;
 
-    let stock = await Stock.findOne({ product, location });
-
+    console.log("stock-1:",stockId);
+    const stock = await Stock.findById(stockId);
+    
     if (!stock) {
-      stock = new Stock({
-        product,
-        location,
-        quantity: adjustmentType === 'add' ? quantity : 0,
-        reservedQuantity: 0
-      });
-    } else {
-      if (adjustmentType === 'add') {
-        stock.quantity += quantity;
-      } else if (adjustmentType === 'subtract') {
-        if (stock.quantity < quantity) {
-          return next(new AppError('Insufficient stock for adjustment', 400));
-        }
-        stock.quantity -= quantity;
-      } else if (adjustmentType === 'set') {
-        stock.quantity = quantity;
-      } else if (adjustmentType === 'reserve') {
-        const availableQuantity = stock.quantity - stock.reservedQuantity;
-        if (availableQuantity < quantity) {
-          return next(new AppError('Insufficient available stock for reservation', 400));
-        }
-        stock.reservedQuantity += quantity;
-      } else if (adjustmentType === 'release') {
-        if (stock.reservedQuantity < quantity) {
-          return next(new AppError('Cannot release more than reserved quantity', 400));
-        }
-        stock.reservedQuantity -= quantity;
-      }
+      return next(new AppError('Stock record not found', 404));
     }
+
+
+    if (adjustmentType === 'add') {
+      stock.quantity += quantity;
+    } else if (adjustmentType === 'subtract') {
+      if (stock.quantity < quantity) {
+        return next(new AppError('Insufficient stock for adjustment', 400));
+      }
+      stock.quantity -= quantity;
+    } else if (adjustmentType === 'set') {
+      stock.quantity = quantity;
+    } else if (adjustmentType === 'reserve') {
+      const availableQuantity = stock.quantity - stock.reservedQuantity;
+      if (availableQuantity < quantity) {
+        return next(new AppError('Insufficient available stock for reservation', 400));
+      }
+      stock.reservedQuantity += quantity;
+    } else if (adjustmentType === 'release') {
+      if (stock.reservedQuantity < quantity) {
+        return next(new AppError('Cannot release more than reserved quantity', 400));
+      }
+      stock.reservedQuantity -= quantity;
+    }
+
 
     stock.availableQuantity = stock.quantity - stock.reservedQuantity;
     stock.lastUpdated = new Date();
@@ -575,6 +571,7 @@ export const transferStock = async (
 ): Promise<void> => {
   try {
     const {
+      stockId,
       product,
       fromLocation,
       fromRoom,
@@ -586,73 +583,143 @@ export const transferStock = async (
       notes
     } = req.body;
 
-    const sourceStock = await Stock.findOne({ product, location: fromLocation });
-    if (!sourceStock || sourceStock.availableQuantity < quantity) {
-      return next(new AppError('Insufficient stock at source location', 400));
+    console.log('Transfer request:', {
+      product, fromLocation, fromRoom, fromRack,
+      toLocation, toRoom, toRack, quantity
+    });
+
+    // Validate quantity
+    if (!quantity || quantity <= 0) {
+      return next(new AppError('Quantity must be greater than 0', 400));
     }
 
-    // Check if this is a location change (not just room/rack reorganization)
+    // Build source stock query with proper null handling for unique constraint
+    const sourceQuery: any = {
+      stockId,
+      product,
+      location: fromLocation,
+      room: fromRoom || null,
+      rack: fromRack || null
+    };
+
+    console.log('Source query:', sourceQuery);
+
+    const sourceStock = await Stock.findOne(sourceQuery);
+    // const sourceStock = await Stock.findById(stockId);
+
+    if (!sourceStock) {
+      return next(new AppError(`Source stock not found for product at location: ${fromLocation}, room: ${fromRoom || 'none'}, rack: ${fromRack || 'none'}`, 404));
+    }
+
+    if (sourceStock.availableQuantity < quantity) {
+      return next(new AppError(`Insufficient stock at source location. Available: ${sourceStock.availableQuantity}, Requested: ${quantity}`, 400));
+    }
+
+    // Check if this is a location change or just room/rack reorganization
     const isLocationChange = fromLocation !== toLocation;
+    const isRoomChange = fromRoom !== toRoom;
+    const isRackChange = fromRack !== toRack;
+
+    // Check if source and destination are the same
+    if (!isLocationChange && !isRoomChange && !isRackChange) {
+      return next(new AppError('Source and destination are the same. No transfer needed.', 400));
+    }
+
+    console.log("Transfer type:", {
+      isLocationChange,
+      isRoomChange,
+      isRackChange,
+      fromLocation,
+      toLocation,
+      fromRoom,
+      toRoom,
+      fromRack,
+      toRack
+    });
+
+    const referenceId = await generateReferenceId('transfer');
+
+    // Get location, room, and rack names for descriptions
+    const [sourceStockPopulated, locationDoc, fromRoomDoc, fromRackDoc, toRoomDoc, toRackDoc] = await Promise.all([
+      Stock.populate(sourceStock, [
+        { path: 'location', select: 'name' },
+        { path: 'room', select: 'name' },
+        { path: 'rack', select: 'name' }
+      ]),
+      isLocationChange ? require('../models/Stock').StockLocation.findById(toLocation).select('name') : null,
+      fromRoom ? require('../models/Stock').Room.findById(fromRoom).select('name') : null,
+      fromRack ? require('../models/Stock').Rack.findById(fromRack).select('name') : null,
+      toRoom ? require('../models/Stock').Room.findById(toRoom).select('name') : null,
+      toRack ? require('../models/Stock').Rack.findById(toRack).select('name') : null
+    ]);
+
+    const fromLocationName = (sourceStockPopulated.location as any)?.name || 'Unknown Location';
+    const toLocationName = isLocationChange ?
+      (locationDoc as any)?.name || 'Unknown Location' :
+      fromLocationName;
+
+    const fromRoomName = (fromRoomDoc as any)?.name || (fromRoom ? 'Unknown Room' : '');
+    const fromRackName = (fromRackDoc as any)?.name || (fromRack ? 'Unknown Rack' : '');
+    const toRoomName = (toRoomDoc as any)?.name || (toRoom ? 'Unknown Room' : '');
+    const toRackName = (toRackDoc as any)?.name || (toRack ? 'Unknown Rack' : '');
+
+    const fromDesc = `${fromLocationName}${fromRoomName ? ` → ${fromRoomName}` : ''}${fromRackName ? ` → ${fromRackName}` : ''}`;
+    const toDesc = `${toLocationName}${toRoomName ? ` → ${toRoomName}` : ''}${toRackName ? ` → ${toRackName}` : ''}`;
+
+    // Store original quantities for ledger entries
+    const originalSourceQuantity = sourceStock.quantity;
+    let originalDestQuantity = 0;
+    let destStock = null;
 
     if (isLocationChange) {
+      // LOCATION TRANSFER: Different locations
+
+      // Check if destination stock already exists with proper null handling
+      const destQuery: any = {
+        stockId,
+        product,
+        location: toLocation,
+        room: toRoom || null,
+        rack: toRack || null
+      };
+
+      destStock = await Stock.findOne(destQuery);
+
+      if (destStock) {
+        originalDestQuantity = destStock.quantity;
+        // Update existing destination stock
+        destStock.quantity += quantity;
+        destStock.availableQuantity = destStock.quantity - destStock.reservedQuantity;
+        destStock.lastUpdated = new Date();
+      } else {
+        // Create new destination stock with proper null handling
+        destStock = new Stock({
+          product,
+          location: toLocation,
+          room: toRoom || null,
+          rack: toRack || null,
+          quantity,
+          reservedQuantity: 0,
+          availableQuantity: quantity,
+          lastUpdated: new Date()
+        });
+      }
+
       // Update source stock (subtract quantity)
       sourceStock.quantity -= quantity;
       sourceStock.availableQuantity = sourceStock.quantity - sourceStock.reservedQuantity;
       sourceStock.lastUpdated = new Date();
-      await sourceStock.save();
 
-      // Update or create destination stock
-      let destStock = await Stock.findOne({ product, location: toLocation });
-      if (!destStock) {
-        destStock = new Stock({
-          product,
-          location: toLocation,
-          room: toRoom || undefined,
-          rack: toRack || undefined,
-          quantity,
-          reservedQuantity: 0
-        });
-      } else {
-        destStock.quantity += quantity;
-        if (toRoom) destStock.room = toRoom;
-        if (toRack) destStock.rack = toRack;
-      }
+      // Save both stocks
+      await Promise.all([sourceStock.save(), destStock.save()]);
 
-      destStock.availableQuantity = destStock.quantity - destStock.reservedQuantity;
-      destStock.lastUpdated = new Date();
-      await destStock.save();
-    } else {
-      // Same location, just updating room/rack
-      if (toRoom) sourceStock.room = toRoom;
-      if (toRack) sourceStock.rack = toRack;
-      sourceStock.lastUpdated = new Date();
-      await sourceStock.save();
-    }
-
-    const referenceId = await generateReferenceId('transfer');
-
-    // Create transfer ledger entries - get location names for descriptions
-    const [fromLocationDoc, toLocationDoc] = await Promise.all([
-      Stock.populate(sourceStock, { path: 'location', select: 'name' }),
-      toLocation !== fromLocation ?
-        require('../models/Stock').StockLocation.findById(toLocation).select('name') :
-        Stock.populate(sourceStock, { path: 'location', select: 'name' })
-    ]);
-
-    const fromLocationName = (fromLocationDoc.location as any)?.name || 'Unknown Location';
-    const toLocationName = isLocationChange ?
-      (toLocationDoc as any)?.name || 'Unknown Location' :
-      fromLocationName;
-
-    const fromDesc = `${fromLocationName}${fromRoom ? ` → ${fromRoom}` : ''}${fromRack ? ` → ${fromRack}` : ''}`;
-    const toDesc = `${toLocationName}${toRoom ? ` → ${toRoom}` : ''}${toRack ? ` → ${toRack}` : ''}`;
-
-    if (isLocationChange) {
       // Create separate ledger entries for location transfers
       await StockLedger.create([
         {
           product,
           location: fromLocation,
+          room: fromRoom || null,
+          rack: fromRack || null,
           transactionType: 'transfer',
           quantity: -quantity,
           reason: `Stock transferred from ${fromDesc} to ${toDesc}`,
@@ -660,38 +727,108 @@ export const transferStock = async (
           performedBy: req.user!.id,
           transactionDate: new Date(),
           resultingQuantity: sourceStock.quantity,
+          previousQuantity: originalSourceQuantity,
           referenceId,
           referenceType: 'transfer'
         },
         {
           product,
           location: toLocation,
+          room: toRoom || null,
+          rack: toRack || null,
           transactionType: 'transfer',
-          quantity,
+          quantity: quantity,
           reason: `Stock received from ${fromDesc} to ${toDesc}`,
           notes,
           performedBy: req.user!.id,
           transactionDate: new Date(),
-          resultingQuantity: isLocationChange ? (await Stock.findOne({ product, location: toLocation }))?.quantity || quantity : sourceStock.quantity,
+          resultingQuantity: destStock.quantity,
+          previousQuantity: originalDestQuantity,
           referenceId,
-          referenceType: 'transfer',
+          referenceType: 'transfer'
         }
       ]);
     } else {
-      // Single ledger entry for room/rack reorganization
-      await StockLedger.create({
+      // ROOM/RACK TRANSFER: Same location, different room or rack
+
+      // Check if a stock record already exists for the new room/rack
+      const destQuery: any = {
         product,
         location: fromLocation,
-        transactionType: 'transfer',
-        quantity: 0, // No quantity change for reorganization
-        reason: `Stock relocated from ${fromDesc} to ${toDesc}`,
-        notes,
-        performedBy: req.user!.id,
-        transactionDate: new Date(),
-        resultingQuantity: sourceStock.quantity,
-        referenceId,
-        referenceType: 'transfer'
-      });
+        room: toRoom || null,
+        rack: toRack || null
+      };
+
+      destStock = await Stock.findOne(destQuery);
+
+      if (destStock) {
+        originalDestQuantity = destStock.quantity;
+        // Add quantity to existing destination
+        destStock.quantity += quantity;
+        destStock.availableQuantity = destStock.quantity - destStock.reservedQuantity;
+        destStock.lastUpdated = new Date();
+      } else {
+        // Create new destination stock record
+        destStock = new Stock({
+          product,
+          location: fromLocation,
+          room: toRoom || null,
+          rack: toRack || null,
+          quantity,
+          reservedQuantity: 0,
+          availableQuantity: quantity,
+          lastUpdated: new Date()
+        });
+      }
+
+      // Subtract from source stock
+      sourceStock.quantity -= quantity;
+      sourceStock.availableQuantity = sourceStock.quantity - sourceStock.reservedQuantity;
+      sourceStock.lastUpdated = new Date();
+
+      // Save both stocks
+      await Promise.all([sourceStock.save(), destStock.save()]);
+
+      // Create ledger entries for room/rack relocation
+      await StockLedger.create([
+        {
+          product,
+          location: fromLocation,
+          room: fromRoom || null,
+          rack: fromRack || null,
+          transactionType: 'transfer',
+          quantity: -quantity,
+          reason: `Stock relocated from ${fromDesc} to ${toDesc}`,
+          notes,
+          performedBy: req.user!.id,
+          transactionDate: new Date(),
+          resultingQuantity: sourceStock.quantity,
+          previousQuantity: originalSourceQuantity,
+          referenceId,
+          referenceType: 'transfer'
+        },
+        {
+          product,
+          location: fromLocation,
+          room: toRoom || null,
+          rack: toRack || null,
+          transactionType: 'transfer',
+          quantity: quantity,
+          reason: `Stock relocated from ${fromDesc} to ${toDesc}`,
+          notes,
+          performedBy: req.user!.id,
+          transactionDate: new Date(),
+          resultingQuantity: destStock.quantity,
+          previousQuantity: originalDestQuantity,
+          referenceId,
+          referenceType: 'transfer'
+        }
+      ]);
+    }
+
+    // Clean up empty stock records (optional)
+    if (sourceStock.quantity === 0 && sourceStock.reservedQuantity === 0) {
+      await Stock.findByIdAndDelete(sourceStock._id);
     }
 
     const response: APIResponse = {
@@ -712,14 +849,27 @@ export const transferStock = async (
           transferredAt: new Date(),
           referenceId,
           isLocationChange,
+          isRoomChange,
+          isRackChange,
           fromDescription: fromDesc,
-          toDescription: toDesc
+          toDescription: toDesc,
+          sourceStock: {
+            id: sourceStock._id,
+            remainingQuantity: sourceStock.quantity,
+            availableQuantity: sourceStock.availableQuantity
+          },
+          destStock: {
+            id: destStock._id,
+            newQuantity: destStock.quantity,
+            availableQuantity: destStock.availableQuantity
+          }
         }
       }
     };
 
     res.status(200).json(response);
   } catch (error) {
+    console.error('Transfer stock error:', error);
     next(error);
   }
 };
