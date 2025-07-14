@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -143,6 +144,8 @@ interface AddContactHistoryInput {
 }
 
 const CustomerManagement: React.FC = () => {
+  const location = useLocation();
+  
   // Core state
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -418,6 +421,16 @@ const CustomerManagement: React.FC = () => {
       setAssignedToFilter(user.id);
     }
   }, [user]);
+
+  // Check for URL parameters to auto-open create modal
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('action') === 'create') {
+      setShowAddModal(true);
+      // Clear the URL parameter
+      window.history.replaceState({}, '', location.pathname);
+    }
+  }, [location]);
 
   const fetchUsers = async () => {
     try {

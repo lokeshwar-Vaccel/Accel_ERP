@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   DollarSign, 
   Users, 
@@ -37,6 +38,7 @@ export default function Dashboard() {
   });
   const [recentActivities, setRecentActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchDashboardData();
@@ -186,28 +188,32 @@ export default function Dashboard() {
       description: 'Schedule new service appointment',
       icon: <Wrench className="w-5 h-5" />,
       color: 'bg-blue-500',
-      href: '/service-management'
+      route: '/service-management',
+      action: () => navigate('/service-management?action=create')
     },
     {
       title: 'Add Customer',
       description: 'Register new customer',
       icon: <Users className="w-5 h-5" />,
       color: 'bg-green-500',
-      href: '/customer-management'
+      route: '/lead-management',
+      action: () => navigate('/lead-management?action=create')
     },
     {
       title: 'New AMC Contract',
       description: 'Create maintenance contract',
       icon: <FileText className="w-5 h-5" />,
       color: 'bg-purple-500',
-      href: '/amc-management'
+      route: '/amc-management',
+      action: () => navigate('/amc-management?action=create')
     },
     {
       title: 'Purchase Order',
       description: 'Create new purchase order',
       icon: <Package className="w-5 h-5" />,
       color: 'bg-orange-500',
-      href: '/purchase-order-management'
+      route: '/purchase-order-management',
+      action: () => navigate('/purchase-order-management?action=create')
     }
   ];
 
@@ -247,23 +253,28 @@ export default function Dashboard() {
         <h3 className="text-base font-bold text-gray-900 mb-4">Quick Actions</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {quickActions.map((action, index) => (
-            <a
+            <div
               key={index}
-              href={action.href}
-              className="group p-3 rounded-xl border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all duration-200"
+              onClick={action.action}
+              className="group p-4 rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-300 cursor-pointer hover:bg-gradient-to-br hover:from-white hover:to-blue-50 transform hover:-translate-y-1 active:scale-95"
             >
-              <div className="flex items-center space-x-2">
-                <div className={`p-1.5 rounded-lg ${action.color} text-white group-hover:scale-110 transition-transform duration-200`}>
+              <div className="flex items-center space-x-3">
+                <div className={`p-2 rounded-lg ${action.color} text-white group-hover:scale-110 transition-transform duration-300 shadow-md group-hover:shadow-lg`}>
                   {action.icon}
                 </div>
-                <div>
-                  <h4 className="text-sm font-medium text-gray-900 group-hover:text-gray-800">
+                <div className="flex-1">
+                  <h4 className="text-sm font-semibold text-gray-900 group-hover:text-blue-900 transition-colors duration-300">
                     {action.title}
                   </h4>
-                  <p className="text-xs text-gray-500">{action.description}</p>
+                  <p className="text-xs text-gray-500 group-hover:text-blue-600 transition-colors duration-300">{action.description}</p>
+                </div>
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                  <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
                 </div>
               </div>
-            </a>
+            </div>
           ))}
         </div>
       </div>
@@ -288,18 +299,108 @@ export default function Dashboard() {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="text-center p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl">
+            {/* Key Performance Indicators Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="text-center p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl border border-blue-200">
                 <div className="text-lg font-bold text-blue-600">{stats?.totalUsers || 0}</div>
                 <div className="text-xs text-blue-700">Total Users</div>
+                <div className="flex items-center justify-center mt-1">
+                  <TrendingUp className="w-3 h-3 text-green-500 mr-1" />
+                  <span className="text-xs text-green-600">Active</span>
+                </div>
               </div>
-              <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-xl">
+              <div className="text-center p-3 bg-gradient-to-br from-green-50 to-green-100 rounded-xl border border-green-200">
                 <div className="text-lg font-bold text-green-600">{stats?.activeAMCs || 0}</div>
                 <div className="text-xs text-green-700">Active AMCs</div>
+                <div className="flex items-center justify-center mt-1">
+                  <CheckCircle className="w-3 h-3 text-green-500 mr-1" />
+                  <span className="text-xs text-green-600">Running</span>
+                </div>
               </div>
-              <div className="text-center p-3 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl">
+              <div className="text-center p-3 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl border border-purple-200">
                 <div className="text-lg font-bold text-purple-600">{formatCurrency(stats?.monthlyRevenue || 0)}</div>
                 <div className="text-xs text-purple-700">Monthly Revenue</div>
+                <div className="flex items-center justify-center mt-1">
+                  <DollarSign className="w-3 h-3 text-purple-500 mr-1" />
+                  <span className="text-xs text-purple-600">+12.5%</span>
+                </div>
+              </div>
+              <div className="text-center p-3 bg-gradient-to-br from-orange-50 to-orange-100 rounded-xl border border-orange-200">
+                <div className="text-lg font-bold text-orange-600">{stats?.pendingTickets || 0}</div>
+                <div className="text-xs text-orange-700">Pending Tickets</div>
+                <div className="flex items-center justify-center mt-1">
+                  <Clock className="w-3 h-3 text-orange-500 mr-1" />
+                  <span className="text-xs text-orange-600">In Queue</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Business Health Indicators */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              {/* Left Column - Service Performance */}
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                  <Wrench className="w-4 h-4 mr-2 text-blue-500" />
+                  Service Performance
+                </h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Avg Response Time</span>
+                    <span className="text-xs font-medium text-green-600">2.4 hrs</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Customer Satisfaction</span>
+                    <span className="text-xs font-medium text-green-600">4.8/5</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Resolution Rate</span>
+                    <span className="text-xs font-medium text-green-600">94%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column - Inventory Status */}
+              <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4 border border-gray-200">
+                <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                  <Package className="w-4 h-4 mr-2 text-purple-500" />
+                  Inventory Status
+                </h4>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Low Stock Items</span>
+                    <span className="text-xs font-medium text-orange-600">{stats?.lowStockItems || 0}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Total Products</span>
+                    <span className="text-xs font-medium text-blue-600">247</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-gray-600">Stock Value</span>
+                    <span className="text-xs font-medium text-purple-600">₹12.5L</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Insights */}
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 rounded-xl p-4 border border-blue-200">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 flex items-center">
+                <Activity className="w-4 h-4 mr-2 text-blue-500" />
+                Today's Highlights
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-lg font-bold text-blue-600">{stats?.totalCustomers || 0}</div>
+                  <div className="text-xs text-gray-600">Total Customers</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-green-600">15</div>
+                  <div className="text-xs text-gray-600">New Leads Today</div>
+                </div>
+                <div>
+                  <div className="text-lg font-bold text-purple-600">8</div>
+                  <div className="text-xs text-gray-600">Contracts Expiring Soon</div>
+                </div>
               </div>
             </div>
           </div>

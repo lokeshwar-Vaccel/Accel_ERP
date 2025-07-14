@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   Plus, 
   Search, 
@@ -115,6 +116,8 @@ interface ServiceReportData {
 }
 
 const ServiceManagement: React.FC = () => {
+  const location = useLocation();
+  
   // Core state
   const [tickets, setTickets] = useState<ServiceTicket[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -174,6 +177,16 @@ const ServiceManagement: React.FC = () => {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  // Check for URL parameters to auto-open create modal
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('action') === 'create') {
+      handleCreateTicket();
+      // Clear the URL parameter
+      window.history.replaceState({}, '', location.pathname);
+    }
+  }, [location]);
 
   const fetchAllData = async () => {
     setLoading(true);

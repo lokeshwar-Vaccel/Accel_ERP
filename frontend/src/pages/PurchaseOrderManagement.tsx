@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -166,6 +167,8 @@ interface POFormData {
 }
 
 const PurchaseOrderManagement: React.FC = () => {
+  const location = useLocation();
+  
   // Core state
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -302,6 +305,16 @@ const PurchaseOrderManagement: React.FC = () => {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  // Check for URL parameters to auto-open create modal
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('action') === 'create') {
+      handleCreatePO();
+      // Clear the URL parameter
+      window.history.replaceState({}, '', location.pathname);
+    }
+  }, [location]);
 
   const fetchAllData = async () => {
     setLoading(true);

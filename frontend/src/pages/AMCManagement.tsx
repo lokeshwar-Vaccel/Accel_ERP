@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   Plus, 
   Search, 
@@ -182,6 +183,8 @@ interface AMCFormData {
 }
 
 const AMCManagement: React.FC = () => {
+  const location = useLocation();
+  
   // Core state
   const [amcs, setAmcs] = useState<AMC[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -347,6 +350,16 @@ const AMCManagement: React.FC = () => {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  // Check for URL parameters to auto-open create modal
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('action') === 'create') {
+      handleCreateAMC();
+      // Clear the URL parameter
+      window.history.replaceState({}, '', location.pathname);
+    }
+  }, [location]);
 
   const fetchAllData = async () => {
     setLoading(true);
