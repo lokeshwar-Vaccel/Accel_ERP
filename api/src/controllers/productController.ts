@@ -132,20 +132,28 @@ export const createProduct = async (
 
     const product = await Product.create(productData);
 
-      // let stock = null;
+    // Create stock entry if location is provided
+    let stock = null;
+    if (product && req.body.location) {
+      try {
+        const stockData = {
+          product: product._id,
+          location: req.body.location,
+          room: req.body.room || null,
+          rack: req.body.rack || null,
+          quantity: req.body.quantity || 0,
+          availableQuantity: req.body.quantity || 0,
+          reservedQuantity: 0,
+          lastUpdated: new Date()
+        };
 
-    // if (product) {
-    //   const stockData = {
-    //     product: product._id,
-    //     location: req.body.location,
-    //     room: req.body.room,
-    //     rack: req.body.rack,
-    //     quantity: req.body.quantity,
-    //     availableQuantity:  req.body.quantity
-    //   };
-
-    //   stock = await Stock.create(stockData);
-    // }
+        stock = await Stock.create(stockData);
+      } catch (stockError) {
+        console.error('Error creating stock entry:', stockError);
+        // Don't fail product creation if stock creation fails
+        // Just log the error and continue
+      }
+    }
 
     const populatedProduct = await Product.findById(product._id)
       .populate('createdBy', 'firstName lastName email');

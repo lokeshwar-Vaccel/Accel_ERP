@@ -49,17 +49,17 @@ const productSchema = new Schema({
   location: {
     type: Schema.Types.ObjectId,
     ref: 'StockLocation',
-    required: [true, 'Location ID is required'],
+    required: false,
   },
   room: {
     type: Schema.Types.ObjectId,
     ref: 'Room',
-    required: [true, 'Room ID is required'],
+    required: false,
   },
   rack: {
     type: Schema.Types.ObjectId,
     ref: 'Rack',
-    required: [true, 'Rack ID is required'],
+    required: false,
   },
   hsnNumber: {
     type: String,

@@ -5,6 +5,7 @@ import PageHeader from '../components/ui/PageHeader';
 import { RootState } from 'redux/store';
 import { useSelector } from 'react-redux';
 import { Pagination } from 'components/ui/Pagination';
+import toast from 'react-hot-toast';
 
 export interface Product {
   _id: string;
@@ -67,6 +68,11 @@ const ProductManagement: React.FC = () => {
   // Custom dropdown states
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  
+  // Form dropdown states
+  const [showFormCategoryDropdown, setShowFormCategoryDropdown] = useState(false);
+  const [showFormDeptDropdown, setShowFormDeptDropdown] = useState(false);
+  const [showFormUomDropdown, setShowFormUomDropdown] = useState(false);
 
   // Modal states
   const [showProductModal, setShowProductModal] = useState(false);
@@ -91,9 +97,7 @@ const ProductManagement: React.FC = () => {
     quantity: 0,
     minStockLevel: 0,
     isActive: true,
-    location: '',
-    room: '',
-    rack: '',
+
     hsnNumber: '',
     dept: '',
     productType1: '',
@@ -109,41 +113,7 @@ const ProductManagement: React.FC = () => {
     createdBy: currentUser
   });
 
-  useEffect(() => {
-    if (formData.location && Array.isArray(rooms)) {
-      const roomsInLocation = rooms.filter(room =>
-        (typeof room.location === 'string' ? room.location : room.location?._id) === formData.location
-      );
-      setFilteredRooms(roomsInLocation);
-
-      // Reset room & rack if current room doesn't belong to selected location
-      if (!roomsInLocation.find(r => r._id === formData.room)) {
-        setFormData(prev => ({ ...prev, room: '', rack: '' }));
-      }
-    } else {
-      setFilteredRooms([]);
-      setFormData(prev => ({ ...prev, room: '', rack: '' }));
-    }
-  }, [formData.location, rooms]);
-
-
-
-  useEffect(() => {
-    if (formData.room && Array.isArray(racks)) {
-      const racksInRoom = racks.filter(rack =>
-        (typeof rack.room === 'string' ? rack.room : rack.room?._id) === formData.room
-      );
-      setFilteredRacks(racksInRoom);
-
-      // Reset rack if it doesn't belong to selected room
-      if (!racksInRoom.find(r => r._id === formData.rack)) {
-        setFormData(prev => ({ ...prev, rack: '' }));
-      }
-    } else {
-      setFilteredRacks([]);
-      setFormData(prev => ({ ...prev, rack: '' }));
-    }
-  }, [formData.room, racks]);
+  // Removed location-related useEffect hooks since location is now optional
 
   const departments = [
     'RETAIL', 'INDUSTRIAL', 'IE', 'TELECOM', 'EV', 'RET/TEL'
@@ -196,9 +166,6 @@ const ProductManagement: React.FC = () => {
       quantity: 0,
       minStockLevel: 0,
       isActive: true,
-      location: '',
-      room: '',
-      rack: '',
       hsnNumber: '',
       dept: '',
       productType1: '',
@@ -230,9 +197,7 @@ const ProductManagement: React.FC = () => {
       quantity: product.quantity,
       minStockLevel: product.minStockLevel,
       isActive: product.isActive ?? true,
-      location: product.location || '',
-      room: product.room || '',
-      rack: product.rack || '',
+
       hsnNumber: product.hsnNumber || '',
       dept: product.dept || '',
       productType1: product.productType1 || '',
@@ -255,6 +220,10 @@ const ProductManagement: React.FC = () => {
   const closeProductModal = () => {
     setShowProductModal(false);
     setSelectedProduct(null);
+    // Close all form dropdowns
+    setShowFormCategoryDropdown(false);
+    setShowFormDeptDropdown(false);
+    setShowFormUomDropdown(false);
     setFormData({
       name: '',
       description: '',
@@ -265,9 +234,6 @@ const ProductManagement: React.FC = () => {
       quantity: 0,
       minStockLevel: 0,
       isActive: true,
-      location: '',
-      room: '',
-      rack: '',
       hsnNumber: '',
       dept: '',
       productType1: '',
@@ -299,19 +265,83 @@ const ProductManagement: React.FC = () => {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
 
+    // Required field validations
     if (!formData.name.trim()) {
       errors.name = 'Product name is required';
+    } else if (formData.name.length < 3) {
+      errors.name = 'Product name must be at least 3 characters long';
+    }
+
+    if (!formData.partNo.trim()) {
+      errors.partNo = 'Part Number is required';
+    } else if (formData.partNo.length < 2) {
+      errors.partNo = 'Part Number must be at least 2 characters long';
     }
 
     if (!formData.category.trim()) {
       errors.category = 'Category is required';
     }
 
+    if (!formData.dept.trim()) {
+      errors.dept = 'Department is required';
+    }
+
+    if (!formData.uom.trim()) {
+      errors.uom = 'Unit of Measure (UOM) is required';
+    }
+
+    // Numeric field validations
     if (formData.minStockLevel < 0) {
       errors.minStockLevel = 'Minimum stock level cannot be negative';
     }
 
+    if (!formData.price || formData.price <= 0) {
+      errors.price = 'MRP must be greater than 0';
+    }
+
+    if (!formData.gndp || formData.gndp <= 0) {
+      errors.gndp = 'GNDP Price must be greater than 0';
+    }
+
+    // HSN Number validation (if provided)
+    if (formData.hsnNumber && !/^\d{4,8}$/.test(formData.hsnNumber)) {
+      errors.hsnNumber = 'HSN Number must be 4-8 digits only';
+    }
+
+    // GST validation (if provided)
+    if (formData.gst && (formData.gst < 0 || formData.gst > 100)) {
+      errors.gst = 'GST rate must be between 0 and 100';
+    }
+
     setFormErrors(errors);
+    
+    // If there are errors, show a summary message
+    if (Object.keys(errors).length > 0) {
+      const missingFields = Object.keys(errors).map(field => {
+        switch(field) {
+          case 'name': return 'Product Name';
+          case 'partNo': return 'Part Number';
+          case 'category': return 'Category';
+          case 'dept': return 'Department';
+          case 'uom': return 'Unit of Measure';
+          case 'price': return 'MRP';
+          case 'gndp': return 'GNDP Price';
+          case 'minStockLevel': return 'Min Stock Level';
+          case 'hsnNumber': return 'HSN Number';
+          case 'gst': return 'GST Rate';
+          default: return field;
+        }
+      });
+      
+      if (missingFields.length > 1) {
+        errors.general = `Please fill in the required fields: ${missingFields.join(', ')}`;
+      } else {
+        errors.general = `Please fix the error in: ${missingFields[0]}`;
+      }
+      setFormErrors(errors);
+      toast.error(errors.general);
+    }
+
     return Object.keys(errors).length === 0;
   };
 
@@ -333,8 +363,14 @@ const ProductManagement: React.FC = () => {
 
       await fetchProducts();
       closeProductModal();
-    } catch (err) {
+      toast.success(isEditing ? 'Product updated successfully' : 'Product created successfully');
+    } catch (err: any) {
       console.error('Error saving product:', err);
+      if (err.response && err.response.data && err.response.data.message) {
+        toast.error(err.response.data.message);
+      } else {
+        toast.error(isEditing ? 'Failed to update product' : 'Failed to create product');
+      }
       setFormErrors({ general: isEditing ? 'Failed to update product' : 'Failed to create product' });
     } finally {
       setSubmitting(false);
@@ -349,8 +385,14 @@ const ProductManagement: React.FC = () => {
       await apiClient.products.delete(productToDelete._id);
       await fetchProducts();
       closeDeleteConfirm();
-    } catch (err) {
+      toast.success('Product deleted successfully');
+    } catch (err: any) {
       console.error('Error deleting product:', err);
+      if (err.response && err.response.data && err.response.data.message) {
+        toast.error(err.response.data.message);
+      } else {
+        toast.error('Failed to delete product');
+      }
       setFormErrors({ general: 'Failed to delete product' });
     } finally {
       setSubmitting(false);
@@ -372,6 +414,37 @@ const ProductManagement: React.FC = () => {
       }));
     }
   };
+
+  const handleDropdownChange = (name: string, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+
+    // Clear error for this field
+    if (formErrors[name]) {
+      setFormErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
+  };
+
+  // Prepare dropdown options for form
+  const formCategoryOptions = category.map(cat => ({
+    value: cat,
+    label: cat.replace('_', ' ').toUpperCase()
+  }));
+
+  const formDepartmentOptions = departments.map(dept => ({
+    value: dept,
+    label: dept
+  }));
+
+  const formUomOptions = ["pcs", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll"].map(unit => ({
+    value: unit,
+    label: unit
+  }));
 
   useEffect(() => {
     fetchAllData();
@@ -801,13 +874,13 @@ const ProductManagement: React.FC = () => {
                       {/* <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
                     <Package className="w-4 h-4 text-blue-600" />
                   </div> */}
-                      <h3 className="text-lg font-semibold text-gray-900">Basic Information</h3>
+                      <h3 className="text-sm font-semibold text-gray-900">Basic Information</h3>
                     </div>
 
                     <div className="space-y-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
                             Product Name *
                           </label>
                           <input
@@ -815,7 +888,7 @@ const ProductManagement: React.FC = () => {
                             name="name"
                             value={formData.name}
                             onChange={handleInputChange}
-                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                            className={`w-full px-2 py-1.5 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm ${formErrors.name ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
                               }`}
                             placeholder="Enter product name"
                           />
@@ -828,7 +901,7 @@ const ProductManagement: React.FC = () => {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
                             Part Number *
                           </label>
                           <input
@@ -836,7 +909,7 @@ const ProductManagement: React.FC = () => {
                             name="partNo"
                             value={formData.partNo}
                             onChange={handleInputChange}
-                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.partNo ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
+                            className={`w-full px-2 py-1.5 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm ${formErrors.partNo ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
                               }`}
                             placeholder="e.g., BRG-789X"
                           />
@@ -851,23 +924,42 @@ const ProductManagement: React.FC = () => {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
                             Category *
                           </label>
-                          <select
-                            name="category"
-                            value={formData.category}
-                            onChange={handleInputChange}
-                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.category ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
-                              }`}
-                          >
-                            <option value="">Select Category</option>
-                            {category.map(cat => (
-                              <option key={cat} value={cat}>
-                                {cat.replace('_', ' ').toUpperCase()}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowFormCategoryDropdown(!showFormCategoryDropdown);
+                                setShowFormDeptDropdown(false);
+                                setShowFormUomDropdown(false);
+                              }}
+                              className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.category ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
+                            >
+                              <span className={`text-gray-700 truncate mr-1 ${!formData.category ? 'text-gray-500' : ''}`}>
+                                {formData.category ? formCategoryOptions.find(opt => opt.value === formData.category)?.label : 'Select Category'}
+                              </span>
+                              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showFormCategoryDropdown ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showFormCategoryDropdown && (
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                                {formCategoryOptions.map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => {
+                                      handleDropdownChange('category', option.value);
+                                      setShowFormCategoryDropdown(false);
+                                    }}
+                                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${formData.category === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           {formErrors.category && (
                             <p className="text-red-500 text-xs mt-1 flex items-center">
                               <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
@@ -877,21 +969,42 @@ const ProductManagement: React.FC = () => {
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
                             Department *
                           </label>
-                          <select
-                            name="dept"
-                            value={formData.dept}
-                            onChange={handleInputChange}
-                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.dept ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
-                              }`}
-                          >
-                            <option value="">Select Department</option>
-                            {departments.map(dept => (
-                              <option key={dept} value={dept}>{dept}</option>
-                            ))}
-                          </select>
+                          <div className="relative">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowFormDeptDropdown(!showFormDeptDropdown);
+                                setShowFormCategoryDropdown(false);
+                                setShowFormUomDropdown(false);
+                              }}
+                              className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.dept ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
+                            >
+                              <span className={`text-gray-700 truncate mr-1 ${!formData.dept ? 'text-gray-500' : ''}`}>
+                                {formData.dept ? formDepartmentOptions.find(opt => opt.value === formData.dept)?.label : 'Select Department'}
+                              </span>
+                              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showFormDeptDropdown ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showFormDeptDropdown && (
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                                {formDepartmentOptions.map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={() => {
+                                      handleDropdownChange('dept', option.value);
+                                      setShowFormDeptDropdown(false);
+                                    }}
+                                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${formData.dept === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                  >
+                                    {option.label}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           {formErrors.dept && (
                             <p className="text-red-500 text-xs mt-1 flex items-center">
                               <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
@@ -903,7 +1016,7 @@ const ProductManagement: React.FC = () => {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
                             Brand/Make
                           </label>
                           <input
@@ -911,13 +1024,13 @@ const ProductManagement: React.FC = () => {
                             name="brand"
                             value={formData.brand}
                             onChange={handleInputChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200 text-sm"
                             placeholder="e.g., SKF"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
                             Model Number
                           </label>
                           <input
@@ -925,14 +1038,14 @@ const ProductManagement: React.FC = () => {
                             name="modelNumber"
                             value={formData.modelNumber}
                             onChange={handleInputChange}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200 text-sm"
                             placeholder="Enter model number"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           Description
                         </label>
                         <textarea
@@ -940,7 +1053,7 @@ const ProductManagement: React.FC = () => {
                           value={formData.description}
                           onChange={handleInputChange}
                           rows={2}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200 resize-none"
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200 resize-none text-sm"
                           placeholder="Enter product description"
                         />
                       </div>
@@ -953,13 +1066,13 @@ const ProductManagement: React.FC = () => {
                   <div className="flex-1 space-y-6 p-6">
                     <div className="flex items-center space-x-2 mb-4">
                       <DollarSign className="w-5 h-5 text-gray-600" />
-                      <h3 className="text-lg font-semibold text-gray-900">Inventory & Pricing</h3>
+                      <h3 className="text-sm font-semibold text-gray-900">Inventory & Pricing</h3>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           Min Stock Level *
                         </label>
                         <input
@@ -968,7 +1081,7 @@ const ProductManagement: React.FC = () => {
                           value={formData.minStockLevel}
                           onChange={handleInputChange}
                           // min="0"
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.minStockLevel ? 'border-red-500' : 'border-gray-300'
+                          className={`w-full px-2 py-1.5 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm ${formErrors.minStockLevel ? 'border-red-500' : 'border-gray-300'
                             }`}
                           placeholder="0"
                         />
@@ -978,7 +1091,7 @@ const ProductManagement: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           GNDP Price (₹) *
                         </label>
                         <input
@@ -988,7 +1101,7 @@ const ProductManagement: React.FC = () => {
                           onChange={handleInputChange}
                           // min="0"
                           step="0.01"
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.gndp ? 'border-red-500' : 'border-gray-300'
+                          className={`w-full px-2 py-1.5 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm ${formErrors.gndp ? 'border-red-500' : 'border-gray-300'
                             }`}
                           placeholder="0.00"
                         />
@@ -998,7 +1111,7 @@ const ProductManagement: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           MRP (₹) *
                         </label>
                         <input
@@ -1008,7 +1121,7 @@ const ProductManagement: React.FC = () => {
                           onChange={handleInputChange}
                           // min="0"
                           // step="0.01"
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.price ? 'border-red-500' : 'border-gray-300'
+                          className={`w-full px-2 py-1.5 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm ${formErrors.price ? 'border-red-500' : 'border-gray-300'
                             }`}
                           placeholder="0.00"
                         />
@@ -1018,27 +1131,51 @@ const ProductManagement: React.FC = () => {
                       </div>
 
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           Unit of Measure (UOM) *
                         </label>
-                        <select
-                          name="uom"
-                          value={formData.uom}
-                          onChange={handleInputChange}
-                          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.uom ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'
-                            }`}
-                        >
-                          <option value="">Select UOM</option>
-                          {["pcs", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll"].map(unit => (
-                            <option key={unit} value={unit}>{unit}</option>
-                          ))}
-                        </select>
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowFormUomDropdown(!showFormUomDropdown);
+                              setShowFormCategoryDropdown(false);
+                              setShowFormDeptDropdown(false);
+                            }}
+                            className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.uom ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
+                          >
+                            <span className={`text-gray-700 truncate mr-1 ${!formData.uom ? 'text-gray-500' : ''}`}>
+                              {formData.uom ? formUomOptions.find(opt => opt.value === formData.uom)?.label : 'Select UOM'}
+                            </span>
+                            <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showFormUomDropdown ? 'rotate-180' : ''}`} />
+                          </button>
+                          {showFormUomDropdown && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                              {formUomOptions.map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={() => {
+                                    handleDropdownChange('uom', option.value);
+                                    setShowFormUomDropdown(false);
+                                  }}
+                                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${formData.uom === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                         {formErrors.uom && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors.uom}</p>
+                          <p className="text-red-500 text-xs mt-1 flex items-center">
+                            <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
+                            {formErrors.uom}
+                          </p>
                         )}
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
                           CPCB Number
                         </label>
                         <input
@@ -1046,7 +1183,7 @@ const ProductManagement: React.FC = () => {
                           name="cpcbNo"
                           value={formData.cpcbNo}
                           onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                           placeholder="Enter CPCB Number"
                         />
                       </div>
@@ -1055,11 +1192,11 @@ const ProductManagement: React.FC = () => {
                     <div className="mb-8">
                       <div className="flex items-center space-x-2 mb-4">
                         <Hash className="w-5 h-5 text-gray-600" />
-                        <h3 className="text-lg font-semibold text-gray-900">Tax Information</h3>
+                        <h3 className="text-sm font-semibold text-gray-900">Tax Information</h3>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
                             HSN Number
                           </label>
                           <input
@@ -1067,13 +1204,13 @@ const ProductManagement: React.FC = () => {
                             name="hsnNumber"
                             value={formData.hsnNumber}
                             onChange={handleInputChange}
-                            className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
                             placeholder="e.g., 8482.10.00"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                          <label className="block text-xs font-medium text-gray-700 mb-1">
                             GST Rate (%)
                           </label>
                           <input
@@ -1081,8 +1218,8 @@ const ProductManagement: React.FC = () => {
                             name="gst"
                             value={formData.gst}
                             onChange={handleInputChange}
-                            className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                            placeholder="e.g., 8482.10.00"
+                            className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                            placeholder="e.g., 18"
                           />
                         </div>
                       </div>
@@ -1091,191 +1228,65 @@ const ProductManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Second Row: Basic Information on Left and Inventory & Pricing, Tax Information on Right */}
-              <div className="flex flex-row space-x-4">
-                <div className="w-1/2 border-r border-gray-200 flex flex-col">
-                  {/* Basic Information Section (Left Side) */}
-                  <div className="flex-1 space-y-6 border-r border-gray-200 p-6">
-                    <div className="flex items-center space-x-2 mb-6">
-                      <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-                        <MapPin className="w-4 h-4 text-purple-600" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-gray-900">Location Information</h3>
+              {/* Product Classification Section */}
+              <div className="w-full">{/* Optional Product Classification */}
+                <div className="border-t border-gray-200 p-6">
+                  <div className="flex items-center space-x-2 mb-6">
+                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                      <Settings className="w-4 h-4 text-green-600" />
                     </div>
-
-                    {/* Location Information Section */}
-                    <div className="mb-8">
-                      {/* <h3 className="text-lg font-semibold text-gray-900">Location Information</h3> */}
-                      <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Location ID</label>
-                            <select
-                              name="location"
-                              value={formData.location}
-                              onChange={handleInputChange}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                              <option value="">Select Location</option>
-                              {locations.map(location => (
-                                <option key={location._id} value={location._id}>
-                                  {location.name}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Room ID</label>
-                            <select
-                              name="room"
-                              value={formData.room}
-                              onChange={handleInputChange}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              disabled={!formData.location}
-                            >
-                              <option value="">Select Room</option>
-                              {filteredRooms.length > 0 ? filteredRooms.map(room =>
-                                typeof room === 'object' && room._id && room.name ? (
-                                  <option key={room._id} value={room._id}>
-                                    {room.name}
-                                  </option>
-                                ) : null
-                              ) : <option disabled value="">No rooms </option>}
-                            </select>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Rack ID</label>
-                            <select
-                              name="rack"
-                              value={formData.rack}
-                              onChange={handleInputChange}
-                              disabled={!formData.room}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                              <option value="">Select Rack</option>
-                              {filteredRacks.length > 0 ? (
-                                filteredRacks.map(rack => (
-                                  <option key={rack._id} value={rack._id}>
-                                    {rack.name}
-                                  </option>
-                                ))
-                              ) : (
-                                <option disabled value="">
-                                  No racks
-                                </option>
-                              )}
-                            </select>
-
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <h3 className="text-sm font-semibold text-gray-900">Product Classification</h3>
+                    <span className="text-xs text-gray-500">(Optional)</span>
                   </div>
-                </div>
 
-                <div className="w-1/2 flex flex-col">
-                  {/* Inventory & Pricing Section */}
-                  <div className="space-y-6">
-                    {/* Input Fields for Inventory & Pricing */}
-                    {/* Product Classification Section */}
-                    <div className="flex-1 space-y-6 p-6">
-                      <div className="flex items-center space-x-2 mb-6">
-                        <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
-                          <Settings className="w-4 h-4 text-green-600" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-gray-900">Product Classification</h3>
-                      </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Product Type 1
+                      </label>
+                      <input
+                        type="text"
+                        name="productType1"
+                        value={formData.productType1}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200 text-sm"
+                        placeholder="Enter product type 1"
+                      />
+                    </div>
 
-                      <div className="space-y-6">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Product Type 1
-                            </label>
-                            {/* <select
-                          name="productType1"
-                          value={formData.productType1}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                        >
-                          <option value="">Select Type 1</option>
-                          {productTypes1.map(type => (
-                            <option key={type} value={type}>{type}</option>
-                          ))}
-                        </select> */}
-                            <input
-                              type="text"
-                              name="productType1"
-                              value={formData.productType1}
-                              onChange={handleInputChange}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                              placeholder="Enter productType1"
-                            />
-                          </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Product Type 2
+                      </label>
+                      <input
+                        type="text"
+                        name="productType2"
+                        value={formData.productType2}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200 text-sm"
+                        placeholder="Enter product type 2"
+                      />
+                    </div>
 
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Product Type 2
-                            </label>
-                            {/* <select
-                          name="productType2"
-                          value={formData.productType2}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                        >
-                          <option value="">Select Type 2</option>
-                          {productTypes2.map(type => (
-                            <option key={type} value={type}>{type}</option>
-                          ))}
-                        </select> */}
-                            <input
-                              type="text"
-                              name="productType2"
-                              value={formData.productType2}
-                              onChange={handleInputChange}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                              placeholder="Enter productType2"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                              Product Type 3
-                            </label>
-                            {/* <select
-                          name="productType3"
-                          value={formData.productType3}
-                          onChange={handleInputChange}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                        >
-                          <option value="">Select Type 3</option>
-                          {productTypes3.map(type => (
-                            <option key={type} value={type}>{type}</option>
-                          ))}
-                        </select> */}
-                            <input
-                              type="text"
-                              name="productType3"
-                              value={formData.productType3}
-                              onChange={handleInputChange}
-                              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200"
-                              placeholder="Enter productType3"
-                            />
-                          </div>
-                          <div></div>
-                        </div>
-                      </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">
+                        Product Type 3
+                      </label>
+                      <input
+                        type="text"
+                        name="productType3"
+                        value={formData.productType3}
+                        onChange={handleInputChange}
+                        className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400 transition-all duration-200 text-sm"
+                        placeholder="Enter product type 3"
+                      />
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Footer with Action Buttons */}
-              <div className="flex justify-end gap-4 items-center p-4  border-t border-gray-200">
+              <div className="flex justify-end gap-4 items-center p-4 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={closeProductModal}
