@@ -242,7 +242,15 @@ const InventoryManagement: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [limit, setLimit] = useState(10);
+  const [limit, setLimit] = useState(100);
+  
+  // Debug: Ensure limit is never too small
+  React.useEffect(() => {
+    if (limit < 10) {
+      console.warn('📊 Fixing small limit value:', limit, '→ 100');
+      setLimit(100);
+    }
+  }, [limit]);
   const [totalPages, setTotalPages] = useState(0);
   const [totalDatas, setTotalDatas] = useState(0);
 
@@ -599,6 +607,8 @@ const InventoryManagement: React.FC = () => {
   };
 
   const fetchInventory = async () => {
+    console.log('📊 Fetching inventory with pagination:', { currentPage, limit, totalPages, totalDatas });
+    
     // Build sort parameter from filters
     const sortField = filters.sortBy || 'name';
     const sortDirection = filters.sortOrder === 'desc' ? '-' : '';
@@ -623,8 +633,12 @@ const InventoryManagement: React.FC = () => {
     try {
       const response = await apiClient.stock.getStock(params);
 
+      console.log('📊 Pagination response:', response.pagination);
+      console.log('📊 Inventory data received:', response.data?.stockLevels?.length || 0, 'items');
+      
       setCurrentPage(response.pagination.page);
-      setLimit(response.pagination.limit);
+      // Don't override limit from backend - keep frontend control
+      // setLimit(response.pagination.limit);
       setTotalDatas(response.pagination.total);
       setTotalPages(response.pagination.pages);
       // Handle different response formats from backend
@@ -2392,6 +2406,12 @@ const InventoryManagement: React.FC = () => {
         </div>
       </div>
 
+                  {/* Debug pagination info */}
+                  <div className="mb-2 text-xs text-gray-500 bg-yellow-50 p-2 rounded">
+                    Debug: Page {currentPage} of {totalPages}, Limit: {limit}, Total: {totalDatas}, 
+                    Showing: {inventory.length} items
+                  </div>
+                  
                   <Pagination
                     currentPage={currentPage}
                     totalPages={totalPages}
