@@ -19,6 +19,7 @@ import paymentLinkRoutes from './paymentLinks';
 import notificationRoutes from './notifications';
 import generalSettingsRoutes from './generalSettings';
 import quotationsRouter from './quotations';
+import inventoryRoutes from './inventory';
 
 
 const router = Router();
@@ -46,7 +47,8 @@ router.get('/', (req, res) => {
       ledger: '/ledger',
       invoices: '/invoices',
       payments: '/payments',
-      paymentLinks: '/payment-links'
+      paymentLinks: '/payment-links',
+      inventory: '/inventory'
     }
   });
 });
@@ -72,5 +74,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/generalSettings', generalSettingsRoutes);
 router.use('/payment-links', paymentLinkRoutes);
 router.use('/quotations', quotationsRouter);
+router.use('/inventory', inventoryRoutes);
 
 export default router;

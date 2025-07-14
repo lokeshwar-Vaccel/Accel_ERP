@@ -10,6 +10,9 @@ export * from './productSchemas';
 // Stock/Inventory validation schemas
 export * from './stockSchemas';
 
+// Inventory import validation schemas
+export * from './inventorySchemas';
+
 // Service ticket validation schemas
 export * from './serviceSchemas';
 

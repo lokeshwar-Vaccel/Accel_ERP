@@ -849,6 +849,58 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: any[] }>('/dashboard/alerts'),
   };
  
+  // Inventory Import APIs
+  inventory = {
+    downloadTemplate: () =>
+      fetch(`${this.baseURL}/inventory/import-template`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+        }
+      }).then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        return res.blob();
+      }),
+
+    import: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return fetch(`${this.baseURL}/inventory/import`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+        }
+      }).then(res => {
+        if (!res.ok) {
+          return res.text().then(text => {
+            try {
+              const error = JSON.parse(text);
+              throw new Error(error.message || error.error || `HTTP ${res.status}: ${res.statusText}`);
+            } catch {
+              throw new Error(text || `HTTP ${res.status}: ${res.statusText}`);
+            }
+          });
+        }
+        return res.json();
+      })
+    },
+
+    previewImport: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return fetch(`${this.baseURL}/inventory/preview-import`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+        }
+      }).then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        return res.json();
+      });
+    }
+  };
+
   quotations = {
     getAll: (params?: any) =>
       this.makeRequest<{ success: boolean; data: any[]; page: number; limit: number; total: number; totalPages: number }>(`/quotations${params ? `?${new URLSearchParams(params)}` : ''}`),

@@ -129,6 +129,11 @@ interface StockTransferFormData {
 const InventoryManagement: React.FC = () => {
   // State management
   const [inventory, setInventory] = useState<StockItem[]>([]);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
   const [products, setProducts] = useState<ProductData[]>([]);
   const [locations, setLocations] = useState<StockLocationData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1627,6 +1632,13 @@ const InventoryManagement: React.FC = () => {
             <span className="text-sm">Add Location</span>
           </button>
           <button
+            onClick={() => setShowImportModal(true)}
+            className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <Archive className="w-4 h-4" />
+            <span className="text-sm">Import Excel</span>
+          </button>
+          <button
             onClick={handleShowStockLedger}
             className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
@@ -2179,9 +2191,34 @@ const InventoryManagement: React.FC = () => {
         )}
       </div>
 
+      {/* Force scrollbar visibility CSS */}
+      <style>{`
+        .inventory-scroll::-webkit-scrollbar {
+          -webkit-appearance: none;
+          height: 15px;
+          background: #f1f1f1;
+        }
+        .inventory-scroll::-webkit-scrollbar-thumb {
+          background: #c1c1c1;
+          border-radius: 10px;
+        }
+        .inventory-scroll::-webkit-scrollbar-track {
+          background: #f1f1f1;
+        }
+      `}</style>
+
       {/* Inventory Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
-        <div className="overflow-x-auto">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-scroll">
+        <div 
+          className="overflow-x-scroll inventory-scroll" 
+          style={{ 
+            scrollbarWidth: 'thin',
+            scrollbarGutter: 'stable both-edges',
+            WebkitOverflowScrolling: 'touch',
+            msOverflowStyle: 'scrollbar',
+            overflowX: 'scroll !important' as any
+          }}
+        >
           <table className="w-full min-w-[1600px] table-fixed">
             <thead className="bg-gray-50">
               <tr>
@@ -4069,6 +4106,357 @@ const InventoryManagement: React.FC = () => {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Import Excel Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Import Inventory from Excel</h2>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <div className="space-y-6">
+                {/* Instructions */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="text-sm font-medium text-blue-900 mb-2">Import Instructions</h3>
+                  <ul className="text-sm text-blue-700 space-y-1">
+                    <li>• Download the template file to see the required format</li>
+                    <li>• Fill in your inventory data following the column headers</li>
+                    <li>• Products will be created/updated automatically</li>
+                    <li>• Stock levels will be set based on QTY column</li>
+                  </ul>
+                </div>
+
+                {/* Template Download */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900">Excel Template</h4>
+                    <p className="text-sm text-gray-600">Download the template with sample data</p>
+                  </div>
+                                     <button
+                     onClick={async () => {
+                       console.log('📥 Starting template download...');
+                       try {
+                         const token = localStorage.getItem('authToken');
+                         console.log('🔑 Auth token present:', !!token);
+                         
+                         console.log('📤 Making request to download template');
+                         const blob = await apiClient.inventory.downloadTemplate();
+                         
+                         console.log('✅ Template download successful');
+                         const url = window.URL.createObjectURL(blob);
+                         const link = document.createElement('a');
+                         link.href = url;
+                         link.download = 'inventory-template.xlsx';
+                         link.click();
+                         window.URL.revokeObjectURL(url);
+                       } catch (error) {
+                         console.error('❌ Template download error:', error);
+                         const errorMessage = error instanceof Error ? error.message : 'Network error';
+                         alert(`Failed to download template: ${errorMessage}`);
+                       }
+                     }}
+                     className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                   >
+                     <Archive className="w-4 h-4 mr-2" />
+                     Download Template
+                   </button>
+                </div>
+
+                {/* File Upload */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-medium text-gray-900">Upload Excel File</h4>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                                         <input
+                       type="file"
+                       accept=".xlsx,.xls,.csv"
+                       onChange={(e) => {
+                         const file = e.target.files?.[0];
+                         if (file) setSelectedFile(file);
+                       }}
+                       className="hidden"
+                       id="import-file"
+                     />
+                    <label
+                      htmlFor="import-file"
+                      className="cursor-pointer flex flex-col items-center space-y-2"
+                    >
+                      <Archive className="w-12 h-12 text-gray-400" />
+                      <div className="text-sm text-gray-600">
+                        <span className="text-blue-600 hover:text-blue-700 font-medium">
+                          Click to upload
+                        </span>{' '}
+                        or drag and drop
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        Excel (.xlsx, .xls) or CSV files only
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Selected File Display */}
+                {selectedFile && (
+                  <div className="flex items-center justify-between p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center space-x-3">
+                      <Archive className="w-5 h-5 text-green-600" />
+                      <div>
+                        <p className="text-sm font-medium text-green-900">{selectedFile.name}</p>
+                        <p className="text-xs text-green-700">
+                          {(selectedFile.size / 1024).toFixed(1)} KB
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedFile(null)}
+                      className="text-green-600 hover:text-green-800"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end space-x-3 mt-6 pt-6 border-t border-gray-200">
+                <button
+                  onClick={() => setShowImportModal(false)}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                                 <button
+                   onClick={async () => {
+                     if (!selectedFile) {
+                       console.error('❌ No file selected for import');
+                       return;
+                     }
+
+                     console.log('🚀 Starting Excel preview process...');
+                     console.log('📁 Selected file:', {
+                       name: selectedFile.name,
+                       size: selectedFile.size,
+                       type: selectedFile.type
+                     });
+
+                     setImporting(true);
+                     try {
+                       console.log('📤 Making preview request using apiClient');
+                       const result = await apiClient.inventory.previewImport(selectedFile);
+
+                       console.log('✅ Preview successful:', result);
+                       setPreviewData(result.data);
+                       setShowPreviewModal(true);
+                       setShowImportModal(false);
+                     } catch (error) {
+                       console.error('❌ Preview error:', error);
+                       const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
+                       alert(`Preview failed: ${errorMessage}`);
+                     } finally {
+                       setImporting(false);
+                       console.log('🏁 Preview process completed');
+                     }
+                   }}
+                   disabled={!selectedFile || importing}
+                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                   {importing ? 'Generating Preview...' : 'Preview Import'}
+                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Import Modal */}
+      {showPreviewModal && previewData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900">Preview Excel Import</h2>
+                <p className="text-gray-600 mt-1">
+                  Review what will be imported before confirming
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  setPreviewData(null);
+                  setSelectedFile(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Summary Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-600 font-medium">Total Rows</p>
+                      <p className="text-2xl font-bold text-blue-900">{previewData.summary?.totalRows || 0}</p>
+                    </div>
+                    <Package className="w-8 h-8 text-blue-600" />
+                  </div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-green-600 font-medium">New Products</p>
+                      <p className="text-2xl font-bold text-green-900">{previewData.summary?.newProducts || 0}</p>
+                    </div>
+                    <Plus className="w-8 h-8 text-green-600" />
+                  </div>
+                </div>
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-yellow-600 font-medium">Stock Updates</p>
+                      <p className="text-2xl font-bold text-yellow-900">{previewData.summary?.stockUpdates || 0}</p>
+                    </div>
+                    <BarChart3 className="w-8 h-8 text-yellow-600" />
+                  </div>
+                </div>
+                <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-red-600 font-medium">Errors</p>
+                      <p className="text-2xl font-bold text-red-900">{previewData.errors?.length || 0}</p>
+                    </div>
+                    <AlertTriangle className="w-8 h-8 text-red-600" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Errors Section */}
+              {previewData.errors && previewData.errors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="w-5 h-5 text-red-600 mr-2 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-medium text-red-800">Import Errors</h3>
+                      <div className="mt-2 text-sm text-red-700">
+                        <ul className="list-disc list-inside space-y-1">
+                          {previewData.errors.slice(0, 10).map((error: string, index: number) => (
+                            <li key={index}>{error}</li>
+                          ))}
+                        </ul>
+                        {previewData.errors.length > 10 && (
+                          <p className="mt-2 text-red-600 font-medium">
+                            ... and {previewData.errors.length - 10} more errors
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Sample Data Preview */}
+              {previewData.sample && previewData.sample.length > 0 && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">Sample Data (First 5 rows)</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-100 text-gray-800">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Part No</th>
+                          <th className="px-3 py-2 text-left font-medium">Description</th>
+                          <th className="px-3 py-2 text-left font-medium">Department</th>
+                          <th className="px-3 py-2 text-left font-medium">Quantity</th>
+                          <th className="px-3 py-2 text-left font-medium">MRP</th>
+                          <th className="px-3 py-2 text-left font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {previewData.sample.slice(0, 5).map((item: any, index: number) => (
+                          <tr key={index} className="hover:bg-gray-50">
+                            <td className="px-3 py-2 font-mono text-xs">{item['PART NO']}</td>
+                            <td className="px-3 py-2">{item.DESCRIPTION}</td>
+                            <td className="px-3 py-2">{item.DEPT}</td>
+                            <td className="px-3 py-2">{item.QTY}</td>
+                            <td className="px-3 py-2">₹{item.MRP?.toLocaleString()}</td>
+                            <td className="px-3 py-2">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                item.status === 'new' ? 'bg-green-100 text-green-800' :
+                                item.status === 'existing' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {item.status || 'Unknown'}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex space-x-4 p-6 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => {
+                  setShowPreviewModal(false);
+                  setPreviewData(null);
+                  setSelectedFile(null);
+                }}
+                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Cancel Import
+              </button>
+              <button
+                onClick={async () => {
+                  if (!selectedFile) return;
+                  
+                  setImporting(true);
+                  setShowPreviewModal(false);
+                  
+                  try {
+                    console.log('📤 Making final import request using apiClient');
+                    const result = await apiClient.inventory.import(selectedFile);
+                    
+                    console.log('✅ Import successful:', result);
+                    alert(`Import completed! ${result.data.successful} items imported successfully.`);
+                    setSelectedFile(null);
+                    setPreviewData(null);
+                    fetchAllData();
+                  } catch (error) {
+                    console.error('❌ Import error:', error);
+                    const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
+                    alert(`Import failed: ${errorMessage}`);
+                  } finally {
+                    setImporting(false);
+                  }
+                }}
+                disabled={importing || (previewData.errors && previewData.errors.length > 0)}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {importing ? (
+                  <span className="flex items-center justify-center">
+                    <RefreshCw className="animate-spin w-5 h-5 mr-2" />
+                    Importing...
+                  </span>
+                ) : (
+                  `Confirm Import (${previewData.summary?.totalRows || 0} rows)`
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
