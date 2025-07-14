@@ -96,7 +96,7 @@ const addressJoiSchema = Joi.object({
   address: Joi.string().max(500).required(),
   state: Joi.string().max(100).required(),
   district: Joi.string().max(100).required(),
-  pincode: Joi.string().pattern(/^\d{6}$/).required(),
+  pincode: Joi.string().pattern(/^\d{6}$/).allow('').optional(),
   isPrimary: Joi.boolean().default(false)
 });
 
@@ -108,7 +108,7 @@ const baseCustomerFields = {
   gstNumber: Joi.string().max(50).trim().allow(''),
   email: Joi.string().email().lowercase().allow(null),
   phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
-  addresses: Joi.array().items(addressJoiSchema).min(1).required(),
+  addresses: Joi.array().items(addressJoiSchema).min(1),
   customerType: Joi.string().valid(...Object.values(CustomerType)),
   type: Joi.string().valid(...Object.values(CustomerMainType)),
   leadSource: Joi.string().max(100).trim().allow(''),
@@ -124,7 +124,7 @@ export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   contactPersonName: baseCustomerFields.contactPersonName,
   gstNumber: baseCustomerFields.gstNumber,
   email: baseCustomerFields.email,
-  phone: baseCustomerFields.phone.required(),
+  phone: baseCustomerFields.phone,
   addresses: baseCustomerFields.addresses,
   customerType: baseCustomerFields.customerType.required(),
   type: baseCustomerFields.type.required(),

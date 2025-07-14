@@ -157,6 +157,47 @@ class ApiClient {
         method: 'POST',
         body: JSON.stringify(contactData),
       }),
+    // Excel import preview
+    previewImportFromFile: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return this.makeRequest<{
+        success: boolean;
+        data: {
+          customersToCreate: any[];
+          existingCustomers: any[];
+          errors: string[];
+          summary: {
+            totalRows: number;
+            newCustomers: number;
+            existingCustomers: number;
+          };
+        }
+      }>('/customers/preview-import', {
+        method: 'POST',
+        body: formData,
+      });
+    },
+    // Excel import
+    importFromFile: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return this.makeRequest<{
+        success: boolean;
+        data: {
+          summary: {
+            totalRows: number;
+            successful: number;
+            failed: number;
+          };
+          createdCustomers: any[];
+          errors: string[];
+        }
+      }>('/customers/import', {
+        method: 'POST',
+        body: formData,
+      });
+    },
   };
 
   // Product Management APIs
@@ -808,6 +849,48 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: any[] }>('/dashboard/alerts'),
   };
  
+  quotations = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[]; page: number; limit: number; total: number; totalPages: number }>(`/quotations${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/quotations/${id}`),
+
+    create: (quotationData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/quotations', {
+        method: 'POST',
+        body: JSON.stringify(quotationData),
+      }),
+
+    update: (id: string, quotationData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/quotations/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(quotationData),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/quotations/${id}`, {
+        method: 'DELETE',
+      }),
+
+    generate: (invoiceId: string, params?: any) =>
+      this.makeRequest(`/quotations/generate/${invoiceId}`, {
+        method: 'POST',
+        body: params ? JSON.stringify(params) : undefined,
+      }),
+    preview: (invoiceId: string) =>
+      fetch(`${this.baseURL}/quotations/preview/${invoiceId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+        }
+      }).then(res => res.text()),
+    download: (invoiceId: string) =>
+      fetch(`${this.baseURL}/quotations/download/${invoiceId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+        }
+      }).then(res => res.blob()),
+  };
 }
 
 export const apiClient = new ApiClient();

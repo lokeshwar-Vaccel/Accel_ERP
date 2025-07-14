@@ -32,6 +32,7 @@ const setup = async () => {
           { module: 'dashboard', access: true, permission: 'admin' },
           { module: 'lead_management', access: true, permission: 'admin' },
           { module: 'user_management', access: true, permission: 'admin' },
+          { module: 'quotation_management', access: true, permission: 'admin' },
           { module: 'product_management', access: true, permission: 'admin' },
           { module: 'inventory_management', access: true, permission: 'admin' },
           { module: 'service_management', access: true, permission: 'admin' },

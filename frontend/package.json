@@ -25,6 +25,7 @@
   "dependencies": {
     "@reduxjs/toolkit": "^2.8.2",
     "@types/react-router-dom": "^5.3.3",
+    "@types/xlsx": "^0.0.35",
     "decimal.js": "^10.6.0",
     "jspdf": "^3.0.1",
     "jspdf-autotable": "^5.0.2",
@@ -37,6 +38,7 @@
     "react-router-dom": "^7.6.2",
     "redux": "^5.0.1",
     "socket.io-client": "^4.8.1",
+    "xlsx": "^0.18.5",
     "zod": "^3.25.67"
   },
   "devDependencies": {

@@ -18,6 +18,7 @@ import paymentRoutes from './payments';
 import paymentLinkRoutes from './paymentLinks';
 import notificationRoutes from './notifications';
 import generalSettingsRoutes from './generalSettings';
+import quotationsRouter from './quotations';
 
 
 const router = Router();
@@ -70,5 +71,6 @@ router.use('/payments', paymentRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/generalSettings', generalSettingsRoutes);
 router.use('/payment-links', paymentLinkRoutes);
+router.use('/quotations', quotationsRouter);
 
 export default router;

@@ -23,6 +23,8 @@ import {
   convertLead,
   scheduleFollowUp,
 } from '../controllers/customerController';
+import multer from 'multer';
+import { previewCustomerImport, importCustomers } from '../controllers/customerImportController';
 
 const router = Router();
 
@@ -31,6 +33,12 @@ router.use(protect);
 
 // Check module access for lead management
 router.use(checkModuleAccess('lead_management'));
+
+const upload = multer();
+
+// Customer Excel import routes
+router.post('/preview-import', upload.single('file'), checkPermission('write'), previewCustomerImport);
+router.post('/import', upload.single('file'), checkPermission('write'), importCustomers);
 
 // Customer routes
 router.route('/')

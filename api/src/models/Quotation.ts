@@ -1,0 +1,103 @@
+import mongoose, { Schema, Document, Types } from 'mongoose';
+
+export interface IQuotation extends Document {
+  quotationNumber: string;
+  invoiceId?: string | Types.ObjectId;
+  issueDate: Date;
+  validUntil: Date;
+  customer: {
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+    pan?: string;
+  };
+  company: {
+    name: string;
+    logo?: string;
+    address: string;
+    phone: string;
+    email: string;
+    pan?: string;
+    bankDetails?: {
+      bankName: string;
+      accountNo: string;
+      ifsc: string;
+      branch: string;
+    };
+  };
+  items: Array<{
+    product: string;
+    description: string;
+    hsnCode?: string;
+    quantity: number;
+    uom: string;
+    unitPrice: number;
+    discount: number;
+    discountedAmount: number;
+    taxRate: number;
+    taxAmount: number;
+    totalPrice: number;
+  }>;
+  subtotal: number;
+  totalDiscount: number;
+  totalTax: number;
+  grandTotal: number;
+  roundOff: number;
+  notes?: string;
+  terms?: string;
+  validityPeriod: number;
+}
+
+const QuotationSchema = new Schema<IQuotation>({
+  quotationNumber: { type: String, unique: true },
+  invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
+  issueDate: { type: Date, },
+  validUntil: { type: Date, },
+  customer: {
+    name: { type: String, },
+    email: { type: String, required: false },
+    phone: { type: String, required: false },
+    address: { type: String, },
+    pan: { type: String, required: false },
+  },
+  company: {
+    name: { type: String, },
+    logo: { type: String },
+    address: { type: String, },
+    phone: { type: String, },
+    email: { type: String, },
+    pan: { type: String },
+    bankDetails: {
+      bankName: { type: String },
+      accountNo: { type: String },
+      ifsc: { type: String },
+      branch: { type: String },
+    },
+  },
+  items: [
+    {
+      product: { type: String, },
+      description: { type: String, },
+      hsnCode: { type: String },
+      quantity: { type: Number, },
+      uom: { type: String, },
+      unitPrice: { type: Number, },
+      discount: { type: Number, },
+      discountedAmount: { type: Number, },
+      taxRate: { type: Number, },
+      taxAmount: { type: Number, },
+      totalPrice: { type: Number, },
+    },
+  ],
+  subtotal: { type: Number, },
+  totalDiscount: { type: Number, },
+  totalTax: { type: Number, },
+  grandTotal: { type: Number, },
+  roundOff: { type: Number, },
+  notes: { type: String },
+  terms: { type: String },
+  validityPeriod: { type: Number, },
+});
+
+export const Quotation = mongoose.model<IQuotation>('Quotation', QuotationSchema); 

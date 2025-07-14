@@ -61,8 +61,9 @@ const addressSchema = new Schema({
 const customerSchema = new Schema({
   name: {
     type: String,
-    required: [true, 'Customer name is required'],
+    // required: [true, 'Customer name is required'],
     trim: true,
+    default: '',
     maxlength: [100, 'Customer name cannot exceed 100 characters']
   },
   designation: {
@@ -90,8 +91,8 @@ const customerSchema = new Schema({
   },
   phone: {
     type: String,
-    required: [true, 'Phone number is required'],
-    match: [/^\+?[1-9]\d{1,14}$/, 'Please provide a valid phone number']
+    // required: [true, 'Phone number is required'],
+    // match: [/^\+?[1-9]\d{1,14}$/, 'Please provide a valid phone number']
   },
   addresses: {
     type: [addressSchema],

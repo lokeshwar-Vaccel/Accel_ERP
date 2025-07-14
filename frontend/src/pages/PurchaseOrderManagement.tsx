@@ -30,6 +30,7 @@ import {
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 import { Pagination } from 'components/ui/Pagination';
+import toast from 'react-hot-toast';
 
 // Types matching backend structure
 type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'partially_received' | 'received' | 'cancelled';
@@ -311,8 +312,10 @@ const PurchaseOrderManagement: React.FC = () => {
         fetchLocations(),
         fetchSuppliers()
       ]);
+      // toast.success('Data refreshed successfully');
     } catch (error) {
       console.error('Error fetching data:', error);
+      toast.error('Failed to refresh data');
     } finally {
       setLoading(false);
     }
@@ -627,6 +630,11 @@ const PurchaseOrderManagement: React.FC = () => {
     });
 
     setFormErrors(errors);
+    
+    if (Object.keys(errors).length > 0) {
+      toast.error('Please fix the form errors before submitting');
+    }
+    
     return Object.keys(errors).length === 0;
   };
 
@@ -657,6 +665,7 @@ const PurchaseOrderManagement: React.FC = () => {
       setPurchaseOrders([response.data, ...purchaseOrders]);
       setShowCreateModal(false);
       resetPOForm();
+      toast.success('Purchase Order created successfully');
     } catch (error: any) {
       console.error('Error creating purchase order:', error);
       if (error.response?.data?.errors) {
@@ -664,6 +673,7 @@ const PurchaseOrderManagement: React.FC = () => {
       } else {
         setFormErrors({ general: 'Failed to create purchase order' });
       }
+      toast.error('Failed to create purchase order');
     } finally {
       setSubmitting(false);
     }
@@ -693,6 +703,7 @@ const PurchaseOrderManagement: React.FC = () => {
       setShowEditModal(false);
       setEditingPO(null);
       resetPOForm();
+      toast.success('Purchase Order updated successfully');
     } catch (error: any) {
       console.error('Error updating purchase order:', error);
       if (error.response?.data?.errors) {
@@ -700,6 +711,7 @@ const PurchaseOrderManagement: React.FC = () => {
       } else {
         setFormErrors({ general: 'Failed to update purchase order' });
       }
+      toast.error('Failed to update purchase order');
     } finally {
       setSubmitting(false);
     }
@@ -720,8 +732,21 @@ const PurchaseOrderManagement: React.FC = () => {
       if (selectedPO && selectedPO._id === poId) {
         setSelectedPO({ ...selectedPO, ...updatedPO });
       }
+
+      // Show success toast based on status
+      const statusMessages: Record<PurchaseOrderStatus, string> = {
+        'draft': 'Purchase Order saved as draft',
+        'sent': 'Purchase Order sent to supplier successfully',
+        'confirmed': 'Purchase Order marked as confirmed',
+        'partially_received': 'Purchase Order partially received',
+        'received': 'Purchase Order marked as received',
+        'cancelled': 'Purchase Order cancelled successfully'
+      };
+      
+      toast.success(statusMessages[newStatus]);
     } catch (error) {
       console.error('Error updating PO status:', error);
+      toast.error('Failed to update Purchase Order status');
     }
   };
 
@@ -752,6 +777,11 @@ const PurchaseOrderManagement: React.FC = () => {
     }
 
     setFormErrors(errors);
+    
+    if (Object.keys(errors).length > 0) {
+      toast.error('Please fill in all required fields');
+    }
+    
     return Object.keys(errors).length === 0;
   };
 
@@ -797,6 +827,7 @@ const PurchaseOrderManagement: React.FC = () => {
       });
 
       setShowReceiveModal(false);
+      toast.success('Items received successfully');
     } catch (error: any) {
       console.error('Error receiving items:', error);
 
@@ -808,7 +839,7 @@ const PurchaseOrderManagement: React.FC = () => {
       }
 
       // Display error to user
-      alert(`Error: ${errorMessage}`);
+      toast.error(`Error: ${errorMessage}`);
     } finally {
       setSubmitting(false);
     }
@@ -830,10 +861,12 @@ const PurchaseOrderManagement: React.FC = () => {
     ];
 
     if (!allowedTypes.includes(file.type)) {
+      const errorMessage = 'Please select a valid Excel (.xlsx, .xls) or CSV file.';
       setImportMessage({
         type: 'error',
-        text: 'Please select a valid Excel (.xlsx, .xls) or CSV file.'
+        text: errorMessage
       });
+      toast.error(errorMessage);
       return;
     }
 
@@ -848,18 +881,23 @@ const PurchaseOrderManagement: React.FC = () => {
         setSelectedFile(file);
         setPreviewData(response.data);
         setShowPreviewModal(true);
+        toast.success('File preview generated successfully');
       } else {
+        const errorMessage = response.data.errors?.[0] || 'Preview failed. Please check your file format.';
         setImportMessage({
           type: 'error',
-          text: response.data.errors?.[0] || 'Preview failed. Please check your file format.'
+          text: errorMessage
         });
+        toast.error(errorMessage);
       }
     } catch (error: any) {
       console.error('Preview error:', error);
+      const errorMessage = error.message || 'Failed to preview file. Please try again.';
       setImportMessage({
         type: 'error',
-        text: error.message || 'Failed to preview file. Please try again.'
+        text: errorMessage
       });
+      toast.error(errorMessage);
     } finally {
       setImporting(false);
       // Clear the file input
@@ -880,30 +918,38 @@ const PurchaseOrderManagement: React.FC = () => {
 
       if (response.success) {
         if (response.data.summary.successful > 0) {
+          const successMessage = `Successfully imported ${response.data.summary.successful} purchase orders from ${response.data.summary.totalRows} total rows!`;
           setImportMessage({
             type: 'success',
-            text: `Successfully imported ${response.data.summary.successful} purchase orders from ${response.data.summary.totalRows} total rows!`
+            text: successMessage
           });
+          toast.success(successMessage);
         } else {
           // No orders were created - show errors
+          const errorMessage = `Import failed! 0 orders created from ${response.data.summary.totalRows} rows. Errors: ${response.data.errors.join('; ')}`;
           setImportMessage({
             type: 'error',
-            text: `Import failed! 0 orders created from ${response.data.summary.totalRows} rows. Errors: ${response.data.errors.join('; ')}`
+            text: errorMessage
           });
+          toast.error(errorMessage);
         }
         await fetchPurchaseOrders(); // Refresh the list
       } else {
+        const errorMessage = response.data.errors?.[0] || 'Import failed. Please check your file format.';
         setImportMessage({
           type: 'error',
-          text: response.data.errors?.[0] || 'Import failed. Please check your file format.'
+          text: errorMessage
         });
+        toast.error(errorMessage);
       }
     } catch (error: any) {
       console.error('Import error:', error);
+      const errorMessage = error.message || 'Failed to import file. Please try again.';
       setImportMessage({
         type: 'error',
-        text: error.message || 'Failed to import file. Please try again.'
+        text: errorMessage
       });
+      toast.error(errorMessage);
     } finally {
       setImporting(false);
       setSelectedFile(null);
@@ -3478,8 +3524,14 @@ const PurchaseOrderManagement: React.FC = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={handleReceiveItems}
-                  disabled={submitting || receiveData.receivedItems.every(item => (item.quantityReceived || 0) === 0)}
+                  onClick={() => {
+                    if (receiveData.receivedItems.every(item => (item.quantityReceived || 0) === 0)) {
+                      toast.error('Please select items to receive');
+                      return;
+                    }
+                    handleReceiveItems();
+                  }}
+                  disabled={submitting}
                   className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                   {submitting ? 'Receiving...' : 'Confirm Receipt'}

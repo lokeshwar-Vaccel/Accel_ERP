@@ -30,13 +30,15 @@ import {
   ChevronDown,
   Contact,
   PhoneIncoming,
-  Sparkles
+  Sparkles,
+  AlertTriangle
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 import { RootState } from 'store';
 import { useSelector } from 'react-redux';
 import { Pagination } from 'components/ui/Pagination';
+import toast from 'react-hot-toast';
 
 
 // Customer types matching backend enums
@@ -229,6 +231,12 @@ const CustomerManagement: React.FC = () => {
   const [showContactTypeDropdown, setShowContactTypeDropdown] = useState(false);
   const [showQuickActionsDropdown, setShowQuickActionsDropdown] = useState(false);
 
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [previewData, setPreviewData] = useState<any>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const user = useSelector((state: RootState) => state.auth.user);
 
   // Tab state for navigation
@@ -246,6 +254,87 @@ const CustomerManagement: React.FC = () => {
     // Optionally return a string or a default icon name
     const option = typeOptions.find(option => option.value === value);
     return option ? option.label : 'User';
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const allowedTypes = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'application/vnd.ms-excel',
+      'text/csv'
+    ];
+    if (!allowedTypes.includes(file.type)) {
+      const errorMessage = 'Please select a valid Excel (.xlsx, .xls) or CSV file.';
+      setImportMessage({ type: 'error', text: errorMessage });
+      toast.error(errorMessage);
+      return;
+    }
+    setImporting(true);
+    setImportMessage(null);
+    try {
+      const response = await apiClient.customers.previewImportFromFile(file);
+      if (response.success) {
+        setSelectedFile(file);
+        setPreviewData(response.data);
+        setShowPreviewModal(true);
+        toast.success('File preview generated successfully');
+      } else {
+        const errorMessage = response.data.errors?.[0] || 'Preview failed. Please check your file format.';
+        setImportMessage({ type: 'error', text: errorMessage });
+        toast.error(errorMessage);
+      }
+    } catch (error: any) {
+      const errorMessage = error.message || 'Failed to preview file. Please try again.';
+      setImportMessage({ type: 'error', text: errorMessage });
+      toast.error(errorMessage);
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleConfirmImport = async () => {
+    if (!selectedFile) return;
+    setImporting(true);
+    setShowPreviewModal(false);
+    try {
+      const response = await apiClient.customers.importFromFile(selectedFile);
+      if (response.success) {
+        if (response.data.summary.successful > 0) {
+          const successMessage = `Successfully imported ${response.data.summary.successful} customers from ${response.data.summary.totalRows} total rows!`;
+          setImportMessage({ type: 'success', text: successMessage });
+          toast.success(successMessage);
+        } else {
+          const errorMessage = `Import failed! 0 customers created from ${response.data.summary.totalRows} rows. Errors: ${response.data.errors.join('; ')}`;
+          setImportMessage({ type: 'error', text: errorMessage });
+          toast.error(errorMessage);
+        }
+        await fetchCustomers();
+      } else {
+        const errorMessage = response.data.errors?.[0] || 'Import failed. Please check your file format.';
+        setImportMessage({ type: 'error', text: errorMessage });
+        toast.error(errorMessage);
+      }
+    } catch (error: any) {
+      const errorMessage = error.message || 'Failed to import file. Please try again.';
+      setImportMessage({ type: 'error', text: errorMessage });
+      toast.error(errorMessage);
+    } finally {
+      setImporting(false);
+      setSelectedFile(null);
+      setPreviewData(null);
+    }
+  };
+
+  const closePreviewModal = () => {
+    setShowPreviewModal(false);
+    setSelectedFile(null);
+    setPreviewData(null);
   };
 
 
@@ -443,18 +532,18 @@ const CustomerManagement: React.FC = () => {
       errors.address = 'At least one address is required';
     } else {
       // Check for empty required fields in addresses
-      const invalidAddresses = customerFormData.addresses.some(addr => 
+      const invalidAddresses = customerFormData.addresses.some(addr =>
         !addr.address.trim() || !addr.state.trim() || !addr.district.trim() || !addr.pincode.trim()
       );
       if (invalidAddresses) {
         errors.address = 'All address fields (address, state, district, pincode) are required';
       }
-      
+
       const primaryCount = customerFormData.addresses.filter(addr => addr.isPrimary).length;
       if (primaryCount !== 1) {
         errors.address = 'There must be exactly one primary address';
       }
-      
+
       // Validate pincode for each address
       const invalidPincode = customerFormData.addresses.some(addr => {
         return addr.pincode && !/^\d{6}$/.test(addr.pincode);
@@ -870,12 +959,43 @@ const CustomerManagement: React.FC = () => {
               <span className="text-sm">{customerTypeTab === 'customer' ? 'Add Customer' : 'Add Supplier'}</span>
             </button>
           }
+          <button
+            onClick={handleImportClick}
+            disabled={importing}
+            className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <FileText className={`w-4 h-4 ${importing ? 'animate-pulse' : ''}`} />
+            <span className="text-sm">{importing ? 'Importing...' : 'Import Excel'}</span>
+          </button>
 
 
         </div>
       </PageHeader>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        onChange={handleFileUpload}
+        style={{ display: 'none' }}
+      />
+      {importMessage && (
+        <div className={`p-4 rounded-lg border ${importMessage.type === 'success'
+          ? 'bg-green-50 border-green-200 text-green-800'
+          : 'bg-red-50 border-red-200 text-red-800'
+          }`}>
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium">{importMessage.text}</p>
+            <button
+              onClick={() => setImportMessage(null)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
-  
+
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -899,26 +1019,26 @@ const CustomerManagement: React.FC = () => {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 md:space-x-4">
 
           <div>
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search customers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search customers..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+
+            <div className="mt-4 flex items-center justify-between">
+              <span className="text-xs text-gray-600">
+                Showing {customers.length} customers
+              </span>
+            </div>
+
+
           </div>
 
-          <div className="mt-4 flex items-center justify-between">
-          <span className="text-xs text-gray-600">
-            Showing {customers.length} customers
-          </span>
-        </div>
-
-
-          </div>
-         
           {/* Tab Navigation inside filter card, right side */}
           {/* <div className="flex space-x-2">
             {tabOptions.map(tab => (
@@ -931,28 +1051,28 @@ const CustomerManagement: React.FC = () => {
               </button>
             ))}
           </div> */}
-       
 
-      
 
-            {/* Insert this above the filters section, after <PageHeader ... /> */}
-      <div className="flex space-x-2 mb-4">
-        <button
-          className={`px-4 py-2 rounded-lg font-semibold focus:outline-none transition-colors border-b-2 ${customerTypeTab === 'customer' ? 'border-blue-600 text-blue-700 bg-white' : 'border-transparent text-gray-500 bg-gray-100 hover:text-blue-600'}`}
-          onClick={() => setCustomerTypeTab('customer')}
-          type="button"
-        >
-          Customer
-        </button>
-        <button
-          className={`px-4 py-2 rounded-lg font-semibold focus:outline-none transition-colors border-b-2 ${customerTypeTab === 'supplier' ? 'border-blue-600 text-blue-700 bg-white' : 'border-transparent text-gray-500 bg-gray-100 hover:text-blue-600'}`}
-          onClick={() => setCustomerTypeTab('supplier')}
-          type="button"
-        >
-          Supplier
-        </button>
-      </div>
-      </div>
+
+
+          {/* Insert this above the filters section, after <PageHeader ... /> */}
+          <div className="flex space-x-2 mb-4">
+            <button
+              className={`px-4 py-2 rounded-lg font-semibold focus:outline-none transition-colors border-b-2 ${customerTypeTab === 'customer' ? 'border-blue-600 text-blue-700 bg-white' : 'border-transparent text-gray-500 bg-gray-100 hover:text-blue-600'}`}
+              onClick={() => setCustomerTypeTab('customer')}
+              type="button"
+            >
+              Customer
+            </button>
+            <button
+              className={`px-4 py-2 rounded-lg font-semibold focus:outline-none transition-colors border-b-2 ${customerTypeTab === 'supplier' ? 'border-blue-600 text-blue-700 bg-white' : 'border-transparent text-gray-500 bg-gray-100 hover:text-blue-600'}`}
+              onClick={() => setCustomerTypeTab('supplier')}
+              type="button"
+            >
+              Supplier
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Customer Table */}
@@ -976,6 +1096,8 @@ const CustomerManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Lead Source
                 </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Designation</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -984,8 +1106,17 @@ const CustomerManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
                     Loading customers...
+                  </td>
+                </tr>
+              ) : customers.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                    <div className="text-center">
+                      <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+                      <p className="text-lg font-medium text-gray-900 mb-2">{customerTypeTab === 'customer'?"No Customers found":"No Customers found"}</p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -1011,7 +1142,7 @@ const CustomerManagement: React.FC = () => {
                         )}
                         <div className="flex items-center text-xs text-gray-600">
                           <Phone className="w-4 h-4 mr-2" />
-                          {customer.phone}
+                          {customer.phone || "N/A"}
                         </div>
                       </div>
                     </td>
@@ -1045,6 +1176,12 @@ const CustomerManagement: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {customer.leadSource || 'Direct'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">{customer.designation || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {customer.addresses && customer.addresses.length > 0 ? (
+                        <span>{customer.addresses[0].address}, {customer.addresses[0].district}, {customer.addresses[0].state}, {customer.addresses[0].pincode}</span>
+                      ) : '-'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
@@ -1096,6 +1233,166 @@ const CustomerManagement: React.FC = () => {
         itemsPerPage={limit}
       />
 
+       {/* Preview Import Modal */}
+      {showPreviewModal && previewData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-2xl font-semibold text-gray-900">Preview Excel Import</h2>
+                <p className="text-gray-600 mt-1">Review what will be imported before confirming</p>
+              </div>
+              <button onClick={closePreviewModal} className="text-gray-400 hover:text-gray-600">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-blue-600 font-medium">New Customers</p>
+                      <p className="text-2xl font-bold text-blue-900">{previewData.summary.newCustomers}</p>
+                    </div>
+                    <Plus className="w-8 h-8 text-blue-600" />
+                  </div>
+                </div>
+                <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-yellow-600 font-medium">Existing Customers</p>
+                      <p className="text-2xl font-bold text-yellow-900">{previewData.summary.existingCustomers}</p>
+                    </div>
+                    <CheckCircle className="w-8 h-8 text-yellow-600" />
+                  </div>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-purple-600 font-medium">Total Rows</p>
+                      <p className="text-2xl font-bold text-purple-900">{previewData.summary.totalRows}</p>
+                    </div>
+                    <FileText className="w-8 h-8 text-purple-600" />
+                  </div>
+                </div>
+              </div>
+              {previewData.errors.length > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <AlertTriangle className="w-5 h-5 text-red-600 mr-2 mt-0.5" />
+                    <div>
+                      <h3 className="text-sm font-medium text-red-800">Import Errors</h3>
+                      <div className="mt-2 text-sm text-red-700">
+                        <ul className="list-disc list-inside space-y-1">
+                          {previewData.errors.map((error: string, index: number) => (
+                            <li key={index}>{error}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              {previewData.customersToCreate.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-green-900 mb-4 flex items-center">
+                    <Plus className="w-5 h-5 mr-2" />
+                    Customers to be Created ({previewData.customersToCreate.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-green-100 text-green-800">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Phone</th>
+                          <th className="px-3 py-2 text-left font-medium">GST</th>
+                          <th className="px-3 py-2 text-left font-medium">Contact Person</th>
+                          <th className="px-3 py-2 text-left font-medium">Designation</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-green-200">
+                        {previewData.customersToCreate.slice(0, 10).map((customer: any, index: number) => (
+                          <tr key={index} className="hover:bg-green-50">
+                            <td className="px-3 py-2">{customer.name}</td>
+                            <td className="px-3 py-2">{customer.phone}</td>
+                            <td className="px-3 py-2">{customer.gstNumber}</td>
+                            <td className="px-3 py-2">{customer.contactPersonName}</td>
+                            <td className="px-3 py-2">{customer.designation}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {previewData.customersToCreate.length > 10 && (
+                      <p className="text-sm text-green-600 mt-2 text-center">
+                        ... and {previewData.customersToCreate.length - 10} more customers
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+              {previewData.existingCustomers.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-yellow-900 mb-4 flex items-center">
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    Existing Customers ({previewData.existingCustomers.length})
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-yellow-100 text-yellow-800">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Phone</th>
+                          <th className="px-3 py-2 text-left font-medium">GST</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-yellow-200">
+                        {previewData.existingCustomers.slice(0, 10).map((customer: any, index: number) => (
+                          <tr key={index} className="hover:bg-yellow-50">
+                            <td className="px-3 py-2">{customer.name}</td>
+                            <td className="px-3 py-2">{customer.phone}</td>
+                            <td className="px-3 py-2">{customer.gstNumber}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {previewData.existingCustomers.length > 10 && (
+                      <p className="text-sm text-yellow-600 mt-2 text-center">
+                        ... and {previewData.existingCustomers.length - 10} more existing customers
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex space-x-4 p-6 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={closePreviewModal}
+                className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              >
+                Cancel Import
+              </button>
+              <button
+                onClick={handleConfirmImport}
+                disabled={importing || previewData.errors.length > 0}
+                className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+              >
+                {importing ? (
+                  <span className="flex items-center justify-center">
+                    <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Importing...
+                  </span>
+                ) : (
+                  `Confirm Import (${previewData.summary.newCustomers} New, ${previewData.summary.existingCustomers} Existing)`
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add Customer Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1122,9 +1419,9 @@ const CustomerManagement: React.FC = () => {
               <div className="flex flex-1">
                 {/* Left: Main Fields */}
                 <div className="w-1/2 border-r border-gray-200 flex flex-col p-4">
-                <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
-                    </div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     {/* Customer Name, Type */}
                     <div>
@@ -1476,9 +1773,9 @@ const CustomerManagement: React.FC = () => {
               <div className="flex flex-1">
                 {/* Left: Main Fields */}
                 <div className="w-1/2 border-r border-gray-200 flex flex-col p-4">
-                <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
-                    </div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     {/* Customer Name, Type */}
                     <div>
@@ -1831,46 +2128,46 @@ const CustomerManagement: React.FC = () => {
                 <div className="space-y-3">
                   <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Customer Information</h3>
                   {/* Status Dropdown as Tag - moved here above the grid */}
-                  
+
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-xs text-gray-500">Customer Type</p>
                       <p className="font-medium capitalize">{selectedCustomer.customerType}</p>
                     </div>
                     <div className="mb-2">
-                    <div className="relative dropdown-container inline-block">
-                      <button
-                        type="button"
-                        onClick={() => setShowStatusDropdown((v) => !v)}
-                        className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(selectedCustomer.status)} ${showStatusDropdown ? 'ring-2 ring-blue-400 border-blue-300' : 'border-transparent'}`}
-                      >
-                        {getStatusIcon(selectedCustomer.status)}
-                        <span className="ml-2 capitalize">{getStatusLabel(selectedCustomer.status)}</span>
-                        <ChevronDown className={`w-4 h-4 ml-2 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showStatusDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white p-2 border border-gray-200 rounded-md shadow-lg z-50 py-1 min-w-[160px] flex flex-col">
-                          {statusOptions
-                            .filter(opt => opt.value !== 'all' && opt.value !== selectedCustomer.status)
-                            .map((option) => (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={async () => {
-                                  await handleStatusChange(selectedCustomer._id, option.value as LeadStatus);
-                                  setSelectedCustomer(prev => prev ? { ...prev, status: option.value as LeadStatus } : prev);
-                                  setShowStatusDropdown(false);
-                                }}
-                                className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full w-full mb-2 focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(option.value as LeadStatus)} border-transparent hover:opacity-80 hover:scale-105`}
-                              >
-                                {getStatusIcon(option.value as LeadStatus)}
-                                <span className="ml-2 capitalize">{option.label}</span>
-                              </button>
-                            ))}
-                        </div>
-                      )}
+                      <div className="relative dropdown-container inline-block">
+                        <button
+                          type="button"
+                          onClick={() => setShowStatusDropdown((v) => !v)}
+                          className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(selectedCustomer.status)} ${showStatusDropdown ? 'ring-2 ring-blue-400 border-blue-300' : 'border-transparent'}`}
+                        >
+                          {getStatusIcon(selectedCustomer.status)}
+                          <span className="ml-2 capitalize">{getStatusLabel(selectedCustomer.status)}</span>
+                          <ChevronDown className={`w-4 h-4 ml-2 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                        </button>
+                        {showStatusDropdown && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-white p-2 border border-gray-200 rounded-md shadow-lg z-50 py-1 min-w-[160px] flex flex-col">
+                            {statusOptions
+                              .filter(opt => opt.value !== 'all' && opt.value !== selectedCustomer.status)
+                              .map((option) => (
+                                <button
+                                  key={option.value}
+                                  type="button"
+                                  onClick={async () => {
+                                    await handleStatusChange(selectedCustomer._id, option.value as LeadStatus);
+                                    setSelectedCustomer(prev => prev ? { ...prev, status: option.value as LeadStatus } : prev);
+                                    setShowStatusDropdown(false);
+                                  }}
+                                  className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full w-full mb-2 focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(option.value as LeadStatus)} border-transparent hover:opacity-80 hover:scale-105`}
+                                >
+                                  {getStatusIcon(option.value as LeadStatus)}
+                                  <span className="ml-2 capitalize">{option.label}</span>
+                                </button>
+                              ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
                     <div>
                       <p className="text-xs text-gray-500">Lead Source</p>
                       <p className="font-medium">{selectedCustomer.leadSource || 'Direct'}</p>

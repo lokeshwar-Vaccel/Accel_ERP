@@ -21,6 +21,7 @@ const moduleMap = {
   dashboard: 'Dashboard',
   lead_management: 'Lead Management',
   user_management: 'User Management',
+  quotation_management: 'Quotation Management',
   product_management: 'Product Management',
   inventory_management: 'Inventory Management',
   service_management: 'Service Management',
@@ -107,6 +108,7 @@ export const UserManagement: React.FC = () => {
     'dashboard',
     'lead_management',
     'user_management',
+    'quotation_management',
     'product_management',
     'inventory_management',
     'service_management',
@@ -124,6 +126,7 @@ export const UserManagement: React.FC = () => {
     hr: [
       'dashboard',
       'user_management',
+      'quotation_management',
       'inventory_management',
       'purchase_orders',
       'lead_management',

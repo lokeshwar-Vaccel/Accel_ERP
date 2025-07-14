@@ -33,6 +33,7 @@ const sampleUsers = [
       { module: 'dashboard', access: true, permission: 'admin' },
       { module: 'lead_management', access: true, permission: 'admin' },
       { module: 'user_management', access: true, permission: 'admin' },
+      { module: 'quotation_management', access: true, permission: 'admin' },
       { module: 'product_management', access: true, permission: 'admin' },
       { module: 'inventory_management', access: true, permission: 'admin' },
       { module: 'billing', access: true, permission: 'admin' },
@@ -56,6 +57,7 @@ const sampleUsers = [
       { module: 'dashboard', access: true, permission: 'write' },
       { module: 'lead_management', access: true, permission: 'write' },
       { module: 'user_management', access: true, permission: 'read' },
+      { module: 'quotation_management', access: true, permission: 'read' },
       { module: 'product_management', access: true, permission: 'write' },
       { module: 'inventory_management', access: true, permission: 'write' },
       { module: 'service_management', access: true, permission: 'write' },
@@ -106,6 +108,7 @@ const sampleUsers = [
     moduleAccess: [
       { module: 'dashboard', access: true, permission: 'read' },
       { module: 'user_management', access: true, permission: 'write' },
+      { module: 'quotation_management', access: true, permission: 'write' },
       { module: 'inventory_management', access: true, permission: 'read' },
       { module: 'purchase_orders', access: true, permission: 'read' },
       { module: 'reports_analytics', access: true, permission: 'read' },

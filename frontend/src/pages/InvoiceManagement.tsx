@@ -3015,7 +3015,7 @@ const InvoiceManagement: React.FC = () => {
                       {(selectedInvoice.items || []).map((item: any, index: number) => (
                         <tr key={index}>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item?.product?.partNo}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item?.partNo}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode ? (
