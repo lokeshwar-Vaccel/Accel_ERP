@@ -2,7 +2,37 @@ import { Response, NextFunction } from 'express';
 import { Product } from '../models/Product';
 import { AuthenticatedRequest, APIResponse, ProductCategory, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
-import { Stock } from '../models/Stock';
+import { Stock, StockLocation } from '../models/Stock';
+import mongoose from 'mongoose';
+
+// Helper function to get or create default location/room/rack for automatic stock creation
+const getOrCreateDefaultLocation = async () => {
+  try {
+    // Try to find existing default location
+    let defaultLocation = await StockLocation.findOne({ name: 'Default Location' });
+    
+    if (!defaultLocation) {
+      // Create default location if it doesn't exist
+      defaultLocation = await StockLocation.create({
+        name: 'Default Location',
+        address: 'Main Office - General Inventory',
+        type: 'main_office',
+        contactPerson: 'Inventory Manager',
+        isActive: true
+      });
+    }
+
+    return {
+      locationId: defaultLocation._id,
+      roomId: null, // Room and rack are optional
+      rackId: null
+    };
+  } catch (error) {
+    console.error('Error getting/creating default location:', error);
+    // Return null if we can't create default location
+    return null;
+  }
+};
 
 // @desc    Get all products
 // @route   GET /api/v1/products
@@ -129,18 +159,32 @@ export const createProduct = async (
       createdBy: req.user!.id
     };
   
-
     const product = await Product.create(productData);
 
-    // Create stock entry if location is provided
+    // Always create stock entry - use provided location or default location
     let stock = null;
-    if (product && req.body.location) {
-      try {
+    try {
+      let locationId = req.body.location;
+      let roomId = req.body.room || null;
+      let rackId = req.body.rack || null;
+
+      // If no location provided, get or create default location
+      if (!locationId) {
+        const defaultLocation = await getOrCreateDefaultLocation();
+        if (defaultLocation) {
+          locationId = defaultLocation.locationId;
+          roomId = defaultLocation.roomId;
+          rackId = defaultLocation.rackId;
+        }
+      }
+
+      // Create stock entry if we have a location
+      if (locationId) {
         const stockData = {
           product: product._id,
-          location: req.body.location,
-          room: req.body.room || null,
-          rack: req.body.rack || null,
+          location: locationId,
+          room: roomId,
+          rack: rackId,
           quantity: req.body.quantity || 0,
           availableQuantity: req.body.quantity || 0,
           reservedQuantity: 0,
@@ -148,11 +192,14 @@ export const createProduct = async (
         };
 
         stock = await Stock.create(stockData);
-      } catch (stockError) {
-        console.error('Error creating stock entry:', stockError);
-        // Don't fail product creation if stock creation fails
-        // Just log the error and continue
+        console.log('Stock entry created successfully:', stock._id);
+      } else {
+        console.warn('Could not create stock entry - no location available');
       }
+    } catch (stockError) {
+      console.error('Error creating stock entry:', stockError);
+      // Don't fail product creation if stock creation fails
+      // Just log the error and continue
     }
 
     const populatedProduct = await Product.findById(product._id)
@@ -160,9 +207,12 @@ export const createProduct = async (
 
     const response: APIResponse = {
       success: true,
-      message: 'Product created successfully',
+      message: stock 
+        ? 'Product created successfully and added to inventory' 
+        : 'Product created successfully (inventory entry failed)',
       data: {
-        product: populatedProduct
+        product: populatedProduct,
+        stock: stock
       }
     };
 
