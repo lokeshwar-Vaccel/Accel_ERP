@@ -352,6 +352,10 @@ const InvoiceManagement: React.FC = () => {
 
   // Add search state for product dropdowns
   const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
+  
+  // Add search state for UOM dropdowns
+  const [uomSearchTerms, setUomSearchTerms] = useState<Record<number, string>>({});
+  const [showUomDropdowns, setShowUomDropdowns] = useState<Record<number, boolean>>({});
 
   // Filter products based on search term
   const getFilteredProducts = (searchTerm: string = '') => {
@@ -377,6 +381,26 @@ const InvoiceManagement: React.FC = () => {
   // Update product search term
   const updateProductSearchTerm = (itemIndex: number, searchTerm: string) => {
     setProductSearchTerms(prev => ({
+      ...prev,
+      [itemIndex]: searchTerm
+    }));
+  };
+
+  // UOM options
+  const UOM_OPTIONS = [
+    'pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'
+  ];
+
+  // Filter UOM based on search term
+  const getFilteredUomOptions = (searchTerm: string = '') => {
+    if (!searchTerm.trim()) return UOM_OPTIONS;
+    const term = searchTerm.toLowerCase();
+    return UOM_OPTIONS.filter(uom => uom.toLowerCase().includes(term));
+  };
+
+  // Update UOM search term
+  const updateUomSearchTerm = (itemIndex: number, searchTerm: string) => {
+    setUomSearchTerms(prev => ({
       ...prev,
       [itemIndex]: searchTerm
     }));
@@ -854,6 +878,8 @@ const InvoiceManagement: React.FC = () => {
     setShowLocationDropdown(false);
     setShowInvoiceTypeDropdown(false);
     setShowProductDropdowns({});
+    setShowUomDropdowns({});
+    setUomSearchTerms({});
     setShowCreateModal(true);
   };
 
@@ -2786,27 +2812,55 @@ const InvoiceManagement: React.FC = () => {
                             )}
                           </div>
 
-                          <div>
+                          <div className="relative">
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                               UOM
                             </label>
-                            <select
-                              value={item.uom || 'pcs'}
-                              onChange={(e) => updateInvoiceItem(index, 'uom', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                              <option value="pcs">pcs</option>
-                              <option value="kg">kg</option>
-                              <option value="litre">litre</option>
-                              <option value="meter">meter</option>
-                              <option value="sq.ft">sq.ft</option>
-                              <option value="hour">hour</option>
-                              <option value="set">set</option>
-                              <option value="box">box</option>
-                              <option value="can">can</option>
-                              <option value="roll">roll</option>
-                              <option value="nos">nos</option>
-                            </select>
+                            <div className="relative">
+                              <button
+                                onClick={() => setShowUomDropdowns({
+                                  ...showUomDropdowns,
+                                  [index]: !showUomDropdowns[index]
+                                })}
+                                className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
+                              >
+                                <span className="text-gray-700">{item.uom || 'pcs'}</span>
+                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showUomDropdowns[index] ? 'rotate-180' : ''}`} />
+                              </button>
+                              {showUomDropdowns[index] && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-hidden flex flex-col">
+                                  <div className="p-2 border-b border-gray-200">
+                                    <input
+                                      type="text"
+                                      placeholder="Search UOM..."
+                                      value={uomSearchTerms[index] || ''}
+                                      onChange={(e) => updateUomSearchTerm(index, e.target.value)}
+                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                      autoFocus
+                                    />
+                                  </div>
+                                  <div className="overflow-y-auto max-h-48 py-0.5">
+                                    {getFilteredUomOptions(uomSearchTerms[index] || '').length === 0 ? (
+                                      <div className="px-3 py-2 text-sm text-gray-500">No UOM found</div>
+                                    ) : (
+                                      getFilteredUomOptions(uomSearchTerms[index] || '').map(uomOption => (
+                                        <button
+                                          key={uomOption}
+                                          onClick={() => {
+                                            updateInvoiceItem(index, 'uom', uomOption);
+                                            setShowUomDropdowns({ ...showUomDropdowns, [index]: false });
+                                            updateUomSearchTerm(index, '');
+                                          }}
+                                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${item.uom === uomOption ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                        >
+                                          {uomOption}
+                                        </button>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
 
