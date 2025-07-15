@@ -1069,20 +1069,34 @@ const CustomerManagement: React.FC = () => {
 
 
           {/* Insert this above the filters section, after <PageHeader ... /> */}
-          <div className="flex space-x-2 mb-4">
+          <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
             <button
-              className={`px-4 py-2 rounded-lg font-semibold focus:outline-none transition-colors border-b-2 ${customerTypeTab === 'customer' ? 'border-blue-600 text-blue-700 bg-white' : 'border-transparent text-gray-500 bg-gray-100 hover:text-blue-600'}`}
+              className={`flex-1 px-6 py-3 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                customerTypeTab === 'customer' 
+                  ? 'bg-white text-blue-700 shadow-sm border border-gray-200' 
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
               onClick={() => setCustomerTypeTab('customer')}
               type="button"
             >
-              Customer
+              <div className="flex items-center justify-center space-x-2">
+                <Users className="w-4 h-4" />
+                <span>Customer</span>
+              </div>
             </button>
             <button
-              className={`px-4 py-2 rounded-lg font-semibold focus:outline-none transition-colors border-b-2 ${customerTypeTab === 'supplier' ? 'border-blue-600 text-blue-700 bg-white' : 'border-transparent text-gray-500 bg-gray-100 hover:text-blue-600'}`}
+              className={`flex-1 px-6 py-3 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                customerTypeTab === 'supplier' 
+                  ? 'bg-white text-blue-700 shadow-sm border border-gray-200' 
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
               onClick={() => setCustomerTypeTab('supplier')}
               type="button"
             >
-              Supplier
+              <div className="flex items-center justify-center space-x-2">
+                <Building className="w-4 h-4" />
+                <span>Supplier</span>
+              </div>
             </button>
           </div>
         </div>
@@ -1110,7 +1124,6 @@ const CustomerManagement: React.FC = () => {
                   Lead Source
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Designation</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -1119,13 +1132,13 @@ const CustomerManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                     Loading customers...
                   </td>
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                     <div className="text-center">
                       <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                       <p className="text-lg font-medium text-gray-900 mb-2">{customerTypeTab === 'customer'?"No Customers found":"No Customers found"}</p>
@@ -1191,11 +1204,6 @@ const CustomerManagement: React.FC = () => {
                       {customer.leadSource || 'Direct'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">{customer.designation || '-'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {customer.addresses && customer.addresses.length > 0 ? (
-                        <span>{customer.addresses[0].address}, {customer.addresses[0].district}, {customer.addresses[0].state}, {customer.addresses[0].pincode}</span>
-                      ) : '-'}
-                    </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button
@@ -2220,6 +2228,15 @@ const CustomerManagement: React.FC = () => {
                     <div>
                       <p className="text-xs text-gray-500">Created</p>
                       <p className="font-medium">{new Date(selectedCustomer.createdAt).toLocaleDateString()}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <p className="text-xs text-gray-500">Address</p>
+                      <p className="font-medium text-sm">
+                        {selectedCustomer.addresses && selectedCustomer.addresses.length > 0 
+                          ? selectedCustomer.addresses.find(addr => addr.isPrimary)?.address || selectedCustomer.addresses[0].address
+                          : selectedCustomer.address || 'No address provided'
+                        }
+                      </p>
                     </div>
                   </div>
                   {/* Removed Quick Actions dropdown here */}

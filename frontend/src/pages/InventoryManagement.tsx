@@ -244,10 +244,9 @@ const InventoryManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(100);
   
-  // Debug: Ensure limit is never too small
+  // Ensure limit is never too small
   React.useEffect(() => {
     if (limit < 10) {
-      console.warn('📊 Fixing small limit value:', limit, '→ 100');
       setLimit(100);
     }
   }, [limit]);
@@ -259,9 +258,11 @@ const InventoryManagement: React.FC = () => {
     category: '',
     location: '',
     stockStatus: 'all',
-    sortBy: 'name',
+    sortBy: 'product.name',
     sortOrder: 'asc'
   });
+
+
 
   const onFiltersChange = useCallback((newFilters: Partial<any>) => {
     setFilters((prev: any) => ({ ...prev, ...newFilters }));
@@ -607,10 +608,8 @@ const InventoryManagement: React.FC = () => {
   };
 
   const fetchInventory = async () => {
-    console.log('📊 Fetching inventory with pagination:', { currentPage, limit, totalPages, totalDatas });
-    
     // Build sort parameter from filters
-    const sortField = filters.sortBy || 'name';
+    const sortField = filters.sortBy || 'product.name';
     const sortDirection = filters.sortOrder === 'desc' ? '-' : '';
     const sortParam = `${sortDirection}${sortField}`;
 
@@ -633,9 +632,6 @@ const InventoryManagement: React.FC = () => {
     try {
       const response = await apiClient.stock.getStock(params);
 
-      console.log('📊 Pagination response:', response.pagination);
-      console.log('📊 Inventory data received:', response.data?.stockLevels?.length || 0, 'items');
-      
       setCurrentPage(response.pagination.page);
       // Don't override limit from backend - keep frontend control
       // setLimit(response.pagination.limit);
@@ -651,6 +647,8 @@ const InventoryManagement: React.FC = () => {
         }
       }
       setInventory(stockData);
+      // Scroll to top after data is loaded
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
       console.error('Error fetching inventory:', error);
       setInventory([]);
@@ -1282,6 +1280,9 @@ const InventoryManagement: React.FC = () => {
         summary.netMovement = summary.totalInward - summary.totalOutward;
         setLedgerSummary(summary);
       }
+      
+      // Scroll to top after data is loaded
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
       console.error('Error fetching stock ledger:', error);
       setStockLedgerData([]);
@@ -1356,8 +1357,8 @@ const InventoryManagement: React.FC = () => {
       render: (value, record) => {
         const status = getStockStatus(record);
         return (
-          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
-            {/* {status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} */}
+          <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
+            {status.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
           </span>
         );
       }
@@ -2090,7 +2091,7 @@ const InventoryManagement: React.FC = () => {
                           room: '',
                           rack: '',
                           stockStatus: 'all',
-                          sortBy: 'name',
+                          sortBy: 'product.name',
                           sortOrder: 'asc'
                         });
                         setShowAdvancedFilters(false);
@@ -2117,7 +2118,7 @@ const InventoryManagement: React.FC = () => {
         )}
 
         {/* Active Filters & Results Summary - Only show when filters are active */}
-        {(filters.search || filters.category || filters.dept || filters.brand || filters.location || filters.room || filters.rack || filters.stockStatus !== 'all' || filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
+        {(filters.search || filters.category || filters.dept || filters.brand || filters.location || filters.room || filters.rack || filters.stockStatus !== 'all' || filters.sortBy !== 'product.name' || filters.sortOrder !== 'asc') && (
           <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-100">
             <div className="flex items-center text-sm text-gray-600">
               <span className="font-medium">{inventory.length}</span>
@@ -2130,7 +2131,7 @@ const InventoryManagement: React.FC = () => {
               <span className="text-xs text-gray-500 font-medium">Active filters:</span>
 
               {filters.search && (
-                <span className="inline-flex items-center px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
+                <span className="inline-flex items-center px-1.5 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
                   "{filters.search}"
                   <button
                     onClick={() => onFiltersChange({ search: '' })}
@@ -2142,7 +2143,7 @@ const InventoryManagement: React.FC = () => {
               )}
 
               {filters.category && (
-                <span className="inline-flex items-center px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                <span className="inline-flex items-center px-1.5 py-0.5 bg-green-100 text-green-800 text-xs rounded-full">
                   {filters.category}
                   <button
                     onClick={() => onFiltersChange({ category: '' })}
@@ -2154,7 +2155,7 @@ const InventoryManagement: React.FC = () => {
               )}
 
               {filters.dept && (
-                <span className="inline-flex items-center px-2 py-1 bg-purple-100 text-purple-800 text-xs rounded-full">
+                <span className="inline-flex items-center px-1.5 py-0.5 bg-purple-100 text-purple-800 text-xs rounded-full">
                   {filters.dept}
                   <button
                     onClick={() => onFiltersChange({ dept: '' })}
@@ -2166,7 +2167,7 @@ const InventoryManagement: React.FC = () => {
               )}
 
               {filters.location && (
-                <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
+                <span className="inline-flex items-center px-1.5 py-0.5 bg-indigo-100 text-indigo-800 text-xs rounded-full">
                   {locations.find(l => l._id === filters.location)?.name}
                   <button
                     onClick={() => onFiltersChange({ location: '' })}
@@ -2178,7 +2179,7 @@ const InventoryManagement: React.FC = () => {
               )}
 
               {filters.stockStatus !== 'all' && (
-                <span className="inline-flex items-center px-2 py-1 bg-orange-100 text-orange-800 text-xs rounded-full">
+                <span className="inline-flex items-center px-1.5 py-0.5 bg-orange-100 text-orange-800 text-xs rounded-full">
                   {stockStatusOptions.find(s => s.value === filters.stockStatus)?.label}
                   <button
                     onClick={() => onFiltersChange({ stockStatus: 'all' })}
@@ -2189,11 +2190,11 @@ const InventoryManagement: React.FC = () => {
                 </span>
               )}
 
-              {(filters.sortBy !== 'name' || filters.sortOrder !== 'asc') && (
-                <span className="inline-flex items-center px-2 py-1 bg-indigo-100 text-indigo-800 text-xs rounded-full">
+              {(filters.sortBy !== 'product.name' || filters.sortOrder !== 'asc') && (
+                <span className="inline-flex items-center px-1.5 py-0.5 bg-indigo-100 text-indigo-800 text-xs rounded-full">
                   {getSortByLabel()} - {getSortOrderLabel()}
                   <button
-                    onClick={() => onFiltersChange({ sortBy: 'name', sortOrder: 'asc' })}
+                    onClick={() => onFiltersChange({ sortBy: 'product.name', sortOrder: 'asc' })}
                     className="ml-1 text-indigo-600 hover:text-indigo-800 font-bold"
                   >
                     ×
@@ -2238,11 +2239,11 @@ const InventoryManagement: React.FC = () => {
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Product Details</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Part No</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">CPCB No</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">UOM</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Location</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Stock Levels</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Location</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">CPCB No</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">MRP</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">UOM</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Pricing</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">Status & Department</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Technical Info</th>
@@ -2268,7 +2269,7 @@ const InventoryManagement: React.FC = () => {
                         <div className="flex items-start">
                           <Package className="w-4 h-4 text-gray-400 mr-2 mt-1 flex-shrink-0" />
                           <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium text-gray-900 truncate">
+                            <div className="text-sm font-medium text-gray-900 break-words">
                               {item.product?.name}
                             </div>
                             {/* <div className="text-xs text-gray-500">
@@ -2280,9 +2281,27 @@ const InventoryManagement: React.FC = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.partNo || 'N/A'}</td>
-                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.cpcbNo || 'N/A'}</td>
-                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.uom || 'N/A'}</td>
+                      <td className="px-4 py-4 text-xs font-bold text-black">{item.product?.partNo || 'N/A'}</td>
+                      <td className="px-4 py-4 w-36">
+                        <div className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Current:</span>
+                            <span className="text-sm font-bold text-gray-900">{item.quantity}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Reserved:</span>
+                            <span className="text-xs text-orange-600 font-medium">{item.reservedQuantity || 0}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">Available:</span>
+                            <span className="text-xs text-green-600 font-medium">{item.availableQuantity}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            {/* <span className="text-xs text-gray-500">UOM:</span>
+                            <span className="text-xs text-green-600 font-medium">{item.product?.uom || 'N/A'}</span> */}
+                          </div>
+                        </div>
+                      </td>
 
                       <td className="px-4 py-4 w-40">
                         <div className="space-y-1">
@@ -2306,28 +2325,9 @@ const InventoryManagement: React.FC = () => {
                           </div>
                         </div>
                       </td>
-
-                      <td className="px-4 py-4 w-36">
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Current:</span>
-                            <span className="text-sm font-bold text-gray-900">{item.quantity}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Reserved:</span>
-                            <span className="text-xs text-orange-600 font-medium">{item.reservedQuantity || 0}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Available:</span>
-                            <span className="text-xs text-green-600 font-medium">{item.availableQuantity}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            {/* <span className="text-xs text-gray-500">UOM:</span>
-                            <span className="text-xs text-green-600 font-medium">{item.product?.uom || 'N/A'}</span> */}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-sm font-medium text-gray-900">{item.product?.price !== undefined ? `₹${item.product.price}` : 'N/A'}</td>
+                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.cpcbNo || 'N/A'}</td>
+                      <td className="px-4 py-4 text-sm font-medium text-gray-900">{item.product?.price !== undefined ? `₹${item.product.price.toFixed(2)}` : 'N/A'}</td>
+                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.uom || 'N/A'}</td>
 
                       <td className="px-4 py-4 w-36">
                         <div className="space-y-1">
@@ -2345,12 +2345,12 @@ const InventoryManagement: React.FC = () => {
 
                       <td className="px-4 py-4 w-36 uppercase">
                         <div className="space-y-2">
-                          <Badge variant={status.variant}>
-                            <StatusIcon className="w-3 h-3 mr-1" />
+                          <Badge variant={status.variant} size="xs">
+                            <StatusIcon className="w-2 h-2 mr-1" />
                             {status.label}
                           </Badge>
                           <div>
-                            <Badge variant="default" size="sm">
+                            <Badge variant="default" size="xs">
                               {item.product?.dept}
                             </Badge>
                           </div>
@@ -2406,12 +2406,6 @@ const InventoryManagement: React.FC = () => {
         </div>
       </div>
 
-                  {/* Debug pagination info */}
-                  <div className="mb-2 text-xs text-gray-500 bg-yellow-50 p-2 rounded">
-                    Debug: Page {currentPage} of {totalPages}, Limit: {limit}, Total: {totalDatas}, 
-                    Showing: {inventory.length} items
-                  </div>
-                  
                   <Pagination
                     currentPage={currentPage}
                     totalPages={totalPages}
@@ -2781,7 +2775,7 @@ const InventoryManagement: React.FC = () => {
                               <div className="flex-1">
                                 <div className="flex items-center space-x-2">
                                   <h4 className="font-medium text-gray-900">{location.name}</h4>
-                                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${location.isActive
+                                  <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${location.isActive
                                     ? 'bg-green-100 text-green-800'
                                     : 'bg-red-100 text-red-800'
                                     }`}>
@@ -2837,7 +2831,7 @@ const InventoryManagement: React.FC = () => {
                                 <div className="flex items-center">
                                   <Archive className="w-5 h-5 text-green-500 mr-2" />
                                   <h4 className="text-lg font-medium text-gray-900">{room.name}</h4>
-                                  <span className={`ml-2 px-2 py-1 text-xs rounded-full ${room.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${room.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                                     }`}>
                                     {room.isActive ? 'Active' : 'Inactive'}
                                   </span>
@@ -2888,7 +2882,7 @@ const InventoryManagement: React.FC = () => {
                                 <div className="flex items-center">
                                   <MapPin className="w-5 h-5 text-purple-500 mr-2" />
                                   <h4 className="text-lg font-medium text-gray-900">{rack.name}</h4>
-                                  <span className={`ml-2 px-2 py-1 text-xs rounded-full ${rack.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${rack.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                                     }`}>
                                     {rack.isActive ? 'Active' : 'Inactive'}
                                   </span>
@@ -2940,9 +2934,9 @@ const InventoryManagement: React.FC = () => {
                           <div className="flex-1">
                             <div className="flex items-center space-x-2">
                               <h4 className="font-medium text-gray-900">{location.name}</h4>
-                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                                location.isActive 
-                                  ? 'bg-green-100 text-green-800' 
+                                            <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${
+                location.isActive 
+                  ? 'bg-green-100 text-green-800' 
                                   : 'bg-red-100 text-red-800'
                               }`}>
                                 {location.isActive ? 'Active' : 'Inactive'}
@@ -3751,7 +3745,7 @@ const InventoryManagement: React.FC = () => {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-xs">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${transaction.type === 'inward' ? 'bg-green-100 text-green-800' :
+                            <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${transaction.type === 'inward' ? 'bg-green-100 text-green-800' :
                               transaction.type === 'outward' ? 'bg-red-100 text-red-800' :
                                 transaction.type === 'transfer' ? 'bg-purple-100 text-purple-800' :
                                   transaction.type === 'reservation' ? 'bg-orange-100 text-orange-800' :
@@ -4060,7 +4054,7 @@ const InventoryManagement: React.FC = () => {
                           <div className="text-gray-500 capitalize">{ledger.location?.type?.replace('_', ' ')}</div>
                         </td>
                         <td className="px-4 py-3">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${ledger.transactionType === 'inward' ? 'bg-green-100 text-green-800' :
+                          <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${ledger.transactionType === 'inward' ? 'bg-green-100 text-green-800' :
                             ledger.transactionType === 'outward' ? 'bg-red-100 text-red-800' :
                               ledger.transactionType === 'transfer' ? 'bg-purple-100 text-purple-800' :
                                 ledger.transactionType === 'reservation' ? 'bg-orange-100 text-orange-800' :
@@ -4411,7 +4405,7 @@ const InventoryManagement: React.FC = () => {
                             <td className="px-3 py-2">{item.QTY}</td>
                             <td className="px-3 py-2">₹{item.MRP?.toLocaleString()}</td>
                             <td className="px-3 py-2">
-                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
                                 item.status === 'new' ? 'bg-green-100 text-green-800' :
                                 item.status === 'existing' ? 'bg-yellow-100 text-yellow-800' :
                                 'bg-red-100 text-red-800'

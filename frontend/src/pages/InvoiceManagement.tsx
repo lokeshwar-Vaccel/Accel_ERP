@@ -1257,8 +1257,10 @@ const InvoiceManagement: React.FC = () => {
       console.log("stockItem-2:", quantity, available);
 
 
-      const isValid = quantity <= available;
-      const message = !isValid
+      const isValid = quantity <= available && available > 0;
+      const message = available === 0 
+        ? `Out of stock`
+        : !isValid
         ? `Only ${available} units available`
         : `${available} units available`;
 
@@ -1305,8 +1307,14 @@ const InvoiceManagement: React.FC = () => {
       }
 
       // Check stock validation if stock reduction is enabled
-      if (newInvoice.reduceStock && stockValidation[index] && !stockValidation[index].isValid) {
-        errors[`item_${index}_stock`] = stockValidation[index].message;
+      if (newInvoice.reduceStock && stockValidation[index]) {
+        const stockInfo = stockValidation[index];
+        if (!stockInfo.isValid || stockInfo.available === 0) {
+          errors[`item_${index}_stock`] = stockInfo.message;
+        }
+        if (item.quantity > stockInfo.available) {
+          errors[`item_${index}_stock`] = `Cannot sell ${item.quantity} units. Only ${stockInfo.available} available.`;
+        }
       }
     });
 
@@ -1716,92 +1724,165 @@ const InvoiceManagement: React.FC = () => {
   const generatePDF = () => {
     if (!selectedInvoice) return;
 
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.width;
-    const pageHeight = doc.internal.pageSize.height;
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 12;
 
-    // Company Header
-    doc.setFontSize(20);
+    // Header: Company Info
+    doc.setFontSize(13);
     doc.setFont('helvetica', 'bold');
-    doc.text('INVOICE', pageWidth / 2, 20, { align: 'center' });
-
-    // Invoice Details
-    doc.setFontSize(12);
+    doc.text(generalSettings?.companyName || 'Sun Power Services', 10, y);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(`Invoice #: ${selectedInvoice.invoiceNumber}`, 20, 40);
-    doc.text(`Issue Date: ${new Date(selectedInvoice.issueDate).toLocaleDateString()}`, 20, 50);
-    doc.text(`Due Date: ${new Date(selectedInvoice.dueDate).toLocaleDateString()}`, 20, 60);
+    y += 5;
+    doc.text(generalSettings?.companyAddress || '', 10, y);
+    y += 5;
+    doc.text(`GSTIN: ${generalSettings?.companyGSTIN || ''}`, 10, y);
+    y += 5;
+    doc.text(`Contact: ${generalSettings?.companyPhone || ''}  Email: ${generalSettings?.companyEmail || ''}`, 10, y);
+    y += 8;
 
-    // Status badges
-    doc.text(`Status: ${selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}`, 140, 40);
-    doc.text(`Payment: ${selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}`, 140, 50);
-
-    // Customer Info
+    // Invoice Details Table
     doc.setFont('helvetica', 'bold');
-    doc.text('Bill To:', 20, 80);
+    doc.setFontSize(11);
+    doc.text('Sales Invoice', pageWidth / 2, y, { align: 'center' });
+    doc.setFontSize(9);
+    y += 6;
     doc.setFont('helvetica', 'normal');
-    doc.text(selectedInvoice.customer ? selectedInvoice.customer.name : selectedInvoice.user?.firstName || '', 20, 90);
-    doc.text(selectedInvoice.customer ? selectedInvoice.customer.email : selectedInvoice.user?.email || '', 20, 100);
-    if (selectedInvoice.customer?.phone) {
-      doc.text(selectedInvoice.customer.phone, 20, 110);
-    }
+    doc.text(`Invoice No: ${selectedInvoice.invoiceNumber || ''}`, 10, y);
+    doc.text(`Dated: ${new Date(selectedInvoice.issueDate).toLocaleDateString()}`, 80, y);
+    doc.text(`Mode/Terms of Payment: ${selectedInvoice.termsOfDelivery || ''}`, 150, y);
+    y += 5;
+    doc.text(`Reference No. & Date: ${selectedInvoice.referenceNo || ''} ${selectedInvoice.referenceDate || ''}`, 10, y);
+    doc.text(`Buyer's Order No: ${selectedInvoice.buyersOrderNo || ''}`, 80, y);
+    doc.text(`Dispatch Doc No: ${selectedInvoice.dispatchDocNo || ''}`, 150, y);
+    y += 5;
+    doc.text(`Delivery Note Date: ${selectedInvoice.deliveryNoteDate || ''}`, 10, y);
+    doc.text(`Dispatched Through: ${selectedInvoice.dispatchedThrough || ''}`, 80, y);
+    doc.text(`Destination: ${selectedInvoice.destination || ''}`, 150, y);
+    y += 8;
+
+    // Buyer/Consignee Details
+    doc.setFont('helvetica', 'bold');
+    doc.text('Buyer:', 10, y);
+    doc.setFont('helvetica', 'normal');
+    doc.text(selectedInvoice.customer?.name || '', 30, y);
+    y += 5;
+    doc.text(selectedInvoice.customer?.email || '', 30, y);
+    y += 5;
+    doc.text(selectedInvoice.customer?.phone || '', 30, y);
+    y += 5;
+    doc.text(`GSTIN: ${selectedInvoice.customer?.gstNumber || ''}`, 30, y);
+    y += 5;
+    doc.text(`State Name: ${selectedInvoice.customer?.state || ''}, Code: ${selectedInvoice.customer?.stateCode || ''}`, 30, y);
+    y += 8;
 
     // Items Table
-    const tableStartY = 130;
-    const tableData = selectedInvoice.items.map((item: any) => [
-      item.description,
-      item.quantity.toString(),
-      `₹${item.unitPrice.toLocaleString()}`,
-      `${item.taxRate}%`,
-      `₹${(item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)).toLocaleString()}`
+    const tableHead = [[
+      'S.No', 'Description of Goods and Services', 'HSN/SAC', 'GST Rate', 'Part No.', 'Quantity', 'UOM', 'Rate', 'per', 'Disc. %', 'Amount'
+    ]];
+    const tableBody = selectedInvoice.items.map((item: any, idx: number) => [
+      (idx + 1).toString(),
+      item.description || '',
+      item.hsnSac || '',
+      (item.taxRate || 0) + '%',
+      item.partNo || '',
+      item.quantity?.toFixed(2) || '',
+      item.uom || '',
+      item.unitPrice?.toFixed(2) || '',
+      item.uom || '',
+      (item.discount || 0).toString(),
+      ((item.quantity * item.unitPrice - ((item.discount || 0) * item.quantity * item.unitPrice / 100) + ((item.quantity * item.unitPrice - ((item.discount || 0) * item.quantity * item.unitPrice / 100)) * (item.taxRate || 0) / 100)).toFixed(2))
     ]);
-
     autoTable(doc, {
-      head: [['Description', 'Qty', 'Unit Price', 'Tax', 'Total']],
-      body: tableData,
-      startY: tableStartY,
+      head: tableHead,
+      body: tableBody,
+      startY: y,
       theme: 'grid',
-      styles: { fontSize: 10 },
-      headStyles: { fillColor: [71, 85, 105], textColor: 255 },
-      alternateRowStyles: { fillColor: [249, 250, 251] },
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [220, 220, 220], textColor: 0 },
+      columnStyles: {
+        0: { cellWidth: 8 },
+        1: { cellWidth: 50 },
+        2: { cellWidth: 18 },
+        3: { cellWidth: 14 },
+        4: { cellWidth: 18 },
+        5: { cellWidth: 14 },
+        6: { cellWidth: 12 },
+        7: { cellWidth: 16 },
+        8: { cellWidth: 12 },
+        9: { cellWidth: 12 },
+        10: { cellWidth: 22 }
+      }
     });
-
-    // Calculate totals
-    const subtotal = selectedInvoice.items.reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice), 0);
-    const totalTax = selectedInvoice.items.reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice * item.taxRate / 100), 0);
     // @ts-ignore
-    const finalY = (doc as any).lastAutoTable?.finalY + 20;
+    y = (doc as any).lastAutoTable.finalY + 4;
 
-    // Summary
-    doc.setFont('helvetica', 'normal');
-    doc.text('Subtotal:', 140, finalY);
-    doc.text(`₹${subtotal.toLocaleString()}`, 170, finalY);
-    doc.text('Total Tax:', 140, finalY + 10);
-    doc.text(`₹${totalTax.toLocaleString()}`, 170, finalY + 10);
-    doc.text('Items Count:', 140, finalY + 20);
-    doc.text(selectedInvoice.items.length.toString(), 170, finalY + 20);
-
-    // Total Amount
+    // Output IGST, Round Off, Total
+    const subtotal = selectedInvoice.items.reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice), 0);
+    const totalTax = selectedInvoice.items.reduce((sum: number, item: any) => sum + ((item.quantity * item.unitPrice - ((item.discount || 0) * item.quantity * item.unitPrice / 100)) * (item.taxRate || 0) / 100), 0);
+    const totalDiscount = selectedInvoice.items.reduce((sum: number, item: any) => sum + ((item.discount || 0) * item.quantity * item.unitPrice / 100), 0);
+    const grandTotal = subtotal - totalDiscount + totalTax;
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(14);
-    doc.text('Total Amount:', 140, finalY + 35);
-    doc.text(`₹${selectedInvoice.totalAmount.toLocaleString()}`, 170, finalY + 35);
+    doc.text(`Output IGST:`, 150, y);
+    doc.text(`${totalTax.toFixed(2)}`, 180, y);
+    y += 5;
+    doc.text(`Round Off:`, 150, y);
+    doc.text(`${(Math.round(grandTotal) - grandTotal).toFixed(2)}`, 180, y);
+    y += 5;
+    doc.text(`Total:`, 150, y);
+    doc.text(`${Math.round(grandTotal).toFixed(2)}`, 180, y);
+    y += 8;
 
-    // Amount mismatch warning
-    if (selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal) {
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(255, 0, 0);
-      doc.text(`External Total: ₹${selectedInvoice.externalInvoiceTotal?.toLocaleString()}`, 140, finalY + 45);
-      doc.setTextColor(0, 0, 0);
-    }
+    // Amount in Words
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Amount Chargeable (in words):`, 10, y);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`${numberToWords(Math.round(grandTotal))} Only`, 70, y);
+    y += 8;
 
-    // Save PDF
+    // Tax Summary Table
+    doc.setFont('helvetica', 'normal');
+    autoTable(doc, {
+      head: [['Taxable Value', 'Integrated Tax Rate', 'Integrated Tax Amount', 'Total']],
+      body: [[
+        subtotal.toFixed(2),
+        (selectedInvoice.items[0]?.taxRate || 0) + '%',
+        totalTax.toFixed(2),
+        (subtotal + totalTax).toFixed(2)
+      ]],
+      startY: y,
+      theme: 'grid',
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [220, 220, 220], textColor: 0 }
+    });
+    // @ts-ignore
+    y = (doc as any).lastAutoTable.finalY + 8;
+
+    // Footer
+    doc.setFont('helvetica', 'normal');
+    doc.text('Declaration:', 10, y);
+    doc.setFont('helvetica', 'italic');
+    doc.text(selectedInvoice.declaration || '', 30, y);
+    y += 8;
+    doc.setFont('helvetica', 'normal');
+    doc.text('For ' + (generalSettings?.companyName || 'Sun Power Services'), 150, y);
+    y += 8;
+    doc.text('Authorised Signatory', 150, y);
+
     doc.save(`Invoice_${selectedInvoice.invoiceNumber}.pdf`);
   };
 
-  // Alternative: Print-friendly HTML version
+  // Helper function to convert number to words (simple, for INR)
+  function numberToWords(num: number): string {
+    // ... (implement or use a library for number to words)
+    // For now, just return the number as string
+    return num.toLocaleString('en-IN');
+  }
+
+  // Update printInvoice function
   const printInvoice = () => {
+    if (!selectedInvoice) return;
     const printContent = `
     <html>
       <head>
@@ -1809,79 +1890,79 @@ const InvoiceManagement: React.FC = () => {
         <style>
           body { font-family: Arial, sans-serif; margin: 20px; }
           .header { text-align: center; margin-bottom: 30px; }
-          .invoice-details { display: flex; justify-content: space-between; margin-bottom: 20px; }
-          .customer-info { margin-bottom: 20px; }
-          table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-          th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-          th { background-color: #f2f2f2; }
-          .total-section { text-align: right; margin-top: 20px; }
-          .mismatch-warning { color: red; font-weight: bold; margin-top: 10px; }
-          @media print { 
-            body { margin: 0; }
-            .no-print { display: none; }
-          }
+          .invoice-details, .buyer-details { width: 100%; margin-bottom: 10px; }
+          .invoice-details td, .buyer-details td { padding: 2px 6px; font-size: 12px; }
+          table.items { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+          table.items th, table.items td { border: 1px solid #333; padding: 4px; font-size: 11px; }
+          table.items th { background: #eee; }
+          .summary-table { width: 100%; margin-top: 10px; }
+          .summary-table td { font-size: 12px; padding: 2px 6px; }
+          .footer { margin-top: 30px; font-size: 12px; }
         </style>
       </head>
       <body>
         <div class="header">
-          <h1>INVOICE</h1>
-          <h2>Invoice #${selectedInvoice.invoiceNumber}</h2>
+          <h2>${generalSettings?.companyName || 'Sun Power Services'}</h2>
+          <div>${generalSettings?.companyAddress || ''}</div>
+          <div>GSTIN: ${generalSettings?.companyGSTIN || ''}</div>
+          <div>Contact: ${generalSettings?.companyPhone || ''}  Email: ${generalSettings?.companyEmail || ''}</div>
         </div>
-        
-        <div class="invoice-details">
-          <div>
-            <p><strong>Issue Date:</strong> ${new Date(selectedInvoice.issueDate).toLocaleDateString()}</p>
-            <p><strong>Due Date:</strong> ${new Date(selectedInvoice.dueDate).toLocaleDateString()}</p>
-          </div>
-          <div>
-            <p><strong>Status:</strong> ${selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1)}</p>
-            <p><strong>Payment:</strong> ${selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1)}</p>
-          </div>
-        </div>
-
-        <div class="customer-info">
-          <h3>Bill To:</h3>
-          <p><strong>${selectedInvoice.customer ? selectedInvoice.customer.name : selectedInvoice.user?.firstName || ''}</strong></p>
-          <p>${selectedInvoice.customer ? selectedInvoice.customer.email : selectedInvoice.user?.email || ''}</p>
-          ${selectedInvoice.customer?.phone ? `<p>${selectedInvoice.customer.phone}</p>` : ''}
-        </div>
-
-        <table>
+        <table class="invoice-details">
+          <tr><td>Invoice No:</td><td>${selectedInvoice.invoiceNumber || ''}</td><td>Dated:</td><td>${new Date(selectedInvoice.issueDate).toLocaleDateString()}</td></tr>
+          <tr><td>Mode/Terms of Payment:</td><td>${selectedInvoice.termsOfDelivery || ''}</td><td>Reference No. & Date:</td><td>${selectedInvoice.referenceNo || ''} ${selectedInvoice.referenceDate || ''}</td></tr>
+          <tr><td>Buyer's Order No:</td><td>${selectedInvoice.buyersOrderNo || ''}</td><td>Dispatch Doc No:</td><td>${selectedInvoice.dispatchDocNo || ''}</td></tr>
+          <tr><td>Delivery Note Date:</td><td>${selectedInvoice.deliveryNoteDate || ''}</td><td>Dispatched Through:</td><td>${selectedInvoice.dispatchedThrough || ''}</td></tr>
+          <tr><td>Destination:</td><td>${selectedInvoice.destination || ''}</td></tr>
+        </table>
+        <table class="buyer-details">
+          <tr><td>Buyer:</td><td>${selectedInvoice.customer?.name || ''}</td></tr>
+          <tr><td>Email:</td><td>${selectedInvoice.customer?.email || ''}</td></tr>
+          <tr><td>Phone:</td><td>${selectedInvoice.customer?.phone || ''}</td></tr>
+          <tr><td>GSTIN:</td><td>${selectedInvoice.customer?.gstNumber || ''}</td></tr>
+          <tr><td>State Name:</td><td>${selectedInvoice.customer?.state || ''}, Code: ${selectedInvoice.customer?.stateCode || ''}</td></tr>
+        </table>
+        <table class="items">
           <thead>
             <tr>
-              <th>Description</th>
-              <th>Qty</th>
-              <th>Unit Price</th>
-              <th>Tax</th>
-              <th>Total</th>
+              <th>S.No</th><th>Description</th><th>HSN/SAC</th><th>GST Rate</th><th>Part No.</th><th>Quantity</th><th>UOM</th><th>Rate</th><th>per</th><th>Disc. %</th><th>Amount</th>
             </tr>
           </thead>
           <tbody>
-            ${(selectedInvoice.items as any[]).map((item: any) => `
+            ${(selectedInvoice.items as any[]).map((item: any, idx: number) => `
               <tr>
-                <td>${item.description}</td>
-                <td>${item.quantity}</td>
-                <td>₹${item.unitPrice.toLocaleString()}</td>
-                <td>${item.taxRate}%</td>
-                <td>₹${(item.quantity * item.unitPrice + (item.quantity * item.unitPrice * (item.taxRate || 0) / 100)).toLocaleString()}</td>
+                <td>${idx + 1}</td>
+                <td>${item.description || ''}</td>
+                <td>${item.hsnSac || ''}</td>
+                <td>${item.taxRate || 0}%</td>
+                <td>${item.partNo || ''}</td>
+                <td>${item.quantity?.toFixed(2) || ''}</td>
+                <td>${item.uom || ''}</td>
+                <td>${item.unitPrice?.toFixed(2) || ''}</td>
+                <td>${item.uom || ''}</td>
+                <td>${item.discount || 0}</td>
+                <td>${(item.quantity * item.unitPrice - ((item.discount || 0) * item.quantity * item.unitPrice / 100) + ((item.quantity * item.unitPrice - ((item.discount || 0) * item.quantity * item.unitPrice / 100)) * (item.taxRate || 0) / 100)).toFixed(2)}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
-
-        <div class="total-section">
-          <p><strong>Subtotal:</strong> ₹${(selectedInvoice.items as any[]).reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice), 0).toLocaleString()}</p>
-          <p><strong>Total Tax:</strong> ₹${(selectedInvoice.items as any[]).reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice * item.taxRate / 100), 0).toLocaleString()}</p>
-          <p><strong>Items Count:</strong> ${selectedInvoice.items.length}</p>
-          <p><strong>Total Quantity:</strong> ${(selectedInvoice.items as any[]).reduce((sum: number, item: any) => sum + item.quantity, 0)}</p>
-          <h2><strong>Total Amount: ₹${selectedInvoice.totalAmount.toLocaleString()}</strong></h2>
-          ${selectedInvoice.totalAmount !== selectedInvoice.externalInvoiceTotal ?
-        `<p class="mismatch-warning">External Total: ₹${selectedInvoice.externalInvoiceTotal?.toLocaleString()}</p>` : ''}
+        <table class="summary-table">
+          <tr><td>Output IGST:</td><td>${totalTax(selectedInvoice).toFixed(2)}</td></tr>
+          <tr><td>Round Off:</td><td>${(Math.round(grandTotal(selectedInvoice)) - grandTotal(selectedInvoice)).toFixed(2)}</td></tr>
+          <tr><td>Total:</td><td>${Math.round(grandTotal(selectedInvoice)).toFixed(2)}</td></tr>
+        </table>
+        <div><strong>Amount Chargeable (in words):</strong> ${numberToWords(Math.round(grandTotal(selectedInvoice)))} Only</div>
+        <table class="summary-table">
+          <tr><td>Taxable Value</td><td>Integrated Tax Rate</td><td>Integrated Tax Amount</td><td>Total</td></tr>
+          <tr><td>${subtotal(selectedInvoice).toFixed(2)}</td><td>${selectedInvoice.items[0]?.taxRate || 0}%</td><td>${totalTax(selectedInvoice).toFixed(2)}</td><td>${(subtotal(selectedInvoice) + totalTax(selectedInvoice)).toFixed(2)}</td></tr>
+        </table>
+        <div class="footer">
+          <div>Declaration: ${selectedInvoice.declaration || ''}</div>
+          <div style="margin-top: 30px;">For ${generalSettings?.companyName || 'Sun Power Services'}</div>
+          <div style="margin-top: 30px;">Authorised Signatory</div>
         </div>
       </body>
     </html>
-  `;
-
+    `;
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(printContent);
@@ -1889,6 +1970,20 @@ const InvoiceManagement: React.FC = () => {
       printWindow.print();
     }
   };
+
+  // Helper functions for print
+  function subtotal(inv: any) {
+    return inv.items.reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice), 0);
+  }
+  function totalTax(inv: any) {
+    return inv.items.reduce((sum: number, item: any) => sum + ((item.quantity * item.unitPrice - ((item.discount || 0) * item.quantity * item.unitPrice / 100)) * (item.taxRate || 0) / 100), 0);
+  }
+  function grandTotal(inv: any) {
+    const sub = subtotal(inv);
+    const tax = totalTax(inv);
+    const disc = inv.items.reduce((sum: number, item: any) => sum + ((item.discount || 0) * item.quantity * item.unitPrice / 100), 0);
+    return sub - disc + tax;
+  }
 
   const truncateTo2 = (value: number) => Math.floor(value * 100) / 100;
 
@@ -2458,305 +2553,255 @@ const InvoiceManagement: React.FC = () => {
                 </div>
 
                 <div className="space-y-4">
-                  {newInvoice.items.map((item, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4">
-                      <div className="grid grid-cols-1 md:grid-cols-10 gap-4 mb-3">
-                        <div className="md:col-span-2">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Product
-                          </label>
-                          <div className="relative dropdown-container">
-                            <button
-                              onClick={() => setShowProductDropdowns({
-                                ...showProductDropdowns,
-                                [index]: !showProductDropdowns[index]
-                              })}
-                              className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors[`item_${index}_product`] ? 'border-red-500' : 'border-gray-300'
-                                } hover:border-gray-400`}
-                            >
-                              <span className="text-gray-700 truncate mr-1">{getProductLabel(item.product)}</span>
-                              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showProductDropdowns[index] ? 'rotate-180' : ''}`} />
-                            </button>
-                            {showProductDropdowns[index] && (
-                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                                <button
-                                  onClick={() => {
-                                    updateInvoiceItem(index, 'product', '');
-                                    setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
-                                  }}
-                                  className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!item.product ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                    }`}
-                                >
-                                  Select product
-                                </button>
-                                {products.map(product => (
+                  {newInvoice.items.map((item, index) => {
+                    const stockInfo = stockValidation[index];
+                    let cardBg = 'bg-white';
+                    if (stockInfo) {
+                      if (stockInfo.available === 0) cardBg = 'bg-red-100';
+                      else if (stockInfo.isValid) cardBg = 'bg-green-50';
+                      else cardBg = 'bg-red-50';
+                    }
+                    return (
+                      <div key={index} className={`border rounded-lg p-4 ${cardBg}`}>
+                        {/* Row 1: Product Selection and Description */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Product *
+                            </label>
+                            <div className="relative dropdown-container">
+                              <button
+                                onClick={() => setShowProductDropdowns({
+                                  ...showProductDropdowns,
+                                  [index]: !showProductDropdowns[index]
+                                })}
+                                className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors[`item_${index}_product`] ? 'border-red-500' : 'border-gray-300'} hover:border-gray-400`}
+                              >
+                                <span className="text-gray-700 truncate mr-1">{getProductLabel(item.product)}</span>
+                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showProductDropdowns[index] ? 'rotate-180' : ''}`} />
+                              </button>
+                              {showProductDropdowns[index] && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
                                   <button
-                                    key={product._id}
                                     onClick={() => {
-                                      updateInvoiceItem(index, 'product', product._id);
+                                      updateInvoiceItem(index, 'product', '');
                                       setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
                                     }}
-                                    className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${item.product === product._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                      }`}
+                                    className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!item.product ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                                   >
-                                    <div>
-                                      <div className="font-medium">{product?.name}</div>
-                                      <div className="text-xs text-gray-500">₹{product?.price?.toLocaleString()} • {product?.category}</div>
-                                    </div>
+                                    Select product
                                   </button>
-                                ))}
+                                  {products.map(product => (
+                                    <button
+                                      key={product._id}
+                                      onClick={() => {
+                                        updateInvoiceItem(index, 'product', product._id);
+                                        setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
+                                      }}
+                                      className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${item.product === product._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                    >
+                                      <div>
+                                        <div className="font-medium">{product?.name}</div>
+                                        <div className="text-xs text-gray-500">₹{product?.price?.toLocaleString()} • {product?.category}</div>
+                                      </div>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                            {formErrors[`item_${index}_product`] && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_product`]}</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Description
+                            </label>
+                            <input
+                              type="text"
+                              value={item.description}
+                              onChange={(e) => updateInvoiceItem(index, 'description', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Item description"
+                            />
+                            {/* Show available stock info below description */}
+                            {stockInfo && (
+                              <div className="text-xs mt-1">
+                                <span className={stockInfo.available === 0 ? 'text-red-600 font-bold' : stockInfo.isValid ? 'text-gray-500' : 'text-red-600 font-semibold'}>
+                                  Available: {stockInfo.available} units
+                                </span>
                               </div>
                             )}
                           </div>
-                          {formErrors[`item_${index}_product`] && (
-                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_product`]}</p>
-                          )}
                         </div>
 
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            HSN/SAC
-                          </label>
-                          <input
-                            type="text"
-                            value={item.hsnSac}
-                            placeholder='0'
-                            onChange={(e) => updateInvoiceItem(index, 'hsnSac', parseFloat(e.target.value))}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'
-                              }`}
-                          />
-                          {formErrors[`item_${index}_price`] && (
-                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            GST %
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={item.taxRate}
-                            placeholder='0.00%'
-                            onChange={(e) => updateInvoiceItem(index, 'taxRate', parseFloat(e.target.value))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Part No
-                          </label>
-                          <input
-                            type="text"
-                            value={item.partNo}
-                            placeholder='0'
-                            onChange={(e) => updateInvoiceItem(index, 'partNo', parseFloat(e.target.value))}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'
-                              }`}
-                          />
-                          {formErrors[`item_${index}_price`] && (
-                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
-                          )}
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Quantity
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            placeholder='0'
-                            onChange={(e) => updateInvoiceItem(index, 'quantity', parseInt(e.target.value))}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_quantity`] || formErrors[`item_${index}_stock`] ? 'border-red-500' :
-                              stockValidation[index] && !stockValidation[index].isValid ? 'border-red-500' : 'border-gray-300'
-                              }`}
-                          />
-                          {formErrors[`item_${index}_quantity`] && (
-                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_quantity`]}</p>
-                          )}
-                          {formErrors[`item_${index}_stock`] && (
-                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_stock`]}</p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            UOM
-                          </label>
-                          <select
-                            value={item.uom || 'pcs'}
-                            onChange={(e) => updateInvoiceItem(index, 'uom', e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="pcs">pcs</option>
-                            <option value="kg">kg</option>
-                            <option value="litre">litre</option>
-                            <option value="meter">meter</option>
-                            <option value="sq.ft">sq.ft</option>
-                            <option value="hour">hour</option>
-                            <option value="set">set</option>
-                            <option value="box">box</option>
-                            <option value="can">can</option>
-                            <option value="roll">roll</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Unit Price (₹)
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={item.unitPrice}
-                            placeholder='0'
-                            onChange={(e) => updateInvoiceItem(index, 'unitPrice', parseFloat(e.target.value))}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'
-                              }`}
-                          />
-                          {formErrors[`item_${index}_price`] && (
-                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
-                          )}
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                           Discount (%)
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            
-                            step="1"
-                            value={item.discount}
-                            placeholder='0.00%'
-                            onChange={(e) => {
-                              updateInvoiceItem(index, 'discount', parseFloat(e.target.value));
-                              // Auto-calculate discountAmount based on item discounts
-                              const updatedItems = [...newInvoice.items];
-                              updatedItems[index] = { ...updatedItems[index], discount: parseFloat(e.target.value) || 0 };
-                              
-                              const totalItemDiscounts = updatedItems.reduce((sum, item) => {
-                                const subtotal = item.quantity * item.unitPrice || 0;
-                                const itemDiscount = (item.discount || 0) * subtotal / 100;
-                                return sum + itemDiscount;
-                              }, 0);
-                              
-                              setNewInvoice(prev => ({
-                                ...prev,
-                                discountAmount: totalItemDiscounts
-                              }));
-                            }}
-
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'
-                              }`}
-                          />
-                          {formErrors[`item_${index}_price`] && (
-                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
-                          )}
-                        </div>
-
-
-                        <div className="flex items-end">
-                          <div className="w-full">
+                        {/* Row 2: HSN/SAC, GST, Part No, Quantity, UOM */}
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                          <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Total
+                              HSN/SAC
+                            </label>
+                            <input
+                              type="text"
+                              value={item.hsnSac || ''}
+                              onChange={(e) => updateInvoiceItem(index, 'hsnSac', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="HSN/SAC"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              GST %
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={item.taxRate || ''}
+                              onChange={(e) => updateInvoiceItem(index, 'taxRate', parseFloat(e.target.value) || 0)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="0.00"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Part No
+                            </label>
+                            <input
+                              type="text"
+                              value={item.partNo || ''}
+                              onChange={(e) => updateInvoiceItem(index, 'partNo', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Part number"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Quantity *
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max={stockInfo?.available || undefined}
+                              value={item.quantity}
+                              onChange={(e) => updateInvoiceItem(index, 'quantity', parseFloat(e.target.value))}
+                              disabled={stockInfo?.available === 0}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_quantity`] ? 'border-red-500' : 'border-gray-300'} ${stockInfo?.available === 0 ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+                            />
+                            {formErrors[`item_${index}_quantity`] && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_quantity`]}</p>
+                            )}
+                            {formErrors[`item_${index}_stock`] && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_stock`]}</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              UOM
+                            </label>
+                            <select
+                              value={item.uom || 'pcs'}
+                              onChange={(e) => updateInvoiceItem(index, 'uom', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            >
+                              <option value="pcs">pcs</option>
+                              <option value="kg">kg</option>
+                              <option value="litre">litre</option>
+                              <option value="meter">meter</option>
+                              <option value="sq.ft">sq.ft</option>
+                              <option value="hour">hour</option>
+                              <option value="set">set</option>
+                              <option value="box">box</option>
+                              <option value="can">can</option>
+                              <option value="roll">roll</option>
+                              <option value="nos">nos</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Row 3: Unit Price, Discount, Total, Remove Button */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Unit Price (₹) *
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unitPrice}
+                              onChange={(e) => updateInvoiceItem(index, 'unitPrice', parseFloat(e.target.value))}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="0.00"
+                            />
+                            {formErrors[`item_${index}_price`] && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Discount (%)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="1"
+                              value={item.discount || ''}
+                              onChange={(e) => {
+                                updateInvoiceItem(index, 'discount', parseFloat(e.target.value) || 0);
+                                // Auto-calculate discountAmount based on item discounts
+                                const updatedItems = [...newInvoice.items];
+                                updatedItems[index] = { ...updatedItems[index], discount: parseFloat(e.target.value) || 0 };
+                                
+                                const totalItemDiscounts = updatedItems.reduce((sum, item) => {
+                                  const subtotal = item.quantity * item.unitPrice || 0;
+                                  const itemDiscount = (item.discount || 0) * subtotal / 100;
+                                  return sum + itemDiscount;
+                                }, 0);
+                                
+                                setNewInvoice(prev => ({
+                                  ...prev,
+                                  discountAmount: totalItemDiscounts
+                                }));
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="0"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Total (₹)
                             </label>
                             <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium">
                               ₹{calculateItemTotal(item).toLocaleString() || 0}
                             </div>
                           </div>
-                          {newInvoice.items.length > 1 && (
-                            <button
-                              onClick={() => removeInvoiceItem(index)}
-                              type="button"
-                              className="ml-2 p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
 
-                      {/* Stock Status Display */}
-                      {newInvoice.reduceStock && newInvoice.location && item.product && (
-                        <div className={`mt-3 p-3 rounded-lg border ${stockValidation[index]
-                          ? stockValidation[index].isValid
-                            ? 'bg-green-50 border-green-200'
-                            : 'bg-red-50 border-red-200'
-                          : 'bg-gray-50 border-gray-200'
-                          }`}>
-                          <div className="flex items-center space-x-2 text-sm">
-                            <Package className="w-4 h-4" />
-                            <span className="font-medium">Stock Status:</span>
-                            {stockValidation[index] ? (
-                              <span className={stockValidation[index].isValid ? 'text-green-700' : 'text-red-700'}>
-                                {stockValidation[index].message}
-                              </span>
-                            ) : (
-                              <span className="text-gray-500">Checking...</span>
+                          <div>
+                            {newInvoice.items.length > 1 && (
+                              <button
+                                onClick={() => removeInvoiceItem(index)}
+                                type="button"
+                                className="w-full p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors border border-red-200"
+                              >
+                                <X className="w-4 h-4 mx-auto" />
+                              </button>
                             )}
                           </div>
                         </div>
-                      )}
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Description
-                        </label>
-                        <input
-                          type="text"
-                          value={item.description}
-                          onChange={(e) => updateInvoiceItem(index, 'description', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Item description"
-                        />
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-                {/* --- ITEMS TABLE SECTION --- */}
-                {/* <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <h3 className="font-bold text-lg mb-2">Goods and Services</h3>
-                <table className="w-full border">
-                  <thead className="bg-gray-100">
-                    <tr>
-                      <th className="border px-2 py-1 text-xs">No.</th>
-                      <th className="border px-2 py-1 text-xs">Description</th>
-                      <th className="border px-2 py-1 text-xs">HSN/SAC</th>
-                      <th className="border px-2 py-1 text-xs">GST %</th>
-                      <th className="border px-2 py-1 text-xs">Part No.</th>
-                      <th className="border px-2 py-1 text-xs">Quantity</th>
-                      <th className="border px-2 py-1 text-xs">Rate</th>
-                      <th className="border px-2 py-1 text-xs">Disc. %</th>
-                      <th className="border px-2 py-1 text-xs">Amount</th>
-                      <th className="border px-2 py-1 text-xs">Location</th>
-                      <th className="border px-2 py-1 text-xs"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {newInvoice.items.map((item, idx) => (
-                      <tr key={idx}>
-                        <td className="border px-2 py-1 text-xs">{idx + 1}</td>
-                        <td className="border px-2 py-1"><input type="text" value={item.description} onChange={e => updateInvoiceItem(idx, 'description', e.target.value)} className="w-full px-1 py-0.5 border rounded" /></td>
-                        <td className="border px-2 py-1"><input type="text" value={item.hsnSac || ''} onChange={e => updateInvoiceItem(idx, 'hsnSac', e.target.value)} className="w-full px-1 py-0.5 border rounded" /></td>
-                        <td className="border px-2 py-1"><input type="number" value={item.gstRate || ''} onChange={e => updateInvoiceItem(idx, 'gstRate', Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></td>
-                        <td className="border px-2 py-1"><input type="text" value={item.partNo || ''} onChange={e => updateInvoiceItem(idx, 'partNo', e.target.value)} className="w-full px-1 py-0.5 border rounded" /></td>
-                        <td className="border px-2 py-1"><input type="number" value={item.quantity} onChange={e => updateInvoiceItem(idx, 'quantity', Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></td>
-                        <td className="border px-2 py-1"><input type="number" value={item.unitPrice} onChange={e => updateInvoiceItem(idx, 'unitPrice', Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></td>
-                        <td className="border px-2 py-1"><input type="number" value={item.discount || ''} onChange={e => updateInvoiceItem(idx, 'discount', Number(e.target.value))} className="w-full px-1 py-0.5 border rounded" /></td>
-                        <td className="border px-2 py-1">₹{calculateItemTotal(item).toLocaleString()}</td>
-                        <td className="border px-2 py-1"><input type="text" value={item.location || ''} onChange={e => updateInvoiceItem(idx, 'location', e.target.value)} className="w-full px-1 py-0.5 border rounded" /></td>
-                        <td className="border px-2 py-1"><button onClick={() => removeInvoiceItem(idx)} className="text-red-500">Remove</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <button onClick={addInvoiceItem} className="mt-2 px-3 py-1 bg-blue-600 text-white rounded">Add Item</button>
-              </div> */}
               </div>
 
               {/* Notes */}

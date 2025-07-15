@@ -72,7 +72,7 @@ const AppRoutes: React.FC = () => {
             <Route path="/payment-success" element={<PaymentSuccess />} /> */}
 
             {/* 404 - Page not found */}
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            <Route path="*" element={<NotFound />} />
         </Routes>
     );
 };

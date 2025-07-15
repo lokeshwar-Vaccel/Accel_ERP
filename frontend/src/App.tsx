@@ -43,7 +43,14 @@ const App = () => {
         <Route path="/reset-password" element={<ResetPasswordForm />} />
         
         {/* Protected routes - require authentication */}
-        {isAuthenticated ? (
+        {isLoading ? (
+          // Show loading while checking authentication
+          <Route path="/*" element={
+            <div className="flex items-center justify-center min-h-screen">
+              <LoadingSpinner />
+            </div>
+          } />
+        ) : isAuthenticated ? (
           <Route path="/*" element={
             <Layout moduleAccess={moduleAccess}>
               <AppRoutes />

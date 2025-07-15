@@ -891,6 +891,7 @@ const QuotationSystem = () => {
                           <option value="box">box</option>
                           <option value="can">can</option>
                           <option value="roll">roll</option>
+                          <option value="nos">nos</option>
                         </select>
                       </div>
                       <div>
