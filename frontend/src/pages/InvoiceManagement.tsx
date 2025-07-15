@@ -2109,18 +2109,18 @@ const InvoiceManagement: React.FC = () => {
             </div>
           </div>
           {/* Invoice Type Toggle */}
-          <div className="flex bg-gray-100 rounded-xl p-0">
+          <div className="flex bg-gray-100 rounded-lg p-0.5">
             {INVOICE_TYPES.map(type => (
               <button
                 key={type.value}
                 onClick={() => setInvoiceType(type.value as 'quotation' | 'sale' | 'purchase' | 'challan')}
-                className={`px-6 py-3 rounded-xl font-medium flex items-center space-x-2 transition-all duration-200 ${invoiceType === type.value
-                  ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-500'
-                  : 'text-gray-600 hover:text-blue-700'
+                className={`px-3 py-2.5 rounded text-sm font-medium flex items-center space-x-1.5 transition-all duration-200 ${invoiceType === type.value
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-blue-700 hover:bg-gray-50'
                   }`}
               >
-                {type.icon}
-                <span>{type.label}</span>
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">{type.icon}</span>
+                <span className="whitespace-nowrap">{type.label}</span>
               </button>
             ))}
           </div>
