@@ -50,13 +50,6 @@ const menuItems = [
     key: 'lead_management',
   },
   {
-    id: 3,
-    name: 'Quotation Management',
-    icon: <Users className="w-4 h-4" />,
-    path: '/quotation-management',
-    key: 'quotation_management',
-  },
-  {
     id: 4,
     name: 'User  Management',
     icon: <User  className="w-4 h-4" />,

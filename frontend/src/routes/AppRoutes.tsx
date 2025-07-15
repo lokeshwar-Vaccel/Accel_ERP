@@ -19,7 +19,6 @@ import PaymentSuccess from "../pages/PaymentSuccess";
 import { ForgotPasswordForm } from "components/features/auth/ForgotPasswordForm";
 import { LoginForm } from "components/features/auth/LoginForm";
 import { ResetPasswordForm } from "components/features/auth/ResetPasswordForm";
-import QuotationManagement from "pages/QuotationManagement";
 
 const AppRoutes: React.FC = () => {
     return (
@@ -35,7 +34,6 @@ const AppRoutes: React.FC = () => {
 
             {/* Lead Management */}
             <Route path="/lead-management" element={<CustomerManagement />} />
-            <Route path="/quotation-management" element={<QuotationManagement />} />
 
             {/* Product Management */}
             <Route path="/product-management" element={<ProductManagement />} />
@@ -44,7 +42,7 @@ const AppRoutes: React.FC = () => {
             <Route path="/inventory-management" element={<InventoryManagement />} />
 
             {/* Billing */}
-            <Route path="/Billing" element={<InvoiceManagement />} />
+            <Route path="/billing" element={<InvoiceManagement />} />
 
             {/* Service Management */}
             <Route path="/service-management" element={<ServiceManagement />} />
