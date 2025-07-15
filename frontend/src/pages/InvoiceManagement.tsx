@@ -350,6 +350,38 @@ const InvoiceManagement: React.FC = () => {
   const [originalInvoiceData, setOriginalInvoiceData] = useState<any>(null);
   const [savingChanges, setSavingChanges] = useState(false);
 
+  // Add search state for product dropdowns
+  const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
+
+  // Filter products based on search term
+  const getFilteredProducts = (searchTerm: string = '') => {
+    console.log('getFilteredProducts called with:', { searchTerm, totalProducts: products.length, products: products.slice(0, 3) });
+    
+    if (!searchTerm.trim()) {
+      console.log('No search term, returning all products:', products.length);
+      return products;
+    }
+    
+    const term = searchTerm.toLowerCase();
+    const filtered = products.filter(product => {
+      const nameMatch = product.name?.toLowerCase().includes(term);
+      const categoryMatch = product.category?.toLowerCase().includes(term);
+      const brandMatch = product.brand?.toLowerCase().includes(term);
+      return nameMatch || categoryMatch || brandMatch;
+    });
+    
+    console.log('Filtered products:', { term, filtered: filtered.length, results: filtered.slice(0, 3) });
+    return filtered;
+  };
+
+  // Update product search term
+  const updateProductSearchTerm = (itemIndex: number, searchTerm: string) => {
+    setProductSearchTerms(prev => ({
+      ...prev,
+      [itemIndex]: searchTerm
+    }));
+  };
+
   const handleItemEdit = (index: number, field: string, value: any) => {
     if (!selectedInvoice) return;
     const updatedItems = [...selectedInvoice.items];
@@ -666,13 +698,48 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const fetchProducts = async () => {
+    console.log('🚀 Starting to fetch inventory items...');
     try {
-      const response = await apiClient.products.getAll();
+      // Fetch from inventory/stock API instead of products API
+      console.log('📡 Making API call to stock.getStock() for all inventory items...');
+      const response = await apiClient.stock.getStock({ limit: 10000, page: 1 });
+      console.log('✅ Full inventory response received:', response);
+      
       const responseData = response.data as any;
-      const productsData = responseData.products || responseData || [];
+      console.log('📦 Response data structure:', responseData);
+      
+      // Extract stock levels which contain product information
+      let productsData = [];
+      if (responseData.stockLevels && Array.isArray(responseData.stockLevels)) {
+        console.log('📋 Data found in responseData.stockLevels');
+        // Map stock levels to product format for the dropdown
+        productsData = responseData.stockLevels.map((stock: any) => ({
+          _id: stock.product?._id || stock.productId,
+          name: stock.product?.name || stock.productName || 'Unknown Product',
+          price: stock.product?.price || 0,
+          category: stock.product?.category || 'N/A',
+          brand: stock.product?.brand || 'N/A',
+          availableQuantity: stock.availableQuantity || 0,
+          // Include original stock data for reference
+          stockData: stock
+        }));
+      } else if (Array.isArray(responseData)) {
+        console.log('📋 Data is directly an array');
+        productsData = responseData;
+      } else {
+        console.warn('⚠️ Unexpected response structure:', responseData);
+        console.log('📊 Available keys:', Object.keys(responseData || {}));
+        productsData = [];
+      }
+      
       setProducts(productsData);
+      console.log(`✨ Successfully set ${productsData.length} inventory items for dropdown`);
+      if (productsData.length > 0) {
+        console.log('🔍 Sample inventory item:', productsData[0]);
+      }
     } catch (error) {
-      console.error('Error fetching products:', error);
+      console.error('❌ Error fetching inventory:', error);
+      console.error('❌ Error details:', error instanceof Error ? error.message : String(error));
       setProducts([]);
     }
   };
@@ -2581,31 +2648,49 @@ const InvoiceManagement: React.FC = () => {
                                 <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showProductDropdowns[index] ? 'rotate-180' : ''}`} />
                               </button>
                               {showProductDropdowns[index] && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                                  <button
-                                    onClick={() => {
-                                      updateInvoiceItem(index, 'product', '');
-                                      setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
-                                    }}
-                                    className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!item.product ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                                  >
-                                    Select product
-                                  </button>
-                                  {products.map(product => (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-hidden flex flex-col">
+                                  <div className="p-2 border-b border-gray-200">
+                                    <input
+                                      type="text"
+                                      placeholder="Search products..."
+                                      value={productSearchTerms[index] || ''}
+                                      onChange={(e) => updateProductSearchTerm(index, e.target.value)}
+                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                      autoFocus
+                                    />
+                                  </div>
+                                  <div className="overflow-y-auto max-h-60 py-0.5">
                                     <button
-                                      key={product._id}
                                       onClick={() => {
-                                        updateInvoiceItem(index, 'product', product._id);
+                                        updateInvoiceItem(index, 'product', '');
                                         setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
+                                        updateProductSearchTerm(index, '');
                                       }}
-                                      className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${item.product === product._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                      className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!item.product ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                                     >
-                                      <div>
-                                        <div className="font-medium">{product?.name}</div>
-                                        <div className="text-xs text-gray-500">₹{product?.price?.toLocaleString()} • {product?.category}</div>
-                                      </div>
+                                      Select product
                                     </button>
-                                  ))}
+                                    {getFilteredProducts(productSearchTerms[index] || '').length === 0 ? (
+                                      <div className="px-3 py-2 text-sm text-gray-500">No products found</div>
+                                    ) : (
+                                      getFilteredProducts(productSearchTerms[index] || '').map(product => (
+                                        <button
+                                          key={product._id}
+                                          onClick={() => {
+                                            updateInvoiceItem(index, 'product', product._id);
+                                            setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
+                                            updateProductSearchTerm(index, '');
+                                          }}
+                                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${item.product === product._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                        >
+                                          <div>
+                                            <div className="font-medium">{product?.name}</div>
+                                            <div className="text-xs text-gray-500">₹{product?.price?.toLocaleString()} • {product?.category}</div>
+                                          </div>
+                                        </button>
+                                      ))
+                                    )}
+                                  </div>
                                 </div>
                               )}
                             </div>
