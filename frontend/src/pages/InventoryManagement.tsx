@@ -2253,11 +2253,11 @@ const InventoryManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Loading inventory...</td>
+                  <td colSpan={11} className="px-6 py-8 text-center text-gray-500">Loading inventory...</td>
                 </tr>
               ) : inventory.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No inventory items found</td>
+                  <td colSpan={11} className="px-6 py-8 text-center text-gray-500">No inventory items found</td>
                 </tr>
               ) : (
                 inventory.map((item, idx) => {

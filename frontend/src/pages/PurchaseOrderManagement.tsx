@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -26,7 +26,8 @@ import {
   Check,
   Ban,
   ChevronDown,
-  Trash2
+  Trash2,
+  Users
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -168,7 +169,7 @@ interface POFormData {
 
 const PurchaseOrderManagement: React.FC = () => {
   const location = useLocation();
-  
+  const navigate = useNavigate();
   // Core state
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -315,6 +316,14 @@ const PurchaseOrderManagement: React.FC = () => {
       window.history.replaceState({}, '', location.pathname);
     }
   }, [location]);
+
+  const quickActions = [
+    {
+      title: 'Create Supplier',
+      route: '/lead-management',
+      action: () => navigate('/lead-management?action=create-supplier')
+    }
+  ];
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -643,11 +652,11 @@ const PurchaseOrderManagement: React.FC = () => {
     });
 
     setFormErrors(errors);
-    
+
     if (Object.keys(errors).length > 0) {
       toast.error('Please fix the form errors before submitting');
     }
-    
+
     return Object.keys(errors).length === 0;
   };
 
@@ -755,7 +764,7 @@ const PurchaseOrderManagement: React.FC = () => {
         'received': 'Purchase Order marked as received',
         'cancelled': 'Purchase Order cancelled successfully'
       };
-      
+
       toast.success(statusMessages[newStatus]);
     } catch (error) {
       console.error('Error updating PO status:', error);
@@ -790,11 +799,11 @@ const PurchaseOrderManagement: React.FC = () => {
     }
 
     setFormErrors(errors);
-    
+
     if (Object.keys(errors).length > 0) {
       toast.error('Please fill in all required fields');
     }
-    
+
     return Object.keys(errors).length === 0;
   };
 
@@ -1536,7 +1545,7 @@ const PurchaseOrderManagement: React.FC = () => {
               )}
 
               {/* Basic Information */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Select Supplier *
@@ -1614,6 +1623,27 @@ const PurchaseOrderManagement: React.FC = () => {
                   {formErrors.supplier && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.supplier}</p>
                   )}
+                </div>
+                <div>
+                  {quickActions.map((action, index) => (
+                    <div
+                      key={index}
+                      // className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-2.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+                    >
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        {action.title}
+                      </label>
+                      <div
+                        onClick={() => {
+                            action.action(); // Run navigation only if form is valid
+                        }}
+                        className="bg-gradient-to-r from-blue-600 cursor-pointer to-blue-700 text-white px-3 py-2.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+                      >
+                        <Plus className="w-4 h-4" />
+                        <span className="text-sm">Create Supplier</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

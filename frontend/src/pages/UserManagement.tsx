@@ -103,6 +103,12 @@ export const UserManagement: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  // Status filter state
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+  const [showRoleDropdown, setShowRoleDropdown] = useState(false);
+
   const userRoles: UserModuleKey[] = ['super_admin', 'admin', 'hr', 'manager', 'viewer'];
   const allModules: ModuleKey[] = [
     'dashboard',
@@ -138,6 +144,49 @@ export const UserManagement: React.FC = () => {
   // Custom dropdown states
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
+
+
+  const roleOptions = [
+    { value: 'all', label: 'All Roles' },
+    { value: 'super_admin', label: 'Super Admin' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'manager', label: 'Manager' },
+    { value: 'hr', label: 'HR' },
+    { value: 'viewer', label: 'Viewer' }
+  ];
+
+  const statusOptions = [
+    { value: 'all', label: 'All Status' },
+    { value: 'active', label: 'Active' },
+    { value: 'in-active', label: 'In Active' },
+  ];
+
+  // Helper for status label (add this if not present)
+  const getStatusLabel = (value: string) => {
+    const option = statusOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Status';
+  };
+
+  // Helper for role label
+  const getRoleLabel = (value: string) => {
+    const option = roleOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Status';
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.dropdown-container')) {
+        setShowStatusDropdown(false);
+        setShowRoleDropdown(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // Fetch users from API
   const fetchUsers = async () => {
@@ -441,7 +490,9 @@ export const UserManagement: React.FC = () => {
   const filteredUsers = users.filter((user: UserDisplay) => {
     const matchesSearch = user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesSearch;
+    const matchesRole = roleFilter === 'all' || user.role === roleFilter;
+    const matchesStatus = statusFilter === 'all' || user.status === statusFilter;
+    return matchesSearch && matchesStatus && matchesRole;
   });
 
   // Sort users: active users first, then deleted users at the bottom
@@ -675,7 +726,65 @@ export const UserManagement: React.FC = () => {
               className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
           </div>
-          <div className="flex space-x-2 ml-auto">
+          {/* Role Custom Dropdown */}
+          <div className="relative dropdown-container w-40">
+            <button
+              onClick={() => {
+                setShowRoleDropdown(!showRoleDropdown);
+              }}
+              className="flex items-center justify-between w-full px-2 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getRoleLabel(roleFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showRoleDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showRoleDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {roleOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setRoleFilter(option.value);
+                      setShowRoleDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${roleFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Status Custom Dropdown */}
+          <div className="relative dropdown-container w-40">
+            <button
+              onClick={() => {
+                setShowStatusDropdown(!showStatusDropdown);
+              }}
+              className="flex items-center justify-between w-full px-2 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+            >
+              <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+            </button>
+            {showStatusDropdown && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => {
+                      setStatusFilter(option.value);
+                      setShowStatusDropdown(false);
+                    }}
+                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* <div className="flex space-x-2 ml-auto">
             <button className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 rounded-md hover:bg-gray-50 text-sm transition-colors">
               <Filter className="w-4 h-4 mr-2" />
               Filters
@@ -684,7 +793,7 @@ export const UserManagement: React.FC = () => {
               <Download className="w-4 h-4 mr-2" />
               Export
             </button>
-          </div>
+          </div> */}
         </div>
       </div>
 

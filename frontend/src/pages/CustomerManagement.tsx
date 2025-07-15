@@ -145,7 +145,7 @@ interface AddContactHistoryInput {
 
 const CustomerManagement: React.FC = () => {
   const location = useLocation();
-  
+
   // Core state
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -250,8 +250,25 @@ const CustomerManagement: React.FC = () => {
   ];
   const [activeTab, setActiveTab] = useState<'customer' | 'supplier'>('customer');
 
+  const searchParams = new URLSearchParams(location.search);
   // Add at the top, after useState imports
-  const [customerTypeTab, setCustomerTypeTab] = useState<'customer' | 'supplier'>('customer');
+  const [customerTypeTab, setCustomerTypeTab] = useState<'customer' | 'supplier'>(searchParams.get('action') !== 'create-supplier'?'customer':'supplier');
+
+  // Ensure supplier tab is selected if ?action=create is present in the URL
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('action') === 'create') {
+      setShowAddModal(true);
+      // Clear the URL parameter
+      window.history.replaceState({}, '', location.pathname);
+    }
+    if (searchParams.get('action') === 'create-supplier') {
+      setCustomerTypeTab('supplier');
+      setShowAddModal(true);
+      // Optionally clear the query param after setting
+      window.history.replaceState({}, '', location.pathname);
+    }
+  }, [location]);
 
   const getTypeIcon = (value: string) => {
     // Optionally return a string or a default icon name
@@ -423,14 +440,14 @@ const CustomerManagement: React.FC = () => {
   }, [user]);
 
   // Check for URL parameters to auto-open create modal
-  useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    if (searchParams.get('action') === 'create') {
-      setShowAddModal(true);
-      // Clear the URL parameter
-      window.history.replaceState({}, '', location.pathname);
-    }
-  }, [location]);
+  // useEffect(() => {
+  //   const searchParams = new URLSearchParams(location.search);
+  //   if (searchParams.get('action') === 'create') {
+  //     setShowAddModal(true);
+  //     // Clear the URL parameter
+  //     window.history.replaceState({}, '', location.pathname);
+  //   }
+  // }, [location]);
 
   const fetchUsers = async () => {
     try {
@@ -531,47 +548,78 @@ const CustomerManagement: React.FC = () => {
   //   return matchesSearch && matchesStatus && matchesType;
   // }) : [];
 
-  const validateCustomerForm = (): boolean => {
-    const errors: Record<string, string> = {};
+const validateCustomerForm = (): boolean => {
+  const errors: Record<string, any> = {};
+  const missingFields: string[] = [];
 
-    if (!customerFormData.name.trim()) {
-      errors.name = 'Customer name is required';
-    }
-    if (!customerFormData.phone.trim()) {
-      errors.phone = 'Phone number is required';
-    }
-    // Enhanced address validation
-    if (!customerFormData.addresses.length) {
-      errors.address = 'At least one address is required';
-    } else {
-      // Check for empty required fields in addresses
-      const invalidAddresses = customerFormData.addresses.some(addr =>
-        !addr.address.trim() || !addr.state.trim() || !addr.district.trim() || !addr.pincode.trim()
-      );
-      if (invalidAddresses) {
-        errors.address = 'All address fields (address, state, district, pincode) are required';
+  // Top-level field checks
+  if (!customerFormData.name.trim()) {
+    errors.name = 'Customer name is required';
+    missingFields.push('Customer Name');
+  }
+
+  if (!customerFormData.phone.trim()) {
+    errors.phone = 'Phone number is required';
+    missingFields.push('Phone Number');
+  }
+
+  if (!customerFormData.email.trim()) {
+    errors.email = 'Email is required';
+    missingFields.push('Email');
+  } else if (!/\S+@\S+\.\S+/.test(customerFormData.email)) {
+    errors.email = 'Please enter a valid email address';
+    missingFields.push('Valid Email');
+  }
+
+  // Address field validation
+  if (!customerFormData.addresses.length) {
+    errors.address = ['At least one address is required'];
+    missingFields.push('Address');
+  } else {
+    const addressErrors: string[] = [];
+
+    customerFormData.addresses.forEach((addr, index) => {
+      const addrMissing: string[] = [];
+
+      if (!addr.address.trim()) addrMissing.push('address');
+      if (!addr.state.trim()) addrMissing.push('state');
+      if (!addr.district.trim()) addrMissing.push('district');
+      if (!addr.pincode.trim()) addrMissing.push('pincode');
+      else if (!/^\d{6}$/.test(addr.pincode)) addrMissing.push('valid 6-digit pincode');
+
+      if (addrMissing.length > 0) {
+        addressErrors[index] = `Please fill in ${addrMissing.join(', ')}`;
+        missingFields.push(`Address #${index + 1}`);
       }
+    });
 
-      const primaryCount = customerFormData.addresses.filter(addr => addr.isPrimary).length;
-      if (primaryCount !== 1) {
-        errors.address = 'There must be exactly one primary address';
-      }
-
-      // Validate pincode for each address
-      const invalidPincode = customerFormData.addresses.some(addr => {
-        return addr.pincode && !/^\d{6}$/.test(addr.pincode);
-      });
-      if (invalidPincode) {
-        errors.address = 'Pincode must be exactly 6 digits';
-      }
-    }
-    if (customerFormData.email && !/\S+@\S+\.\S+/.test(customerFormData.email)) {
-      errors.email = 'Please enter a valid email address';
+    const primaryCount = customerFormData.addresses.filter(addr => addr.isPrimary).length;
+    if (primaryCount !== 1) {
+      errors.addressPrimary = 'There must be exactly one primary address';
+      missingFields.push('Primary Address');
     }
 
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
+    if (addressErrors.length > 0) {
+      errors.address = addressErrors;
+    }
+  }
+
+  // General error summary
+  if (missingFields.length > 1) {
+    errors.general = `Please fix the following: ${missingFields.join(', ')}`;
+  } else if (missingFields.length === 1) {
+    errors.general = `Please fix the error in: ${missingFields[0]}`;
+  }
+
+  if (errors.general) {
+    toast.error(errors.general);
+  }
+
+  setFormErrors(errors);
+  return Object.keys(errors).length === 0;
+};
+
+
 
   const handleSubmitCustomer = async () => {
     if (!validateCustomerForm()) return;
@@ -1071,11 +1119,10 @@ const CustomerManagement: React.FC = () => {
           {/* Insert this above the filters section, after <PageHeader ... /> */}
           <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
             <button
-              className={`flex-1 px-6 py-3 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                customerTypeTab === 'customer' 
-                  ? 'bg-white text-blue-700 shadow-sm border border-gray-200' 
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
+              className={`flex-1 px-6 py-3 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'customer'
+                ? 'bg-white text-blue-700 shadow-sm border border-gray-200'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
               onClick={() => setCustomerTypeTab('customer')}
               type="button"
             >
@@ -1085,11 +1132,10 @@ const CustomerManagement: React.FC = () => {
               </div>
             </button>
             <button
-              className={`flex-1 px-6 py-3 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                customerTypeTab === 'supplier' 
-                  ? 'bg-white text-blue-700 shadow-sm border border-gray-200' 
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }`}
+              className={`flex-1 px-6 py-3 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'supplier'
+                ? 'bg-white text-blue-700 shadow-sm border border-gray-200'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                }`}
               onClick={() => setCustomerTypeTab('supplier')}
               type="button"
             >
@@ -1141,7 +1187,7 @@ const CustomerManagement: React.FC = () => {
                   <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                     <div className="text-center">
                       <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                      <p className="text-lg font-medium text-gray-900 mb-2">{customerTypeTab === 'customer'?"No Customers found":"No Customers found"}</p>
+                      <p className="text-lg font-medium text-gray-900 mb-2">{customerTypeTab === 'customer' ? "No Customers found" : "No Customers found"}</p>
                     </div>
                   </td>
                 </tr>
@@ -1254,7 +1300,7 @@ const CustomerManagement: React.FC = () => {
         itemsPerPage={limit}
       />
 
-       {/* Preview Import Modal */}
+      {/* Preview Import Modal */}
       {showPreviewModal && previewData && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
@@ -1424,6 +1470,7 @@ const CustomerManagement: React.FC = () => {
                 onClick={() => {
                   setShowAddModal(false);
                   resetCustomerForm();
+                  setFormErrors({})
                   setShowAssignedToDropdown(false);
                 }}
                 className="text-gray-400 hover:text-gray-600"
@@ -1665,7 +1712,7 @@ const CustomerManagement: React.FC = () => {
                     </div>
 
                     {/* Scrollable container for address list */}
-                    <div className="max-h-80 overflow-y-auto pr-1 space-y-2">
+                    <div className="max-h-[500px] overflow-y-auto pr-1 space-y-2">
                       {customerFormData.addresses.map((address, index) => (
                         <div
                           key={address.id}
@@ -1674,7 +1721,8 @@ const CustomerManagement: React.FC = () => {
                           <div className='flex-1'>
                             <div className="flex justify-between my-1">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Address * {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                                Address {index + 1} *{' '}
+                                 {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
                               </label>
                               {!address.isPrimary && (
                                 <button
@@ -1721,6 +1769,9 @@ const CustomerManagement: React.FC = () => {
                                 maxLength={6}
                               />
                             </div>
+                            {Array.isArray(formErrors.address) && formErrors.address[index] && (
+                              <p className="text-red-500 text-xs mt-1 pt-2">{formErrors.address[index]}</p>
+                            )}
                           </div>
                           <div className="flex gap-2 ps-2 mt-10 mb-8">
                             {customerFormData.addresses.length > 1 && (
@@ -1735,9 +1786,6 @@ const CustomerManagement: React.FC = () => {
                           </div>
                         </div>
                       ))}
-                      {formErrors.address && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -2019,7 +2067,7 @@ const CustomerManagement: React.FC = () => {
                     </div>
 
                     {/* Scrollable container for address list */}
-                    <div className="max-h-80 overflow-y-auto pr-1 space-y-2">
+                    <div className="max-h-[500px] overflow-y-auto pr-1 space-y-2">
                       {customerFormData.addresses.map((address, index) => (
                         <div
                           key={address.id}
@@ -2028,7 +2076,8 @@ const CustomerManagement: React.FC = () => {
                           <div className='flex-1'>
                             <div className="flex justify-between my-1">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Address * {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                                Address {index + 1} *{' '}
+                                 {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
                               </label>
                               {!address.isPrimary && (
                                 <button
@@ -2075,6 +2124,9 @@ const CustomerManagement: React.FC = () => {
                                 maxLength={6}
                               />
                             </div>
+                            {Array.isArray(formErrors.address) && formErrors.address[index] && (
+                              <p className="text-red-500 text-xs mt-1 pt-2">{formErrors.address[index]}</p>
+                            )}
                           </div>
                           <div className="flex gap-2 ps-2 mt-10 mb-8">
                             {customerFormData.addresses.length > 1 && (
@@ -2089,9 +2141,6 @@ const CustomerManagement: React.FC = () => {
                           </div>
                         </div>
                       ))}
-                      {formErrors.address && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.address}</p>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -2232,7 +2281,7 @@ const CustomerManagement: React.FC = () => {
                     <div className="col-span-2">
                       <p className="text-xs text-gray-500">Address</p>
                       <p className="font-medium text-sm">
-                        {selectedCustomer.addresses && selectedCustomer.addresses.length > 0 
+                        {selectedCustomer.addresses && selectedCustomer.addresses.length > 0
                           ? selectedCustomer.addresses.find(addr => addr.isPrimary)?.address || selectedCustomer.addresses[0].address
                           : selectedCustomer.address || 'No address provided'
                         }
