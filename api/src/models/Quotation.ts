@@ -6,10 +6,12 @@ export interface IQuotation extends Document {
   issueDate: Date;
   validUntil: Date;
   customer: {
+    _id?: string; // Customer ID for reference
     name: string;
     email: string;
     phone: string;
     address: string;
+    addressId?: string; // Address ID for reference
     pan?: string;
   };
   company: {
@@ -55,10 +57,12 @@ const QuotationSchema = new Schema<IQuotation>({
   issueDate: { type: Date, },
   validUntil: { type: Date, },
   customer: {
+    _id: { type: String }, // Customer ID for reference
     name: { type: String, },
     email: { type: String, required: false },
     phone: { type: String, required: false },
     address: { type: String, },
+    addressId: { type: String }, // Address ID for reference
     pan: { type: String, required: false },
   },
   company: {

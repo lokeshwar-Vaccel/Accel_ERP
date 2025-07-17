@@ -184,6 +184,7 @@ export interface IProduct extends Document {
   price: number;
   gst: number;
   minStockLevel: number;
+  maxStockLevel?: number;
   isActive: boolean;
   createdBy: string;
   stockUnit?: StockUnit;
@@ -336,6 +337,11 @@ export interface APIResponse<T = any> {
   message: string;
   data?: T;
   error?: string;
+  totalStock?: number;
+  totalLowStock?: number;
+  totalOutOfStock?: number;
+  totalOverStocked?: number;
+  totalInStock?: number;
   pagination?: {
     page: number;
     limit: number;

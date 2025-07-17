@@ -7,7 +7,7 @@ export const generateReferenceId = async (type: string): Promise<string> => {
   if (type === 'adjustment') prefix = 'AD';
   else if (type === 'purchase_receipt') prefix = 'PR';
   else if (type === 'reservation') prefix = 'RS';
-  
+  else if (type === 'quotation') prefix = 'QT';
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   
   // Find the latest counter for the type and date

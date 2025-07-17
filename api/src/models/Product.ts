@@ -31,6 +31,21 @@ const productSchema = new Schema({
     min: [0, 'Minimum stock level cannot be negative'],
     default: 0
   },
+  maxStockLevel: {
+    type: Number,
+    min: [0, 'Maximum stock level cannot be negative'],
+    default: 0,
+    validate: {
+      validator: function(this: any, value: number) {
+        // Only validate if both min and max are set
+        if (value && this.minStockLevel && value < this.minStockLevel) {
+          return false;
+        }
+        return true;
+      },
+      message: 'Maximum stock level must be greater than or equal to minimum stock level'
+    }
+  },
   isActive: {
     type: Boolean,
     default: true
@@ -40,6 +55,7 @@ const productSchema = new Schema({
     required: [true, 'Part number is required'],
     trim: true,
     maxlength: [100, 'Part number cannot exceed 100 characters'],
+    unique: true
   },
   quantity: {
     type: Number,
@@ -126,6 +142,7 @@ const productSchema = new Schema({
 productSchema.index({ name: 'text', brand: 'text', modelNumber: 'text' });
 productSchema.index({ category: 1 });
 productSchema.index({ isActive: 1 });
+productSchema.index({ partNo: 1 }, { unique: true });
 
 // Virtual for product code (auto-generated)
 // productSchema.virtual('productCode').get(function(this: any) {
@@ -155,12 +172,17 @@ productSchema.pre('save', function(this: any, next) {
   if (this.price < 0) {
     throw new Error('Price cannot be negative');
   }
-  
   // Ensure minimum stock level is valid
   if (this.minStockLevel < 0) {
     throw new Error('Minimum stock level cannot be negative');
   }
-  
+  // Ensure maximum stock level is valid
+  if (this.maxStockLevel < 0) {
+    throw new Error('Maximum stock level cannot be negative');
+  }
+  if (this.maxStockLevel && this.minStockLevel && this.maxStockLevel < this.minStockLevel) {
+    throw new Error('Maximum stock level must be greater than or equal to minimum stock level');
+  }
   next();
 });
 

@@ -127,6 +127,7 @@ const baseProductFields = {
   specifications: Joi.object().unknown(true),
   price: Joi.number().min(0).precision(2).required(),
   minStockLevel: Joi.number().integer().min(0).required(),
+  maxStockLevel: Joi.number().integer().min(0).required(),
   isActive: Joi.boolean().default(true),
   tags: Joi.array().items(Joi.string().max(50)).max(10),
   dimensions: Joi.object({
@@ -172,6 +173,7 @@ export const createProductSchema = Joi.object({
   specifications: baseProductFields.specifications,
   price: baseProductFields.price,
   minStockLevel: baseProductFields.minStockLevel,
+  maxStockLevel: baseProductFields.maxStockLevel,
   isActive: baseProductFields.isActive,
   tags: baseProductFields.tags,
   dimensions: baseProductFields.dimensions,
@@ -190,7 +192,6 @@ export const createProductSchema = Joi.object({
   gst: baseProductFields.gst,
   gndp: baseProductFields.gndp,
   cpcbNo: baseProductFields.cpcbNo,
-  // mrp: baseProductFields.mrp,
   gndpTotal: baseProductFields.gndpTotal,
   createdBy: baseProductFields.createdBy,
   uom: Joi.string().valid(...allowedStockUnits).required()
@@ -206,6 +207,7 @@ export const updateProductSchema = Joi.object({
   specifications: baseProductFields.specifications,
   // price: baseProductFields.price,
   minStockLevel: baseProductFields.minStockLevel,
+  maxStockLevel: baseProductFields.maxStockLevel,
   isActive: baseProductFields.isActive,
   tags: baseProductFields.tags,
   dimensions: baseProductFields.dimensions,
@@ -223,7 +225,7 @@ export const updateProductSchema = Joi.object({
   make: baseProductFields.make,
   gst: baseProductFields.gst,
   gndp: baseProductFields.gndp,
-  mrp: baseProductFields.mrp,
+  price: baseProductFields.price,
   gndpTotal: baseProductFields.gndpTotal,
   createdBy: baseProductFields.createdBy,
   stockUnit: Joi.string().valid(...allowedStockUnits).allow(null)

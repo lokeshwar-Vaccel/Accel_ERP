@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Package, DollarSign, TrendingDown, TrendingUp, X, ChevronDown, Settings, MapPin, Hash } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Package, DollarSign, TrendingDown, TrendingUp, X, ChevronDown, Settings, MapPin, Hash, Filter, IndianRupee } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 import { RootState } from 'redux/store';
@@ -37,6 +37,7 @@ export interface Product {
   createdAt: string;
   updatedAt: string;
   createdBy?: string | { _id: string; firstName?: string; lastName?: string };
+  maxStockLevel?: number; // Added
 }
 
 
@@ -52,7 +53,9 @@ interface ProductFormData {
 }
 
 const ProductManagement: React.FC = () => {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<Product[]>([]); // paginated for table
+  const [allProductsForAvg, setAllProductsForAvg] = useState<Product[]>([]); // all for avg price
+  const [activeProducts, setActiveProducts] = useState<Product[]>([]); // all for avg price
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
@@ -68,7 +71,7 @@ const ProductManagement: React.FC = () => {
   // Custom dropdown states
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  
+
   // Form dropdown states
   const [showFormCategoryDropdown, setShowFormCategoryDropdown] = useState(false);
   const [showFormDeptDropdown, setShowFormDeptDropdown] = useState(false);
@@ -96,6 +99,7 @@ const ProductManagement: React.FC = () => {
     partNo: '',
     quantity: 0,
     minStockLevel: 0,
+    maxStockLevel: 0,
     isActive: true,
 
     hsnNumber: '',
@@ -134,14 +138,31 @@ const ProductManagement: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
+  // Sorting state
+  const [sortField, setSortField] = useState('all');
+  const [sortOrder, setSortOrder] = useState('asc');
+
+  // Collapsible filter panel state
+  const [showFilters, setShowFilters] = useState(false);
+
   useEffect(() => {
     fetchProducts();
   }, []);
 
+  // Update sort param when sortField or sortOrder changes
+  useEffect(() => {
+    if (sortField === 'all' || sortOrder === 'all') {
+      setSort('-createdAt'); // default sort
+    } else {
+      const sortParam = sortOrder === 'asc' ? sortField : `-${sortField}`;
+      setSort(sortParam);
+    }
+  }, [sortField, sortOrder]);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as Element;
+      const target = event.target as HTMLElement;
       if (!target.closest('.dropdown-container')) {
         setShowCategoryDropdown(false);
         setShowStatusDropdown(false);
@@ -149,7 +170,9 @@ const ProductManagement: React.FC = () => {
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
   }, []);
 
   // Modal handlers
@@ -165,6 +188,7 @@ const ProductManagement: React.FC = () => {
       partNo: '',
       quantity: 0,
       minStockLevel: 0,
+      maxStockLevel: 0,
       isActive: true,
       hsnNumber: '',
       dept: '',
@@ -196,6 +220,7 @@ const ProductManagement: React.FC = () => {
       partNo: product.partNo || '',
       quantity: product.quantity,
       minStockLevel: product.minStockLevel,
+      maxStockLevel: product.maxStockLevel || 0,
       isActive: product.isActive ?? true,
 
       hsnNumber: product.hsnNumber || '',
@@ -233,6 +258,7 @@ const ProductManagement: React.FC = () => {
       partNo: '',
       quantity: 0,
       minStockLevel: 0,
+      maxStockLevel: 0,
       isActive: true,
       hsnNumber: '',
       dept: '',
@@ -278,6 +304,16 @@ const ProductManagement: React.FC = () => {
       errors.partNo = 'Part Number must be at least 2 characters long';
     }
 
+    // Uniqueness check (for create and edit)
+    const isDuplicatePartNo = products.some(
+      (p) =>
+        p.partNo.trim().toLowerCase() === formData.partNo.trim().toLowerCase() &&
+        (!isEditing || (selectedProduct && p._id !== selectedProduct._id))
+    );
+    if (isDuplicatePartNo) {
+      errors.partNo = 'Part Number must be unique';
+    }
+
     if (!formData.category.trim()) {
       errors.category = 'Category is required';
     }
@@ -295,6 +331,30 @@ const ProductManagement: React.FC = () => {
       errors.minStockLevel = 'Minimum stock level cannot be negative';
     }
 
+    // Ensure minStockLevel is an integer
+    if (formData.minStockLevel && !Number.isInteger(formData.minStockLevel)) {
+      errors.minStockLevel = 'Minimum stock level must be a whole number';
+    }
+
+    // Max Stock Level validation
+    if (formData.maxStockLevel < 0) {
+      errors.maxStockLevel = 'Maximum stock level cannot be negative';
+    }
+    if (formData.maxStockLevel && !Number.isInteger(formData.maxStockLevel)) {
+      errors.maxStockLevel = 'Maximum stock level must be a whole number';
+    }
+    if (
+      formData.maxStockLevel &&
+      formData.minStockLevel &&
+      formData.maxStockLevel <= formData.minStockLevel
+    ) {
+      errors.maxStockLevel = 'Maximum stock level must be greater than or equal to minimum stock level';
+    }
+
+    if (!formData.maxStockLevel || formData.maxStockLevel <= 0) {
+      errors.maxStockLevel = 'Max Stock Level must be greater than 0';
+    }
+
     if (!formData.price || formData.price <= 0) {
       errors.price = 'MRP must be greater than 0';
     }
@@ -305,7 +365,7 @@ const ProductManagement: React.FC = () => {
 
     // HSN Number validation (if provided)
     if (formData.hsnNumber && !/^\d{4,8}$/.test(formData.hsnNumber)) {
-      errors.hsnNumber = 'HSN Number must be 4-8 digits only';
+      errors.hsnNumber = 'HSN Number must be 4-8 digits only (no decimals)';
     }
 
     // GST validation (if provided)
@@ -314,11 +374,11 @@ const ProductManagement: React.FC = () => {
     }
 
     setFormErrors(errors);
-    
+
     // If there are errors, show a summary message
     if (Object.keys(errors).length > 0) {
       const missingFields = Object.keys(errors).map(field => {
-        switch(field) {
+        switch (field) {
           case 'name': return 'Product Name';
           case 'partNo': return 'Part Number';
           case 'category': return 'Category';
@@ -327,12 +387,13 @@ const ProductManagement: React.FC = () => {
           case 'price': return 'MRP';
           case 'gndp': return 'GNDP Price';
           case 'minStockLevel': return 'Min Stock Level';
+          case 'maxStockLevel': return 'Max Stock Level';
           case 'hsnNumber': return 'HSN Number';
           case 'gst': return 'GST Rate';
           default: return field;
         }
       });
-      
+
       if (missingFields.length > 1) {
         errors.general = `Please fill in the required fields: ${missingFields.join(', ')}`;
       } else {
@@ -365,9 +426,16 @@ const ProductManagement: React.FC = () => {
       closeProductModal();
       toast.success(isEditing ? 'Product updated successfully' : 'Product created successfully');
     } catch (err: any) {
-      console.error('Error saving product:', err);
       if (err.response && err.response.data && err.response.data.message) {
-        toast.error(err.response.data.message);
+        if (
+          err.response.data.message.includes('duplicate key') &&
+          err.response.data.message.includes('partNo')
+        ) {
+          toast.error('Part Number must be unique');
+          setFormErrors({ partNo: 'Part Number must be unique' });
+        } else {
+          toast.error(err.response.data.message);
+        }
       } else {
         toast.error(isEditing ? 'Failed to update product' : 'Failed to create product');
       }
@@ -403,7 +471,10 @@ const ProductManagement: React.FC = () => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'price' || name === 'minStockLevel' ? Number(value) : value
+      [name]: name === 'price' ? Number(value) :
+        name === 'minStockLevel' ? parseInt(value, 10) :
+          name === 'maxStockLevel' ? parseInt(value, 10) :
+            value
     }));
 
     // Clear error for this field
@@ -441,7 +512,7 @@ const ProductManagement: React.FC = () => {
     label: dept
   }));
 
-  const formUomOptions = ["pcs", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll"].map(unit => ({
+  const formUomOptions = ["pcs", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll", "nos"].map(unit => ({
     value: unit,
     label: unit
   }));
@@ -536,21 +607,15 @@ const ProductManagement: React.FC = () => {
       ...(statusFilter !== 'all' && {
         isActive: statusFilter === 'active' ? true : false,
       }),
-      // ...(leadSourceFilter && { leadSource: leadSourceFilter }),
-      // ...(dateFrom && { dateFrom }),
-      // ...(dateTo && { dateTo }),
-      // ...(assignedToParam && { assignedTo: assignedToParam }),
     };
 
     try {
       setLoading(true);
       const response = await apiClient.products.getAll(params);
-      // setCounts(response.data.counts);
       setCurrentPage(response.pagination.page);
       setLimit(response.pagination.limit);
       setTotalDatas(response.pagination.total);
       setTotalPages(response.pagination.pages);
-      // Handle different response formats: { data: { products: [...] } } or { data: [...] }
       let products: any[] = [];
       if (response.data) {
         if (Array.isArray(response.data)) {
@@ -562,15 +627,51 @@ const ProductManagement: React.FC = () => {
       setProducts(products);
     } catch (error) {
       console.error('Error fetching products:', error);
-      // Set empty array on error instead of mock data to show real issue
       setProducts([]);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchAllProductsForAvg = async () => {
+    try {
+      let allProducts: any[] = [];
+      let page = 1;
+      let hasMore = true;
+      const limit = 100;
+
+      while (hasMore) {
+        const response: any = await apiClient.products.getAll({ page, limit });
+        let productsData: any[] = [];
+        if (response?.data) {
+          if (Array.isArray(response.data)) {
+            productsData = response.data;
+          } else if (response.data.products && Array.isArray(response.data.products)) {
+            productsData = response.data.products;
+          }
+        }
+        allProducts = allProducts.concat(productsData);
+
+        // Check if there are more pages
+        const pagination = response?.pagination || response?.data?.pagination;
+        if (pagination && pagination.pages && page < pagination.pages) {
+          page += 1;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      setAllProductsForAvg(allProducts);
+      setActiveProducts(allProducts.filter(p => p.isActive));
+    } catch (error) {
+      setAllProductsForAvg([]);
+      setActiveProducts([]);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
+    fetchAllProductsForAvg();
   }, [currentPage, limit, sort, searchTerm, statusFilter, categoryFilter]);
 
   const filteredProducts = Array.isArray(products) ? products.filter(product => {
@@ -612,6 +713,18 @@ const ProductManagement: React.FC = () => {
     return option ? option.label : 'All Status';
   };
 
+  // Clear all filters handler
+  const clearAllFilters = () => {
+    setShowFilters(false);
+    setSearchTerm('');
+    setSortField('all');
+    setSortOrder('asc');
+    setCategoryFilter('all');
+    setStatusFilter('all');
+  };
+
+   const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all' || sortField !== 'all' || searchTerm;
+
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader
@@ -643,7 +756,8 @@ const ProductManagement: React.FC = () => {
             <div>
               <p className="text-xs text-gray-600">Active Products</p>
               <p className="text-xl font-bold text-green-600">
-                {Array.isArray(products) ? products.filter(p => p.isActive).length : 0}
+              {totalDatas}
+                {/* {Array.isArray(products) ? products.filter(p => p.isActive).length : 0} */}
               </p>
             </div>
             <TrendingUp className="w-6 h-6 text-green-600" />
@@ -663,91 +777,205 @@ const ProductManagement: React.FC = () => {
             <div>
               <p className="text-xs text-gray-600">Avg Price</p>
               <p className="text-xl font-bold text-orange-600">
-                {/* ₹{Array.isArray(products) && products.length > 0 ? Math.round(products.reduce((acc, p) => acc + (p.price || 0), 0) / products.length).toLocaleString() : 0} */}
+                ₹{allProductsForAvg.length > 0
+                  ? (allProductsForAvg.reduce((acc, p) => acc + (p.price || 0), 0) / allProductsForAvg.length).toFixed(2)
+                  : 0}
               </p>
             </div>
-            <DollarSign className="w-6 h-6 text-orange-600" />
+            <IndianRupee className="w-6 h-6 text-orange-600" />
           </div>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-
-          {/* Category Custom Dropdown */}
-          <div className="relative dropdown-container">
+      {/* Filters Button */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+        {/* Primary Search Bar */}
+        <div className="p-3 border-b border-gray-100">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
             <button
-              onClick={() => {
-                setShowCategoryDropdown(!showCategoryDropdown);
-                setShowStatusDropdown(false);
-              }}
-              className="flex items-center justify-between w-full md:w-32 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+              onClick={() => setShowFilters(v => !v)}
+              className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-xs font-medium flex items-center gap-1.5"
             >
-              <span className="text-gray-700 truncate mr-1">{getCategoryLabel(categoryFilter)}</span>
-              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+              <Filter className="w-3.5 h-3.5" />
+              Filters
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
             </button>
-            {showCategoryDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                {categoryOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setCategoryFilter(option.value);
-                      setShowCategoryDropdown(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                      }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
+          </div>
+        </div>
+        {/* Collapsible Filter Panel */}
+        {showFilters && (
+          <div className="px-6 py-6 bg-gray-50">
+            {/* Main Filter Controls */}
+            <div className="grid grid-cols-5 gap-4 mb-6">
+              {/* Sort By */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Sort By</label>
+                <select
+                  value={sortField}
+                  onChange={e => setSortField(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
+                >
+                  <option value="all">Select Field</option>
+                  <option value="name">Product Name</option>
+                  <option value="partNo">Part Number</option>
+                  <option value="price">Price</option>
+                </select>
               </div>
-            )}
-          </div>
 
-          {/* Status Custom Dropdown */}
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => {
-                setShowStatusDropdown(!showStatusDropdown);
-                setShowCategoryDropdown(false);
-              }}
-              className="flex items-center justify-between w-full md:w-28 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-            >
-              <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
-              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showStatusDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                {statusOptions.map((option) => (
+              {/* Sort Order */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Sort Order</label>
+                <select
+                  value={sortOrder}
+                  onChange={e => setSortOrder(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
+                >
+                  <option value="asc">Ascending (A-Z)</option>
+                  <option value="desc">Descending (Z-A)</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+                {/* Category Custom Dropdown */}
+                <div className="relative dropdown-container">
                   <button
-                    key={option.value}
                     onClick={() => {
-                      setStatusFilter(option.value);
+                      setShowCategoryDropdown(!showCategoryDropdown);
                       setShowStatusDropdown(false);
                     }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                      }`}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   >
-                    {option.label}
+                    <span className="text-gray-700 truncate mr-1">{getCategoryLabel(categoryFilter)}</span>
+                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCategoryDropdown ? 'rotate-180' : ''}`} />
                   </button>
-                ))}
+                  {showCategoryDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {categoryOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setCategoryFilter(option.value);
+                            setShowCategoryDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                {/* Status Custom Dropdown */}
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => {
+                      setShowStatusDropdown(!showStatusDropdown);
+                      setShowCategoryDropdown(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  >
+                    <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showStatusDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {statusOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setStatusFilter(option.value);
+                            setShowStatusDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                            }`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-end">
+              <button
+                onClick={clearAllFilters}
+                disabled={!hasActiveFilters}
+                className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                  hasActiveFilters
+                    ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
+                    : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                }`}
+              >
+                Clear All Filters
+              </button>
+            </div>
+
+
+            </div>
+
           </div>
+        )}
+        {/* Active Filters Chips */}
+        {hasActiveFilters && (
+          <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-100">
+            <div className="flex items-center text-sm text-gray-600">
+              {/* <span className="font-medium">{filteredProducts.length}</span>
+              <span className="mx-1">of</span>
+              <span>{filteredProducts.length}</span>
+              <span className="ml-1">items found</span> */}
+            </div>
+          <div className="mt-4 flex flex-wrap gap-2 items-center">
+          <span className="text-xs text-gray-500">Active filters:</span>
+          {categoryFilter !== 'all' && (
+            <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full text-xs flex items-center">
+              {getCategoryLabel(categoryFilter)}
+              <button onClick={() => setCategoryFilter('all')} className="ml-1 text-purple-500 hover:text-purple-700">×</button>
+            </span>
+          )}
+          {statusFilter !== 'all' && (
+            <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs flex items-center">
+              {getStatusLabel(statusFilter)}
+              <button onClick={() => setStatusFilter('all')} className="ml-1 text-blue-500 hover:text-blue-700">×</button>
+            </span>
+          )}
+          {sortField !== 'all' && (
+            <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs flex items-center">
+              {(() => {
+                let label = '';
+                if (sortField === 'name') label = 'Product Name';
+                else if (sortField === 'partNo') label = 'Part No';
+                else if (sortField === 'price') label = 'Price';
+                return `${label} - ${sortOrder === 'asc' ? 'A-Z (Ascending)' : 'Z-A (Descending)'}`;
+              })()}
+              <button onClick={() => setSortField('all')} className="ml-1 text-green-500 hover:text-green-700">×</button>
+            </span>
+          )}
+          {searchTerm && (
+            <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs flex items-center">
+              {`Search: "${searchTerm}"`}
+              <button onClick={() => setSearchTerm('')} className="ml-1 text-yellow-500 hover:text-yellow-700">×</button>
+            </span>
+          )}
         </div>
+        </div>)
+        }
       </div>
+
 
       {/* Products Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -761,6 +989,7 @@ const ProductManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Stock</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UOM</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPCB No</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -779,15 +1008,15 @@ const ProductManagement: React.FC = () => {
               ) : (
                 filteredProducts.map((product) => (
                   <tr key={product._id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap uppercase">
                       <div>
                         <div className="text-xs font-medium text-gray-900">{product.name}</div>
                         {/* <div className="text-xs text-gray-500">Code: {product.productCode || 'N/A'}</div> */}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.partNo}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.category}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.brand || 'N/A'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.category}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.brand || 'N/A'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
                       ₹{product?.price?.toLocaleString()}
                     </td>
@@ -795,12 +1024,15 @@ const ProductManagement: React.FC = () => {
                       {product.minStockLevel}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                      {product.maxStockLevel}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {product?.uom}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {product.cpcbNo || 'N/A'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap uppercase">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${product.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                         }`}>
                         {product.isActive ? 'Active' : 'Inactive'}
@@ -1078,9 +1310,15 @@ const ProductManagement: React.FC = () => {
                         <input
                           type="number"
                           name="minStockLevel"
-                          value={formData.minStockLevel}
+                          value={formData.minStockLevel === 0 ? "" : formData.minStockLevel}
                           onChange={handleInputChange}
-                          // min="0"
+                          step="1"
+                          inputMode="numeric"
+                          onKeyDown={(e) => {
+                            if (e.key === '.' || e.key === ',') {
+                              e.preventDefault();
+                            }
+                          }}
                           className={`w-full px-2 py-1.5 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm ${formErrors.minStockLevel ? 'border-red-500' : 'border-gray-300'
                             }`}
                           placeholder="0"
@@ -1089,15 +1327,38 @@ const ProductManagement: React.FC = () => {
                           <p className="text-red-500 text-xs mt-1">{formErrors.minStockLevel}</p>
                         )}
                       </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Max Stock Level *
+                        </label>
+                        <input
+                          type="number"
+                          name="maxStockLevel"
+                          value={formData.maxStockLevel === 0 ? "" : formData.maxStockLevel}
+                          onChange={handleInputChange}
+                          step="1"
+                          inputMode="numeric"
+                          onKeyDown={(e) => {
+                            if (e.key === '.' || e.key === ',') {
+                              e.preventDefault();
+                            }
+                          }}
+                          className={`w-full px-2 py-1.5 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm ${formErrors.maxStockLevel ? 'border-red-500' : 'border-gray-300'}`}
+                          placeholder="0"
+                        />
+                        {formErrors.maxStockLevel && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.maxStockLevel}</p>
+                        )}
+                      </div>
 
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
                           GNDP Price (₹) *
                         </label>
                         <input
-                          type="text"
+                          type="number"
                           name="gndp"
-                          value={formData.gndp}
+                          value={formData.gndp === 0 ? "" : formData.gndp}
                           onChange={handleInputChange}
                           // min="0"
                           step="0.01"
@@ -1115,12 +1376,13 @@ const ProductManagement: React.FC = () => {
                           MRP (₹) *
                         </label>
                         <input
-                          type="text"
+                          type="number"
                           name="price"
-                          value={formData.price}
+                          value={formData.price === 0 ? "" : formData.price}
                           onChange={handleInputChange}
                           // min="0"
-                          // step="0.01"
+                          step="0.01"
+                          inputMode="decimal"
                           className={`w-full px-2 py-1.5 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm ${formErrors.price ? 'border-red-500' : 'border-gray-300'
                             }`}
                           placeholder="0.00"
@@ -1204,9 +1466,15 @@ const ProductManagement: React.FC = () => {
                             name="hsnNumber"
                             value={formData.hsnNumber}
                             onChange={handleInputChange}
-                            className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                            placeholder="e.g., 8482.10.00"
+                            // pattern="^\\d{4,8}$"
+                            inputMode="numeric"
+                            className={`w-full px-2 py-1.5 border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 text-sm ${formErrors.hsnNumber ? 'border-red-500' : 'border-gray-300'
+                              }`}
+                            placeholder="e.g., 84821000"
                           />
+                          {formErrors.hsnNumber && (
+                            <p className="text-red-500 text-xs mt-1">{formErrors.hsnNumber}</p>
+                          )}
                         </div>
 
                         <div>
@@ -1214,9 +1482,9 @@ const ProductManagement: React.FC = () => {
                             GST Rate (%)
                           </label>
                           <input
-                            type="text"
+                            type="number"
                             name="gst"
-                            value={formData.gst}
+                            value={formData.gst === 0 ? "" : formData.gst}
                             onChange={handleInputChange}
                             className="w-full px-2 py-1.5 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
                             placeholder="e.g., 18"

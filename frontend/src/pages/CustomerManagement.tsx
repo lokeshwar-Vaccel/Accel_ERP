@@ -558,10 +558,10 @@ const validateCustomerForm = (): boolean => {
     missingFields.push('Customer Name');
   }
 
-  if (!customerFormData.phone.trim()) {
-    errors.phone = 'Phone number is required';
-    missingFields.push('Phone Number');
-  }
+  // if (!customerFormData.phone.trim()) {
+  //   errors.phone = 'Phone number is required';
+  //   missingFields.push('Phone Number');
+  // }
 
   if (!customerFormData.email.trim()) {
     errors.email = 'Email is required';
@@ -613,6 +613,15 @@ const validateCustomerForm = (): boolean => {
 
   if (errors.general) {
     toast.error(errors.general);
+  }
+
+  // GST Number validation
+  if (customerFormData.gstNumber) {
+    const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    if (!gstRegex.test(customerFormData.gstNumber)) {
+      errors.gstNumber = 'GST Number must be 15 characters, uppercase, and in valid GSTIN format (e.g., 22AAAAA0000A1Z5)';
+      missingFields.push('Valid GST Number');
+    }
   }
 
   setFormErrors(errors);
@@ -1578,16 +1587,19 @@ const validateCustomerForm = (): boolean => {
                       <input
                         type="text"
                         value={customerFormData.gstNumber}
-                        onChange={(e) => setCustomerFormData({ ...customerFormData, gstNumber: e.target.value })}
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, gstNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15) })}
+                        className={`w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500${formErrors.gstNumber ? ' border-red-500' : ''}`}
                         placeholder="Enter gst number"
                       />
+                      {formErrors.gstNumber && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.gstNumber}</p>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email
+                        Email *
                       </label>
                       <input
                         type="email"
@@ -1603,7 +1615,7 @@ const validateCustomerForm = (): boolean => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone Number *
+                        Phone Number
                       </label>
                       <input
                         type="number"
@@ -1613,9 +1625,9 @@ const validateCustomerForm = (): boolean => {
                           }`}
                         placeholder="Enter phone number"
                       />
-                      {formErrors.phone && (
+                      {/* {formErrors.phone && (
                         <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
-                      )}
+                      )} */}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
@@ -1933,16 +1945,19 @@ const validateCustomerForm = (): boolean => {
                       <input
                         type="text"
                         value={customerFormData.gstNumber}
-                        onChange={(e) => setCustomerFormData({ ...customerFormData, gstNumber: e.target.value })}
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, gstNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15) })}
+                        className={`w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500${formErrors.gstNumber ? ' border-red-500' : ''}`}
                         placeholder="Enter gst number"
                       />
+                      {formErrors.gstNumber && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.gstNumber}</p>
+                      )}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email
+                        Email *
                       </label>
                       <input
                         type="email"
@@ -1958,7 +1973,7 @@ const validateCustomerForm = (): boolean => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone Number *
+                        Phone Number
                       </label>
                       <input
                         type="tel"
@@ -1968,9 +1983,9 @@ const validateCustomerForm = (): boolean => {
                           }`}
                         placeholder="Enter phone number"
                       />
-                      {formErrors.phone && (
+                      {/* {formErrors.phone && (
                         <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
-                      )}
+                      )} */}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">

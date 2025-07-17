@@ -31,6 +31,7 @@ export const getStockLevels = async (
       brand,
       outOfStock,
       overStocked,
+      inStock,
       stockId
     } = req.query as QueryParams & {
       location?: string;
@@ -43,11 +44,12 @@ export const getStockLevels = async (
       brand?: string;
       outOfStock?: string;
       overStocked?: string;
-       stockId?: string; 
+      inStock?: string;
+      stockId?: string;
     };
 
     console.log('Stock levels request query:', req.query);
-    console.log('Stock status filters - lowStock:', lowStock, 'outOfStock:', outOfStock, 'overStocked:', overStocked);
+    console.log('Stock status filters - lowStock:', lowStock, 'inStock:', inStock, 'outOfStock:', outOfStock, 'overStocked:', overStocked);
 
     // Build query
     const query: any = {};
@@ -128,7 +130,7 @@ export const getStockLevels = async (
     console.log('Query used:', JSON.stringify(query));
 
     // Determine if we need to use aggregation (for nested sort fields or stock status filters)
-    const useAggregation = sort.includes('.') || lowStock === 'true' || outOfStock === 'true' || overStocked === 'true';
+    const useAggregation = sort.includes('.') || lowStock === 'true' || outOfStock === 'true' || overStocked === 'true' || inStock === 'true';
 
     if (useAggregation) {
       // Support nested sort fields like 'product.name'
@@ -180,25 +182,49 @@ export const getStockLevels = async (
       ];
 
       // FIX 4: Improve stock status filtering logic
-      if (lowStock === 'true' || outOfStock === 'true' || overStocked === 'true') {
+      if (lowStock === 'true' || outOfStock === 'true' || overStocked === 'true' || inStock === 'true') {
         const statusConditions = [];
 
+        // Out of Stock: quantity <= 0
         if (outOfStock === 'true') {
-          statusConditions.push({ $eq: ['$quantity', 0] });
+          statusConditions.push({ $lte: ['$quantity', 0] });
         }
 
+        // Low Stock: minStock > 0 && quantity < minStock && quantity > 0
         if (lowStock === 'true') {
           statusConditions.push({
             $and: [
-              { $gt: ['$quantity', 0] },
-              { $lte: ['$quantity', { $ifNull: ['$product.minStockLevel', 0] }] }
+              { $gt: ['$product.minStockLevel', 0] },
+              { $lt: ['$quantity', '$product.minStockLevel'] },
+              { $gt: ['$quantity', 0] }
             ]
           });
         }
 
+        // Overstocked: maxStock > 0 && quantity > maxStock
         if (overStocked === 'true') {
           statusConditions.push({
-            $gt: ['$quantity', { $multiply: [{ $ifNull: ['$product.minStockLevel', 0] }, 3] }]
+            $and: [
+              { $gt: ['$product.maxStockLevel', 0] },
+              { $gt: ['$quantity', '$product.maxStockLevel'] }
+            ]
+          });
+        }
+
+        // In Stock: (minStock === 0 || quantity >= minStock) && (maxStock === 0 || quantity <= maxStock) && quantity > 0
+        if (inStock === 'true') {
+          statusConditions.push({
+            $and: [
+              { $gt: ['$quantity', 0] },
+              { $or: [
+                { $eq: ['$product.minStockLevel', 0] },
+                { $gte: ['$quantity', '$product.minStockLevel'] }
+              ] },
+              { $or: [
+                { $eq: ['$product.maxStockLevel', 0] },
+                { $lte: ['$quantity', '$product.maxStockLevel'] }
+              ] }
+            ]
           });
         }
 
@@ -260,12 +286,115 @@ export const getStockLevels = async (
         message = 'Low stock items retrieved successfully';
       } else if (overStocked === 'true') {
         message = 'Overstocked items retrieved successfully';
+      } else if (inStock === 'true') {
+        message = 'In stock items retrieved successfully';
       }
 
+      // --- FIX: Use aggregation for stock status counts ---
+      // Low Stock
+      const totalLowStockAgg = await Stock.aggregate([
+        {
+          $lookup: {
+            from: 'products',
+            localField: 'product',
+            foreignField: '_id',
+            as: 'product'
+          }
+        },
+        { $unwind: '$product' },
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $gt: ['$product.minStockLevel', 0] },
+                { $lt: ['$quantity', '$product.minStockLevel'] },
+                { $gt: ['$quantity', 0] }
+              ]
+            }
+          }
+        },
+        { $count: 'total' }
+      ]);
+      const totalLowStock = totalLowStockAgg[0]?.total || 0;
+
+      // Out of Stock
+      const totalOutOfStockAgg = await Stock.aggregate([
+        {
+          $match: { quantity: { $lte: 0 } }
+        },
+        { $count: 'total' }
+      ]);
+      const totalOutOfStock = totalOutOfStockAgg[0]?.total || 0;
+
+      // Over Stocked
+      const totalOverStockedAgg = await Stock.aggregate([
+        {
+          $lookup: {
+            from: 'products',
+            localField: 'product',
+            foreignField: '_id',
+            as: 'product'
+          }
+        },
+        { $unwind: '$product' },
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $gt: ['$product.maxStockLevel', 0] },
+                { $gt: ['$quantity', '$product.maxStockLevel'] }
+              ]
+            }
+          }
+        },
+        { $count: 'total' }
+      ]);
+      const totalOverStocked = totalOverStockedAgg[0]?.total || 0;
+
+      // In Stock
+      const totalInStockAgg = await Stock.aggregate([
+        {
+          $lookup: {
+            from: 'products',
+            localField: 'product',
+            foreignField: '_id',
+            as: 'product'
+          }
+        },
+        { $unwind: '$product' },
+        {
+          $match: {
+            $expr: {
+              $and: [
+                { $gt: ['$quantity', 0] },
+                { $or: [
+                  { $eq: ['$product.minStockLevel', 0] },
+                  { $gte: ['$quantity', '$product.minStockLevel'] }
+                ] },
+                { $or: [
+                  { $eq: ['$product.maxStockLevel', 0] },
+                  { $lte: ['$quantity', '$product.maxStockLevel'] }
+                ] }
+              ]
+            }
+          }
+        },
+        { $count: 'total' }
+      ]);
+      const totalInStock = totalInStockAgg[0]?.total || 0;
+      // --- END FIX ---
+
+      const totalStock = await Stock.countDocuments({});
+      console.log("totalStock:",totalStock);
       const response: APIResponse = {
         success: true,
         message,
         data: { stockLevels: stockStatusItems },
+        totalStock: totalStock,
+        totalLowStock: totalLowStock,
+        totalOutOfStock: totalOutOfStock,
+        totalOverStocked: totalOverStocked,
+        totalInStock: totalInStock,
         pagination: {
           page: Number(page),
           limit: Number(limit),
@@ -289,14 +418,116 @@ export const getStockLevels = async (
       .skip((Number(page) - 1) * Number(limit));
 
     const total = await Stock.countDocuments(query);
+    console.log("total:",total);
+    
     const pages = Math.ceil(total / Number(limit));
 
     console.log('Final stock levels found:', stockLevels.length); // Debug log
+
+    // --- FIX: Use aggregation for stock status counts ---
+    // Low Stock
+    const totalLowStockAgg = await Stock.aggregate([
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'product',
+          foreignField: '_id',
+          as: 'product'
+        }
+      },
+      { $unwind: '$product' },
+      {
+        $match: {
+          $expr: {
+            $and: [
+              { $gt: ['$product.minStockLevel', 0] },
+              { $lt: ['$quantity', '$product.minStockLevel'] }
+            ]
+          }
+        }
+      },
+      { $count: 'total' }
+    ]);
+    const totalLowStock = totalLowStockAgg[0]?.total || 0;
+
+    // Out of Stock
+    const totalOutOfStockAgg = await Stock.aggregate([
+      {
+        $match: { quantity: 0 }
+      },
+      { $count: 'total' }
+    ]);
+    const totalOutOfStock = totalOutOfStockAgg[0]?.total || 0;
+
+    // Over Stocked
+    const totalOverStockedAgg = await Stock.aggregate([
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'product',
+          foreignField: '_id',
+          as: 'product'
+        }
+      },
+      { $unwind: '$product' },
+      {
+        $match: {
+          $expr: {
+            $and: [
+              { $gt: ['$product.maxStockLevel', 0] },
+              { $gt: ['$quantity', '$product.maxStockLevel'] }
+            ]
+          }
+        }
+      },
+      { $count: 'total' }
+    ]);
+    const totalOverStocked = totalOverStockedAgg[0]?.total || 0;
+
+    // In Stock
+    const totalInStockAgg = await Stock.aggregate([
+      {
+        $lookup: {
+          from: 'products',
+          localField: 'product',
+          foreignField: '_id',
+          as: 'product'
+        }
+      },
+      { $unwind: '$product' },
+      {
+        $match: {
+          $expr: {
+            $and: [
+              { $gt: ['$quantity', 0] },
+              { $or: [
+                { $eq: ['$product.minStockLevel', 0] },
+                { $gte: ['$quantity', '$product.minStockLevel'] }
+              ] },
+              { $or: [
+                { $eq: ['$product.maxStockLevel', 0] },
+                { $lte: ['$quantity', '$product.maxStockLevel'] }
+              ] }
+            ]
+          }
+        }
+      },
+      { $count: 'total' }
+    ]);
+    const totalInStock = totalInStockAgg[0]?.total || 0;
+    // --- END FIX ---
+
+    const totalStock = await Stock.countDocuments({});
 
     const response: APIResponse = {
       success: true,
       message: 'Stock levels retrieved successfully',
       data: { stockLevels },
+      totalStock: totalStock,
+      totalLowStock: totalLowStock,
+      totalOutOfStock: totalOutOfStock,
+      totalOverStocked: totalOverStocked,
+      totalInStock: totalInStock,
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -389,11 +620,11 @@ export const adjustStock = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { stockId,product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId: reservationReferenceId, reservedUntil } = req.body;
+    const { stockId, product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId: reservationReferenceId, reservedUntil } = req.body;
 
-    console.log("stock-1:",stockId);
+    console.log("stock-1:", stockId);
     const stock = await Stock.findById(stockId);
-    
+
     if (!stock) {
       return next(new AppError('Stock record not found', 404));
     }

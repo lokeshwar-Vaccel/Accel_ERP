@@ -34,6 +34,7 @@ import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
 import { Pagination } from 'components/ui/Pagination';
 import apiClientQuotation from '../utils/api';
+import QuotationForm from '../components/QuotationForm';
 
 
 // Types
@@ -251,6 +252,8 @@ const InvoiceManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
+  const [quotations, setQuotations] = useState<any[]>([]);
+  const [quotationLoading, setQuotationLoading] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -356,45 +359,26 @@ const InvoiceManagement: React.FC = () => {
 
   // Add search state for product dropdowns
   const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
-  
+
   // Add search state for UOM dropdowns
   const [uomSearchTerms, setUomSearchTerms] = useState<Record<number, string>>({});
   const [showUomDropdowns, setShowUomDropdowns] = useState<Record<number, boolean>>({});
 
   // Quotation-specific state
-  const [quotations, setQuotations] = useState<any[]>([]);
-  const [quotationLoading, setQuotationLoading] = useState(false);
-  const [showQuotationModal, setShowQuotationModal] = useState(false);
+  const [showQuotationForm, setShowQuotationForm] = useState(false);
   const [selectedQuotation, setSelectedQuotation] = useState<any | null>(null);
-  const [quotationModalMode, setQuotationModalMode] = useState<'create' | 'edit' | 'view'>('create');
-  
-  // Quotation form state
-  const [quotationForm, setQuotationForm] = useState({
-    customer: '',
-    dueDate: '',
-    items: [{
-      product: '',
-      description: '',
-      quantity: 1,
-      unitPrice: 0,
-      taxRate: 18,
-      hsnSac: '',
-      partNo: '',
-      uom: 'pcs',
-      discount: 0,
-    }],
-    notes: ''
-  });
+  const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create');
+  const [showQuotationViewModal, setShowQuotationViewModal] = useState(false);
 
   // Filter products based on search term
   const getFilteredProducts = (searchTerm: string = '') => {
     console.log('getFilteredProducts called with:', { searchTerm, totalProducts: products.length, products: products.slice(0, 3) });
-    
+
     if (!searchTerm.trim()) {
       console.log('No search term, returning all products:', products.length);
       return products;
     }
-    
+
     const term = searchTerm.toLowerCase();
     const filtered = products.filter(product => {
       const nameMatch = product.name?.toLowerCase().includes(term);
@@ -402,7 +386,7 @@ const InvoiceManagement: React.FC = () => {
       const brandMatch = product.brand?.toLowerCase().includes(term);
       return nameMatch || categoryMatch || brandMatch;
     });
-    
+
     console.log('Filtered products:', { term, filtered: filtered.length, results: filtered.slice(0, 3) });
     return filtered;
   };
@@ -495,8 +479,8 @@ const InvoiceManagement: React.FC = () => {
       const adjustedTaxRateRaw = calculateAdjustedTaxRate(unitPrice, quantity, targetItemTotal);
       const adjustedTaxRate = Math.min(100, adjustedTaxRateRaw); // Limit to 100%
 
-      let taxAmount = truncateTo2((base * adjustedTaxRate) / 100);
-      const totalPrice = Number((base + taxAmount).toFixed(2));
+      let taxAmount = parseFloat(((base * adjustedTaxRate) / 100).toFixed(2));
+      const totalPrice = parseFloat((base + taxAmount).toFixed(2));
 
       return {
         ...item,
@@ -718,8 +702,8 @@ const InvoiceManagement: React.FC = () => {
 
     try {
       const response = await apiClient.invoices.getAll(params);
-      console.log("response555:",response);
-      
+      console.log("response555:", response);
+
       if (response.data.pagination) {
         setCurrentPage(response.data.pagination.page);
         setLimit(response.data.pagination.limit);
@@ -763,7 +747,7 @@ const InvoiceManagement: React.FC = () => {
         sort,
         search: searchTerm,
       });
-      
+
       const responseData = response.data as any;
       if (responseData.pagination) {
         setQuotations(responseData.quotations || []);
@@ -789,10 +773,10 @@ const InvoiceManagement: React.FC = () => {
       console.log('📡 Making API call to stock.getStock() for all inventory items...');
       const response = await apiClient.stock.getStock({ limit: 10000, page: 1 });
       console.log('✅ Full inventory response received:', response);
-      
+
       const responseData = response.data as any;
       console.log('📦 Response data structure:', responseData);
-      
+
       // Extract stock levels which contain product information
       let productsData = [];
       if (responseData.stockLevels && Array.isArray(responseData.stockLevels)) {
@@ -816,7 +800,7 @@ const InvoiceManagement: React.FC = () => {
         console.log('📊 Available keys:', Object.keys(responseData || {}));
         productsData = [];
       }
-      
+
       setProducts(productsData);
       console.log(`✨ Successfully set ${productsData.length} inventory items for dropdown`);
       if (productsData.length > 0) {
@@ -863,9 +847,9 @@ const InvoiceManagement: React.FC = () => {
       if (response.success && response.data && response.data.companies && response.data.companies.length > 0) {
         // Get the first company settings (assuming single company setup)
         const companySettings = response.data.companies[0];
-        
+
         setGeneralSettings(companySettings);
-        
+
         // Auto-populate default values in newInvoice if it exists
         if (newInvoice) {
           console.log("companySettings11:", companySettings);
@@ -955,20 +939,19 @@ const InvoiceManagement: React.FC = () => {
   // Quotation handlers
   const handleCreateQuotation = () => {
     setSelectedQuotation(null);
-    setQuotationModalMode('create');
-    setShowQuotationModal(true);
+    setModalMode('create');
+    setShowQuotationForm(true);
   };
 
   const handleViewQuotation = (quotation: any) => {
     setSelectedQuotation(quotation);
-    setQuotationModalMode('view');
-    setShowQuotationModal(true);
+    setShowQuotationViewModal(true);
   };
 
   const handleEditQuotation = (quotation: any) => {
     setSelectedQuotation(quotation);
-    setQuotationModalMode('edit');
-    setShowQuotationModal(true);
+    setModalMode('edit');
+    setShowQuotationForm(true);
   };
 
   const handleDeleteQuotation = async (quotation: any) => {
@@ -1189,15 +1172,16 @@ const InvoiceManagement: React.FC = () => {
       const response = await apiClient.invoices.sendEmail(invoice._id);
 
       if (response.success) {
-        toast.success(`Invoice email sent successfully!`);
+        toast.success(response.message || `Invoice email sent successfully!`);
         await fetchInvoices();
         await fetchStats();
       } else {
-        toast.error('Failed to send invoice email');
+        toast.error(response.message || 'Failed to send invoice email');
       }
     } catch (error) {
       console.error('Error sending invoice email:', error);
-      toast.error('Failed to send invoice email. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Failed to send invoice email. Please try again.';
+      toast.error(errorMessage);
     }
   };
 
@@ -1444,11 +1428,11 @@ const InvoiceManagement: React.FC = () => {
 
 
       const isValid = quantity <= available && available > 0;
-      const message = available === 0 
+      const message = available === 0
         ? `Out of stock`
         : !isValid
-        ? `Only ${available} units available`
-        : `${available} units available`;
+          ? `Only ${available} units available`
+          : `${available} units available`;
 
       setStockValidation(prev => ({
         ...prev,
@@ -1627,7 +1611,7 @@ const InvoiceManagement: React.FC = () => {
   const calculateTotalDiscount = () => {
     const itemDiscounts = calculateItemDiscounts();
     // const invoiceDiscount = newInvoice.discountAmount || 0;
-    return parseFloat((itemDiscounts ).toFixed(2)) || 0;
+    return parseFloat((itemDiscounts).toFixed(2)) || 0;
   };
 
 
@@ -2171,7 +2155,221 @@ const InvoiceManagement: React.FC = () => {
     return sub - disc + tax;
   }
 
-  const truncateTo2 = (value: number) => Math.floor(value * 100) / 100;
+  // Print quotation function
+  const printQuotation = (quotation: any) => {
+    const printContent = `
+    <html>
+      <head>
+        <title>Quotation ${quotation.quotationNumber}</title>
+        <style>
+          body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            line-height: 1.6;
+          }
+          .header { 
+            text-align: center; 
+            margin-bottom: 30px; 
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+          }
+          .company-info, .customer-info { 
+            width: 100%; 
+            margin-bottom: 20px; 
+          }
+          .company-info td, .customer-info td { 
+            padding: 5px 10px; 
+            font-size: 12px; 
+            vertical-align: top;
+          }
+          .quotation-details {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+          }
+          table.items { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-bottom: 20px; 
+          }
+          table.items th, table.items td { 
+            border: 1px solid #333; 
+            padding: 8px; 
+            font-size: 11px; 
+            text-align: left;
+          }
+          table.items th { 
+            background: #eee; 
+            font-weight: bold;
+          }
+          .summary-table { 
+            width: 100%; 
+            margin-top: 20px; 
+          }
+          .summary-table td { 
+            font-size: 12px; 
+            padding: 5px 10px; 
+          }
+          .footer { 
+            margin-top: 30px; 
+            font-size: 12px; 
+          }
+          .total-row {
+            font-weight: bold;
+            background-color: #f0f0f0;
+          }
+          .notes-section {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+          }
+          @media print {
+            body { margin: 0; }
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>${quotation.company?.name || 'Sun Power Services'}</h1>
+          <div>${quotation.company?.address || ''}</div>
+          <div>Phone: ${quotation.company?.phone || ''} | Email: ${quotation.company?.email || ''}</div>
+          <div>PAN: ${quotation.company?.pan || ''}</div>
+        </div>
+
+        <div class="quotation-details">
+          <h2>QUOTATION</h2>
+          <table class="quotation-details" style="width: 100%; border-collapse: collapse; border: 1px solid #333; border-radius: 5px; padding: 10px; margin-bottom: 20px;">
+            <tr>
+              <td><strong>Quotation No:</strong></td>
+              <td>${quotation.quotationNumber}</td>
+              <td><strong>Issue Date:</strong></td>
+              <td>${quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : ''}</td>
+            </tr>
+            <tr>
+              <td><strong>Valid Until:</strong></td>
+              <td>${quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString() : ''}</td>
+              <td><strong>Validity Period:</strong></td>
+              <td>${quotation.validityPeriod || 30} days</td>
+            </tr>
+          </table>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
+          <div style="width: 48%;">
+            <h3>From:</h3>
+            <div>
+              <strong>${quotation.company?.name || 'Sun Power Services'}</strong><br>
+              ${quotation.company?.address || ''}<br>
+              Phone: ${quotation.company?.phone || 'N/A'}<br>
+              Email: ${quotation.company?.email || 'N/A'}<br>
+              PAN: ${quotation.company?.pan || 'N/A'}
+              ${quotation.company?.bankDetails ? `
+              <br><br><strong>Bank Details:</strong><br>
+              Bank: ${quotation.company.bankDetails.bankName || 'N/A'}<br>
+              Account: ${quotation.company.bankDetails.accountNo || 'N/A'}<br>
+              IFSC: ${quotation.company.bankDetails.ifsc || 'N/A'}<br>
+              Branch: ${quotation.company.bankDetails.branch || 'N/A'}
+              ` : ''}
+            </div>
+          </div>
+          <div style="width: 48%;">
+            <h3>To:</h3>
+            <div>
+              <strong>${quotation.customer?.name || 'N/A'}</strong><br>
+              Email: ${quotation.customer?.email || 'N/A'}<br>
+              Phone: ${quotation.customer?.phone || 'N/A'}<br>
+              Address: ${quotation.customer?.address || 'N/A'}
+            </div>
+          </div>
+        </div>
+
+        <table class="items">
+          <thead>
+            <tr>
+              <th>S.No</th>
+              <th>Description</th>
+              <th>HSN Code</th>
+              <th>Qty</th>
+              <th>UOM</th>
+              <th>Unit Price</th>
+              <th>Discount</th>
+              <th>Tax Rate</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${(quotation.items || []).map((item: any, idx: number) => `
+              <tr>
+                <td>${idx + 1}</td>
+                <td>${item.description || ''}</td>
+                <td>${item.hsnCode || 'N/A'}</td>
+                <td>${item.quantity || 0}</td>
+                <td>${item.uom || 'pcs'}</td>
+                <td>₹${item.unitPrice?.toLocaleString() || '0'}</td>
+                <td>${item.discount || 0}%</td>
+                <td>${item.taxRate || 0}%</td>
+                <td>₹${(item.unitPrice * item.quantity * (1 - item.discount / 100) * (1 + item.taxRate / 100)).toFixed(2)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <table class="summary-table" style="float: right; width: 300px;">
+          <tr>
+            <td><strong>Subtotal:</strong></td>
+            <td>₹${quotation.subtotal?.toLocaleString() || '0'}</td>
+          </tr>
+          <tr>
+            <td><strong>Total Discount:</strong></td>
+            <td>-₹${quotation.totalDiscount?.toFixed(2) || '0'}</td>
+          </tr>
+          <tr>
+            <td><strong>Total Tax:</strong></td>
+            <td>₹${quotation.totalTax?.toFixed(2) || '0'}</td>
+          </tr>
+          <tr class="total-row">
+            <td><strong>Grand Total:</strong></td>
+            <td><strong>₹${quotation.grandTotal?.toFixed(2) || '0'}</strong></td>
+          </tr>
+        </table>
+
+        ${(quotation.notes || quotation.terms) ? `
+        <div class="notes-section">
+          ${quotation.notes ? `
+          <div style="margin-bottom: 15px;">
+            <strong>Notes:</strong><br>
+            ${quotation.notes}
+          </div>
+          ` : ''}
+          ${quotation.terms ? `
+          <div>
+            <strong>Terms & Conditions:</strong><br>
+            ${quotation.terms}
+          </div>
+          ` : ''}
+        </div>
+        ` : ''}
+
+        <div class="footer">
+          <div style="margin-top: 50px; text-align: center;">
+            <div style="margin-bottom: 30px;">For ${quotation.company?.name || 'Sun Power Services'}</div>
+            <div>Authorised Signatory</div>
+          </div>
+        </div>
+      </body>
+    </html>
+    `;
+    
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      printWindow.print();
+    }
+  };
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
@@ -2187,7 +2385,7 @@ const InvoiceManagement: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>
               {invoiceType === 'sale' ? 'Create Invoice' :
-               invoiceType === 'challan' ? 'Create Challan' : 'Create Invoice'}
+                invoiceType === 'challan' ? 'Create Challan' : 'Create Invoice'}
             </span>
           </Button>
         )}
@@ -2391,19 +2589,19 @@ const InvoiceManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                      ₹{quotation.totalAmount?.toLocaleString() || '0.00'}
+                      ₹{quotation.grandTotal?.toFixed(2) || '0.00'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">-</td>
-                    <td className="px-4 py-3 text-sm text-gray-500">-</td>
                     <td className="px-4 py-3">
                       <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
                         Quotation
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">-</td>
                     <td className="px-4 py-3 text-sm text-gray-900">
-                      {quotation.validUntil || 'N/A'}
-                    </td>
+  {quotation.validUntil
+    ? new Date(quotation.validUntil).toLocaleDateString('en-GB') // => 17/07/2025
+    : 'N/A'}
+</td>
+
                     <td className="px-4 py-3 text-sm font-medium">
                       <div className="flex items-center space-x-1">
                         <button
@@ -2717,7 +2915,7 @@ const InvoiceManagement: React.FC = () => {
                     <p className="text-red-500 text-xs mt-1">{formErrors.dueDate}</p>
                   )}
                 </div>
-                
+
                 {/* Reference No. & Date */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3058,13 +3256,13 @@ const InvoiceManagement: React.FC = () => {
                                 // Auto-calculate discountAmount based on item discounts
                                 const updatedItems = [...newInvoice.items];
                                 updatedItems[index] = { ...updatedItems[index], discount: parseFloat(e.target.value) || 0 };
-                                
+
                                 const totalItemDiscounts = updatedItems.reduce((sum, item) => {
                                   const subtotal = item.quantity * item.unitPrice || 0;
                                   const itemDiscount = (item.discount || 0) * subtotal / 100;
                                   return sum + itemDiscount;
                                 }, 0);
-                                
+
                                 setNewInvoice(prev => ({
                                   ...prev,
                                   discountAmount: totalItemDiscounts
@@ -3214,9 +3412,9 @@ const InvoiceManagement: React.FC = () => {
                       <FileText className="w-4 h-4" />
                       <span>
                         {invoiceType === 'quotation' ? 'Create Quotation' :
-                         invoiceType === 'sale' ? 'Create Invoice' :
-                         invoiceType === 'purchase' ? 'Create Purchase' :
-                         invoiceType === 'challan' ? 'Create Challan' : 'Create Invoice'}
+                          invoiceType === 'sale' ? 'Create Invoice' :
+                            invoiceType === 'purchase' ? 'Create Purchase' :
+                              invoiceType === 'challan' ? 'Create Challan' : 'Create Invoice'}
                       </span>
                     </>
                   )}
@@ -3302,14 +3500,17 @@ const InvoiceManagement: React.FC = () => {
               <div>
                 <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
                 <div className="text-sm text-gray-600">
-                  <p className="font-medium">{selectedInvoice.customer ? selectedInvoice.customer.name : selectedInvoice.supplierName ?? ''}</p>
-                  <p>{selectedInvoice.customer ? selectedInvoice.customer.email : selectedInvoice.supplierEmail ?? ''}</p>
-                  <p>{selectedInvoice.customer ? selectedInvoice.customer.phone : ''}</p>
+                  <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.address : selectedInvoice?.supplierAddress ?? ''}</p>
+                  <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.district : selectedInvoice?.supplierDistrict ?? ''}</p>
+                  <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.state : selectedInvoice?.supplierState ?? ''}</p>
+                  <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.pincode : selectedInvoice?.supplierPincode ?? ''}</p>
+                  <p>{selectedInvoice?.customer ? selectedInvoice?.customer.email : selectedInvoice?.supplierEmail ?? ''}</p>
+                  <p>{selectedInvoice?.customer ? selectedInvoice?.customer.phone : ''}</p>
                 </div>
               </div>
 
               {/* Total Amount Mismatch Warning */}
-              {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount !== selectedInvoice?.externalInvoiceTotal &&(
+              {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount !== selectedInvoice?.externalInvoiceTotal && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <div className="flex items-center">
                     <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
@@ -4130,427 +4331,204 @@ const InvoiceManagement: React.FC = () => {
 
             </div>
           </div>
-                  </div>
-        )}
+        </div>
+      )}
 
-                {/* Quotation Modal */}
-        {showQuotationModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between p-4 border-b border-gray-200">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Create New Quotation
-                </h2>
+      {/* Quotation Modal */}
+      {showQuotationForm && (
+        <QuotationForm
+          isOpen={showQuotationForm}
+          onClose={() => setShowQuotationForm(false)}
+          onSuccess={() => {
+            setShowQuotationForm(false);
+            fetchQuotations();
+          }}
+          customers={customers}
+          products={products}
+          mode={modalMode}
+          generalSettings={generalSettings}
+          initialData={selectedQuotation}
+          quotationId={selectedQuotation?._id}
+        />
+      )}
+
+      {/* Quotation View Modal */}
+      {showQuotationViewModal && selectedQuotation && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Quotation {selectedQuotation.quotationNumber}</h2>
+              <div className="flex items-center space-x-2">
                 <button
-                  onClick={() => setShowQuotationModal(false)}
+                  onClick={() => printQuotation(selectedQuotation)}
+                  className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  Print
+                </button>
+                <button
+                  onClick={() => setShowQuotationViewModal(false)}
                   className="text-gray-400 hover:text-gray-600"
                 >
                   <X className="w-6 h-6" />
                 </button>
               </div>
+            </div>
 
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {/* Form Errors */}
-                {formErrors.general && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                    <p className="text-red-600 text-sm">{formErrors.general}</p>
-                  </div>
-                )}
-
-                {/* Customer and Basic Info */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-6 space-y-6">
+              {/* Quotation Header */}
+              <div className="border-b border-gray-200 pb-4">
+                <div className="flex justify-between items-start">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Customer *
-                    </label>
-                    <div className="relative dropdown-container">
-                      <button
-                        onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
-                        className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.customer ? 'border-red-500' : 'border-gray-300'} hover:border-gray-400`}
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {quotationForm.customer ? 
-                            customers.find(c => c._id === quotationForm.customer)?.name || 'Select Customer'
-                            : 'Select Customer'
-                          }
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCustomerDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showCustomerDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                          <button
-                            onClick={() => {
-                              setQuotationForm({ ...quotationForm, customer: '' });
-                              setShowCustomerDropdown(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!quotationForm.customer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                          >
-                            Select customer
-                          </button>
-                          {customers.map((customer) => (
-                            <button
-                              key={customer._id}
-                              onClick={() => {
-                                setQuotationForm({ ...quotationForm, customer: customer._id });
-                                setShowCustomerDropdown(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${quotationForm.customer === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                            >
-                              <div>
-                                <div className="font-medium">{customer.name}</div>
-                                <div className="text-xs text-gray-500">{customer.email}</div>
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    {formErrors.customer && (
-                      <p className="mt-1 text-sm text-red-600">{formErrors.customer}</p>
-                    )}
+                    <h3 className="text-xl font-bold text-gray-900">
+                      Quotation #{selectedQuotation.quotationNumber}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Issue Date: {selectedQuotation.issueDate ? new Date(selectedQuotation.issueDate).toLocaleDateString() : ''}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Valid Until: {selectedQuotation.validUntil ? new Date(selectedQuotation.validUntil).toLocaleDateString() : ''}
+                    </p>
+                    <p className="text-sm text-gray-600">
+                      Validity Period: {selectedQuotation.validityPeriod || 30} days
+                    </p>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Due Date *
-                    </label>
-                    <input
-                      type="date"
-                      value={quotationForm.dueDate || ''}
-                      onChange={(e) => setQuotationForm({ ...quotationForm, dueDate: e.target.value })}
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.dueDate ? 'border-red-500' : 'border-gray-300'} hover:border-gray-400`}
-                    />
-                    {formErrors.dueDate && (
-                      <p className="mt-1 text-sm text-red-600">{formErrors.dueDate}</p>
-                    )}
+                  <div className="text-right">
+                    <span className="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-blue-100 text-blue-800">
+                      Quotation
+                    </span>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Quotation Type
-                    </label>
-                    <select
-                      value="quotation"
-                      disabled
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
-                    >
-                      <option value="quotation">Quotation</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Items Section */}
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">Items</h3>
-                    <button
-                      onClick={() => {
-                        const newItems = [...quotationForm.items, {
-                          product: '',
-                          description: '',
-                          quantity: 1,
-                          unitPrice: 0,
-                          taxRate: 18,
-                          hsnSac: '',
-                          partNo: '',
-                          uom: 'pcs',
-                          discount: 0,
-                        }];
-                        setQuotationForm({ ...quotationForm, items: newItems });
-                      }}
-                      className="bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-700 flex items-center space-x-1.5 text-sm transition-colors"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Add Item</span>
-                    </button>
-                  </div>
-
-                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-gray-50 border-b border-gray-200">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">Product</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">Description</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Qty</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Unit Price</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Disc %</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Tax %</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Total</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">Actions</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {quotationForm.items.map((item, index) => {
-                            const subtotal = item.quantity * item.unitPrice;
-                            const discountAmount = subtotal * ((item.discount || 0) / 100);
-                            const afterDiscount = subtotal - discountAmount;
-                            const taxAmount = afterDiscount * ((item.taxRate || 0) / 100);
-                            const total = afterDiscount + taxAmount;
-
-                            return (
-                              <tr key={index} className="hover:bg-gray-50">
-                                <td className="px-4 py-3">
-                                  <div className="relative dropdown-container">
-                                    <button
-                                      onClick={() => setShowProductDropdowns(prev => ({ ...prev, [index]: !prev[index] }))}
-                                      className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400 text-sm"
-                                    >
-                                      <span className="text-gray-700 truncate mr-1">
-                                        {item.product ? 
-                                          products.find(p => p._id === item.product)?.name || 'Select Product'
-                                          : 'Select Product'
-                                        }
-                                      </span>
-                                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showProductDropdowns[index] ? 'rotate-180' : ''}`} />
-                                    </button>
-                                    
-                                    {showProductDropdowns[index] && (
-                                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                                        <button
-                                          onClick={() => {
-                                            const newItems = [...quotationForm.items];
-                                            newItems[index] = {
-                                              ...newItems[index],
-                                              product: '',
-                                              description: '',
-                                              unitPrice: 0,
-                                              hsnSac: '',
-                                              partNo: '',
-                                              uom: 'pcs'
-                                            };
-                                            setQuotationForm({ ...quotationForm, items: newItems });
-                                            setShowProductDropdowns(prev => ({ ...prev, [index]: false }));
-                                          }}
-                                          className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm text-gray-700"
-                                        >
-                                          Select product
-                                        </button>
-                                        {products.map((product) => (
-                                          <button
-                                            key={product._id}
-                                            onClick={() => {
-                                              const newItems = [...quotationForm.items];
-                                              newItems[index] = {
-                                                ...newItems[index],
-                                                product: product._id,
-                                                description: product.name,
-                                                unitPrice: product.price || 0,
-                                                hsnSac: '',
-                                                partNo: '',
-                                                uom: 'pcs'
-                                              };
-                                              setQuotationForm({ ...quotationForm, items: newItems });
-                                              setShowProductDropdowns(prev => ({ ...prev, [index]: false }));
-                                            }}
-                                            className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm text-gray-700"
-                                          >
-                                            <div>
-                                              <div className="font-medium">{product.name}</div>
-                                              <div className="text-xs text-gray-500">₹{product.price || 0}</div>
-                                            </div>
-                                          </button>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <input
-                                    type="text"
-                                    value={item.description}
-                                    onChange={(e) => {
-                                      const newItems = [...quotationForm.items];
-                                      newItems[index].description = e.target.value;
-                                      setQuotationForm({ ...quotationForm, items: newItems });
-                                    }}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                    placeholder="Item description"
-                                  />
-                                </td>
-                                <td className="px-4 py-3">
-                                  <input
-                                    type="number"
-                                    value={item.quantity}
-                                    onChange={(e) => {
-                                      const newItems = [...quotationForm.items];
-                                      newItems[index].quantity = parseFloat(e.target.value) || 0;
-                                      setQuotationForm({ ...quotationForm, items: newItems });
-                                    }}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                    min="0"
-                                    step="0.01"
-                                  />
-                                </td>
-                                <td className="px-4 py-3">
-                                  <input
-                                    type="number"
-                                    value={item.unitPrice}
-                                    onChange={(e) => {
-                                      const newItems = [...quotationForm.items];
-                                      newItems[index].unitPrice = parseFloat(e.target.value) || 0;
-                                      setQuotationForm({ ...quotationForm, items: newItems });
-                                    }}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                    min="0"
-                                    step="0.01"
-                                  />
-                                </td>
-                                <td className="px-4 py-3">
-                                  <input
-                                    type="number"
-                                    value={item.discount || 0}
-                                    onChange={(e) => {
-                                      const newItems = [...quotationForm.items];
-                                      newItems[index].discount = parseFloat(e.target.value) || 0;
-                                      setQuotationForm({ ...quotationForm, items: newItems });
-                                    }}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                    min="0"
-                                    max="100"
-                                    step="0.01"
-                                  />
-                                </td>
-                                <td className="px-4 py-3">
-                                  <input
-                                    type="number"
-                                    value={item.taxRate || 0}
-                                    onChange={(e) => {
-                                      const newItems = [...quotationForm.items];
-                                      newItems[index].taxRate = parseFloat(e.target.value) || 0;
-                                      setQuotationForm({ ...quotationForm, items: newItems });
-                                    }}
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                                    min="0"
-                                    step="0.01"
-                                  />
-                                </td>
-                                <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                                  ₹{total.toFixed(2)}
-                                </td>
-                                <td className="px-4 py-3">
-                                  <button
-                                    onClick={() => {
-                                      const newItems = quotationForm.items.filter((_, i) => i !== index);
-                                      setQuotationForm({ ...quotationForm, items: newItems });
-                                    }}
-                                    className="text-red-600 hover:text-red-800 p-1.5 hover:bg-red-50 rounded transition-colors"
-                                    disabled={quotationForm.items.length === 1}
-                                    title="Remove item"
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Notes */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Notes
-                  </label>
-                  <textarea
-                    value={quotationForm.notes}
-                    onChange={(e) => setQuotationForm({ ...quotationForm, notes: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    rows={3}
-                    placeholder="Additional notes or terms..."
-                  />
                 </div>
               </div>
 
-              {/* Footer */}
-              <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
-                <div className="text-sm text-gray-600">
-                  <span className="font-medium">Total: </span>
-                  <span className="text-lg font-bold text-gray-900">
-                    ₹{quotationForm.items.reduce((sum, item) => {
-                      const subtotal = item.quantity * item.unitPrice;
-                      const discountAmount = subtotal * ((item.discount || 0) / 100);
-                      const afterDiscount = subtotal - discountAmount;
-                      const taxAmount = afterDiscount * ((item.taxRate || 0) / 100);
-                      return sum + afterDiscount + taxAmount;
-                    }, 0).toFixed(2)}
-                  </span>
+              {/* Company Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">From:</h4>
+                  <div className="text-sm text-gray-600">
+                    <p className="font-medium">{selectedQuotation.company?.name || 'Sun Power Services'}</p>
+                    <p>{selectedQuotation.company?.address || ''}</p>
+                    <p>Phone: {selectedQuotation.company?.phone || 'N/A'}</p>
+                    <p>Email: {selectedQuotation.company?.email || 'N/A'}</p>
+                    <p>PAN: {selectedQuotation.company?.pan || 'N/A'}</p>
+                    {selectedQuotation.company?.bankDetails && (
+                      <div className="mt-2">
+                        <p className="font-medium text-gray-700">Bank Details:</p>
+                        <p>Bank: {selectedQuotation.company.bankDetails.bankName || 'N/A'}</p>
+                        <p>Account: {selectedQuotation.company.bankDetails.accountNo || 'N/A'}</p>
+                        <p>IFSC: {selectedQuotation.company.bankDetails.ifsc || 'N/A'}</p>
+                        <p>Branch: {selectedQuotation.company.bankDetails.branch || 'N/A'}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex space-x-3">
-                  <button
-                    onClick={() => setShowQuotationModal(false)}
-                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
-                    disabled={submitting}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={async () => {
-                      if (!quotationForm.customer) {
-                        toast.error('Please select a customer');
-                        return;
-                      }
-                      
-                      setSubmitting(true);
-                      try {
-                        const quotationData = {
-                          customer: quotationForm.customer,
-                          dueDate: quotationForm.dueDate,
-                          items: quotationForm.items,
-                          notes: quotationForm.notes,
-                          totalAmount: quotationForm.items.reduce((sum, item) => {
-                            const subtotal = item.quantity * item.unitPrice;
-                            const discountAmount = subtotal * ((item.discount || 0) / 100);
-                            const afterDiscount = subtotal - discountAmount;
-                            const taxAmount = afterDiscount * ((item.taxRate || 0) / 100);
-                            return sum + afterDiscount + taxAmount;
-                          }, 0)
-                        };
 
-                        await apiClientQuotation.quotations.create(quotationData);
-                        toast.success('Quotation created successfully');
-                        setShowQuotationModal(false);
-                        fetchQuotations();
-                        
-                        // Reset form
-                        setQuotationForm({
-                          customer: '',
-                          dueDate: '',
-                          items: [{
-                            product: '',
-                            description: '',
-                            quantity: 1,
-                            unitPrice: 0,
-                            taxRate: 18,
-                            hsnSac: '',
-                            partNo: '',
-                            uom: 'pcs',
-                            discount: 0,
-                          }],
-                          notes: ''
-                        });
-                      } catch (error) {
-                        console.error('Error creating quotation:', error);
-                        toast.error('Failed to create quotation');
-                      } finally {
-                        setSubmitting(false);
-                      }
-                    }}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                    disabled={submitting}
-                  >
-                    {submitting ? 'Creating...' : 'Create Quotation'}
-                  </button>
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">To:</h4>
+                  <div className="text-sm text-gray-600">
+                    <p className="font-medium">{selectedQuotation.customer?.name || 'N/A'}</p>
+                    <p>Email: {selectedQuotation.customer?.email || 'N/A'}</p>
+                    <p>Phone: {selectedQuotation.customer?.phone || 'N/A'}</p>
+                    {/* <p>PAN: {selectedQuotation.customer?.pan || 'N/A'}</p> */}
+                    <p>Address: {selectedQuotation.customer?.address || 'N/A'}</p>
+                  </div>
                 </div>
               </div>
+
+              {/* Quotation Items */}
+              <div>
+                <h4 className="font-medium text-gray-900 mb-3">Items:</h4>
+                <div className="overflow-x-auto">
+                  <table className="w-full border border-gray-200 rounded-lg">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN Code</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">UOM</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax Rate</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {(selectedQuotation.items || []).map((item: any, index: number) => (
+                        <tr key={index}>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.hsnCode || 'N/A'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.uom}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">₹{item.unitPrice?.toLocaleString()}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.discount || 0}%</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.taxRate || 0}%</td>
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900"> ₹{(item.unitPrice * item.quantity * (1 - item.discount / 100) * (1 + item.taxRate / 100)).toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Quotation Summary */}
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex justify-end">
+                  <div className="w-64 space-y-2 text-right">
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Subtotal:</span>
+                        <span>₹{selectedQuotation.subtotal?.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total Discount:</span>
+                        <span className="text-green-600">-₹{selectedQuotation.totalDiscount?.toFixed(2)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total Tax:</span>
+                        <span>₹{selectedQuotation.totalTax?.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <div className="border-t pt-2">
+                      <div className="flex justify-between text-lg font-bold">
+                        <span>Grand Total:</span>
+                        <span className="text-blue-600">₹{selectedQuotation.grandTotal?.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes and Terms */}
+              {(selectedQuotation.notes || selectedQuotation.terms) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {selectedQuotation.notes && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Notes:</h4>
+                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                        {selectedQuotation.notes}
+                      </p>
+                    </div>
+                  )}
+                  {selectedQuotation.terms && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Terms & Conditions:</h4>
+                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                        {selectedQuotation.terms}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </div>
           </div>
-        )}
-      </div>
-    );
-  };
+        </div>
+      )}
+     
+    </div>
+  );
+};
 
 export default InvoiceManagement; 

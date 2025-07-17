@@ -238,6 +238,9 @@ export const previewInventoryImport = async (
         // Check if product already exists
         const existingProduct = await Product.findOne({ partNo: row['PART NO'] });
         let itemStatus = 'new';
+        console.log("existingProduct:",existingProduct);
+        console.log("newProductsCount:",newProductsCount);
+        
 
         if (existingProduct) {
           itemStatus = 'existing';
@@ -527,7 +530,8 @@ export const importInventory = async (
             uom: uom,
             price: mrp,
             gndp: gndp,
-            minStockLevel: 1,
+            minStockLevel: 0,
+            maxStockLevel: 0,
             quantity: 0, // Will be set through stock
             hsnNumber: row['HSN CODE'] || '',
             gst: gst,

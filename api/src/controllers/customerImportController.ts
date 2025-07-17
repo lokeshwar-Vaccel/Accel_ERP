@@ -23,16 +23,6 @@ const getColumnValue = (row: any, keys: string[]): string => {
   return '';
 };
 
-// Helper: Combine address fields into one
-const buildAddress = (row: any) => {
-  const addressParts = [
-    getColumnValue(row, ['Address-1', 'Address 1', 'address-1', 'address1', 'address 1']),
-    getColumnValue(row, ['Address-2', 'Address 2', 'address-2', 'address2', 'address 2']),
-    getColumnValue(row, ['Address-3', 'Address 3', 'address-3', 'address3', 'address 3'])
-  ].filter(Boolean);
-  return addressParts.join(', ');
-};
-
 // Helper: Build addresses array so each Address-1, Address-2, Address-3, etc. is a separate address object
 const buildAddresses = (row: any) => {
   const addresses: any[] = [];
@@ -183,7 +173,7 @@ export const previewCustomerImport = async (
         name: getColumnValue(row, ['Name', 'Customer Name', 'name', 'customer name']),
         designation: getColumnValue(row, ['Designation', 'designation']) || 'N/A',
         // contactPersonName: getColumnValue(row, ['Contact person Name', 'Contact Person', 'contact person name']) || 'N/A',
-        gstNumber: getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']),
+        gstNumber: getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']) || 'N/A',
         email: getColumnValue(row, ['Email', 'email', 'E-mail']) || undefined,
         // phone: getColumnValue(row, ['Mobile No', 'Phone', 'phone', 'mobile', 'mobile no']) || 'N/A',
         addresses: buildAddresses(row),
@@ -305,14 +295,13 @@ export const importCustomers = async (
 
       const existing = await findExistingCustomer(row);
       if (existing) {
-        results.failed++;
+        // Do not store duplicate, do not increment failed, just add to errors
         results.errors.push(`Row ${i + 2}: Customer already exists (name: ${existing.name}, phone: ${existing.phone})`);
         continue;
       }
 
       try {
         const created = await Customer.create({ ...customerInput, createdBy: req.user!.id });
-        
         results.successful++;
         results.createdCustomers.push({
           name: created.name,

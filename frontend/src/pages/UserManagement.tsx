@@ -26,6 +26,7 @@ const moduleMap = {
   service_management: 'Service Management',
   amc_management: 'AMC Management',
   purchase_orders: 'Purchase Orders',
+  billing: 'Billing',
   reports_analytics: 'Reports & Analytics',
   file_management: 'File Management',
   communications: 'Communications',
@@ -118,6 +119,7 @@ export const UserManagement: React.FC = () => {
     'service_management',
     'amc_management',
     'purchase_orders',
+    'billing',
     'reports_analytics',
     'file_management',
     'communications',
@@ -130,7 +132,6 @@ export const UserManagement: React.FC = () => {
     hr: [
       'dashboard',
       'user_management',
-      'quotation_management',
       'inventory_management',
       'purchase_orders',
       'lead_management',

@@ -144,6 +144,10 @@ customerSchema.index({ name: 'text', email: 'text', phone: 'text' });
 customerSchema.index({ status: 1 });
 customerSchema.index({ customerType: 1 });
 customerSchema.index({ assignedTo: 1 });
+// Add unique index for gstNumber if present
+customerSchema.index({ gstNumber: 1 }, { unique: true, sparse: true });
+// Add unique compound index for name + phone
+customerSchema.index({ name: 1, phone: 1 }, { unique: true, sparse: true });
 
 // Virtual for latest contact
 customerSchema.virtual('latestContact').get(function(this: any) {

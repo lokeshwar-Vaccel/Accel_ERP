@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, FileText, Printer, Edit, Trash, Plus, X, Save, Calculator, ChevronDown, Package } from 'lucide-react';
 import apiClient from '../utils/api';
+import QuotationForm from '../components/QuotationForm';
 
 // Define Quotation type (simplified for frontend usage)
 interface QuotationItem {
@@ -88,6 +89,13 @@ const QuotationSystem = () => {
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
   const [showProductDropdowns, setShowProductDropdowns] = useState<Record<number, boolean>>({});
   const [stockValidation, setStockValidation] = useState<Record<number, { available: number; isValid: boolean; message: string }>>({});
+
+  // --- State for QuotationForm ---
+  const [isQuotationFormOpen, setQuotationFormOpen] = useState(false);
+  const [quotationFormMode, setQuotationFormMode] = useState<'create' | 'edit' | 'view'>('create');
+  const [quotationFormInitialData, setQuotationFormInitialData] = useState<any | undefined>(undefined);
+  const [quotationFormId, setQuotationFormId] = useState<string | undefined>(undefined);
+console.log("quotationFormMode",quotationFormMode);
 
   // --- Fetch customers and products on mount ---
   useEffect(() => {
@@ -1158,16 +1166,20 @@ const QuotationSystem = () => {
     setShowModal(true);
   };
 
-  const handleEdit = (quotation: Quotation) => {
-    setSelectedQuotation(quotation);
+  const handleEdit = (quotation: any) => {
+    setQuotationFormInitialData(quotation);
+    setQuotationFormMode('edit');
     setModalMode('edit');
-    setShowModal(true);
+    setQuotationFormId(quotation._id);
+    setQuotationFormOpen(true);
   };
 
   const handleCreate = () => {
-    setSelectedQuotation(null);
+    setQuotationFormInitialData(undefined);
+    setQuotationFormMode('create');
     setModalMode('create');
-    setShowModal(true);
+    setQuotationFormId(undefined);
+    setQuotationFormOpen(true);
   };
 
   const handleDelete = async (quotation: Quotation) => {
@@ -1376,33 +1388,26 @@ const QuotationSystem = () => {
                       </td> */}
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center gap-2">
-                          {/* <button
+                          <button
                             onClick={() => handleView(quotation)}
                             className="text-blue-600 hover:text-blue-900 p-1 rounded"
                             title="View"
                           >
-                            <Eye className="w-4 h-4" />
+                            <Eye className="w-5 h-5" />
                           </button>
                           <button
                             onClick={() => handleEdit(quotation)}
-                            className="text-yellow-600 hover:text-yellow-900 p-1 rounded"
+                            className="text-purple-500 hover:text-purple-700 p-1 rounded"
                             title="Edit"
                           >
-                            <Edit className="w-4 h-4" />
+                            <Edit className="w-5 h-5" />
                           </button>
                           <button
-                            onClick={() => handlePrint(quotation)}
-                            className="text-purple-600 hover:text-purple-900 p-1 rounded"
-                            title="Print"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </button> */}
-                          <button
                             onClick={() => handleDelete(quotation)}
-                            className="text-red-600 hover:text-red-900 p-1 rounded"
+                            className="text-red-600 hover:text-red-800 p-1 rounded"
                             title="Delete"
                           >
-                            <Trash className="w-4 h-4" />
+                            <X className="w-5 h-5" />
                           </button>
                         </div>
                       </td>
@@ -1440,6 +1445,18 @@ const QuotationSystem = () => {
             quotation={selectedQuotation}
           />
         )}
+        {/* QuotationForm Modal for Create/Edit */}
+        <QuotationForm
+          isOpen={isQuotationFormOpen}
+          onClose={() => setQuotationFormOpen(false)}
+          onSuccess={() => fetchQuotations(page)}
+          customers={customers}
+          products={products}
+          generalSettings={{}}
+          initialData={quotationFormInitialData}
+          mode={quotationFormMode}
+          quotationId={quotationFormId}
+        />
       </div>
     </div>
   );

@@ -7,6 +7,7 @@ import {
   getQuotationById,
   getQuotations,
   createQuotation,
+  createQuotationFromImage,
   updateQuotation,
   deleteQuotation
 } from '../controllers/quotationController';
@@ -24,6 +25,7 @@ router.get('/download/:invoiceId', checkPermission('read'), downloadQuotationPDF
 router.get('/', checkPermission('read'), getQuotations);
 router.get('/:id', checkPermission('read'), getQuotationById);
 router.post('/', checkPermission('write'), createQuotation);
+router.post('/from-image', checkPermission('write'), createQuotationFromImage);
 router.put('/:id', checkPermission('write'), updateQuotation);
 router.delete('/:id', checkPermission('delete'), deleteQuotation);
 

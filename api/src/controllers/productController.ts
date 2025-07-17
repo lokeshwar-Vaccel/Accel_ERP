@@ -69,7 +69,8 @@ export const getProducts = async (
         { name: { $regex: search, $options: 'i' } },
         { description: { $regex: search, $options: 'i' } },
         { brand: { $regex: search, $options: 'i' } },
-        { modelNumber: { $regex: search, $options: 'i' } }
+        { modelNumber: { $regex: search, $options: 'i' } },
+        { partNo: { $regex: search, $options: 'i' } }
       ];
     }
     
@@ -159,6 +160,8 @@ export const createProduct = async (
       createdBy: req.user!.id
     };
   
+    console.log("productData:",productData);
+    
     const product = await Product.create(productData);
 
     // Always create stock entry - use provided location or default location
@@ -242,11 +245,17 @@ export const updateProduct = async (
       return next(new AppError('Product not found', 404));
     }
 
+    // Debug: log incoming update payload
+    console.log('Update payload:', req.body);
+
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     ).populate('createdBy', 'firstName lastName email');
+
+    // Debug: log updated product
+    console.log('Updated product:', updatedProduct);
 
     const response: APIResponse = {
       success: true,

@@ -22,7 +22,8 @@ import {
   Archive,
   Edit2,
   Filter,
-  Hash
+  Hash,
+  HelpCircle
 } from 'lucide-react';
 import { Table } from '../components/ui/Table';
 import { Modal } from '../components/ui/Modal';
@@ -35,6 +36,7 @@ import { Input } from 'components/ui/Input';
 import { Select } from 'components/ui/Select';
 import { Badge } from 'components/ui/Badge';
 import { Pagination } from 'components/ui/Pagination';
+import toast from 'react-hot-toast';
 
 // Types
 interface ProductData {
@@ -46,6 +48,7 @@ interface ProductData {
   price: number;
   uom?: string;
   minStockLevel: number;
+  maxStockLevel?: number;
   partNo?: string;
   dept?: string;
   hsnNumber?: string;
@@ -114,7 +117,7 @@ interface StockAdjustmentFormData {
 }
 
 interface StockTransferFormData {
-  stockId:string,
+  stockId: string,
   product: string;
   fromLocation: string;
   fromRoom: string;
@@ -138,6 +141,11 @@ const InventoryManagement: React.FC = () => {
   const [locations, setLocations] = useState<StockLocationData[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [totalStock, setTotalStock] = useState(0);
+  const [totalLowStock, setTotalLowStock] = useState(0);
+  const [totalOutOfStock, setTotalOutOfStock] = useState(0);
+  const [totalOverStocked, setTotalOverStocked] = useState(0);
+  const [totalInStock, setTotalInStock] = useState(0);
 
   // Search and filter states - these are now handled by the filters object
 
@@ -243,7 +251,7 @@ const InventoryManagement: React.FC = () => {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(100);
-  
+
   // Ensure limit is never too small
   React.useEffect(() => {
     if (limit < 10) {
@@ -271,19 +279,34 @@ const InventoryManagement: React.FC = () => {
 
   // Fix getStockStatusTable: remove maxStockLevel check
   const getStockStatusTable = (item: StockItem) => {
-    if (item.quantity === 0) {
+    const minStock = item.product?.minStockLevel ?? 0;
+    const maxStock = item.product?.maxStockLevel ?? 0;
+  
+    if (item.quantity <= 0) {
       return { label: 'Out of Stock', variant: 'danger' as const, icon: AlertTriangle };
     }
-    if (item.quantity <= (item.product?.minStockLevel || 0)) {
+  
+    if (minStock > 0 && item.quantity < minStock) {
       return { label: 'Low Stock', variant: 'warning' as const, icon: TrendingDown };
     }
-    if (item.quantity > ((item.product?.minStockLevel || 0) * 3)) {
+  
+    if (maxStock > 0 && item.quantity > maxStock) {
       return { label: 'Overstocked', variant: 'info' as const, icon: TrendingUp };
     }
-    return { label: 'In Stock', variant: 'success' as const, icon: Package };
+  
+    if (
+      (minStock === 0 || item.quantity >= minStock) &&
+      (maxStock === 0 || item.quantity <= maxStock)
+    ) {
+      return { label: 'In Stock', variant: 'success' as const, icon: Package };
+    }
+  
+    // fallback if somehow none of the conditions matched
+    return { label: 'Unknown', variant: 'default' as const, icon: HelpCircle };
   };
+  
 
-    const handlePageChange = (page: number) => {
+  const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
 
@@ -292,7 +315,8 @@ const InventoryManagement: React.FC = () => {
     { value: 'all', label: 'All Stock Levels' },
     { value: 'low_stock', label: 'Low Stock' },
     { value: 'out_of_stock', label: 'Out of Stock' },
-    { value: 'overstocked', label: 'Overstocked' }
+    { value: 'overstocked', label: 'Overstocked' },
+    { value: 'in_stock', label: 'In Stock' }
   ];
 
   const sortByOptions = [
@@ -484,14 +508,14 @@ const InventoryManagement: React.FC = () => {
           loc._id === selectedRoom._id ? updatedRoom : loc
         ));
         fetchLocations();
-      fetchRooms();
+        fetchRooms();
       } else {
         // Create new location
         const response = await apiClient.stock.createRoom(roomFormData);
         const newRoom = (response.data as any).room || response.data;
         setRooms([...rooms, newRoom]);
         fetchLocations();
-      fetchRooms();
+        fetchRooms();
       }
 
       // setShowLocationModal(false);
@@ -627,12 +651,20 @@ const InventoryManagement: React.FC = () => {
       ...(filters.stockStatus === 'low_stock' && { lowStock: 'true' }),
       ...(filters.stockStatus === 'out_of_stock' && { outOfStock: 'true' }),
       ...(filters.stockStatus === 'overstocked' && { overStocked: 'true' }),
+      ...(filters.stockStatus === 'in_stock' && { inStock: 'true' }),
     };
 
     try {
       const response = await apiClient.stock.getStock(params);
+      console.log("response-2:", response);
+
 
       setCurrentPage(response.pagination.page);
+      setTotalStock(response.totalStock);
+      setTotalLowStock(response.totalLowStock);
+      setTotalOutOfStock(response.totalOutOfStock);
+      setTotalOverStocked(response.totalOverStocked);
+      setTotalInStock(response.totalInStock);
       // Don't override limit from backend - keep frontend control
       // setLimit(response.pagination.limit);
       setTotalDatas(response.pagination.total);
@@ -665,8 +697,8 @@ const InventoryManagement: React.FC = () => {
       let page = 1;
       let hasMore = true;
 
-      
-      
+
+
       while (hasMore) {
         const response: any = await apiClient.products.getAll({ page, limit: 100 });
         let productsData: any[] = [];
@@ -818,8 +850,8 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleUpdateStock = (stockItem: StockItem) => {
-    console.log("stockItem:",stockItem);
-    
+    console.log("stockItem:", stockItem);
+
     setSelectedItem(stockItem);
     setAdjustmentFormData({
       stockId: stockItem._id,
@@ -839,7 +871,7 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleTransferStock = (stockItem: StockItem) => {
-        console.log("stockItem--22:",stockItem);
+    console.log("stockItem--22:", stockItem);
     setSelectedItem(stockItem); // Store the selected item for access to stock details
 
     // Calculate available quantity and set reasonable default
@@ -1023,7 +1055,7 @@ const InventoryManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const { stockId,product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId, reservedUntil } = adjustmentFormData;
+      const { stockId, product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId, reservedUntil } = adjustmentFormData;
 
       const adjustmentData: any = {
         stockId,
@@ -1073,8 +1105,8 @@ const InventoryManagement: React.FC = () => {
     try {
       const response = await apiClient.stock.getStock({ stockId: stockId, product: productId, location: locationId });
 
-      console.log("response1:",response);
-      
+      console.log("response1:", response);
+
       let stockData: any[] = [];
       if (response.data) {
         if (Array.isArray(response.data)) {
@@ -1097,12 +1129,12 @@ const InventoryManagement: React.FC = () => {
     try {
       setFormErrors({});
       const { stockId, product, fromLocation, fromRoom, fromRack, toLocation, toRoom, toRack, quantity, notes } = transferFormData;
-      console.log("stockId:",stockId);
+      console.log("stockId:", stockId);
 
       // Get fresh stock data before transfer
       const currentStock = await getCurrentStockStatus(stockId, product, fromLocation);
-      console.log("currentStock:",currentStock);
-      
+      console.log("currentStock:", currentStock);
+
 
       if (currentStock) {
         const availableQuantity = currentStock.availableQuantity || (currentStock.quantity - (currentStock.reservedQuantity || 0));
@@ -1280,7 +1312,7 @@ const InventoryManagement: React.FC = () => {
         summary.netMovement = summary.totalInward - summary.totalOutward;
         setLedgerSummary(summary);
       }
-      
+
       // Scroll to top after data is loaded
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (error) {
@@ -1301,10 +1333,12 @@ const InventoryManagement: React.FC = () => {
   const getStockStatus = (item: StockItem) => {
     const product = typeof item.product === 'object' ? item.product : null;
     if (!product) return 'unknown';
-
+    const minStock = product.minStockLevel ?? 0;
+    const maxStock = product.maxStockLevel ?? 0;
     if (item.quantity <= 0) return 'out_of_stock';
-    if (item.quantity <= (product.minStockLevel || 0)) return 'low_stock';
-    if (item.quantity > ((product.minStockLevel || 0) * 3)) return 'overstocked';
+    if (minStock > 0 && item.quantity < minStock) return 'low_stock';
+    if (maxStock > 0 && item.quantity > maxStock) return 'overstocked';
+    if (minStock === 0 && maxStock === 0) return 'in_stock';
     return 'in_stock';
   };
 
@@ -1318,6 +1352,8 @@ const InventoryManagement: React.FC = () => {
         return 'text-red-800 bg-red-100';
       case 'overstocked':
         return 'text-blue-800 bg-blue-100';
+      case 'in_stock':
+        return 'text-green-800 bg-green-100';
       default:
         return 'text-gray-800 bg-gray-100';
     }
@@ -1445,27 +1481,48 @@ const InventoryManagement: React.FC = () => {
   const stats = [
     {
       title: 'Total Products',
-      value: Array.isArray(inventory) ? totalDatas : '0',
+      action: () => {
+        clearAllFilters();
+      },
+      value: totalStock,
       icon: <Package className="w-6 h-6" />,
       color: 'blue'
     },
     {
       title: 'Low Stock Items',
-      value: Array.isArray(inventory) ? inventory.filter(item => getStockStatus(item) === 'low_stock').length.toString() : '0',
+      action: () => {
+        onFiltersChange({ stockStatus: 'low_stock' });
+      },
+      value: totalLowStock,
       icon: <AlertTriangle className="w-6 h-6" />,
       color: 'yellow'
     },
     {
       title: 'Out of Stock',
-      value: Array.isArray(inventory) ? inventory.filter(item => getStockStatus(item) === 'out_of_stock').length.toString() : '0',
+      action: () => {
+        onFiltersChange({ stockStatus: 'out_of_stock' });
+      },
+      value: totalOutOfStock,
       icon: <TrendingDown className="w-6 h-6" />,
       color: 'red'
     },
     {
       title: 'Overstocked',
-      value: Array.isArray(inventory) ? inventory.filter(item => getStockStatus(item) === 'overstocked').length.toString() : '0',
+      action: () => {
+        onFiltersChange({ stockStatus: 'overstocked' });
+      },
+      value: totalOverStocked,
       icon: <TrendingUp className="w-6 h-6" />,
       color: 'purple'
+    },
+    {
+      title: 'In Stock',
+      action: () => {
+        onFiltersChange({ stockStatus: 'in_stock' });
+      },
+      value: totalInStock,
+      icon: <Package className="w-6 h-6" />,
+      color: 'green'
     }
   ];
 
@@ -1619,6 +1676,33 @@ const InventoryManagement: React.FC = () => {
     return location ? location.name : 'All Locations';
   };
 
+  const clearAllFilters = () => {
+    onFiltersChange({
+      search: '',
+      category: '',
+      dept: '',
+      brand: '',
+      location: '',
+      room: '',
+      rack: '',
+      stockStatus: 'all',
+      sortBy: 'product.name',
+      sortOrder: 'asc'
+    });
+    setShowAdvancedFilters(false);
+    // Close all filter dropdowns
+    setShowCategoryFilterDropdown(false);
+    setShowDeptFilterDropdown(false);
+    setShowBrandFilterDropdown(false);
+    setShowLocationFilterDropdown(false);
+    setShowRoomFilterDropdown(false);
+    setShowRackFilterDropdown(false);
+    setShowStockStatusFilterDropdown(false);
+    setShowSortFilterDropdown(false);
+    setShowSortOrderFilterDropdown(false);
+  };
+
+
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
   // Custom dropdown states for filters
@@ -1671,9 +1755,13 @@ const InventoryManagement: React.FC = () => {
       </PageHeader>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div
+            onClick={stat.action}
+            key={index}
+            className="bg-white cursor-pointer p-4 rounded-xl shadow-sm border border-gray-100 transform transition-transform duration-200 hover:scale-105 active:scale-95"
+          >
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-600">{stat.title}</p>
@@ -1686,6 +1774,7 @@ const InventoryManagement: React.FC = () => {
           </div>
         ))}
       </div>
+
 
       {/* Redesigned Search & Filters */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
@@ -1705,7 +1794,7 @@ const InventoryManagement: React.FC = () => {
 
             {/* Quick Actions */}
             <div className="flex gap-2">
-              <button
+              {/* <button
                 onClick={() => onFiltersChange({ stockStatus: 'out_of_stock' })}
                 className="px-3 py-1.5 bg-red-50 text-red-700 rounded-md hover:bg-red-100 transition-colors border border-red-200 text-xs font-medium"
               >
@@ -1722,7 +1811,7 @@ const InventoryManagement: React.FC = () => {
                 className="px-3 py-1.5 bg-purple-50 text-purple-700 rounded-md hover:bg-purple-100 transition-colors border border-purple-200 text-xs font-medium"
               >
                 Overstocked
-              </button>
+              </button> */}
               <button
                 onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                 className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-xs font-medium flex items-center gap-1.5"
@@ -2081,31 +2170,7 @@ const InventoryManagement: React.FC = () => {
 
                   <div className="pt-2">
                     <button
-                      onClick={() => {
-                        onFiltersChange({
-                          search: '',
-                          category: '',
-                          dept: '',
-                          brand: '',
-                          location: '',
-                          room: '',
-                          rack: '',
-                          stockStatus: 'all',
-                          sortBy: 'product.name',
-                          sortOrder: 'asc'
-                        });
-                        setShowAdvancedFilters(false);
-                        // Close all filter dropdowns
-                        setShowCategoryFilterDropdown(false);
-                        setShowDeptFilterDropdown(false);
-                        setShowBrandFilterDropdown(false);
-                        setShowLocationFilterDropdown(false);
-                        setShowRoomFilterDropdown(false);
-                        setShowRackFilterDropdown(false);
-                        setShowStockStatusFilterDropdown(false);
-                        setShowSortFilterDropdown(false);
-                        setShowSortOrderFilterDropdown(false);
-                      }}
+                      onClick={clearAllFilters}
                       className="w-full px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
                     >
                       Clear All Filters
@@ -2121,9 +2186,9 @@ const InventoryManagement: React.FC = () => {
         {(filters.search || filters.category || filters.dept || filters.brand || filters.location || filters.room || filters.rack || filters.stockStatus !== 'all' || filters.sortBy !== 'product.name' || filters.sortOrder !== 'asc') && (
           <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-100">
             <div className="flex items-center text-sm text-gray-600">
-              <span className="font-medium">{inventory.length}</span>
+              <span className="font-medium">{totalDatas}</span>
               <span className="mx-1">of</span>
-              <span>{inventory.length}</span>
+              <span>{totalDatas}</span>
               <span className="ml-1">items found</span>
             </div>
 
@@ -2224,9 +2289,9 @@ const InventoryManagement: React.FC = () => {
 
       {/* Inventory Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-scroll">
-        <div 
-          className="overflow-x-scroll inventory-scroll" 
-          style={{ 
+        <div
+          className="overflow-x-scroll inventory-scroll"
+          style={{
             scrollbarWidth: 'thin',
             scrollbarGutter: 'stable both-edges',
             WebkitOverflowScrolling: 'touch',
@@ -2247,7 +2312,7 @@ const InventoryManagement: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Pricing</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">Status & Department</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Technical Info</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Actions</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -2335,7 +2400,7 @@ const InventoryManagement: React.FC = () => {
                           MRP: ₹{(item.product?.price || 0).toFixed(2)}
                           </div> */}
                           <div className="text-xs text-gray-500">
-                            GST: {item.product?.gst}% 
+                            GST: {item.product?.gst}%
                           </div>
                           <div className="text-xs text-gray-500">
                             GNDP: ₹{(item.product?.gndp || 0).toFixed(2)}
@@ -2370,28 +2435,28 @@ const InventoryManagement: React.FC = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-4 w-20 whitespace-nowrap text-sm font-medium">
+                      <td className="px-4 py-4 w-32 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center justify-center space-x-1">
                           <button
                             onClick={() => handleUpdateStock(item)}
-                            className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
+                            className="text-blue-600 hover:text-blue-900 p-2 rounded hover:bg-blue-50 transition-colors"
                             title="Adjust Stock"
                           >
-                            <Edit className="w-3 h-3" />
+                            <Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => viewStockHistory(item)}
-                            className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
+                            className="text-green-600 hover:text-green-900 p-2 rounded hover:bg-green-50 transition-colors"
                             title="View History"
                           >
-                            <Package className="w-3 h-3" />
+                            <Package className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleTransferStock(item)}
-                            className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
+                            className="text-purple-600 hover:text-purple-900 p-1 pe-3 rounded hover:bg-purple-50 transition-colors"
                             title="Transfer Stock"
                           >
-                            <ArrowUpDown className="w-3 h-3" />
+                            <ArrowUpDown className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -2406,13 +2471,13 @@ const InventoryManagement: React.FC = () => {
         </div>
       </div>
 
-                  <Pagination
-                    currentPage={currentPage}
-                    totalPages={totalPages}
-                    onPageChange={handlePageChange}
-                    totalItems={totalDatas}
-                    itemsPerPage={limit}
-                  />
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
+        totalItems={totalDatas}
+        itemsPerPage={limit}
+      />
 
       {/* Add Location Modal */}
       {showLocationModal && (
@@ -2619,7 +2684,7 @@ const InventoryManagement: React.FC = () => {
                       placeholder="Brief description of the room"
                     />
 
-                    <div className="flex items-center">
+                    {/* <div className="flex items-center">
                       <input
                         type="checkbox"
                         id="isActive"
@@ -2630,7 +2695,7 @@ const InventoryManagement: React.FC = () => {
                       <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
                         Active
                       </label>
-                    </div>
+                    </div> */}
 
                     {roomErrors.submit && (
                       <div className="text-red-600 text-sm">{roomErrors.submit}</div>
@@ -2687,7 +2752,7 @@ const InventoryManagement: React.FC = () => {
                       placeholder="Brief description of the rack"
                     />
 
-                    <div className="flex items-center">
+                    {/* <div className="flex items-center">
                       <input
                         type="checkbox"
                         id="isActive"
@@ -2698,7 +2763,7 @@ const InventoryManagement: React.FC = () => {
                       <label htmlFor="isActive" className="ml-2 block text-sm text-gray-900">
                         Active
                       </label>
-                    </div>
+                    </div> */}
 
                     {rackErrors.submit && (
                       <div className="text-red-600 text-sm">{rackErrors.submit}</div>
@@ -2721,7 +2786,7 @@ const InventoryManagement: React.FC = () => {
               <div className="w-1/2 p-4">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-900">Existing Locations</h3>
-                  <span className="text-sm text-gray-500">{locations.length} locations</span>
+                  <span className="text-sm text-gray-500">{activeTab === 'locations' ? locations.length : activeTab === 'rooms' ? rooms.length : racks.length} {activeTab === 'locations' ? 'locations' : activeTab === 'rooms' ? 'rooms' : 'racks'}</span>
                 </div>
 
                 <div className="space-y-6">
@@ -2829,9 +2894,9 @@ const InventoryManagement: React.FC = () => {
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
                                 <div className="flex items-center">
-                                  <Archive className="w-5 h-5 text-green-500 mr-2" />
-                                  <h4 className="text-lg font-medium text-gray-900">{room.name}</h4>
-                                  <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${room.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  <Archive className="w-4 h-4 text-green-500 mr-2" />
+                                  <h4 className="font-medium text-gray-900">{room.name}</h4>
+                                  <span className={`ml-2 px-1.5 py-0.5 text-xs font-medium rounded-full ${room.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                                     }`}>
                                     {room.isActive ? 'Active' : 'Inactive'}
                                   </span>
@@ -2842,9 +2907,9 @@ const InventoryManagement: React.FC = () => {
                                 {room.description && (
                                   <p className="text-sm text-gray-500 mt-1">{room.description}</p>
                                 )}
-                                <div className="mt-2">
+                                <div className="mt-1">
                                   <span className="text-sm text-gray-600">
-                                    {/* Racks: {getRacksForRoom(room.id).length} */}
+                                    Racks: {racks.filter(rack => rack.room._id === room._id).length}
                                   </span>
                                 </div>
                               </div>
@@ -2880,15 +2945,19 @@ const InventoryManagement: React.FC = () => {
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
                                 <div className="flex items-center">
-                                  <MapPin className="w-5 h-5 text-purple-500 mr-2" />
-                                  <h4 className="text-lg font-medium text-gray-900">{rack.name}</h4>
-                                  <span className={`ml-2 px-1.5 py-0.5 text-xs rounded-full ${rack.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                  <MapPin className="w-4 h-4 text-purple-500 mr-2" />
+                                  <h4 className="font-medium text-gray-900">{rack.name}</h4>
+                                  <span className={`ml-2 px-1.5 py-0.5 text-xs font-medium rounded-full ${rack.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                                     }`}>
                                     {rack.isActive ? 'Active' : 'Inactive'}
                                   </span>
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1">
-                                  {/* Location: {getLocationName(rack.locationId)} → Room: {getRoomName(rack.roomId)} */}
+                                  Location: {
+                                    locations.find(loc => loc._id === rack.location._id)?.name || 'Unknown'
+                                  } &rarr; Room: {
+                                    rooms.find(room => room._id === rack.room._id)?.name || 'Unknown'
+                                  }
                                 </p>
                                 {rack.description && (
                                   <p className="text-sm text-gray-500 mt-1">{rack.description}</p>
@@ -3287,7 +3356,7 @@ const InventoryManagement: React.FC = () => {
                   onClick={() => {
                     setShowTransferModal(false);
                     setTransferFormData({
-                      stockId:'',
+                      stockId: '',
                       product: '',
                       fromLocation: '',
                       fromRoom: '',
@@ -4137,7 +4206,7 @@ const InventoryManagement: React.FC = () => {
                 <X className="w-6 h-6" />
               </button>
             </div>
-            
+
             <div className="p-6">
               <div className="space-y-6">
                 {/* Instructions */}
@@ -4157,50 +4226,50 @@ const InventoryManagement: React.FC = () => {
                     <h4 className="text-sm font-medium text-gray-900">Excel Template</h4>
                     <p className="text-sm text-gray-600">Download the template with sample data</p>
                   </div>
-                                     <button
-                     onClick={async () => {
-                       console.log('📥 Starting template download...');
-                       try {
-                         const token = localStorage.getItem('authToken');
-                         console.log('🔑 Auth token present:', !!token);
-                         
-                         console.log('📤 Making request to download template');
-                         const blob = await apiClient.inventory.downloadTemplate();
-                         
-                         console.log('✅ Template download successful');
-                         const url = window.URL.createObjectURL(blob);
-                         const link = document.createElement('a');
-                         link.href = url;
-                         link.download = 'inventory-template.xlsx';
-                         link.click();
-                         window.URL.revokeObjectURL(url);
-                       } catch (error) {
-                         console.error('❌ Template download error:', error);
-                         const errorMessage = error instanceof Error ? error.message : 'Network error';
-                         alert(`Failed to download template: ${errorMessage}`);
-                       }
-                     }}
-                     className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
-                   >
-                     <Archive className="w-4 h-4 mr-2" />
-                     Download Template
-                   </button>
+                  <button
+                    onClick={async () => {
+                      console.log('📥 Starting template download...');
+                      try {
+                        const token = localStorage.getItem('authToken');
+                        console.log('🔑 Auth token present:', !!token);
+
+                        console.log('📤 Making request to download template');
+                        const blob = await apiClient.inventory.downloadTemplate();
+
+                        console.log('✅ Template download successful');
+                        const url = window.URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = 'inventory-template.xlsx';
+                        link.click();
+                        window.URL.revokeObjectURL(url);
+                      } catch (error) {
+                        console.error('❌ Template download error:', error);
+                        const errorMessage = error instanceof Error ? error.message : 'Network error';
+                        alert(`Failed to download template: ${errorMessage}`);
+                      }
+                    }}
+                    className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+                  >
+                    <Archive className="w-4 h-4 mr-2" />
+                    Download Template
+                  </button>
                 </div>
 
                 {/* File Upload */}
                 <div className="space-y-4">
                   <h4 className="text-sm font-medium text-gray-900">Upload Excel File</h4>
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
-                                         <input
-                       type="file"
-                       accept=".xlsx,.xls,.csv"
-                       onChange={(e) => {
-                         const file = e.target.files?.[0];
-                         if (file) setSelectedFile(file);
-                       }}
-                       className="hidden"
-                       id="import-file"
-                     />
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls,.csv"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) setSelectedFile(file);
+                      }}
+                      className="hidden"
+                      id="import-file"
+                    />
                     <label
                       htmlFor="import-file"
                       className="cursor-pointer flex flex-col items-center space-y-2"
@@ -4249,43 +4318,45 @@ const InventoryManagement: React.FC = () => {
                 >
                   Cancel
                 </button>
-                                 <button
-                   onClick={async () => {
-                     if (!selectedFile) {
-                       console.error('❌ No file selected for import');
-                       return;
-                     }
+                <button
+                  onClick={async () => {
+                    if (!selectedFile) {
+                      console.error('❌ No file selected for import');
+                      return;
+                    }
 
-                     console.log('🚀 Starting Excel preview process...');
-                     console.log('📁 Selected file:', {
-                       name: selectedFile.name,
-                       size: selectedFile.size,
-                       type: selectedFile.type
-                     });
+                    console.log('🚀 Starting Excel preview process...');
+                    console.log('📁 Selected file:', {
+                      name: selectedFile.name,
+                      size: selectedFile.size,
+                      type: selectedFile.type
+                    });
 
-                     setImporting(true);
-                     try {
-                       console.log('📤 Making preview request using apiClient');
-                       const result = await apiClient.inventory.previewImport(selectedFile);
+                    setImporting(true);
+                    try {
+                      console.log('📤 Making preview request using apiClient');
+                      const result = await apiClient.inventory.previewImport(selectedFile);
 
-                       console.log('✅ Preview successful:', result);
-                       setPreviewData(result.data);
-                       setShowPreviewModal(true);
-                       setShowImportModal(false);
-                     } catch (error) {
-                       console.error('❌ Preview error:', error);
-                       const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
-                       alert(`Preview failed: ${errorMessage}`);
-                     } finally {
-                       setImporting(false);
-                       console.log('🏁 Preview process completed');
-                     }
-                   }}
-                   disabled={!selectedFile || importing}
-                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                 >
-                   {importing ? 'Generating Preview...' : 'Preview Import'}
-                 </button>
+                      console.log('✅ Preview successful:', result);
+                      setPreviewData(result.data);
+                      setShowPreviewModal(true);
+                      setShowImportModal(false);
+                      toast.success(result.message || 'Preview successful');
+                    } catch (error) {
+                      console.error('❌ Preview error:', error);
+                      const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
+                      //  alert(`Preview failed: ${errorMessage}`);
+                      toast.error(`Preview failed: ${errorMessage}`);
+                    } finally {
+                      setImporting(false);
+                      console.log('🏁 Preview process completed');
+                    }
+                  }}
+                  disabled={!selectedFile || importing}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {importing ? 'Generating Preview...' : 'Preview Import'}
+                </button>
               </div>
             </div>
           </div>
@@ -4405,11 +4476,10 @@ const InventoryManagement: React.FC = () => {
                             <td className="px-3 py-2">{item.QTY}</td>
                             <td className="px-3 py-2">₹{item.MRP?.toLocaleString()}</td>
                             <td className="px-3 py-2">
-                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${
-                                item.status === 'new' ? 'bg-green-100 text-green-800' :
-                                item.status === 'existing' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }`}>
+                              <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${item.status === 'new' ? 'bg-green-100 text-green-800' :
+                                  item.status === 'existing' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                }`}>
                                 {item.status || 'Unknown'}
                               </span>
                             </td>
@@ -4437,23 +4507,25 @@ const InventoryManagement: React.FC = () => {
               <button
                 onClick={async () => {
                   if (!selectedFile) return;
-                  
+
                   setImporting(true);
                   setShowPreviewModal(false);
-                  
+
                   try {
                     console.log('📤 Making final import request using apiClient');
                     const result = await apiClient.inventory.import(selectedFile);
-                    
+
                     console.log('✅ Import successful:', result);
-                    alert(`Import completed! ${result.data.successful} items imported successfully.`);
+                    toast.success(`Import completed! ${result.data.successful} items imported successfully.`)
+                    // alert(`Import completed! ${result.data.successful} items imported successfully.`);
                     setSelectedFile(null);
                     setPreviewData(null);
                     fetchAllData();
                   } catch (error) {
                     console.error('❌ Import error:', error);
                     const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
-                    alert(`Import failed: ${errorMessage}`);
+                    toast.error(`Import failed: ${errorMessage}`);
+                    // alert(`Import failed: ${errorMessage}`);
                   } finally {
                     setImporting(false);
                   }
@@ -4471,6 +4543,14 @@ const InventoryManagement: React.FC = () => {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {importing && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 flex items-center space-x-3 shadow-lg">
+            <RefreshCw className="animate-spin w-8 h-8 text-green-600" />
+            <span className="text-lg font-semibold text-green-700">Importing, please wait...</span>
           </div>
         </div>
       )}

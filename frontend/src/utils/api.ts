@@ -279,7 +279,7 @@ class ApiClient {
     // Stock Management
     getStock: (params?: any) =>{
       // this.makeRequest<{ success: boolean; data: any; pagination?: any }>(`/stock${params ? `?${new URLSearchParams(params)}` : ''}`),
-      return this.makeRequest<{ success: boolean; data:{stockLevels:any[]}; pagination: any }>(`/stock${params ? `?${new URLSearchParams(params)}` : ''}`);
+      return this.makeRequest<{ success: boolean; data:{stockLevels:any[]}; totalStock: number; totalLowStock: number; totalOutOfStock: number; totalOverStocked: number; totalInStock: number; pagination: any }>(`/stock${params ? `?${new URLSearchParams(params)}` : ''}`);
   },
     adjustStock: (adjustmentData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/stock/adjust', {
@@ -330,7 +330,7 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: any }>('/invoices/stats'),
 
     sendEmail: (id: string) =>
-      this.makeRequest<{ success: boolean; data: { paymentLink: string } }>(`/invoices/${id}/send-email`, {
+      this.makeRequest<{ success: boolean; data: { paymentLink: string }; message: string }>(`/invoices/${id}/send-email`, {
         method: 'POST',
       }),
 
