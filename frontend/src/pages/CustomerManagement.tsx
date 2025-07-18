@@ -1475,7 +1475,7 @@ const validateCustomerForm = (): boolean => {
                         </div>
                         <div className="text-xs text-gray-500">
                           {/* ID: {customer._id.slice(-6)} */}
-                          Employee ID: {customer.employeeId}
+                          Customer ID: {customer.employeeId}
                         </div>
                       </div>
                     </td>
