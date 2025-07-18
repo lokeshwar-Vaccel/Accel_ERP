@@ -32,6 +32,8 @@ export interface IQuotation extends Document {
     product: string;
     description: string;
     hsnCode?: string;
+    hsnNumber?: string; // Added hsnNumber field
+    partNo?: string; // Added partNo field
     quantity: number;
     uom: string;
     unitPrice: number;
@@ -84,6 +86,8 @@ const QuotationSchema = new Schema<IQuotation>({
       product: { type: String, },
       description: { type: String, },
       hsnCode: { type: String },
+      hsnNumber: { type: String }, // Added hsnNumber field
+      partNo: { type: String }, // Added partNo field
       quantity: { type: Number, },
       uom: { type: String, },
       unitPrice: { type: Number, },

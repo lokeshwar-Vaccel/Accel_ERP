@@ -5,6 +5,8 @@ export interface QuotationItem {
   product: string;
   description: string;
   hsnCode?: string;
+  hsnNumber?: string; // Added hsnNumber field
+  partNo?: string; // Added partNo field
   quantity: number;
   uom: string;
   unitPrice: number;
@@ -45,7 +47,7 @@ export interface QuotationData {
   validUntil?: Date;
   validityPeriod?: number;
   customer: QuotationCustomer;
-  company: QuotationCompany;
+  company?: QuotationCompany;
   items: QuotationItem[];
   subtotal: number;
   totalDiscount: number;
@@ -98,15 +100,15 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
   }
 
   // Company validation
-  if (!data.company) {
-    errors.push({ field: 'company', message: 'Company information is required' });
-  } else {
-    if (!data.company.name?.trim()) {
-      errors.push({ field: 'company.name', message: 'Company name is required' });
-    }
-    if (!data.company.address?.trim()) {
-      errors.push({ field: 'company.address', message: 'Company address is required' });
-    }
+  // if (!data.company) {
+  //   errors.push({ field: 'company', message: 'Company information is required' });
+  // } else {
+  //   if (!data.company.name?.trim()) {
+  //     errors.push({ field: 'company.name', message: 'Company name is required' });
+  //   }
+  //   if (!data.company.address?.trim()) {
+  //     errors.push({ field: 'company.address', message: 'Company address is required' });
+  //   }
     // if (!data.company.phone?.trim()) {
     //   errors.push({ field: 'company.phone', message: 'Company phone is required' });
     // }
@@ -115,7 +117,7 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
     // } else if (!isValidEmail(data.company.email)) {
     //   errors.push({ field: 'company.email', message: 'Invalid company email format' });
     // }
-  }
+  // }
 
   // Items validation
   if (!data.items || data.items.length === 0) {
@@ -272,10 +274,10 @@ export const getFieldErrorMessage = (field: string): string => {
     'customer.email': 'Please enter a valid email address',
     'customer.phone': 'Please enter a valid phone number',
     'customer.address': 'Customer address is required',
-    'company.name': 'Company name is required',
-    'company.email': 'Please enter a valid company email',
-    'company.phone': 'Company phone is required',
-    'company.address': 'Company address is required',
+    // 'company.name': 'Company name is required',
+    // 'company.email': 'Please enter a valid company email',
+    // 'company.phone': 'Company phone is required',
+    // 'company.address': 'Company address is required',
     'items': 'At least one item is required',
     'items[].product': 'Product selection is required',
     'items[].description': 'Item description is required',
@@ -297,8 +299,8 @@ export const sanitizeQuotationData = (data: any): any => {
       name: String(data.customer.name || '').trim(),
       email: String(data.customer.email || '').trim(),
       phone: String(data.customer.phone || '').trim(),
-      address: String(data.customer.address || '').trim(),
-      addressId: data.customer.addressId || undefined, // Preserve address ID
+      address: String(data.customer.address || '').trim(), // Store actual address text
+      addressId: data.customer.addressId || undefined, // Preserve address ID for reference
       pan: String(data.customer.pan || '').trim()
     } : undefined,
     company: data.company ? {
@@ -313,6 +315,8 @@ export const sanitizeQuotationData = (data: any): any => {
       product: String(item.product || '').trim(),
       description: String(item.description || '').trim(),
       hsnCode: String(item.hsnCode || '').trim(),
+      hsnNumber: String(item.hsnNumber || '').trim(), // Added hsnNumber field
+      partNo: String(item.partNo || '').trim(), // Added partNo field
       quantity: Number(item.quantity) || 0,
       uom: String(item.uom || 'pcs').trim(),
       unitPrice: Number(item.unitPrice) || 0,
@@ -348,6 +352,8 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
     product: '',
     description: '',
     hsnCode: '',
+    hsnNumber: '',
+    partNo: '',
     quantity: 1,
     uom: 'pcs',
     unitPrice: 0,

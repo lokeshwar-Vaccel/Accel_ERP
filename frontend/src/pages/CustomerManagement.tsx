@@ -759,6 +759,7 @@ const validateCustomerForm = (): boolean => {
       }
       const response = await apiClient.customers.create(submitData);
       fetchCustomers();
+      fetchAllCustomers();
       setShowAddModal(false);
       resetCustomerForm();
     } catch (error: any) {
@@ -789,6 +790,7 @@ const validateCustomerForm = (): boolean => {
       const response = await apiClient.customers.update(editingCustomer._id, submitData);
       // setCustomers(customers.map(c => c._id === editingCustomer._id ? response.data : c));
       fetchCustomers()
+      fetchAllCustomers();
       setShowEditModal(false);
       setEditingCustomer(null);
       resetCustomerForm();
@@ -819,6 +821,7 @@ const validateCustomerForm = (): boolean => {
       }
       const response = await apiClient.customers.addContact(selectedCustomer._id, contactData);
       fetchCustomers()
+      fetchAllCustomers();
       // setCustomers(customers.map(c => 
       //   c._id === selectedCustomer._id 
       //     ? { ...c, contactHistory: [...c.contactHistory, response.data] }
@@ -966,11 +969,14 @@ const validateCustomerForm = (): boolean => {
     const customerId = e.dataTransfer.getData('text/plain');
 
     if (customerId && draggedCustomer) {
-      const currentCustomer = customers.find(c => c._id === customerId);
+      const currentCustomer = allCustomers.find(c => c._id === customerId);
       if (currentCustomer && currentCustomer.status !== newStatus) {
         handleStatusChange(customerId, newStatus);
+        fetchAllCustomers();
+        fetchCustomers();
       }
     }
+    
 
     setDraggedCustomer(null);
     setDragOverColumn(null);

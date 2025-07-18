@@ -1018,16 +1018,16 @@ const ProductManagement: React.FC = () => {
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.category}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.brand || 'N/A'}</td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
-                      ₹{product?.price?.toLocaleString()}
+                      ₹{product?.price?.toFixed(2)}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {product.minStockLevel}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product.maxStockLevel}
+                      {product.maxStockLevel  }
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product?.uom}
+                      {product?.uom || 'N/A'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {product.cpcbNo || 'N/A'}

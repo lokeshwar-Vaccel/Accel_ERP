@@ -39,8 +39,6 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
     initialData || getDefaultQuotationData()
   );
 
-  console.log('formData', formData,mode,quotationId);
-  
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -77,6 +75,16 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
           const customer = customers.find(c => c._id === initialData.customer?._id);
           if (customer) {
             setAddresses(customer.addresses || []);
+            
+            // If there's an address ID in the initial data, convert it to address text
+            if (initialData.customer?.address && typeof initialData.customer.address === 'string') {
+              const addressId = parseInt(initialData.customer.address);
+              const address = customer.addresses?.find((a: any) => a.id === addressId);
+              if (address) {
+                // Update the initial data to include the actual address text
+                initialData.customer.address = address.address;
+              }
+            }
           }
         }
       }
@@ -149,8 +157,15 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
   // Get address label for display
   const getAddressLabel = (value: string | undefined) => {
     if (!value) return 'Select address';
-    const address = addresses.find(a => a.id === parseInt(value));
-    return address ? `${address.address} (${address.district}, ${address.pincode})` : 'Select address';
+    
+    // If the value looks like an ID (numeric), try to find the address in addresses array
+    if (!isNaN(parseInt(value))) {
+      const address = addresses.find(a => a.id === parseInt(value));
+      return address ? `${address.address} (${address.district}, ${address.pincode})` : 'Select address';
+    }
+    
+    // If the value is already an address text, return it directly
+    return value;
   };
 
   // Validate form data
@@ -173,6 +188,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
           email: customer.email || '',
           phone: customer.phone || '',
           address: '', // Reset address when customer changes
+          addressId: '', // Reset addressId when customer changes
           pan: customer.pan || ''
         }
       }));
@@ -189,7 +205,8 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
         ...prev,
         customer: {
           ...prev.customer!,
-          address: addressId // Store addressId instead of address text
+          address: address.address, // Store the actual address text
+          addressId: addressId // Store the address ID for reference
         }
       }));
     }
@@ -207,6 +224,8 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
         description: product.name,
         unitPrice: product.price || 0,
         hsnCode: product.hsnNumber || '',
+        hsnNumber: product.hsnNumber || '', // Added hsnNumber field
+        partNo: product.partNo || '', // Added partNo field
         uom: product.uom || 'pcs'
       };
       setFormData(prev => ({ ...prev, items: newItems }));
@@ -221,6 +240,8 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
       product: '',
       description: '',
       hsnCode: '',
+      hsnNumber: '', // Added hsnNumber field
+      partNo: '', // Added partNo field
       quantity: 1,
       uom: 'pcs',
       unitPrice: 0,
@@ -528,6 +549,8 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/5">Product</th>
                       {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">Description</th> */}
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">HSN</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-16">Part No</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Qty</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Unit Price</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">Disc %</th>
@@ -602,16 +625,27 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                           </div>
                         </td>
 
-                        {/* Description */}
-                        {/* <td className="px-4 py-3">
+                        {/* HSN */}
+                        <td className="px-4 py-3">
                           <input
                             type="text"
-                            value={item.description}
-                            onChange={(e) => updateItem(index, 'description', e.target.value)}
+                            value={item.hsnCode || ''}
+                            onChange={(e) => updateItem(index, 'hsnCode', e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                            placeholder="Item description"
+                            placeholder="HSN Code"
                           />
-                        </td> */}
+                        </td>
+
+                        {/* Part No */}
+                        <td className="px-4 py-3">
+                          <input
+                            type="text"
+                            value={item.partNo || ''}
+                            onChange={(e) => updateItem(index, 'partNo', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                            placeholder="Part Number"
+                          />
+                        </td>
 
                         {/* Quantity */}
                         <td className="px-4 py-3">

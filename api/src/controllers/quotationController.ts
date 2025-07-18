@@ -377,15 +377,15 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
 
 // Helper functions for validation and calculation
 const sanitizeQuotationData = (data: any): any => {
-  return {
+  const sanitized = {
     ...data,
     customer: data.customer ? {
       _id: data.customer._id || undefined, // Preserve customer ID
       name: String(data.customer.name || '').trim(),
       email: String(data.customer.email || '').trim(),
       phone: String(data.customer.phone || '').trim(),
-      address: String(data.customer.address || '').trim(),
-      addressId: data.customer.addressId || undefined, // Preserve address ID
+      address: String(data.customer.address || '').trim(), // Store actual address text
+      addressId: data.customer.addressId || undefined, // Preserve address ID for reference
       pan: String(data.customer.pan || '').trim()
     } : undefined,
     company: data.company ? {
@@ -400,6 +400,8 @@ const sanitizeQuotationData = (data: any): any => {
       product: String(item.product || '').trim(),
       description: String(item.description || '').trim(),
       hsnCode: String(item.hsnCode || '').trim(),
+      hsnNumber: String(item.hsnNumber || '').trim(), // Added hsnNumber field
+      partNo: String(item.partNo || '').trim(), // Added partNo field
       quantity: Number(item.quantity) || 0,
       uom: String(item.uom || 'pcs').trim(),
       unitPrice: Number(item.unitPrice) || 0,
@@ -409,6 +411,8 @@ const sanitizeQuotationData = (data: any): any => {
     notes: String(data.notes || '').trim(),
     terms: String(data.terms || '').trim()
   };
+  
+  return sanitized;
 };
 
 const validateQuotationData = (data: any): { isValid: boolean; errors: any[] } => {
@@ -433,23 +437,23 @@ const validateQuotationData = (data: any): { isValid: boolean; errors: any[] } =
   }
 
   // Company validation
-  if (!data.company) {
-    errors.push({ field: 'company', message: 'Company information is required' });
-  } else {
-    if (!data.company.name?.trim()) {
-      errors.push({ field: 'company.name', message: 'Company name is required' });
-    }
-    if (!data.company.address?.trim()) {
-      errors.push({ field: 'company.address', message: 'Company address is required' });
-    }
-    // Make phone and email optional
-    if (data.company.phone && !isValidPhone(data.company.phone)) {
-      errors.push({ field: 'company.phone', message: 'Invalid company phone number format' });
-    }
-    if (data.company.email && !isValidEmail(data.company.email)) {
-      errors.push({ field: 'company.email', message: 'Invalid company email format' });
-    }
-  }
+  // if (!data.company) {
+  //   errors.push({ field: 'company', message: 'Company information is required' });
+  // } else {
+  //   if (!data.company.name?.trim()) {
+  //     errors.push({ field: 'company.name', message: 'Company name is required' });
+  //   }
+  //   if (!data.company.address?.trim()) {
+  //     errors.push({ field: 'company.address', message: 'Company address is required' });
+  //   }
+  //   // Make phone and email optional
+  //   if (data.company.phone && !isValidPhone(data.company.phone)) {
+  //     errors.push({ field: 'company.phone', message: 'Invalid company phone number format' });
+  //   }
+  //   if (data.company.email && !isValidEmail(data.company.email)) {
+  //     errors.push({ field: 'company.email', message: 'Invalid company email format' });
+  //   }
+  // }
 
   // Items validation
   if (!data.items || data.items.length === 0) {
@@ -519,7 +523,7 @@ const calculateQuotationTotals = (items: any[]): any => {
   });
 
   const grandTotalBeforeRound = subtotal - totalDiscount + totalTax;
-  const grandTotal = Math.round(grandTotalBeforeRound);
+  const grandTotal = grandTotalBeforeRound;
   const roundOff = roundTo2Decimals(grandTotal - grandTotalBeforeRound);
 
   return {

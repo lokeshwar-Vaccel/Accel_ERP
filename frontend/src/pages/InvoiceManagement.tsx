@@ -286,7 +286,7 @@ const InvoiceManagement: React.FC = () => {
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [invoiceType, setInvoiceType] = useState<'quotation' | 'sale' | 'purchase' | 'challan'>('sale');
 
-  console.log("selectedInvoice:", selectedInvoice);
+  console.log("invoiceType-------:", invoiceType);
 
 
   // Status update states
@@ -371,6 +371,9 @@ const InvoiceManagement: React.FC = () => {
   const [selectedQuotation, setSelectedQuotation] = useState<any | null>(null);
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create');
   const [showQuotationViewModal, setShowQuotationViewModal] = useState(false);
+
+  console.log("selectedQuotation:", selectedQuotation);
+  
 
   // Filter products based on search term
   const getFilteredProducts = (searchTerm: string = '') => {
@@ -751,15 +754,50 @@ const InvoiceManagement: React.FC = () => {
       });
 
       const responseData = response.data as any;
+      console.log("responseData123:", response);
+      
+      let quotationsData = [];
       if (responseData.pagination) {
-        setQuotations(responseData.quotations || []);
+        quotationsData = responseData.quotations || [];
         setCurrentPage(responseData.pagination.page);
         setLimit(responseData.pagination.limit);
         setTotalDatas(responseData.pagination.total);
         setTotalPages(responseData.pagination.pages);
       } else {
-        setQuotations(responseData || []);
+        quotationsData = responseData || [];
       }
+
+      // Resolve address IDs to actual address text for existing quotations
+      const resolvedQuotations = quotationsData.map((quotation: any) => {
+        if (quotation.customer && quotation.customer.address) {
+          // Check if the address is an ID (numeric string)
+          if (!isNaN(parseInt(quotation.customer.address))) {
+            // Find the customer to get their addresses
+            const customer = customers.find(c => c._id === quotation.customer._id);
+            if (customer && customer.addresses) {
+              const addressId = parseInt(quotation.customer.address);
+              const address = customer.addresses.find((a: any) => a.id === addressId);
+              if (address) {
+                // Update the quotation with the actual address text
+                return {
+                  ...quotation,
+                  customer: {
+                    ...quotation.customer,
+                    address: address.address,
+                    state: address.state,
+                    district: address.district,
+                    pincode: address.pincode,
+                    addressId: address.id
+                  }
+                };
+              }
+            }
+          }
+        }
+        return quotation;
+      });
+
+      setQuotations(resolvedQuotations);
     } catch (error) {
       console.error('Error fetching quotations:', error);
       setQuotations([]);
@@ -950,6 +988,7 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const handleViewQuotation = (quotation: any) => {
+    console.log("quotation123:", quotation);
     setSelectedQuotation(quotation);
     setShowQuotationViewModal(true);
   };
@@ -2284,13 +2323,6 @@ const InvoiceManagement: React.FC = () => {
               Phone: ${quotation.company?.phone || 'N/A'}<br>
               Email: ${quotation.company?.email || 'N/A'}<br>
               PAN: ${quotation.company?.pan || 'N/A'}
-              ${quotation.company?.bankDetails ? `
-              <br><br><strong>Bank Details:</strong><br>
-              Bank: ${quotation.company.bankDetails.bankName || 'N/A'}<br>
-              Account: ${quotation.company.bankDetails.accountNo || 'N/A'}<br>
-              IFSC: ${quotation.company.bankDetails.ifsc || 'N/A'}<br>
-              Branch: ${quotation.company.bankDetails.branch || 'N/A'}
-              ` : ''}
             </div>
           </div>
           <div style="width: 48%;">
@@ -2299,7 +2331,7 @@ const InvoiceManagement: React.FC = () => {
               <strong>${quotation.customer?.name || 'N/A'}</strong><br>
               Email: ${quotation.customer?.email || 'N/A'}<br>
               Phone: ${quotation.customer?.phone || 'N/A'}<br>
-              Address: ${quotation.customer?.address || 'N/A'}
+              Address: ${`${quotation.customer?.address} (${quotation.customer?.district}, ${quotation.customer?.state}, ${quotation.customer?.pincode})` || 'N/A'}
             </div>
           </div>
         </div>
@@ -2312,6 +2344,7 @@ const InvoiceManagement: React.FC = () => {
               <th>HSN Code</th>
               <th>Qty</th>
               <th>UOM</th>
+              <th>Part No</th>
               <th>Unit Price</th>
               <th>Discount</th>
               <th>Tax Rate</th>
@@ -2326,6 +2359,7 @@ const InvoiceManagement: React.FC = () => {
                 <td>${item.hsnCode || 'N/A'}</td>
                 <td>${item.quantity || 0}</td>
                 <td>${item.uom || 'pcs'}</td>
+                <td>${item.partNo || 'N/A'}</td>
                 <td>₹${item.unitPrice?.toLocaleString() || '0'}</td>
                 <td>${item.discount || 0}%</td>
                 <td>${item.taxRate || 0}%</td>
@@ -2521,19 +2555,26 @@ const InvoiceManagement: React.FC = () => {
           </div>
           {/* Invoice Type Toggle */}
           <div className="flex bg-gray-100 rounded-lg p-0.5">
-            {INVOICE_TYPES.map(type => (
-              <button
-                key={type.value}
-                onClick={() => setInvoiceType(type.value as 'quotation' | 'sale' | 'purchase' | 'challan')}
-                className={`px-3 py-2.5 rounded text-sm font-medium flex items-center space-x-1.5 transition-all duration-200 ${invoiceType === type.value
-                  ? 'bg-white text-blue-700 shadow-sm'
-                  : 'text-gray-600 hover:text-blue-700 hover:bg-gray-50'
-                  }`}
-              >
-                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">{type.icon}</span>
-                <span className="whitespace-nowrap">{type.label}</span>
-              </button>
-            ))}
+          {INVOICE_TYPES.map(type => (
+  <button
+    key={type.value}
+    onClick={() => {
+      const selectedType = type.value as 'quotation' | 'sale' | 'purchase' | 'challan';
+      setInvoiceType(selectedType);
+      setNewInvoice(prev => ({ ...prev, invoiceType: selectedType }));
+      setShowInvoiceTypeDropdown(false); // optional: close dropdown if open
+    }}
+    className={`px-3 py-2.5 rounded text-sm font-medium flex items-center space-x-1.5 transition-all duration-200 ${
+      invoiceType === type.value
+        ? 'bg-white text-blue-700 shadow-sm'
+        : 'text-gray-600 hover:text-blue-700 hover:bg-gray-50'
+    }`}
+  >
+    <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">{type.icon}</span>
+    <span className="whitespace-nowrap">{type.label}</span>
+  </button>
+))}
+
           </div>
         </div>
 
@@ -2957,37 +2998,53 @@ const InvoiceManagement: React.FC = () => {
                       }`} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Invoice Type
-                  </label>
-                  <div className="relative dropdown-container">
-                    <button
-                      onClick={() => setShowInvoiceTypeDropdown(!showInvoiceTypeDropdown)}
-                      disabled={invoiceType === 'challan' ? true : false}
-                      className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400 bg-gray-100 cursor-not-allowed"
-                    >
-                      <span className="text-gray-700 truncate mr-1">{getInvoiceTypeLabel(newInvoice.invoiceType)}</span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showInvoiceTypeDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showInvoiceTypeDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                        {INVOICE_TYPES.map((option) => (
-                          <button
-                            key={option.value}
-                            onClick={() => {
-                              setNewInvoice({ ...newInvoice, invoiceType: option.value as any });
-                              setShowInvoiceTypeDropdown(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.invoiceType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                              }`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
+  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Type</label>
+  <div className="relative dropdown-container">
+    <button
+      onClick={() => {
+        if (invoiceType !== 'challan') {
+          setShowInvoiceTypeDropdown(prev => !prev);
+        }
+      }}
+      disabled={invoiceType === 'challan'}
+      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg transition-colors ${
+        invoiceType === 'challan'
+          ? 'bg-gray-100 cursor-not-allowed border-gray-300'
+          : 'bg-white border-gray-300 hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+      }`}
+    >
+      <span className="text-gray-700 truncate mr-1">
+        {getInvoiceTypeLabel(invoiceType)} {/* Use invoiceType here */}
+      </span>
+      <ChevronDown
+        className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${
+          showInvoiceTypeDropdown ? 'rotate-180' : ''
+        }`}
+      />
+    </button>
+
+    {showInvoiceTypeDropdown && (
+      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+        {INVOICE_TYPES.map(option => (
+          <button
+            key={option.value}
+            onClick={() => {
+              setInvoiceType(option.value as any);
+              setNewInvoice(prev => ({ ...prev, invoiceType: option.value as any }));
+              setShowInvoiceTypeDropdown(false);
+            }}
+            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+              invoiceType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    )}
+  </div>
+</div>
+
 
               </div>
 
@@ -4435,7 +4492,7 @@ const InvoiceManagement: React.FC = () => {
                     <p>Phone: {selectedQuotation.company?.phone || 'N/A'}</p>
                     <p>Email: {selectedQuotation.company?.email || 'N/A'}</p>
                     <p>PAN: {selectedQuotation.company?.pan || 'N/A'}</p>
-                    {selectedQuotation.company?.bankDetails && (
+                    {/* {selectedQuotation.company?.bankDetails && (
                       <div className="mt-2">
                         <p className="font-medium text-gray-700">Bank Details:</p>
                         <p>Bank: {selectedQuotation.company.bankDetails.bankName || 'N/A'}</p>
@@ -4443,7 +4500,7 @@ const InvoiceManagement: React.FC = () => {
                         <p>IFSC: {selectedQuotation.company.bankDetails.ifsc || 'N/A'}</p>
                         <p>Branch: {selectedQuotation.company.bankDetails.branch || 'N/A'}</p>
                       </div>
-                    )}
+                    )} */}
                   </div>
                 </div>
 
@@ -4454,7 +4511,7 @@ const InvoiceManagement: React.FC = () => {
                     <p>Email: {selectedQuotation.customer?.email || 'N/A'}</p>
                     <p>Phone: {selectedQuotation.customer?.phone || 'N/A'}</p>
                     {/* <p>PAN: {selectedQuotation.customer?.pan || 'N/A'}</p> */}
-                    <p>Address: {selectedQuotation.customer?.address || 'N/A'}</p>
+                    <p>Address: {`${selectedQuotation.customer?.address} (${selectedQuotation.customer?.district}, ${selectedQuotation.customer?.state}, ${selectedQuotation.customer?.pincode})` || 'N/A'}</p>
                   </div>
                 </div>
               </div>
@@ -4470,6 +4527,7 @@ const InvoiceManagement: React.FC = () => {
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN Code</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">UOM</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax Rate</th>
@@ -4483,6 +4541,7 @@ const InvoiceManagement: React.FC = () => {
                           <td className="px-4 py-2 text-sm text-gray-900">{item.hsnCode || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.uom}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.partNo || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">₹{item.unitPrice?.toLocaleString()}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.discount || 0}%</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.taxRate || 0}%</td>
