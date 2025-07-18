@@ -12,7 +12,7 @@ export const getStockLocations = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { page = 1, limit = 10, sort = '-createdAt', search } = req.query as QueryParams & {
+    const { page = 1, limit = 10, sort = '-updatedAt', search } = req.query as QueryParams & {
       search?: string;
     };
 
@@ -29,7 +29,7 @@ export const getStockLocations = async (
 
     // Execute query with pagination
     const locations = await StockLocation.find(query)
-      .sort(sort as string)
+      .sort({"name": 1})
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit))
       .select('-__v'); // Exclude __v field

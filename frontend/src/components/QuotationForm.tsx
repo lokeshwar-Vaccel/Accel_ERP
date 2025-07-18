@@ -226,7 +226,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
         hsnCode: product.hsnNumber || '',
         hsnNumber: product.hsnNumber || '', // Added hsnNumber field
         partNo: product.partNo || '', // Added partNo field
-        uom: product.uom || 'pcs'
+        uom: product.uom || 'nos'
       };
       setFormData(prev => ({ ...prev, items: newItems }));
     }
@@ -243,7 +243,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
       hsnNumber: '', // Added hsnNumber field
       partNo: '', // Added partNo field
       quantity: 1,
-      uom: 'pcs',
+      uom: 'nos',
       unitPrice: 0,
       discount: 0,
       discountedAmount: 0,

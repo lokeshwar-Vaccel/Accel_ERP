@@ -83,7 +83,7 @@ export enum ProductCategory {
 
 // Stock Unit Type
 export type StockUnit =
-  | 'pcs'
+  | 'nos'
   | 'kg'
   | 'litre'
   | 'meter'

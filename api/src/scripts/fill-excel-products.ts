@@ -56,7 +56,7 @@ async function main() {
       gndp: p.gndp,
       price: p.price,
       gndpTotal: p.gndpTotal,
-      stockUnit: 'pcs',
+      stockUnit: 'nos',
       createdBy: FIXED_USER_ID
     });
     insertedProducts++;

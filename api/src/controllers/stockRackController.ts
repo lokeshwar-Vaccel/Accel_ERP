@@ -37,7 +37,7 @@ export const getRacks = async (req: AuthenticatedRequest, res: Response, next: N
         .populate('room', 'name description')
         .skip((+page - 1) * +limit)
         .limit(+limit)
-        .sort({ createdAt: -1 }),
+        .sort({ "name": 1 }),
       Rack.countDocuments(filter),
     ]);
 

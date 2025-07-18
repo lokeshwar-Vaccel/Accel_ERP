@@ -9,7 +9,8 @@ import {
   FileText, 
   AlertTriangle,
   CheckCircle,
-  Loader
+  Loader,
+  IndianRupee
 } from 'lucide-react';
 
 interface Invoice {
@@ -357,7 +358,7 @@ const PaymentPage: React.FC = () => {
                       </>
                     ) : (
                       <>
-                        <DollarSign className="w-5 h-5 mr-2" />
+                        <IndianRupee className="w-5 h-5 mr-2" />
                         Pay ₹{paymentForm.amount.toLocaleString()}
                       </>
                     )}

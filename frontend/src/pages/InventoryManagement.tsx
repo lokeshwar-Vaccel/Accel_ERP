@@ -733,14 +733,17 @@ const InventoryManagement: React.FC = () => {
       const response = await apiClient.stock.getLocations();
       // Handle response format from backend - locations are nested in data.locations
       let locationsData: any[] = [];
+      console.log(response.data)
       if (response.data) {
         if (Array.isArray(response.data)) {
-          locationsData = response.data;
+          locationsData = response.data.sort((a,b) => a.name.localCompare(b.name));
         } else if ((response.data as any).locations && Array.isArray((response.data as any).locations)) {
+          console.log(locationsData)
           locationsData = (response.data as any).locations;
         }
       }
       setLocations(locationsData);
+      // await fetchLocations();
     } catch (error) {
       console.error('Error fetching locations:', error);
       setLocations([]);

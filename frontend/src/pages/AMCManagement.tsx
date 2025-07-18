@@ -19,7 +19,8 @@ import {
   Building,
   Package,
   RefreshCw,
-  ChevronDown
+  ChevronDown,
+  IndianRupee
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -1046,7 +1047,7 @@ const AMCManagement: React.FC = () => {
     {
       title: 'Total Value',
       value: formatCurrency(amcs.reduce((sum, amc) => sum + amc.contractValue, 0)),
-      icon: <DollarSign className="w-6 h-6" />,
+      icon: <IndianRupee className="w-6 h-6" />,
       color: 'purple'
     },
     {
@@ -1756,7 +1757,7 @@ const AMCManagement: React.FC = () => {
                                   className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
                                   title="Generate Invoice"
                                 >
-                                  <DollarSign className="w-4 h-4" />
+                                  <IndianRupee className="w-4 h-4" />
                                 </button>
                               </>
                             )}

@@ -12,7 +12,8 @@ import {
   Zap,
   FileText,
   CheckCircle,
-  Clock
+  Clock,
+  IndianRupee
 } from 'lucide-react';
 import StatCard from 'components/StatCard';
 import { DashboardStats } from '../types';
@@ -79,7 +80,7 @@ export default function Dashboard() {
         { id: '2', action: 'Service ticket completed', time: '15 minutes ago', type: 'service', icon: Wrench, color: 'green' },
         { id: '3', action: 'Low stock alert for generators', time: '1 hour ago', type: 'inventory', icon: Package, color: 'orange' },
         { id: '4', action: 'New AMC contract signed', time: '2 hours ago', type: 'amc', icon: FileText, color: 'purple' },
-        { id: '5', action: 'Purchase order approved', time: '3 hours ago', type: 'purchase', icon: DollarSign, color: 'indigo' },
+        { id: '5', action: 'Purchase order approved', time: '3 hours ago', type: 'purchase', icon: IndianRupee, color: 'indigo' },
         { id: '6', action: 'New user added to system', time: '4 hours ago', type: 'user', icon: Users, color: 'cyan' },
       ]);
     } catch (error) {
@@ -156,7 +157,7 @@ export default function Dashboard() {
       title: 'Monthly Revenue', 
       value: formatCurrency(stats?.monthlyRevenue || 0), 
       change: 12.5, 
-      icon: <DollarSign className="w-4 h-4" />, 
+      icon: <IndianRupee className="w-4 h-4" />, 
       color: 'green' 
     },
     { 
@@ -321,7 +322,7 @@ export default function Dashboard() {
                 <div className="text-lg font-bold text-purple-600">{formatCurrency(stats?.monthlyRevenue || 0)}</div>
                 <div className="text-xs text-purple-700">Monthly Revenue</div>
                 <div className="flex items-center justify-center mt-1">
-                  <DollarSign className="w-3 h-3 text-purple-500 mr-1" />
+                  <IndianRupee className="w-3 h-3 text-purple-500 mr-1" />
                   <span className="text-xs text-purple-600">+12.5%</span>
                 </div>
               </div>

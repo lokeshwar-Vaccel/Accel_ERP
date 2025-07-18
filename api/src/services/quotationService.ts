@@ -235,7 +235,7 @@ export class QuotationService {
         description: String(item.description || '').trim(),
         hsnCode: String(item.hsnCode || '').trim(),
         quantity: Number(item.quantity) || 0,
-        uom: String(item.uom || 'pcs').trim(),
+        uom: String(item.uom || 'nos').trim(),
         unitPrice: Number(item.unitPrice) || 0,
         discount: Number(item.discount) || 0,
         taxRate: Number(item.taxRate) || 0
@@ -291,7 +291,7 @@ export class QuotationService {
         description: item.description,
         hsnCode: productObj.hsnSac || item.hsnSac || '',
         quantity: item.quantity,
-        uom: item.uom || 'pcs',
+        uom: item.uom || 'nos',
         unitPrice: item.unitPrice,
         discount: item.discount || 0,
         discountedAmount: this.roundTo2Decimals(discountAmount),

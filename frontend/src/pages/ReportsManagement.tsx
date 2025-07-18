@@ -28,7 +28,8 @@ import {
   Calendar as CalendarIcon,
   MapPin,
   Phone,
-  Mail
+  Mail,
+  IndianRupee
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -251,7 +252,7 @@ const ReportsManagement: React.FC = () => {
     { id: 'overview', name: 'Overview Dashboard', icon: BarChart3, color: 'blue' },
     { id: 'tickets', name: 'Service Tickets TAT', icon: Clock, color: 'orange' },
     { id: 'inventory', name: 'Inventory Analytics', icon: Package, color: 'green' },
-    { id: 'revenue', name: 'Revenue Tracking', icon: DollarSign, color: 'purple' },
+    { id: 'revenue', name: 'Revenue Tracking', icon: IndianRupee, color: 'purple' },
     { id: 'amc', name: 'AMC Status Reports', icon: Briefcase, color: 'indigo' },
     { id: 'leads', name: 'Lead Conversion', icon: Target, color: 'pink' },
     { id: 'engineers', name: 'Engineer Performance', icon: User, color: 'teal' }
@@ -301,7 +302,7 @@ const ReportsManagement: React.FC = () => {
               </div>
             </div>
             <div className="p-3 bg-green-100 rounded-lg">
-              <DollarSign className="w-6 h-6 text-green-600" />
+              <IndianRupee className="w-6 h-6 text-green-600" />
             </div>
           </div>
         </div>
@@ -702,7 +703,7 @@ const ReportsManagement: React.FC = () => {
                 {formatCurrency(revenueAnalytics?.totalRevenue || 0)}
               </p>
             </div>
-            <DollarSign className="w-6 h-6 text-green-600" />
+            <IndianRupee className="w-6 h-6 text-green-600" />
           </div>
         </div>
         <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
@@ -867,7 +868,7 @@ const ReportsManagement: React.FC = () => {
                 {formatCurrency(amcAnalytics?.contractValue || 0)}
               </p>
             </div>
-            <DollarSign className="w-6 h-6 text-purple-600" />
+            <IndianRupee className="w-6 h-6 text-purple-600" />
           </div>
         </div>
       </div>

@@ -190,7 +190,7 @@ export const createInvoice = async (
         taxRate: item.taxRate || 0,
         taxAmount: taxAmount,
         discount: item.discount || 0,
-        uom: item.uom || 'pcs',
+        uom: item.uom || 'nos',
         partNo: item.partNo || '',
         hsnSac: item.hsnSac || ''
       });

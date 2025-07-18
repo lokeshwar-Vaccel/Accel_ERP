@@ -27,7 +27,8 @@ import {
   Ban,
   ChevronDown,
   Trash2,
-  Users
+  Users,
+  IndianRupee
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -1160,7 +1161,7 @@ const PurchaseOrderManagement: React.FC = () => {
     {
       title: 'Total Value',
       value: formatCurrency(purchaseOrders.reduce((sum, po) => sum + po.totalAmount, 0)),
-      icon: <DollarSign className="w-6 h-6" />,
+      icon: <IndianRupee className="w-6 h-6" />,
       color: 'purple'
     }
   ];
@@ -3409,7 +3410,7 @@ const PurchaseOrderManagement: React.FC = () => {
                 <div className="bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 rounded-lg p-6 shadow-sm">
                   <div className='pb-4'>
                     <div className="flex items-center space-x-2 mb-4">
-                      {/* <DollarSign className="w-5 h-5 text-gray-600" /> */}
+                      {/* <IndianRupee className="w-5 h-5 text-gray-600" /> */}
                       <h3 className="text-lg font-semibold text-gray-900">External Invoice details</h3>
                     </div>
                     <div>
@@ -3543,8 +3544,11 @@ const PurchaseOrderManagement: React.FC = () => {
 
                         // Compare amounts using debounced value
                         const externalTotal = parseFloat(debouncedExternalTotal);
-                        const isMatching = Math.abs(externalTotal - grandTotal) < 0.01; // Allow small floating point differences
-
+                        console.log("externalTotal:",externalTotal);
+                        
+                        //const isMatching = Math.abs(externalTotal - grandTotal) < 0.0001; // Allow small floating point differences
+                        const isMatching = externalTotal.toFixed(2) === grandTotal.toFixed(2);
+                        
                         return isMatching ? (
                           <div className="flex items-center text-green-700 bg-green-50 p-2 rounded border border-green-300">
                             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

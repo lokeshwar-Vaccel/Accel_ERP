@@ -111,7 +111,7 @@ const ProductManagement: React.FC = () => {
     gst: 0,
     gndp: 0,
     price: 0,
-    uom: 'pcs',
+    uom: 'nos',
     gndpTotal: 0,
     cpcbNo: '', // Added
     createdBy: currentUser
@@ -124,7 +124,7 @@ const ProductManagement: React.FC = () => {
   ];
 
   const stockUnit = [
-    'pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'
+    'nos', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'
   ];
 
   const category = [
@@ -199,7 +199,7 @@ const ProductManagement: React.FC = () => {
       gst: 0,
       gndp: 0,
       price: 0,
-      uom: 'pcs',
+      uom: 'nos',
       gndpTotal: 0,
       cpcbNo: '', // Added
       createdBy: currentUser
@@ -232,7 +232,7 @@ const ProductManagement: React.FC = () => {
       gst: product.gst || 0,
       gndp: product.gndp || 0,
       price: product.price || 0,
-      uom: product.uom || 'pcs',
+      uom: product.uom || 'nos',
       gndpTotal: product.gndpTotal || 0,
       cpcbNo: product.cpcbNo || '', // Added
       createdBy: typeof product.createdBy === 'string' ? product.createdBy : product.createdBy?._id || ''
@@ -269,7 +269,7 @@ const ProductManagement: React.FC = () => {
       gst: 0,
       gndp: 0,
       price: 0,
-      uom: 'pcs',
+      uom: 'nos',
       gndpTotal: 0,
       cpcbNo: '', // Added
       createdBy: ''
@@ -512,7 +512,7 @@ const ProductManagement: React.FC = () => {
     label: dept
   }));
 
-  const formUomOptions = ["pcs", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll", "nos"].map(unit => ({
+  const formUomOptions = ["nos", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll", "nos"].sort().map(unit => ({
     value: unit,
     label: unit
   }));
@@ -1297,7 +1297,7 @@ const ProductManagement: React.FC = () => {
                   {/* Duplicate Basic Information Section for Right Side */}
                   <div className="flex-1 space-y-6 p-6">
                     <div className="flex items-center space-x-2 mb-4">
-                      <DollarSign className="w-5 h-5 text-gray-600" />
+                      <IndianRupee className="w-5 h-5 text-gray-600" />
                       <h3 className="text-sm font-semibold text-gray-900">Inventory & Pricing</h3>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

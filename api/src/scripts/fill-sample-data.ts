@@ -113,7 +113,7 @@ async function main() {
       gndp: randomInt(50, 500),
       price: randomInt(100, 1000),
       gndpTotal: randomInt(1000, 10000),
-      stockUnit: pickRandom(['pcs', 'kg', 'litre', 'meter', 'set']),
+      stockUnit: pickRandom(['nos', 'kg', 'litre', 'meter', 'set']),
       createdBy: FIXED_USER_ID
     }))
   );

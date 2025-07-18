@@ -33,7 +33,7 @@ export const getRooms = async (req: AuthenticatedRequest, res: Response, next: N
         .populate('location', 'name type ')
         .skip((+page - 1) * +limit)
         .limit(+limit)
-        .sort({ createdAt: -1 }),
+        .sort({"name":1}),
       Room.countDocuments(filter),
     ]);
 

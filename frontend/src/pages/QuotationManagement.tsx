@@ -72,7 +72,7 @@ const QuotationSystem = () => {
         taxRate: 18,
         hsnSac: '',
         partNo: '',
-        uom: 'pcs',
+        uom: 'nos',
         discount: 0,
       },
     ],
@@ -190,7 +190,7 @@ console.log("quotationFormMode",quotationFormMode);
           taxRate: 18,
           hsnSac: '',
           partNo: '',
-          uom: 'pcs',
+          uom: 'nos',
           discount: 0,
         },
       ],
@@ -215,7 +215,7 @@ console.log("quotationFormMode",quotationFormMode);
           updatedItems[index].taxRate = productObj.gst;
           updatedItems[index].partNo = productObj.partNo;
           updatedItems[index].hsnSac = productObj.hsnNumber;
-          updatedItems[index].uom = productObj.uom || 'pcs';
+          updatedItems[index].uom = productObj.uom || 'nos';
         }
       }
       return { ...prev, items: updatedItems };
@@ -409,7 +409,7 @@ console.log("quotationFormMode",quotationFormMode);
           description: item.description || '',
           hsnCode: item.hsnCode || item.hsnSac || '',
           quantity: item.quantity,
-          uom: item.uom || 'pcs',
+          uom: item.uom || 'nos',
           unitPrice: item.unitPrice,
           discount: item.discount || 0,
           discountedAmount,
@@ -885,11 +885,10 @@ console.log("quotationFormMode",quotationFormMode);
                           UOM
                         </label>
                         <select
-                          value={item.uom || 'pcs'}
+                          value={item.uom || 'nos'}
                           onChange={(e) => updateInvoiceItem(index, 'uom', e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         >
-                          <option value="pcs">pcs</option>
                           <option value="kg">kg</option>
                           <option value="litre">litre</option>
                           <option value="meter">meter</option>

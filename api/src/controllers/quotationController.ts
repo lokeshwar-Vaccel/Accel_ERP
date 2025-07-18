@@ -403,7 +403,7 @@ const sanitizeQuotationData = (data: any): any => {
       hsnNumber: String(item.hsnNumber || '').trim(), // Added hsnNumber field
       partNo: String(item.partNo || '').trim(), // Added partNo field
       quantity: Number(item.quantity) || 0,
-      uom: String(item.uom || 'pcs').trim(),
+      uom: String(item.uom || 'nos').trim(),
       unitPrice: Number(item.unitPrice) || 0,
       discount: Number(item.discount) || 0,
       taxRate: Number(item.taxRate) || 0

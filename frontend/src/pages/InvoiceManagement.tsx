@@ -22,7 +22,8 @@ import {
   Ban,
   AlertCircle,
   XCircle,
-  TrendingDown
+  TrendingDown,
+  IndianRupee
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -321,7 +322,7 @@ const InvoiceManagement: React.FC = () => {
         gstRate: 0,
         partNo: '',
         hsnSac: '',
-        uom: 'pcs',
+        uom: 'nos',
         discount: 0
       }
     ],
@@ -406,7 +407,7 @@ const InvoiceManagement: React.FC = () => {
 
   // UOM options
   const UOM_OPTIONS = [
-    'pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'
+    'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'
   ];
 
   // Filter UOM based on search term
@@ -561,6 +562,15 @@ const InvoiceManagement: React.FC = () => {
       totalAmount,
       remainingAmount,
     }));
+    console.log("items",{
+      // ...prev,
+      items: adjustedItems,
+      subtotal: parseFloat(subtotal.toFixed(2)),
+      taxAmount: parseFloat(taxAmount.toFixed(2)),
+      totalAmount,
+      remainingAmount,
+    });
+    
   };
 
 
@@ -929,7 +939,7 @@ const InvoiceManagement: React.FC = () => {
           gstRate: 0,
           partNo: '',
           hsnSac: '',
-          uom: 'pcs',
+          uom: 'nos',
           discount: 0
         }
       ],
@@ -1313,7 +1323,7 @@ const InvoiceManagement: React.FC = () => {
       // Payment Management - Available for invoices that can have payments
       if (invoice.status !== 'cancelled' && invoice.status !== 'draft') {
         actions.push({
-          icon: <DollarSign className="w-4 h-4" />,
+          icon: <IndianRupee className="w-4 h-4" />,
           label: 'Update Payment',
           action: () => handleUpdatePayment(invoice),
           color: 'text-green-600 hover:text-green-900 hover:bg-green-50'
@@ -1395,7 +1405,7 @@ const InvoiceManagement: React.FC = () => {
           gstRate: 0,
           partNo: '',
           hsnSac: '',
-          uom: 'pcs',
+          uom: 'nos',
           discount: 0
         }
       ]
@@ -1745,7 +1755,7 @@ const InvoiceManagement: React.FC = () => {
           unitPrice: Number(item.unitPrice),
           taxRate: Number(item.taxRate || 0),
           discount: Number(item.discount || 0),
-          uom: item.uom || 'pcs',
+          uom: item.uom || 'nos',
           partNo: item.partNo || '',
           hsnSac: item.hsnSac || ''
         }))
@@ -1846,7 +1856,7 @@ const InvoiceManagement: React.FC = () => {
     {
       title: 'Total Revenue',
       value: `₹${stats.totalRevenue.toLocaleString()}`,
-      icon: <DollarSign className="w-6 h-6" />,
+      icon: <IndianRupee className="w-6 h-6" />,
       color: 'purple'
     }
   ];
@@ -2358,7 +2368,7 @@ const InvoiceManagement: React.FC = () => {
                 <td>${item.description || ''}</td>
                 <td>${item.hsnCode || 'N/A'}</td>
                 <td>${item.quantity || 0}</td>
-                <td>${item.uom || 'pcs'}</td>
+                <td>${item.uom || 'nos'}</td>
                 <td>${item.partNo || 'N/A'}</td>
                 <td>₹${item.unitPrice?.toLocaleString() || '0'}</td>
                 <td>${item.discount || 0}%</td>
@@ -3257,7 +3267,7 @@ const InvoiceManagement: React.FC = () => {
                                 })}
                                 className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
                               >
-                                <span className="text-gray-700">{item.uom || 'pcs'}</span>
+                                <span className="text-gray-700">{item.uom || 'nos'}</span>
                                 <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showUomDropdowns[index] ? 'rotate-180' : ''}`} />
                               </button>
                               {showUomDropdowns[index] && (

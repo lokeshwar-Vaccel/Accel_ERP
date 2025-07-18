@@ -15,7 +15,7 @@ interface QuotationModalProps {
 const QuotationModal: React.FC<QuotationModalProps> = ({ open, onClose, mode, quotation, onSaved }) => {
   const [form, setForm] = useState<any>({
     customer: '',
-    items: [{ product: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, uom: 'pcs' }],
+    items: [{ product: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, uom: 'nos' }],
     validityPeriod: 30,
     notes: '',
     terms: '',
@@ -28,7 +28,7 @@ const QuotationModal: React.FC<QuotationModalProps> = ({ open, onClose, mode, qu
     } else {
       setForm({
         customer: '',
-        items: [{ product: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, uom: 'pcs' }],
+        items: [{ product: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, uom: 'nos' }],
         validityPeriod: 30,
         notes: '',
         terms: '',
@@ -51,7 +51,7 @@ const QuotationModal: React.FC<QuotationModalProps> = ({ open, onClose, mode, qu
   const addItem = () => {
     setForm((prev: any) => ({
       ...prev,
-      items: [...prev.items, { product: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, uom: 'pcs' }],
+      items: [...prev.items, { product: '', description: '', quantity: 1, unitPrice: 0, taxRate: 0, discount: 0, uom: 'nos' }],
     }));
   };
 

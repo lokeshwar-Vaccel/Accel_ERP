@@ -137,7 +137,7 @@ POST /api/v1/quotations
       "unitPrice": 100.00,
       "discount": 5,
       "taxRate": 18,
-      "uom": "pcs"
+      "uom": "nos"
     }
   ],
   "notes": "Additional notes",

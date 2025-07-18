@@ -101,8 +101,8 @@ const invoiceItemSchema = new Schema({
   },
   uom: {
     type: String,
-    enum: ['pcs', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'],
-    default: 'pcs'
+    enum: ['kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'],
+    default: 'nos'
   },
   discount: {
     type: Number,
