@@ -177,6 +177,8 @@ const PurchaseOrderManagement: React.FC = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  console.log("purchaseOrders-99992:",purchaseOrders);
+  
 
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
@@ -216,7 +218,7 @@ const PurchaseOrderManagement: React.FC = () => {
         description: '',
         quantity: 1,
         unitPrice: 0,
-        taxRate: 18
+        taxRate: 0
       }
     ],
     // discountAmount: 0,
@@ -275,6 +277,9 @@ const PurchaseOrderManagement: React.FC = () => {
     documentNumber: '',
     documentDate: new Date().toISOString().split('T')[0],
   });
+
+  console.log("receiveData-12:",receiveData);
+  
 
 
 
@@ -573,6 +578,7 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const openReceiveModal = (po: PurchaseOrder) => {
+    console.log("po-12:",po);
 
     setSelectedPO(po);
     setReceiveSearchTerm(''); // Clear search when opening modal
@@ -776,6 +782,13 @@ const PurchaseOrderManagement: React.FC = () => {
   const validateReceiveForm = (): boolean => {
     const errors: Record<string, string> = {};
 
+    // Validate all required fields marked with asterisks in the form
+    if (!receiveData.location || receiveData.location.trim() === '') {
+      errors.location = 'Delivery Location is required';
+    }
+    if (!receiveData.receiptDate || receiveData.receiptDate.trim() === '') {
+      errors.receiptDate = 'Receipt Date is required';
+    }
     if (!receiveData.shipDate || receiveData.shipDate.trim() === '') {
       errors.shipDate = 'Ship Date is required';
     }
@@ -798,6 +811,11 @@ const PurchaseOrderManagement: React.FC = () => {
       errors.documentDate = 'Document Date is required';
     }
 
+    // Validate that at least one item has been selected to receive
+    if (receiveData.receivedItems.every(item => (item.quantityReceived || 0) === 0)) {
+      errors.items = 'Please select items to receive';
+    }
+
     setFormErrors(errors);
 
     if (Object.keys(errors).length > 0) {
@@ -814,6 +832,8 @@ const PurchaseOrderManagement: React.FC = () => {
     if (!validateReceiveForm()) return;
 
     setSubmitting(true);
+    console.log("receiveData:",receiveData);
+    
     try {
       const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
 
@@ -2831,7 +2851,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     <select
                       value={receiveData.location}
                       onChange={(e) => setReceiveData({ ...receiveData, location: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.location ? 'border-red-500' : 'border-gray-300'}`}
                     >
                       <option value="">Select location...</option>
                       {locations.length === 0 ? (
@@ -2844,6 +2864,9 @@ const PurchaseOrderManagement: React.FC = () => {
                         ))
                       )}
                     </select>
+                    {formErrors.location && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.location}</p>
+                    )}
                   </div>
 
                   <div>
@@ -2854,8 +2877,11 @@ const PurchaseOrderManagement: React.FC = () => {
                       type="date"
                       value={receiveData.receiptDate}
                       onChange={(e) => setReceiveData({ ...receiveData, receiptDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.receiptDate ? 'border-red-500' : 'border-gray-300'}`}
                     />
+                    {formErrors.receiptDate && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.receiptDate}</p>
+                    )}
                   </div>
 
                   <div>
@@ -3014,6 +3040,11 @@ const PurchaseOrderManagement: React.FC = () => {
                     />
                   </div>
                 </div>
+                {formErrors.items && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-red-600 text-sm">{formErrors.items}</p>
+                  </div>
+                )}
 
                 {(() => {
                   const itemsWithRemainingQty = selectedPO.items.filter(item =>
@@ -3566,15 +3597,11 @@ const PurchaseOrderManagement: React.FC = () => {
                 >
                   Cancel
                 </button>
-                <button
-                  onClick={() => {
-                    if (receiveData.receivedItems.every(item => (item.quantityReceived || 0) === 0)) {
-                      toast.error('Please select items to receive');
-                      return;
-                    }
-                    handleReceiveItems();
-                  }}
-                  disabled={submitting}
+                                  <button
+                    onClick={() => {
+                      handleReceiveItems();
+                    }}
+                    disabled={submitting}
                   className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                   {submitting ? 'Receiving...' : 'Confirm Receipt'}

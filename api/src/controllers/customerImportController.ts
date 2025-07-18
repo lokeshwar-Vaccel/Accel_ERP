@@ -10,6 +10,7 @@ import {
 import { AppError } from '../middleware/errorHandler';
 import { CustomerImportInput, createCustomerSchema } from '../schemas/customerSchemas';
 import * as XLSX from 'xlsx';
+import { TransactionCounter } from '../models/TransactionCounter';
 
 // Helper: Get value from possible column names (case-insensitive, trims spaces)
 const getColumnValue = (row: any, keys: string[]): string => {
@@ -82,15 +83,15 @@ const cleanRowKeys = (row: any) => {
 
 // Helper: Find existing customer by GST or name+phone
 const findExistingCustomer = async (row: any) => {
-  const gst = getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']);
-  if (gst) {
-    const byGst = await Customer.findOne({ gstNumber: gst });
-    if (byGst) return byGst;
-  }
+//   const gst = getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']);
+//   if (gst) {
+//     const byGst = await Customer.findOne({ gstNumber: gst });
+//     if (byGst) return byGst;
+//   }
   const name = getColumnValue(row, ['Name', 'Customer Name', 'name', 'customer name']);
-  const phone = getColumnValue(row, ['Mobile No', 'Phone', 'phone', 'mobile', 'mobile no']);
-  if (name && phone) {
-    return await Customer.findOne({ name, phone });
+//   const phone = getColumnValue(row, ['Mobile No', 'Phone', 'phone', 'mobile', 'mobile no']);
+  if (name ) {
+    return await Customer.findOne({ name });
   }
   return null;
 };
@@ -129,6 +130,16 @@ const findHeaderRowAndData = (worksheet: any) => {
     range: 1
   });
 };
+
+// Utility to get next employeeId (same as in customerController)
+async function getNextEmployeeId() {
+  const counter = await TransactionCounter.findOneAndUpdate(
+    { type: 'employeeId' },
+    { $inc: { sequence: 1 } },
+    { new: true, upsert: true }
+  );
+  return `SPS1${String(counter.sequence).padStart(4, '0')}`;
+}
 
 // @desc    Preview customers from Excel/CSV before import
 // @route   POST /api/v1/customers/preview-import
@@ -205,9 +216,9 @@ export const previewCustomerImport = async (
       if (existing) {
         preview.existingCustomers.push({
           name: existing.name,
-          phone: existing.phone,
+        //   phone: existing.phone,
           gstNumber: (existing as any).gstNumber,
-          id: existing._id
+        //   id: existing._id
         });
         preview.summary.existingCustomers++;
         continue;
@@ -246,11 +257,14 @@ export const importCustomers = async (
     
     // Use the improved header detection
     const rawData: any[] = findHeaderRowAndData(worksheet);
-      
+    console.log("rawData:",rawData);
+    
+    
     if (!rawData.length) return next(new AppError('No data found in file', 400));
 
     const cleanedData = rawData.map(cleanRowKeys);
-
+    console.log("cleanedData:",cleanedData);
+    
     const results = {
       successful: 0,
       failed: 0,
@@ -283,36 +297,41 @@ export const importCustomers = async (
 
       // Skip header row and rows where name is missing (essential field)
       if (!customerInput.name || customerInput.name.toLowerCase() === 'name') {
+        results.errors.push(`Row ${i + 2}: Skipped - missing or invalid name.`);
+        results.failed++;
         continue;
       }
 
-      const { error } = createCustomerSchema.validate(customerInput);
-      if (error) {
-        results.failed++;
-        results.errors.push(`Row ${i + 2}: ${error.message}`);
-        continue;
-      }
+    //   const { error } = createCustomerSchema.validate(customerInput);
+    //   if (error) {
+    //     results.failed++;
+    //     results.errors.push(`Row ${i + 2}: ${error.message}`);
+    //     continue;
+    //   }
 
       const existing = await findExistingCustomer(row);
       if (existing) {
-        // Do not store duplicate, do not increment failed, just add to errors
-        results.errors.push(`Row ${i + 2}: Customer already exists (name: ${existing.name}, phone: ${existing.phone})`);
+        // results.errors.push(`Row ${i + 2}: Skipped - customer already exists (name: ${existing.name}, phone: ${existing.phone})`);
+        results.failed++;
         continue;
       }
 
-      try {
-        const created = await Customer.create({ ...customerInput, createdBy: req.user!.id });
+    //   try {
+        // Generate employeeId for each imported customer
+        const employeeId = await getNextEmployeeId();
+        const created = await Customer.create({ ...customerInput, createdBy: req.user!.id, employeeId });
         results.successful++;
         results.createdCustomers.push({
           name: created.name,
           phone: created.phone,
           gstNumber: (created as any).gstNumber,
-          id: created._id
+          id: created._id,
+          employeeId: created.employeeId
         });
-      } catch (createErr: any) {
-        results.failed++;
-        results.errors.push(`Row ${i + 2}: ${createErr.message}`);
-      }
+    //   } catch (createErr: any) {
+    //     results.failed++;
+    //     results.errors.push(`Row ${i + 2}: ${createErr.message}`);
+    //   }
     }
 
     const response: APIResponse = {

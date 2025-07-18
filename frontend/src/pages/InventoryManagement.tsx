@@ -270,7 +270,8 @@ const InventoryManagement: React.FC = () => {
     sortOrder: 'asc'
   });
 
-
+  const [importProgress, setImportProgress] = useState<number>(0); // percentage progress
+  const [processing, setProcessing] = useState<boolean>(false); // backend processing stage
 
   const onFiltersChange = useCallback((newFilters: Partial<any>) => {
     setFilters((prev: any) => ({ ...prev, ...newFilters }));
@@ -4507,27 +4508,54 @@ const InventoryManagement: React.FC = () => {
               <button
                 onClick={async () => {
                   if (!selectedFile) return;
-
                   setImporting(true);
+                  setImportProgress(0);
+                  setProcessing(false);
                   setShowPreviewModal(false);
-
                   try {
-                    console.log('📤 Making final import request using apiClient');
-                    const result = await apiClient.inventory.import(selectedFile);
-
-                    console.log('✅ Import successful:', result);
-                    toast.success(`Import completed! ${result.data.successful} items imported successfully.`)
-                    // alert(`Import completed! ${result.data.successful} items imported successfully.`);
-                    setSelectedFile(null);
-                    setPreviewData(null);
-                    fetchAllData();
+                    const formData = new FormData();
+                    formData.append('file', selectedFile);
+                    const xhr = new XMLHttpRequest();
+                    xhr.open('POST', '/api/v1/inventory/import', true);
+                    // Add Authorization header from localStorage
+                    const token = localStorage.getItem('authToken');
+                    if (token) {
+                      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                    }
+                    xhr.upload.onprogress = (event) => {
+                      if (event.lengthComputable) {
+                        const percent = Math.round((event.loaded / event.total) * 100);
+                        setImportProgress(percent);
+                        if (percent === 100) {
+                          setProcessing(true); // switch to processing stage
+                        }
+                      }
+                    };
+                    
+                    xhr.onload = async function () {
+                      setImporting(false);
+                      setProcessing(false);
+                      setImportProgress(100);
+                      if (xhr.status === 200) {
+                        const result = JSON.parse(xhr.responseText);
+                        toast.success(`Import completed! ${result.data.successful} items imported successfully.`);
+                        setSelectedFile(null);
+                        setPreviewData(null);
+                        fetchAllData();
+                      } else {
+                        toast.error('Import failed. Please try again.');
+                      }
+                    };
+                    xhr.onerror = function () {
+                      setImporting(false);
+                      setProcessing(false);
+                      toast.error('Failed to import file. Please try again.');
+                    };
+                    xhr.send(formData);
                   } catch (error) {
-                    console.error('❌ Import error:', error);
-                    const errorMessage = error instanceof Error ? error.message : 'Network error. Please try again.';
-                    toast.error(`Import failed: ${errorMessage}`);
-                    // alert(`Import failed: ${errorMessage}`);
-                  } finally {
                     setImporting(false);
+                    setProcessing(false);
+                    toast.error('Failed to import file. Please try again.');
                   }
                 }}
                 disabled={importing || (previewData.errors && previewData.errors.length > 0)}
@@ -4536,7 +4564,7 @@ const InventoryManagement: React.FC = () => {
                 {importing ? (
                   <span className="flex items-center justify-center">
                     <RefreshCw className="animate-spin w-5 h-5 mr-2" />
-                    Importing...
+                    {processing ? 'Processing file, please wait...' : `Importing... ${importProgress}%`}
                   </span>
                 ) : (
                   `Confirm Import (${previewData.summary?.totalRows || 0} rows)`
@@ -4546,14 +4574,33 @@ const InventoryManagement: React.FC = () => {
           </div>
         </div>
       )}
-      {importing && (
-        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 flex items-center space-x-3 shadow-lg">
-            <RefreshCw className="animate-spin w-8 h-8 text-green-600" />
-            <span className="text-lg font-semibold text-green-700">Importing, please wait...</span>
-          </div>
-        </div>
+{importing && (
+  <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+    <div className="bg-white rounded-lg p-6 shadow-xl w-[90%] max-w-md space-y-6">
+      <div className="flex items-center space-x-3">
+        <RefreshCw className="animate-spin w-6 h-6 text-green-600" />
+        <span className="text-base font-semibold text-green-700">
+          {processing ? 'Processing file, please wait...' : 'Uploading file...'}
+        </span>
+      </div>
+
+      {/* Progress bar wrapper */}
+      <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden">
+        <div
+          className="absolute top-0 left-0 h-full bg-green-500 rounded-full transition-all duration-300 ease-in-out"
+          style={{ width: `${importProgress}%` }}
+        ></div>
+      </div>
+
+      {/* Percentage */}
+      {processing && (
+        <div className="text-sm text-right font-medium text-gray-700">{importProgress}%</div>
       )}
+    </div>
+  </div>
+)}
+
+
     </div>
   );
 };

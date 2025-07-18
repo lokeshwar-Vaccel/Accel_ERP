@@ -3,6 +3,18 @@ import { Customer } from '../models/Customer';
 import { AuthenticatedRequest, APIResponse, LeadStatus, CustomerType, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { createAssignmentNotification, createStatusChangeNotification, createFollowUpNotification } from './notificationController';
+import { TransactionCounter } from '../models/TransactionCounter';
+
+// Utility to get next employeeId
+async function getNextEmployeeId() {
+  // Use a single counter document for employeeId
+  const counter = await TransactionCounter.findOneAndUpdate(
+    { type: 'employeeId' },
+    { $inc: { sequence: 1 } },
+    { new: true, upsert: true }
+  );
+  return `SPS1${String(counter.sequence).padStart(4, '0')}`;
+}
 
 // @desc    Get all customers
 // @route   GET /api/v1/customers
@@ -16,12 +28,17 @@ export const getCustomers = async (
     const { 
       page = 1, 
       limit = 10, 
-      sort = '-createdAt', 
+      sort = 'name', 
       search, 
       customerType, 
       status, 
       assignedTo,
       leadSource,
+      newLeadStatus,
+      qualifiedStatus,
+      convertedStatus,
+      lostStatus,
+      contactedStatus,
       dateFrom,
       dateTo,
       type
@@ -30,6 +47,11 @@ export const getCustomers = async (
       status?: LeadStatus;
       assignedTo?: string;
       leadSource?: string;
+      newLeadStatus?: string;
+      qualifiedStatus?: string;
+      convertedStatus?: string;
+      lostStatus?: string;
+      contactedStatus?: string;
       dateFrom?: string;
       dateTo?: string;
       type?: string;
@@ -46,7 +68,8 @@ export const getCustomers = async (
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
+        { phone: { $regex: search, $options: 'i' } },
+        { employeeId: { $regex: search, $options: 'i' } },
       ];
     }
     
@@ -54,7 +77,19 @@ export const getCustomers = async (
       query.customerType = customerType;
     }
     
-    if (status) {
+    // Handle status-based filters
+    if (newLeadStatus === 'true') {
+      query.status = 'new';
+    } else if (qualifiedStatus === 'true') {
+      query.status = 'qualified';
+    } else if (convertedStatus === 'true') {
+      query.status = 'converted';
+    } else if (lostStatus === 'true') {
+      query.status = 'lost';
+    } else if (contactedStatus === 'true') {
+      query.status = 'contacted';
+    } else if (status) {
+      // If no specific status filter is applied, use the general status filter
       query.status = status;
     }
     
@@ -96,6 +131,7 @@ export const getCustomers = async (
 
     const total = await Customer.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));
+    const totalAllCustomers = await Customer.countDocuments({});
 
     // Calculate counts for different statuses
     const [totalCustomers, newLeads, qualified, converted, lost, contacted] = await Promise.all([
@@ -119,7 +155,13 @@ export const getCustomers = async (
           converted,
           lost,
           contacted
-        }
+        },
+        newLeadStatusCount: newLeads,
+        qualifiedStatusCount: qualified,
+        convertedStatusCount: converted,
+        lostStatusCount: lost,
+        contactedStatusCount: contacted,
+        totalCustomersCount: totalAllCustomers
       },
       pagination: {
         page: Number(page),
@@ -176,9 +218,12 @@ export const createCustomer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    // Generate employeeId
+    const employeeId = await getNextEmployeeId();
     const customerData = {
       ...req.body,
-      createdBy: req.user?.id
+      createdBy: req.user?.id,
+      employeeId
     };
 
     const customer = await Customer.create(customerData);

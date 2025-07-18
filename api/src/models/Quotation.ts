@@ -15,17 +15,17 @@ export interface IQuotation extends Document {
     pan?: string;
   };
   company: {
-    name: string;
+    name?: string;
     logo?: string;
-    address: string;
-    phone: string;
-    email: string;
+    address?: string;
+    phone?: string;
+    email?: string;
     pan?: string;
     bankDetails?: {
-      bankName: string;
-      accountNo: string;
-      ifsc: string;
-      branch: string;
+      bankName?: string;
+      accountNo?: string;
+      ifsc?: string;
+      branch?: string;
     };
   };
   items: Array<{

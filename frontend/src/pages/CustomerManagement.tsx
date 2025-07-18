@@ -32,7 +32,8 @@ import {
   Contact,
   PhoneIncoming,
   Sparkles,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -81,12 +82,13 @@ interface User {
 
 interface Customer {
   _id: string;
+  employeeId?: string;
   name: string;
   designation?: string;
   contactPersonName?: string;
   gstNumber?: string;
   email?: string;
-  phone: string;
+  phone?: string;
   address: string;
   customerType: CustomerType;
   leadSource?: string;
@@ -148,6 +150,7 @@ const CustomerManagement: React.FC = () => {
 
   // Core state
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [allCustomers, setAllCustomers] = useState<Customer[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -164,6 +167,14 @@ const CustomerManagement: React.FC = () => {
     lost: 0,
     contacted: 0,
   });
+
+  // Individual status count states
+  const [newLeadStatusCount, setNewLeadStatusCount] = useState(0);
+  const [qualifiedStatusCount, setQualifiedStatusCount] = useState(0);
+  const [convertedStatusCount, setConvertedStatusCount] = useState(0);
+  const [lostStatusCount, setLostStatusCount] = useState(0);
+  const [contactedStatusCount, setContactedStatusCount] = useState(0);
+  const [totalCustomersCount, setTotalCustomersCount] = useState(0);
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
@@ -254,6 +265,22 @@ const CustomerManagement: React.FC = () => {
   // Add at the top, after useState imports
   const [customerTypeTab, setCustomerTypeTab] = useState<'customer' | 'supplier'>(searchParams.get('action') !== 'create-supplier'?'customer':'supplier');
 
+  // Add after other useState hooks for filters
+  const [sortField, setSortField] = useState('all');
+  const [sortOrder, setSortOrder] = useState('asc');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const [importProgress, setImportProgress] = useState<number>(0); // percentage progress
+
+  useEffect(() => {
+    if (sortField === 'all') {
+      setSort('-createdAt'); // default sort
+    } else {
+      const sortParam = sortOrder === 'asc' ? sortField : `-${sortField}`;
+      setSort(sortParam);
+    }
+  }, [sortField, sortOrder]);
+
   // Ensure supplier tab is selected if ?action=create is present in the URL
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
@@ -322,30 +349,59 @@ const CustomerManagement: React.FC = () => {
     if (!selectedFile) return;
     setImporting(true);
     setShowPreviewModal(false);
+    setImportProgress(0);
     try {
-      const response = await apiClient.customers.importFromFile(selectedFile);
-      if (response.success) {
-        if (response.data.summary.successful > 0) {
-          const successMessage = `Successfully imported ${response.data.summary.successful} customers from ${response.data.summary.totalRows} total rows!`;
-          setImportMessage({ type: 'success', text: successMessage });
-          toast.success(successMessage);
-        } else {
-          const errorMessage = `Import failed! 0 customers created from ${response.data.summary.totalRows} rows. Errors: ${response.data.errors.join('; ')}`;
-          setImportMessage({ type: 'error', text: errorMessage });
-          toast.error(errorMessage);
-        }
-        await fetchCustomers();
-      } else {
-        const errorMessage = response.data.errors?.[0] || 'Import failed. Please check your file format.';
-        setImportMessage({ type: 'error', text: errorMessage });
-        toast.error(errorMessage);
+      // Use XMLHttpRequest to track progress
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/v1/customers/import', true);
+      // Add Authorization header from localStorage
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       }
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) {
+          const percent = Math.round((event.loaded / event.total) * 100);
+          setImportProgress(percent);
+        }
+      };
+      xhr.onload = async function () {
+        setImporting(false);
+        setImportProgress(100);
+        if (xhr.status === 200) {
+          const response = JSON.parse(xhr.responseText);
+          if (response.success) {
+            const successMessage = `Successfully imported ${response.data.summary.successful} customers from ${response.data.summary.totalRows} total rows!`;
+            setImportMessage({ type: 'success', text: successMessage });
+            toast.success(successMessage);
+            await fetchCustomers();
+          } else {
+            const errorMessage = response.data.errors?.[0] || 'Import failed. Please check your file format.';
+            setImportMessage({ type: 'error', text: errorMessage });
+            toast.error(errorMessage);
+          }
+        } else {
+          setImportMessage({ type: 'error', text: 'Import failed. Please try again.' });
+          toast.error('Import failed. Please try again.');
+        }
+        setSelectedFile(null);
+        setPreviewData(null);
+      };
+      xhr.onerror = function () {
+        setImporting(false);
+        setImportMessage({ type: 'error', text: 'Failed to import file. Please try again.' });
+        toast.error('Failed to import file. Please try again.');
+        setSelectedFile(null);
+        setPreviewData(null);
+      };
+      xhr.send(formData);
     } catch (error: any) {
+      setImporting(false);
       const errorMessage = error.message || 'Failed to import file. Please try again.';
       setImportMessage({ type: 'error', text: errorMessage });
       toast.error(errorMessage);
-    } finally {
-      setImporting(false);
       setSelectedFile(null);
       setPreviewData(null);
     }
@@ -449,6 +505,44 @@ const CustomerManagement: React.FC = () => {
   //   }
   // }, [location]);
 
+  const fetchAllCustomers = async () => {
+    try {
+      let allCustomersData: Customer[] = [];
+      let page = 1;
+      let hasMore = true;
+
+      while (hasMore) {
+        const response: any = await apiClient.customers.getAll({ 
+          page, 
+          limit: 100,
+          type: customerTypeTab 
+        });
+        let customersData: Customer[] = [];
+        if (response?.data) {
+          if (Array.isArray(response.data)) {
+            customersData = response.data;
+          } else if (response.data.customers && Array.isArray(response.data.customers)) {
+            customersData = response.data.customers;
+          }
+        }
+        allCustomersData = allCustomersData.concat(customersData);
+
+        // Check if there are more pages
+        const pagination = response?.pagination || response?.data?.pagination;
+        if (pagination && pagination.pages && page < pagination.pages) {
+          page += 1;
+        } else {
+          hasMore = false;
+        }
+      }
+
+      setAllCustomers(allCustomersData);
+    } catch (error) {
+      console.error('Error fetching all customers:', error);
+      setAllCustomers([]);
+    }
+  };
+
   const fetchUsers = async () => {
     try {
       const response = await apiClient.users.getAll({ role: 'hr' });
@@ -476,6 +570,7 @@ const CustomerManagement: React.FC = () => {
       if (assignedToFilter !== user.id) setAssignedToFilter(user.id);
     }
     if (user?.role === 'hr' && !assignedToParam) return;
+
     const params: any = {
       page: currentPage,
       limit,
@@ -483,11 +578,25 @@ const CustomerManagement: React.FC = () => {
       search: searchTerm,
       type: customerTypeTab, // always send type
       ...(typeFilter !== 'all' && { customerType: typeFilter }),
-      ...(statusFilter !== 'all' && { status: statusFilter }),
       ...(dateFrom && { dateFrom }),
       ...(dateTo && { dateTo }),
       ...(assignedToParam && { assignedTo: assignedToParam }),
     };
+
+    // Handle status-based filters
+    if (statusFilter === 'new') {
+      params.newLeadStatus = 'true';
+    } else if (statusFilter === 'qualified') {
+      params.qualifiedStatus = 'true';
+    } else if (statusFilter === 'converted') {
+      params.convertedStatus = 'true';
+    } else if (statusFilter === 'lost') {
+      params.lostStatus = 'true';
+    } else if (statusFilter === 'contacted') {
+      params.contactedStatus = 'true';
+    } else if (statusFilter !== 'all') {
+      params.status = statusFilter;
+    }
     console.log('Fetching customers with type:', customerTypeTab);
     console.log('Params sent to API:', params);
     try {
@@ -495,6 +604,15 @@ const CustomerManagement: React.FC = () => {
       const response = await apiClient.customers.getAll(params);
       console.log('API response data:', response);
       setCounts(response.data.counts);
+      
+      // Set individual status counts
+      setNewLeadStatusCount((response.data as any).newLeadStatusCount || 0);
+      setQualifiedStatusCount((response.data as any).qualifiedStatusCount || 0);
+      setConvertedStatusCount((response.data as any).convertedStatusCount || 0);
+      setLostStatusCount((response.data as any).lostStatusCount || 0);
+      setContactedStatusCount((response.data as any).contactedStatusCount || 0);
+      setTotalCustomersCount((response.data as any).totalCustomersCount || 0);
+      
       setCurrentPage(response.pagination.page);
       setLimit(response.pagination.limit);
       setTotalDatas(response.pagination.total);
@@ -518,10 +636,15 @@ const CustomerManagement: React.FC = () => {
 
   useEffect(() => {
     fetchCustomers();
+    fetchAllCustomers();
     if (user?.role !== 'hr') {
       fetchUsers();
     }
   }, [user, currentPage, limit, sort, searchTerm, typeFilter, statusFilter, dateFrom, dateTo, assignedToFilter, customerTypeTab]);
+
+  useEffect(() => {
+    fetchAllCustomers();
+  }, [customerTypeTab]);
 
   const handleDeleteCustomer = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this customer?')) {
@@ -557,11 +680,6 @@ const validateCustomerForm = (): boolean => {
     errors.name = 'Customer name is required';
     missingFields.push('Customer Name');
   }
-
-  // if (!customerFormData.phone.trim()) {
-  //   errors.phone = 'Phone number is required';
-  //   missingFields.push('Phone Number');
-  // }
 
   if (!customerFormData.email.trim()) {
     errors.email = 'Email is required';
@@ -730,7 +848,8 @@ const validateCustomerForm = (): boolean => {
     try {
       await apiClient.customers.update(customerId, { status: newStatus });
       // Fetch from server after drop is complete
-      fetchCustomers();
+      // fetchCustomers();
+      fetchAllCustomers();
     } catch (error) {
       console.error('Error updating status:', error);
     }
@@ -785,9 +904,9 @@ const validateCustomerForm = (): boolean => {
       contactPersonName: customer.contactPersonName || '',
       gstNumber: customer.gstNumber || '',
       email: customer.email || '',
-      phone: customer.phone,
-      address: customer.address,
-      customerType: customer.customerType,
+      phone: customer.phone || '',
+      address: customer.address || '',
+      customerType: customer.customerType || 'retail',
       leadSource: customer.leadSource || '',
       assignedTo: getUserId(customer.assignedTo),
       notes: customer.notes || '',
@@ -912,27 +1031,39 @@ const validateCustomerForm = (): boolean => {
   };
 
   const stats = [
-    {
-      title: 'Total Customers',
-      value: counts.totalCustomers ? counts.totalCustomers.toString() : '0',
-      icon: <Users className="w-6 h-6" />,
-      color: 'blue'
-    },
+          {
+        title: 'Total Customers',
+        value: totalCustomersCount,
+        action: () => {
+          clearAllFilters();
+        },
+        icon: <Users className="w-6 h-6" />,
+        color: 'blue'
+      },
     {
       title: 'New Leads',
-      value: counts.newLeads ? counts.newLeads.toString() : '0',
+      value: newLeadStatusCount,
+      action: () => {
+        setStatusFilter('new');
+      },
       icon: <UserPlus className="w-6 h-6" />,
       color: 'blue'
     },
     {
       title: 'Qualified',
-      value: counts.qualified ? counts.qualified.toString() : '0',
+      value: qualifiedStatusCount,
+      action: () => {
+        setStatusFilter('qualified');
+      },
       icon: <Target className="w-6 h-6" />,
       color: 'yellow'
     },
     {
       title: 'Converted',
-      value: counts.converted ? counts.converted.toString() : '0',
+      value: convertedStatusCount,
+      action: () => {
+        setStatusFilter('converted');
+      },
       icon: <CheckCircle className="w-6 h-6" />,
       color: 'green'
     }
@@ -1004,6 +1135,28 @@ const validateCustomerForm = (): boolean => {
     return found ? found.label : 'Select Contact Type';
   };
 
+  // Add filter options for sort
+  const sortFieldOptions = [
+    { value: 'all', label: 'Select Field' },
+    { value: 'name', label: 'Customer Name' },
+    { value: 'email', label: 'Email' },
+    { value: 'createdAt', label: 'Created Date' },
+  ];
+  const sortOrderOptions = [
+    { value: 'asc', label: 'Ascending (A-Z)' },
+    { value: 'desc', label: 'Descending (Z-A)' },
+  ];
+
+  const clearAllFilters = () => {
+    setShowFilters(false);
+    setSearchTerm('');
+    setSortField('all');
+    setSortOrder('asc');
+    setTypeFilter('all');
+    setStatusFilter('all');
+  };
+  const hasActiveFilters = typeFilter !== 'all' || statusFilter !== 'all' || sortField !== 'all' || searchTerm;
+
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       {/* Header */}
@@ -1070,7 +1223,7 @@ const validateCustomerForm = (): boolean => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div key={index} onClick={stat.action} className="bg-white cursor-pointer p-4 rounded-xl shadow-sm border border-gray-100">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-600">{stat.title}</p>
@@ -1085,76 +1238,177 @@ const validateCustomerForm = (): boolean => {
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between space-y-4 md:space-y-0 md:space-x-4">
-
-          <div>
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search customers..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-gray-600">
-                Showing {customers.length} customers
-              </span>
-            </div>
-
-
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
+      {/* Header Section - Single Row */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+        <div className="flex items-center gap-4">
+          {/* Search Bar */}
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search customers by name, email, or ID..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm text-sm placeholder-gray-500"
+            />
+          </div>
+          {/* Action Buttons */}
+          <div className="flex gap-3">
+            <button
+              onClick={() => setShowFilters(v => !v)}
+              className="px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 border border-gray-300 text-sm font-medium flex items-center gap-2 shadow-sm"
+            >
+              <Filter className="w-4 h-4" />
+              Filters
+              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+            </button>
+            
           </div>
 
-          {/* Tab Navigation inside filter card, right side */}
-          {/* <div className="flex space-x-2">
-            {tabOptions.map(tab => (
-              <button
-                key={tab.value}
-                className={`px-4 py-2 rounded-lg font-semibold focus:outline-none transition-colors border-b-2 ${activeTab === tab.value ? 'border-blue-600 text-blue-700 bg-white' : 'border-transparent text-gray-500 bg-gray-100 hover:text-blue-600'}`}
-                onClick={() => setActiveTab(tab.value as typeof activeTab)}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div> */}
-
-
-
-
-          {/* Insert this above the filters section, after <PageHeader ... /> */}
-          <div className="flex space-x-1 mb-6 bg-gray-100 p-1 rounded-lg">
+          {/* Customer Type Tabs */}
+          <div className="flex space-x-1 bg-white p-1 rounded-lg border border-gray-200">
             <button
-              className={`flex-1 px-6 py-3 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'customer'
-                ? 'bg-white text-blue-700 shadow-sm border border-gray-200'
+              className={`px-4 py-2.5 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'customer'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               onClick={() => setCustomerTypeTab('customer')}
               type="button"
             >
-              <div className="flex items-center justify-center space-x-2">
+              <div className="flex items-center space-x-2">
                 <Users className="w-4 h-4" />
-                <span>Customer</span>
+                <span>Customers</span>
               </div>
             </button>
             <button
-              className={`flex-1 px-6 py-3 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'supplier'
-                ? 'bg-white text-blue-700 shadow-sm border border-gray-200'
+              className={`px-4 py-2.5 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'supplier'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                 }`}
               onClick={() => setCustomerTypeTab('supplier')}
               type="button"
             >
-              <div className="flex items-center justify-center space-x-2">
+              <div className="flex items-center space-x-2">
                 <Building className="w-4 h-4" />
-                <span>Supplier</span>
+                <span>Suppliers</span>
               </div>
             </button>
           </div>
+          
+          
         </div>
+      </div>
+        {/* Collapsible Filter Panel */}
+        {showFilters && (
+          <div className="px-6 py-6 bg-gray-50">
+            <div className="grid grid-cols-4 gap-4 mb-6">
+              {/* Sort By */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Sort By</label>
+                <select
+                  value={sortField}
+                  onChange={e => setSortField(e.target.value as any)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
+                >
+                  {sortFieldOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Sort Order */}
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Sort Order</label>
+                <select
+                  value={sortOrder}
+                  onChange={e => setSortOrder(e.target.value as any)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
+                >
+                 <option value="asc">Ascending (A-Z)</option>
+                 <option value="desc">Descending (Z-A)</option>
+                </select>
+              </div>
+              {/* Status */}
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  >
+                    <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showStatusDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {statusOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setStatusFilter(option.value as any);
+                            setShowStatusDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={clearAllFilters}
+                  // disabled={!hasActiveFilters}
+                  className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    hasActiveFilters
+                      ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
+                      : 'bg-gray-100 text-gray-400 border border-gray-200 hover-gray-700 '
+                  }`}
+                >
+                  Clear All Filters
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Active Filters Chips */}
+        {hasActiveFilters && (
+          <div className="px-4 py-3 flex flex-wrap gap-2 items-center border-t border-gray-100">
+            <span className="text-xs text-gray-500">Active filters:</span>
+            {typeFilter !== 'all' && (
+              <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full text-xs flex items-center">
+                {getTypeLabel(typeFilter)}
+                <button onClick={() => setTypeFilter('all')} className="ml-1 text-purple-500 hover:text-purple-700">×</button>
+              </span>
+            )}
+            {statusFilter !== 'all' && (
+              <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs flex items-center">
+                {getStatusLabel(statusFilter)}
+                <button onClick={() => setStatusFilter('all')} className="ml-1 text-blue-500 hover:text-blue-700">×</button>
+              </span>
+            )}
+            {sortField !== 'all' && (
+              <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs flex items-center">
+                {(() => {
+                  let label = '';
+                  if (sortField === 'name') label = 'Customer Name';
+                  else if (sortField === 'email') label = 'Email';
+                  else if (sortField === 'createdAt') label = 'Created Date';
+                  return `${label} - ${sortOrder === 'asc' ? 'A-Z (Ascending)' : 'Z-A (Descending)'}`;
+                })()}
+                <button onClick={() => setSortField('all')} className="ml-1 text-green-500 hover:text-green-700">×</button>
+              </span>
+            )}
+            {searchTerm && (
+              <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs flex items-center">
+                {`Search: "${searchTerm}"`}
+                <button onClick={() => setSearchTerm('')} className="ml-1 text-yellow-500 hover:text-yellow-700">×</button>
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Customer Table */}
@@ -1209,7 +1463,8 @@ const validateCustomerForm = (): boolean => {
                           {customer.name}
                         </div>
                         <div className="text-xs text-gray-500">
-                          ID: {customer._id.slice(-6)}
+                          {/* ID: {customer._id.slice(-6)} */}
+                          Employee ID: {customer.employeeId}
                         </div>
                       </div>
                     </td>
@@ -1458,7 +1713,7 @@ const validateCustomerForm = (): boolean => {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Importing...
+                    Importing... {importProgress}%
                   </span>
                 ) : (
                   `Confirm Import (${previewData.summary.newCustomers} New, ${previewData.summary.existingCustomers} Existing)`
@@ -1615,19 +1870,15 @@ const validateCustomerForm = (): boolean => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone Number
+                        Phone Number (Optional)
                       </label>
                       <input
-                        type="number"
+                        type="tel"
                         value={customerFormData.phone}
                         onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                        placeholder="Enter phone number"
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter phone number (optional)"
                       />
-                      {/* {formErrors.phone && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
-                      )} */}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
@@ -1973,19 +2224,15 @@ const validateCustomerForm = (): boolean => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone Number
+                        Phone Number (Optional)
                       </label>
                       <input
                         type="tel"
                         value={customerFormData.phone}
                         onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.phone ? 'border-red-500' : 'border-gray-300'
-                          }`}
-                        placeholder="Enter phone number"
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter phone number (optional)"
                       />
-                      {/* {formErrors.phone && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.phone}</p>
-                      )} */}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
@@ -2532,7 +2779,7 @@ const validateCustomerForm = (): boolean => {
             <div className="p-6">
               <div className="grid grid-cols-5 gap-4">
                 {(['new', 'qualified', 'contacted', 'converted', 'lost'] as LeadStatus[]).map((status) => {
-                  const statusCustomers = customers.filter(c => c.status === status);
+                  const statusCustomers = allCustomers.filter(c => c.status === status);
                   const getColumnColor = (s: LeadStatus) => {
                     switch (s) {
                       case 'new': return 'bg-blue-50 border-blue-200';
@@ -2741,6 +2988,17 @@ const validateCustomerForm = (): boolean => {
           </div>
         </div>
       )} */}
+      {importing && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 flex items-center space-x-4 shadow-lg">
+            <RefreshCw className="animate-spin w-8 h-8 text-green-600" />
+            <div>
+              <span className="text-lg font-semibold text-green-700 block">Importing, please wait...</span>
+              <span className="text-base text-gray-700 mt-1 block">{importProgress}%</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

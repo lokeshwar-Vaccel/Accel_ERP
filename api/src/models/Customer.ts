@@ -39,17 +39,17 @@ const addressSchema = new Schema({
   },
   state: {
     type: String,
-    required: [true, 'State is required'],
+    // required: [true, 'State is required'],
     maxlength: [100, 'State cannot exceed 100 characters']
   },
   district: {
     type: String,
-    required: [true, 'District is required'],
+    // required: [true, 'District is required'],
     maxlength: [100, 'District cannot exceed 100 characters']
   },
   pincode: {
     type: String,
-    required: [true, 'Pincode is required'],
+    // required: [true, 'Pincode is required'],
     match: [/^\d{6}$/, 'Pincode must be 6 digits']
   },
   isPrimary: {
@@ -128,6 +128,12 @@ const customerSchema = new Schema({
     maxlength: [2000, 'Notes cannot exceed 2000 characters']
   },
   contactHistory: [contactHistorySchema],
+  employeeId: {
+    type: String,
+    unique: true,
+    sparse: true, // allow legacy customers without employeeId
+    trim: true
+  },
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',

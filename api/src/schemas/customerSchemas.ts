@@ -8,7 +8,7 @@ export interface CreateCustomerInput {
   contactPersonName?: string;
   gstNumber?: string;
   email?: string;
-  phone: string;
+  phone?: string;
   addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean }[];
   customerType: CustomerType;
   type: CustomerMainType; // 'customer' or 'supplier'
@@ -60,6 +60,11 @@ export interface CustomerQueryInput {
   dateFrom?: string;
   dateTo?: string;
   type?: string;
+  newLeadStatus?: string;
+  qualifiedStatus?: string;
+  convertedStatus?: string;
+  lostStatus?: string;
+  contactedStatus?: string;
 }
 
 export interface ConvertLeadInput {
@@ -81,7 +86,7 @@ export interface CustomerImportInput {
   contactPersonName?: string;
   gstNumber?: string;
   email?: string;
-  phone: string;
+  phone?: string;
   addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean }[];
   customerType: CustomerType;
   type: CustomerMainType; // 'customer' or 'supplier'
@@ -107,7 +112,7 @@ const baseCustomerFields = {
   contactPersonName: Joi.string().max(100).trim().allow(''),
   gstNumber: Joi.string().max(50).trim().allow(''),
   email: Joi.string().email().lowercase().allow(null),
-  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
+  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).allow('', null),
   addresses: Joi.array().items(addressJoiSchema).min(1),
   customerType: Joi.string().valid(...Object.values(CustomerType)),
   type: Joi.string().valid(...Object.values(CustomerMainType)),
@@ -126,11 +131,11 @@ export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone,
   addresses: baseCustomerFields.addresses,
-  customerType: baseCustomerFields.customerType.required(),
-  type: baseCustomerFields.type.required(),
+  customerType: baseCustomerFields.customerType,
+  type: baseCustomerFields.type,
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
-  status: baseCustomerFields.status.default(LeadStatus.NEW),
+  status: baseCustomerFields.status,
   notes: baseCustomerFields.notes
 });
 
@@ -183,7 +188,11 @@ export const customerQuerySchema = Joi.object<CustomerQueryInput>({
   dateFrom: Joi.date().iso(),
   dateTo: Joi.date().iso().greater(Joi.ref('dateFrom')),
   type: Joi.string(),
-
+  newLeadStatus: Joi.string().valid('true', 'false'),
+  qualifiedStatus: Joi.string().valid('true', 'false'),
+  convertedStatus: Joi.string().valid('true', 'false'),
+  lostStatus: Joi.string().valid('true', 'false'),
+  contactedStatus: Joi.string().valid('true', 'false'),
 });
 
 // Convert lead to customer schema
@@ -208,12 +217,12 @@ export const customerImportSchema = Joi.object<CustomerImportInput>({
   contactPersonName: baseCustomerFields.contactPersonName,
   gstNumber: baseCustomerFields.gstNumber,
   email: baseCustomerFields.email,
-  phone: baseCustomerFields.phone.required(),
+  phone: baseCustomerFields.phone,
   addresses: baseCustomerFields.addresses,
-  customerType: baseCustomerFields.customerType.required(),
-  type: baseCustomerFields.type.required(),
+  customerType: baseCustomerFields.customerType,
+  type: baseCustomerFields.type,
   leadSource: baseCustomerFields.leadSource,
-  status: baseCustomerFields.status.default(LeadStatus.NEW),
+  status: baseCustomerFields.status,
   notes: baseCustomerFields.notes
 });
 

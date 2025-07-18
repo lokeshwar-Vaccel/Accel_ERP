@@ -18,17 +18,17 @@ export interface IQuotation {
     pan?: string;
   };
   company: {
-    name: string;
+    name?: string;
     logo?: string;
-    address: string;
-    phone: string;
-    email: string;
+    address?: string;
+    phone?: string;
+    email?: string;
     pan?: string;
     bankDetails?: {
-      bankName: string;
-      accountNo: string;
-      ifsc: string;
-      branch: string;
+      bankName?: string;
+      accountNo?: string;
+      ifsc?: string;
+      branch?: string;
     };
   };
   items: Array<{
@@ -101,24 +101,24 @@ export class QuotationService {
     }
 
     // Company validation
-    if (!data.company) {
-      errors.push({ field: 'company', message: 'Company information is required' });
-    } else {
-      if (!data.company.name?.trim()) {
-        errors.push({ field: 'company.name', message: 'Company name is required' });
-      }
-      if (!data.company.address?.trim()) {
-        errors.push({ field: 'company.address', message: 'Company address is required' });
-      }
-      if (!data.company.phone?.trim()) {
-        errors.push({ field: 'company.phone', message: 'Company phone is required' });
-      }
-      if (!data.company.email?.trim()) {
-        errors.push({ field: 'company.email', message: 'Company email is required' });
-      } else if (!this.isValidEmail(data.company.email)) {
-        errors.push({ field: 'company.email', message: 'Invalid company email format' });
-      }
-    }
+    // if (!data.company) {
+    //   errors.push({ field: 'company', message: 'Company information is required' });
+    // } else {
+    //   if (!data.company.name?.trim()) {
+    //     errors.push({ field: 'company.name', message: 'Company name is required' });
+    //   }
+    //   if (!data.company.address?.trim()) {
+    //     errors.push({ field: 'company.address', message: 'Company address is required' });
+    //   }
+    //   if (!data.company.phone?.trim()) {
+    //     errors.push({ field: 'company.phone', message: 'Company phone is required' });
+    //   }
+    //   if (!data.company.email?.trim()) {
+    //     errors.push({ field: 'company.email', message: 'Company email is required' });
+    //   } else if (!this.isValidEmail(data.company.email)) {
+    //     errors.push({ field: 'company.email', message: 'Invalid company email format' });
+    //   }
+    // }
 
     // Items validation
     if (!data.items || data.items.length === 0) {
@@ -222,13 +222,13 @@ export class QuotationService {
         address: String(data.customer.address || '').trim(),
         pan: String(data.customer.pan || '').trim()
       } : undefined,
-      company: data.company ? {
-        name: String(data.company.name || '').trim(),
-        address: String(data.company.address || '').trim(),
-        phone: String(data.company.phone || '').trim(),
-        email: String(data.company.email || '').trim(),
-        pan: String(data.company.pan || '').trim(),
-        bankDetails: data.company.bankDetails
+      company: data?.company ? {
+        name: String(data.company?.name || '').trim(),
+        address: String(data.company?.address || '').trim(),
+        phone: String(data.company?.phone || '').trim(),
+        email: String(data.company?.email || '').trim(),
+        pan: String(data.company?.pan || '').trim(),
+        bankDetails: data.company?.bankDetails
       } : undefined,
       items: Array.isArray(data.items) ? data.items.map((item: any) => ({
         product: String(item.product || '').trim(),

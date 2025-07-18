@@ -103,6 +103,19 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
     }
   }, [formData.items]);
 
+//   useEffect(() => {
+//     const handleClickOutside = (event: MouseEvent) => {
+//       const target = event.target as HTMLElement;
+//       if (!target.closest('.dropdown-container')) {
+//       }
+//     };
+
+//     document.addEventListener('mousedown', handleClickOutside);
+//     return () => {
+//       document.removeEventListener('mousedown', handleClickOutside);
+//     };
+//   }, []);
+
   // Filter products based on search term
   const getFilteredProducts = (searchTerm: string = '') => {
     if (!searchTerm) return products;
@@ -508,8 +521,8 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
               </button>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-              <div className="overflow-x-auto">
+            <div className="bg-white border border-gray-200 rounded-lg">
+              <div className="">
                 <table className="w-full">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
@@ -545,7 +558,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                             </button>
                             
                             {showProductDropdowns[index] && (
-                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[999] max-h-80 overflow-hidden flex flex-col">
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-hidden flex flex-col">
                                 <div className="p-2 border-b border-gray-200">
                                   <input
                                     type="text"

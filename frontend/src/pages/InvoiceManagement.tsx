@@ -160,6 +160,8 @@ interface NewInvoiceItem {
   uom?: string;
   discount?: number;
   location?: string;
+  gst?: number;
+  hsnNumber?: string;
 }
 
 interface NewInvoice {
@@ -786,6 +788,10 @@ const InvoiceManagement: React.FC = () => {
           _id: stock.product?._id || stock.productId,
           name: stock.product?.name || stock.productName || 'Unknown Product',
           price: stock.product?.price || 0,
+          gst: stock.product?.gst || 0,
+          hsnNumber: stock.product?.hsnNumber || '',
+          partNo: stock.product?.partNo || '',
+          uom: stock.product?.uom ,
           category: stock.product?.category || 'N/A',
           brand: stock.product?.brand || 'N/A',
           availableQuantity: stock.availableQuantity || 0,
@@ -1364,22 +1370,34 @@ const InvoiceManagement: React.FC = () => {
     }));
   };
 
+  const extractGSTRate = (gst: string | number | undefined): number => {
+    if (!gst) return 0;
+    if (typeof gst === 'number') return gst;
+    const match = gst.match(/(\d+(\.\d+)?)/); // Extracts number like 18 or 18.5
+    return match ? parseFloat(match[1]) : 0;
+  };
+  
+
   const updateInvoiceItem = (index: number, field: keyof NewInvoiceItem, value: any) => {
     setNewInvoice(prev => {
       const updatedItems = [...prev.items];
+      console.log("updatedItems:", updatedItems);
       updatedItems[index] = { ...updatedItems[index], [field]: value };
-      // Auto-populate price, description, gst, and partNo when product is selected
+      // Auto-populate price, description, gst, hsnNumber, and partNo when product is selected
       if (field === 'product') {
         const productObj = products.find(p => p._id === value);
         console.log("productObj:", productObj);
 
+        
+
         if (productObj) {
           updatedItems[index].unitPrice = productObj.price;
           updatedItems[index].description = productObj.name;
-          updatedItems[index].taxRate = productObj.gst;
+          updatedItems[index].gst = productObj.gst;
+          updatedItems[index].taxRate =  extractGSTRate(productObj.gst);
           updatedItems[index].partNo = productObj.partNo;
-          updatedItems[index].hsnSac = productObj.hsnNumber;
-          updatedItems[index].uom = productObj.uom || 'pcs';
+          updatedItems[index].hsnNumber = productObj.hsnNumber;
+          updatedItems[index].uom = productObj.uom;
         }
         // Validate stock when product or quantity changes
         validateStockForItem(index, value, updatedItems[index].quantity);
@@ -2945,7 +2963,8 @@ const InvoiceManagement: React.FC = () => {
                   <div className="relative dropdown-container">
                     <button
                       onClick={() => setShowInvoiceTypeDropdown(!showInvoiceTypeDropdown)}
-                      className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
+                      disabled={invoiceType === 'challan' ? true : false}
+                      className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400 bg-gray-100 cursor-not-allowed"
                     >
                       <span className="text-gray-700 truncate mr-1">{getInvoiceTypeLabel(newInvoice.invoiceType)}</span>
                       <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showInvoiceTypeDropdown ? 'rotate-180' : ''}`} />
@@ -3112,8 +3131,8 @@ const InvoiceManagement: React.FC = () => {
                             </label>
                             <input
                               type="text"
-                              value={item.hsnSac || ''}
-                              onChange={(e) => updateInvoiceItem(index, 'hsnSac', e.target.value)}
+                              value={item.hsnNumber || ''}
+                              onChange={(e) => updateInvoiceItem(index, 'hsnNumber', e.target.value)}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               placeholder="HSN/SAC"
                             />
@@ -3128,8 +3147,8 @@ const InvoiceManagement: React.FC = () => {
                               min="0"
                               max="100"
                               step="0.01"
-                              value={item.taxRate || ''}
-                              onChange={(e) => updateInvoiceItem(index, 'taxRate', parseFloat(e.target.value) || 0)}
+                              value={item.gst || ''}
+                              onChange={(e) => updateInvoiceItem(index, 'gst', parseFloat(e.target.value) || 0)}
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                               placeholder="0.00"
                             />
@@ -3433,7 +3452,7 @@ const InvoiceManagement: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Invoice {selectedInvoice.invoiceNumber ?? ''}</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Invoice - {selectedInvoice.invoiceNumber ?? ''}</h2>
               <div className="flex items-center space-x-2">
                 {/* Print Options */}
                 <button
@@ -3482,6 +3501,9 @@ const InvoiceManagement: React.FC = () => {
                     <p className="text-sm text-gray-600">
                       Due Date: {selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : ''}
                     </p>
+                    {selectedInvoice.poNumber && <p className="text-sm text-black-600 mt-1 font-medium">
+                    PONumber: {selectedInvoice.poNumber ? selectedInvoice.poNumber : ''}
+                    </p>}
                   </div>
                   <div className="text-right">
                     <div className="flex space-x-2 mb-2">
@@ -3559,7 +3581,7 @@ const InvoiceManagement: React.FC = () => {
                       {(selectedInvoice.items || []).map((item: any, index: number) => (
                         <tr key={index}>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item?.partNo}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item?.product?.partNo}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode ? (

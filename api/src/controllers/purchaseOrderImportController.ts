@@ -253,6 +253,7 @@ export const importPurchaseOrders = async (
               product: product._id,
               quantity: item['Ordered Qty'] || item.QTY,
               unitPrice: item.Price,
+              taxRate: extractGSTRateAmount(item.Tax),
               totalPrice: item.TOTAL || (item.Price * (item['Ordered Qty'] || item.QTY)),
               description: item['Part Description']
             });
@@ -386,6 +387,13 @@ const extractGSTRate = (taxString?: string): number => {
   const match = taxString.match(/(\d+\.?\d*)%/);
   return match ? parseFloat(match[1]) : 0;
 };
+
+const extractGSTRateAmount = (taxString?: string): number => {
+  if (!taxString) return 0;
+  const matches = taxString.match(/(\d+\.?\d*)%/g);
+  return matches ? matches.reduce((sum, rate) => sum + parseFloat(rate), 0) : 0;
+};
+
 
 const getPriorityFromDept = (dept: string): 'low' | 'medium' | 'high' | 'urgent' => {
   const priorityMap: Record<string, 'low' | 'medium' | 'high' | 'urgent'> = {
