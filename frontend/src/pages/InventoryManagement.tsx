@@ -69,6 +69,7 @@ interface StockLocationData {
   contactPerson?: string;
   phone?: string;
   isActive: boolean;
+  createdAt?: string;
 }
 
 interface StockItem {
@@ -731,19 +732,21 @@ const InventoryManagement: React.FC = () => {
   const fetchLocations = async () => {
     try {
       const response = await apiClient.stock.getLocations();
-      // Handle response format from backend - locations are nested in data.locations
       let locationsData: any[] = [];
-      console.log(response.data)
       if (response.data) {
         if (Array.isArray(response.data)) {
-          locationsData = response.data.sort((a,b) => a.name.localCompare(b.name));
+          locationsData = response.data;
         } else if ((response.data as any).locations && Array.isArray((response.data as any).locations)) {
-          console.log(locationsData)
           locationsData = (response.data as any).locations;
         }
       }
+      // Sort ascending by createdAt (oldest first)
+      locationsData = locationsData.sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return aTime - bTime;
+      });
       setLocations(locationsData);
-      // await fetchLocations();
     } catch (error) {
       console.error('Error fetching locations:', error);
       setLocations([]);
@@ -753,7 +756,6 @@ const InventoryManagement: React.FC = () => {
   const fetchRooms = async () => {
     try {
       const response = await apiClient.stock.getRooms();
-      // Handle response format from backend - locations are nested in data.locations
       let roomsData: any[] = [];
       if (response.data) {
         if (Array.isArray(response.data)) {
@@ -762,10 +764,12 @@ const InventoryManagement: React.FC = () => {
           roomsData = (response.data as any).rooms;
         }
       }
-
-
-      // const roomsInLocation = roomsData.filter(room => room.location._id === racks.location._id);
-      // setFilteredRooms(roomsInLocation);
+      // Sort ascending by createdAt (oldest first)
+      roomsData = roomsData.sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return aTime - bTime;
+      });
       setRooms(roomsData);
     } catch (error) {
       console.error('Error fetching locations:', error);
@@ -791,7 +795,6 @@ const InventoryManagement: React.FC = () => {
   const fetchRacks = async () => {
     try {
       const response = await apiClient.stock.getRacks();
-      // Handle response format from backend - locations are nested in data.locations
       let racksData: any[] = [];
       if (response.data) {
         if (Array.isArray(response.data)) {
@@ -800,6 +803,12 @@ const InventoryManagement: React.FC = () => {
           racksData = (response.data as any).racks;
         }
       }
+      // Sort ascending by createdAt (oldest first)
+      racksData = racksData.sort((a, b) => {
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+        return aTime - bTime;
+      });
       setRacks(racksData);
     } catch (error) {
       console.error('Error fetching locations:', error);
@@ -908,9 +917,9 @@ const InventoryManagement: React.FC = () => {
     if (!locationFormData.address.trim()) {
       errors.address = 'Address is required';
     }
-    if (!locationFormData.type) {
-      errors.type = 'Location type is required';
-    }
+    // if (!locationFormData.type) {
+    //   errors.type = 'Location type is required';
+    // }
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
@@ -930,11 +939,13 @@ const InventoryManagement: React.FC = () => {
         setLocations(locations.map(loc =>
           loc._id === editingLocationId ? updatedLocation : loc
         ));
+        await fetchLocations();
       } else {
         // Create new location
         const response = await apiClient.stock.createLocation(locationFormData);
         const newLocation = (response.data as any).location || response.data;
-        setLocations([...locations, newLocation]);
+        setLocations([newLocation, ...locations]); // Add new location at the top
+        await fetchLocations(); // Optionally, you can skip await fetchLocations(); here to avoid re-sorting
       }
 
       // setShowLocationModal(false);
@@ -2486,7 +2497,7 @@ const InventoryManagement: React.FC = () => {
       {/* Add Location Modal */}
       {showLocationModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-[1200px] h-[600px] m-4 overflow-hidden flex flex-col">
+          <div className="bg-white rounded-xl shadow-xl w-[1200px] h-[600px] m-4 overflow-y-auto flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">
                 {isEditingLocation ? 'Edit Location' : 'Manage Stock Locations'}
@@ -2838,7 +2849,7 @@ const InventoryManagement: React.FC = () => {
                       </div>
 
                       <div className="grid gap-4">
-                        {locations.map((location) => (
+                        {locations.sort((a,b) => a.name.localeCompare(b.name)).map((location) => (
                           <div key={location._id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
@@ -2893,7 +2904,7 @@ const InventoryManagement: React.FC = () => {
                       </div>
 
                       <div className="grid gap-4">
-                        {rooms.map((room) => (
+                        {rooms.sort((a,b) => a.name.localeCompare(b.name)).map((room) => (
                           <div key={room._id} className="border border-gray-200 rounded-lg p-4">
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
@@ -2944,7 +2955,7 @@ const InventoryManagement: React.FC = () => {
                       </div>
 
                       <div className="grid gap-4">
-                        {racks.map((rack) => (
+                        {racks.sort((a,b) => a.name.localeCompare(b.name)).map((rack) => (
                           <div key={rack._id} className="border border-gray-200 rounded-lg p-4">
                             <div className="flex justify-between items-start">
                               <div className="flex-1">

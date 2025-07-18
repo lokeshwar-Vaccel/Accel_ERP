@@ -681,13 +681,18 @@ const validateCustomerForm = (): boolean => {
     missingFields.push('Customer Name');
   }
 
-  if (!customerFormData.email.trim()) {
-    errors.email = 'Email is required';
-    missingFields.push('Email');
-  } else if (!/\S+@\S+\.\S+/.test(customerFormData.email)) {
-    errors.email = 'Please enter a valid email address';
-    missingFields.push('Valid Email');
+  if (!customerFormData.gstNumber.trim()) {
+    errors.gstNumber = 'GST Number is required';
+    missingFields.push('GST Number');
   }
+
+  // if (!customerFormData.email.trim()) {
+  //   errors.email = 'Email is required';
+  //   missingFields.push('Email');
+  // } else if (!/\S+@\S+\.\S+/.test(customerFormData.email)) {
+  //   errors.email = 'Please enter a valid email address';
+  //   missingFields.push('Valid Email');
+  // }
 
   // Address field validation
   if (!customerFormData.addresses.length) {
@@ -1870,9 +1875,9 @@ const validateCustomerForm = (): boolean => {
                           }`}
                         placeholder="Enter email address"
                       />
-                      {formErrors.email && (
+                      {/* {formErrors.email && (
                         <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
-                      )}
+                      )} */}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2224,9 +2229,9 @@ const validateCustomerForm = (): boolean => {
                           }`}
                         placeholder="Enter email address"
                       />
-                      {formErrors.email && (
+                      {/* {formErrors.email && (
                         <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
-                      )}
+                      )} */}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">

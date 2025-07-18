@@ -48,7 +48,7 @@ export const updateUserSchema = Joi.object({
 // Customer validation schemas
 export const createCustomerSchema = Joi.object({
   name: Joi.string().min(2).max(100).required(),
-  email: Joi.string().email(),
+  // email: Joi.string().email(),
   phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).allow('', null),
   address: Joi.string().max(500).required(),
   customerType: Joi.string().valid(...Object.values(CustomerType)).required(),
@@ -106,8 +106,8 @@ export const createStockLocationSchema = Joi.object({
   name: Joi.string().min(2).max(100).required(),
   address: Joi.string().max(500).required(),
   type: Joi.string().valid('main_office', 'warehouse', 'service_center').required(),
-  contactPerson: Joi.string().max(100),
-  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/)
+  // contactPerson: Joi.string().max(100),
+  // phone: Joi.string()
 });
 
 export const updateStockSchema = Joi.object({

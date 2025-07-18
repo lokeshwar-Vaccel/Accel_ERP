@@ -46,6 +46,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
   const [showProductDropdowns, setShowProductDropdowns] = useState<Record<number, boolean>>({});
   const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
   const [addresses, setAddresses] = useState<any[]>([]);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
 
   // Reset form when modal opens/closes
   useEffect(() => {
@@ -157,15 +158,10 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
   // Get address label for display
   const getAddressLabel = (value: string | undefined) => {
     if (!value) return 'Select address';
-    
-    // If the value looks like an ID (numeric), try to find the address in addresses array
-    if (!isNaN(parseInt(value))) {
-      const address = addresses.find(a => a.id === parseInt(value));
-      return address ? `${address.address} (${address.district}, ${address.pincode})` : 'Select address';
-    }
-    
-    // If the value is already an address text, return it directly
-    return value;
+    const address = addresses.find(a => a.id.toString() === value);
+    return address
+      ? `${address.address} (${address.district}, ${address.pincode})`
+      : 'Select address';
   };
 
   // Validate form data
@@ -199,17 +195,14 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
 
   // Handle address selection
   const handleAddressSelect = (addressId: string) => {
-    const address = addresses.find(a => a.id === parseInt(addressId));
-    if (address) {
-      setFormData(prev => ({
-        ...prev,
-        customer: {
-          ...prev.customer!,
-          address: address.address, // Store the actual address text
-          addressId: addressId // Store the address ID for reference
-        }
-      }));
-    }
+    setFormData(prev => ({
+      ...prev,
+      customer: {
+        ...prev.customer!,
+        address: addressId, // store the ID, not the text
+        addressId: addressId
+      }
+    }));
     setShowAddressDropdown(false);
   };
 
@@ -391,6 +384,16 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                 
                 {showCustomerDropdown && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                    <div className="p-2 border-b border-gray-200">
+                      <input
+                        type="text"
+                        placeholder="Search customers..."
+                        value={customerSearchTerm}
+                        onChange={e => setCustomerSearchTerm(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        autoFocus
+                      />
+                    </div>
                     <button
                       onClick={() => {
                         setFormData(prev => ({
@@ -406,23 +409,33 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                         }));
                         setShowCustomerDropdown(false);
                         setAddresses([]);
+                        setCustomerSearchTerm('');
                       }}
                       className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.customer?._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                     >
                       Select customer
                     </button>
-                    {customers.map((customer) => (
-                      <button
-                        key={customer._id}
-                        onClick={() => handleCustomerSelect(customer._id)}
-                        className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${formData.customer?._id === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                      >
-                        <div>
-                          <div className="font-medium">{customer.name}</div>
-                          <div className="text-xs text-gray-500">{customer.email}</div>
-                        </div>
-                      </button>
-                    ))}
+                    {customers
+                      .filter(customer =>
+                        customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                        customer.email?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                        customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase())
+                      )
+                      .map((customer) => (
+                        <button
+                          key={customer._id}
+                          onClick={() => {
+                            handleCustomerSelect(customer._id);
+                            setCustomerSearchTerm('');
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${formData.customer?._id === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                        >
+                          <div>
+                            <div className="font-medium">{customer.name}</div>
+                            <div className="text-xs text-gray-500">{customer.email}</div>
+                          </div>
+                        </button>
+                      ))}
                   </div>
                 )}
               </div>
@@ -445,7 +458,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                   }`}
                 >
                   <span className="text-gray-700 truncate mr-1">
-                    {getAddressLabel(formData.customer?.address || '')}
+                    {getAddressLabel(formData.customer?.address)}
                   </span>
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${
                     showAddressDropdown ? 'rotate-180' : ''
