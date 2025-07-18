@@ -426,8 +426,8 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                   </div>
                 )}
               </div>
-              {getFieldError('customer') && (
-                <p className="mt-1 text-sm text-red-600">{getFieldError('customer')}</p>
+              {getFieldError('customer.name') && (
+                <p className="mt-1 text-sm text-red-600">{getFieldError('customer.name')}</p>
               )}
             </div>
 
@@ -526,6 +526,9 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                 min="1"
                 max="365"
               />
+              {getFieldError('validityPeriod') && (
+                <p className="mt-1 text-sm text-red-600">{getFieldError('validityPeriod')}</p>
+              )}
             </div>
           </div>
 
@@ -719,6 +722,9 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
               </div>
             </div>
           </div>
+          {getFieldError('items.product') && (
+            <p className="mt-1 text-sm text-red-600">{getFieldError('items.product')}</p>
+          )}
 
           {/* Notes */}
           <div>

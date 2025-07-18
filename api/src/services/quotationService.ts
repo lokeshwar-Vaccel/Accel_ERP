@@ -128,9 +128,9 @@ export class QuotationService {
         if (!item.product?.trim()) {
           errors.push({ field: `items[${index}].product`, message: 'Product is required' });
         }
-        if (!item.description?.trim()) {
-          errors.push({ field: `items[${index}].description`, message: 'Description is required' });
-        }
+        // if (!item.description?.trim()) {
+        //   errors.push({ field: `items[${index}].description`, message: 'Description is required' });
+        // }
         if (!this.isValidNumber(item.quantity) || item.quantity <= 0) {
           errors.push({ field: `items[${index}].quantity`, message: 'Quantity must be greater than 0' });
         }
