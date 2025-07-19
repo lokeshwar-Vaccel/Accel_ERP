@@ -66,7 +66,7 @@ const ProductManagement: React.FC = () => {
   const [limit, setLimit] = useState(10);
   const [totalPages, setTotalPages] = useState(0);
   const [totalDatas, setTotalDatas] = useState(0);
-  const [sort, setSort] = useState('-createdAt');
+  const [sort, setSort] = useState('name');
 
   // Custom dropdown states
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
@@ -152,7 +152,7 @@ const ProductManagement: React.FC = () => {
   // Update sort param when sortField or sortOrder changes
   useEffect(() => {
     if (sortField === 'all' || sortOrder === 'all') {
-      setSort('-createdAt'); // default sort
+      setSort('name'); // default sort
     } else {
       const sortParam = sortOrder === 'asc' ? sortField : `-${sortField}`;
       setSort(sortParam);
@@ -597,6 +597,7 @@ const ProductManagement: React.FC = () => {
   };
 
   const fetchProducts = async () => {
+    
 
     const params: any = {
       page: currentPage,

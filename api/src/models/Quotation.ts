@@ -10,8 +10,6 @@ export interface IQuotation extends Document {
     name: string;
     email: string;
     phone: string;
-    address: string;
-    addressId?: string; // Address ID for reference
     pan?: string;
   };
   company: {
@@ -28,6 +26,7 @@ export interface IQuotation extends Document {
       branch?: string;
     };
   };
+  location?: string | Types.ObjectId; // Added location field as reference
   items: Array<{
     product: string;
     description: string;
@@ -51,6 +50,12 @@ export interface IQuotation extends Document {
   notes?: string;
   terms?: string;
   validityPeriod: number;
+  customerAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+  };
 }
 
 const QuotationSchema = new Schema<IQuotation>({
@@ -63,8 +68,6 @@ const QuotationSchema = new Schema<IQuotation>({
     name: { type: String, },
     email: { type: String, required: false },
     phone: { type: String, required: false },
-    address: { type: String, },
-    addressId: { type: String }, // Address ID for reference
     pan: { type: String, required: false },
   },
   company: {
@@ -81,6 +84,7 @@ const QuotationSchema = new Schema<IQuotation>({
       branch: { type: String },
     },
   },
+  location: { type: Schema.Types.ObjectId, ref: 'StockLocation' }, // Added location field as reference
   items: [
     {
       product: { type: String, },
@@ -106,6 +110,12 @@ const QuotationSchema = new Schema<IQuotation>({
   notes: { type: String },
   terms: { type: String },
   validityPeriod: { type: Number, },
+  customerAddress: {
+    address: { type: String, trim: true },
+    state: { type: String, trim: true },
+    district: { type: String, trim: true },
+    pincode: { type: String, trim: true }
+  },
 });
 
 export const Quotation = mongoose.model<IQuotation>('Quotation', QuotationSchema); 

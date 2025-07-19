@@ -46,7 +46,7 @@ export const getProducts = async (
     const { 
       page = 1, 
       limit = 10, 
-      sort = '-createdAt', 
+      sort = 'name', 
       search, 
       category, 
       brand,
@@ -160,8 +160,6 @@ export const createProduct = async (
       createdBy: req.user!.id
     };
   
-    console.log("productData:",productData);
-    
     const product = await Product.create(productData);
 
     // Always create stock entry - use provided location or default location
@@ -195,7 +193,6 @@ export const createProduct = async (
         };
 
         stock = await Stock.create(stockData);
-        console.log('Stock entry created successfully:', stock._id);
       } else {
         console.warn('Could not create stock entry - no location available');
       }
@@ -246,16 +243,11 @@ export const updateProduct = async (
     }
 
     // Debug: log incoming update payload
-    console.log('Update payload:', req.body);
-
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     ).populate('createdBy', 'firstName lastName email');
-
-    // Debug: log updated product
-    console.log('Updated product:', updatedProduct);
 
     const response: APIResponse = {
       success: true,

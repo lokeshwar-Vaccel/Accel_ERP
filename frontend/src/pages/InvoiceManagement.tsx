@@ -264,7 +264,6 @@ const InvoiceManagement: React.FC = () => {
   const [totalDatas, setTotalDatas] = useState(0);
   const [sort, setSort] = useState('-createdAt');
 
-  console.log("invoices111111111111111:", invoices);
 
 
   // Custom dropdown states
@@ -285,10 +284,17 @@ const InvoiceManagement: React.FC = () => {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
-  const [invoiceType, setInvoiceType] = useState<'quotation' | 'sale' | 'purchase' | 'challan'>('sale');
+  // Initialize invoiceType from localStorage or default to 'sale'
+  const [invoiceType, setInvoiceType] = useState<'quotation' | 'sale' | 'purchase' | 'challan'>(() => {
+    const savedInvoiceType = localStorage.getItem('selectedInvoiceType');
+    return (savedInvoiceType as 'quotation' | 'sale' | 'purchase' | 'challan') || 'quotation';
+  });
 
-  console.log("invoiceType-------:", invoiceType);
-
+  // Custom setter function that updates both state and localStorage
+  const updateInvoiceType = (newType: 'quotation' | 'sale' | 'purchase' | 'challan') => {
+    setInvoiceType(newType);
+    localStorage.setItem('selectedInvoiceType', newType);
+  };
 
   // Status update states
   const [statusUpdate, setStatusUpdate] = useState<StatusUpdate>({
@@ -340,9 +346,6 @@ const InvoiceManagement: React.FC = () => {
     declaration: '',
   });
 
-  console.log("newInvoice:", newInvoice);
-
-
   // Stock validation states
   const [stockValidation, setStockValidation] = useState<Record<number, {
     available: number;
@@ -373,36 +376,20 @@ const InvoiceManagement: React.FC = () => {
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create');
   const [showQuotationViewModal, setShowQuotationViewModal] = useState(false);
 
-  console.log("selectedQuotation:", selectedQuotation);
-  
-
   // Filter products based on search term
   const getFilteredProducts = (searchTerm: string = '') => {
-    console.log('getFilteredProducts called with:', { searchTerm, totalProducts: products.length, products: products.slice(0, 3) });
-
-    if (!searchTerm.trim()) {
-      console.log('No search term, returning all products:', products.length);
-      return products;
-    }
-
-    const term = searchTerm.toLowerCase();
-    const filtered = products.filter(product => {
-      const nameMatch = product.name?.toLowerCase().includes(term);
-      const categoryMatch = product.category?.toLowerCase().includes(term);
-      const brandMatch = product.brand?.toLowerCase().includes(term);
-      return nameMatch || categoryMatch || brandMatch;
-    });
-
-    console.log('Filtered products:', { term, filtered: filtered.length, results: filtered.slice(0, 3) });
-    return filtered;
+    if (!searchTerm) return products;
+    return products.filter(product =>
+      product.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.partNo?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
   };
 
   // Update product search term
   const updateProductSearchTerm = (itemIndex: number, searchTerm: string) => {
-    setProductSearchTerms(prev => ({
-      ...prev,
-      [itemIndex]: searchTerm
-    }));
+    setProductSearchTerms(prev => ({ ...prev, [itemIndex]: searchTerm }));
   };
 
   // UOM options
@@ -562,15 +549,7 @@ const InvoiceManagement: React.FC = () => {
       totalAmount,
       remainingAmount,
     }));
-    console.log("items",{
-      // ...prev,
-      items: adjustedItems,
-      subtotal: parseFloat(subtotal.toFixed(2)),
-      taxAmount: parseFloat(taxAmount.toFixed(2)),
-      totalAmount,
-      remainingAmount,
-    });
-    
+
   };
 
 
@@ -590,13 +569,10 @@ const InvoiceManagement: React.FC = () => {
     });
   };
 
-  console.log("selectedInvoice3344:", selectedInvoice);
   const handleSaveChanges = async () => {
     setSavingChanges(true);
     try {
       if (!selectedInvoice) return;
-
-      console.log("selectedInvoice33:", selectedInvoice);
 
       const payload = {
         products: selectedInvoice.items.map((item: any) => ({
@@ -717,7 +693,6 @@ const InvoiceManagement: React.FC = () => {
 
     try {
       const response = await apiClient.invoices.getAll(params);
-      console.log("response555:", response);
 
       if (response.data.pagination) {
         setCurrentPage(response.data.pagination.page);
@@ -764,8 +739,7 @@ const InvoiceManagement: React.FC = () => {
       });
 
       const responseData = response.data as any;
-      console.log("responseData123:", response);
-      
+
       let quotationsData = [];
       if (responseData.pagination) {
         quotationsData = responseData.quotations || [];
@@ -817,21 +791,12 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const fetchProducts = async () => {
-    console.log('🚀 Starting to fetch inventory items...');
     try {
-      // Fetch from inventory/stock API instead of products API
-      console.log('📡 Making API call to stock.getStock() for all inventory items...');
       const response = await apiClient.stock.getStock({ limit: 10000, page: 1 });
-      console.log('✅ Full inventory response received:', response);
 
       const responseData = response.data as any;
-      console.log('📦 Response data structure:', responseData);
-
-      // Extract stock levels which contain product information
       let productsData = [];
       if (responseData.stockLevels && Array.isArray(responseData.stockLevels)) {
-        console.log('📋 Data found in responseData.stockLevels');
-        // Map stock levels to product format for the dropdown
         productsData = responseData.stockLevels.map((stock: any) => ({
           _id: stock.product?._id || stock.productId,
           name: stock.product?.name || stock.productName || 'Unknown Product',
@@ -839,26 +804,21 @@ const InvoiceManagement: React.FC = () => {
           gst: stock.product?.gst || 0,
           hsnNumber: stock.product?.hsnNumber || '',
           partNo: stock.product?.partNo || '',
-          uom: stock.product?.uom ,
+          uom: stock.product?.uom,
           category: stock.product?.category || 'N/A',
           brand: stock.product?.brand || 'N/A',
           availableQuantity: stock.availableQuantity || 0,
-          // Include original stock data for reference
           stockData: stock
         }));
       } else if (Array.isArray(responseData)) {
-        console.log('📋 Data is directly an array');
         productsData = responseData;
       } else {
         console.warn('⚠️ Unexpected response structure:', responseData);
-        console.log('📊 Available keys:', Object.keys(responseData || {}));
         productsData = [];
       }
 
       setProducts(productsData);
-      console.log(`✨ Successfully set ${productsData.length} inventory items for dropdown`);
       if (productsData.length > 0) {
-        console.log('🔍 Sample inventory item:', productsData[0]);
       }
     } catch (error) {
       console.error('❌ Error fetching inventory:', error);
@@ -878,12 +838,21 @@ const InvoiceManagement: React.FC = () => {
           locationsData = (response.data as any).locations;
         }
       }
+
       setLocations(locationsData);
+
+      // Set "Main Office" as default if not already selected
+      const mainOffice = locationsData.find(loc => loc.name === "Main Office");
+      // if (mainOffice && !newInvoice.location) {
+      setNewInvoice(prev => ({ ...prev, location: mainOffice._id }));
+      // }
+
     } catch (error) {
       console.error('Error fetching locations:', error);
       setLocations([]);
     }
   };
+
 
   const fetchStats = async () => {
     try {
@@ -897,7 +866,6 @@ const InvoiceManagement: React.FC = () => {
   const fetchGeneralSettings = async () => {
     try {
       const response = await apiClient.generalSettings.getAll();
-      console.log("response=============:", response);
       if (response.success && response.data && response.data.companies && response.data.companies.length > 0) {
         // Get the first company settings (assuming single company setup)
         const companySettings = response.data.companies[0];
@@ -906,7 +874,6 @@ const InvoiceManagement: React.FC = () => {
 
         // Auto-populate default values in newInvoice if it exists
         if (newInvoice) {
-          console.log("companySettings11:", companySettings);
           setNewInvoice(prev => ({
             ...prev,
             pan: companySettings.companyPan || prev.pan,
@@ -927,7 +894,7 @@ const InvoiceManagement: React.FC = () => {
       customer: '',
       dueDate: '',
       invoiceType: 'sale',
-      location: '',
+      location: newInvoice.location,
       notes: '',
       items: [
         {
@@ -983,7 +950,6 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const handleViewInvoice = (invoice: Invoice) => {
-    console.log("invoice12:", invoice);
 
     setSelectedInvoice(invoice);
     setOriginalInvoiceData(JSON.parse(JSON.stringify(invoice))); // Deep copy for backup
@@ -998,7 +964,6 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const handleViewQuotation = (quotation: any) => {
-    console.log("quotation123:", quotation);
     setSelectedQuotation(quotation);
     setShowQuotationViewModal(true);
   };
@@ -1425,25 +1390,21 @@ const InvoiceManagement: React.FC = () => {
     const match = gst.match(/(\d+(\.\d+)?)/); // Extracts number like 18 or 18.5
     return match ? parseFloat(match[1]) : 0;
   };
-  
+
 
   const updateInvoiceItem = (index: number, field: keyof NewInvoiceItem, value: any) => {
     setNewInvoice(prev => {
       const updatedItems = [...prev.items];
-      console.log("updatedItems:", updatedItems);
       updatedItems[index] = { ...updatedItems[index], [field]: value };
       // Auto-populate price, description, gst, hsnNumber, and partNo when product is selected
       if (field === 'product') {
         const productObj = products.find(p => p._id === value);
-        console.log("productObj:", productObj);
-
-        
 
         if (productObj) {
           updatedItems[index].unitPrice = productObj.price;
           updatedItems[index].description = productObj.name;
           updatedItems[index].gst = productObj.gst;
-          updatedItems[index].taxRate =  extractGSTRate(productObj.gst);
+          updatedItems[index].taxRate = extractGSTRate(productObj.gst);
           updatedItems[index].partNo = productObj.partNo;
           updatedItems[index].hsnNumber = productObj.hsnNumber;
           updatedItems[index].uom = productObj.uom;
@@ -1475,9 +1436,6 @@ const InvoiceManagement: React.FC = () => {
         location: newInvoice.location
       });
 
-      console.log("stockItem-3:", response);
-
-
       let stockData: any[] = [];
       if (response.data) {
         if (Array.isArray(response.data)) {
@@ -1489,10 +1447,6 @@ const InvoiceManagement: React.FC = () => {
 
       const stockItem = stockData.length > 0 ? stockData[0] : null;
       const available = stockItem ? (stockItem.availableQuantity || (stockItem.quantity - (stockItem.reservedQuantity || 0))) : 0;
-
-      console.log("stockItem-1:", stockItem);
-      console.log("stockItem-2:", quantity, available);
-
 
       const isValid = quantity <= available && available > 0;
       const message = available === 0
@@ -2112,9 +2066,70 @@ const InvoiceManagement: React.FC = () => {
 
   // Helper function to convert number to words (simple, for INR)
   function numberToWords(num: number): string {
-    // ... (implement or use a library for number to words)
-    // For now, just return the number as string
-    return num.toLocaleString('en-IN');
+    const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
+    const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
+    const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+    const thousands = ['', 'Thousand', 'Lakh', 'Crore'];
+
+    const convertLessThanOneThousand = (num: number): string => {
+      if (num === 0) return '';
+
+      let result = '';
+
+      if (num >= 100) {
+        result += ones[Math.floor(num / 100)] + ' Hundred ';
+        num %= 100;
+      }
+
+      if (num >= 20) {
+        result += tens[Math.floor(num / 10)] + ' ';
+        num %= 10;
+      } else if (num >= 10) {
+        result += teens[num - 10] + ' ';
+        return result;
+      }
+
+      if (num > 0) {
+        result += ones[num] + ' ';
+      }
+
+      return result;
+    };
+
+    const convertToWords = (num: number): string => {
+      if (num === 0) return 'Zero';
+
+      let result = '';
+      let groupIndex = 0;
+
+      while (num > 0) {
+        const group = num % 1000;
+        if (group !== 0) {
+          const groupWords = convertLessThanOneThousand(group);
+          if (groupIndex > 0) {
+            result = groupWords + thousands[groupIndex] + ' ' + result;
+          } else {
+            result = groupWords;
+          }
+        }
+        num = Math.floor(num / 1000);
+        groupIndex++;
+      }
+
+      return result.trim();
+    };
+
+    // Handle decimal part (paise)
+    const rupees = Math.floor(num);
+    const paise = Math.round((num - rupees) * 100);
+
+    let result = convertToWords(rupees) + ' Rupees';
+
+    if (paise > 0) {
+      result += ' and ' + convertToWords(paise) + ' Paise';
+    }
+
+    return result + ' Only';
   }
 
   // Update printInvoice function
@@ -2132,36 +2147,70 @@ const InvoiceManagement: React.FC = () => {
           table.items { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
           table.items th, table.items td { border: 1px solid #333; padding: 4px; font-size: 11px; }
           table.items th { background: #eee; }
-          .summary-table { width: 100%; margin-top: 10px; }
-          .summary-table td { font-size: 12px; padding: 2px 6px; }
+          .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 30px;
+            margin-bottom: 10px;
+          }
+          .summary-table td {
+            padding: 6px 8px;
+            font-size: 12px;
+            border-bottom: 1px solid #dee2e6;
+          }
+          .summary-table td:first-child {
+            font-weight: bold;
+            color: #495057;
+          }
           .footer { margin-top: 30px; font-size: 12px; }
         </style>
       </head>
       <body>
         <div class="header">
           <h2>${generalSettings?.companyName || 'Sun Power Services'}</h2>
-          <div>${generalSettings?.companyAddress || ''}</div>
-          <div>GSTIN: ${generalSettings?.companyGSTIN || ''}</div>
-          <div>Contact: ${generalSettings?.companyPhone || ''}  Email: ${generalSettings?.companyEmail || ''}</div>
+          ${generalSettings?.companyAddress ? `<div>${generalSettings?.companyAddress || ''}</div>` : ''}
+          ${generalSettings?.companyGSTIN ? `<div>GSTIN: ${generalSettings?.companyGSTIN || ''}</div>` : ''}
+          ${generalSettings?.companyPhone ? `<div>Contact: ${generalSettings?.companyPhone || ''}  Email: ${generalSettings?.companyEmail || ''}</div>` : ''}
         </div>
         <table class="invoice-details">
-          <tr><td>Invoice No:</td><td>${selectedInvoice.invoiceNumber || ''}</td><td>Dated:</td><td>${new Date(selectedInvoice.issueDate).toLocaleDateString()}</td></tr>
-          <tr><td>Mode/Terms of Payment:</td><td>${selectedInvoice.termsOfDelivery || ''}</td><td>Reference No. & Date:</td><td>${selectedInvoice.referenceNo || ''} ${selectedInvoice.referenceDate || ''}</td></tr>
-          <tr><td>Buyer's Order No:</td><td>${selectedInvoice.buyersOrderNo || ''}</td><td>Dispatch Doc No:</td><td>${selectedInvoice.dispatchDocNo || ''}</td></tr>
-          <tr><td>Delivery Note Date:</td><td>${selectedInvoice.deliveryNoteDate || ''}</td><td>Dispatched Through:</td><td>${selectedInvoice.dispatchedThrough || ''}</td></tr>
-          <tr><td>Destination:</td><td>${selectedInvoice.destination || ''}</td></tr>
+          ${selectedInvoice.invoiceNumber ? `<tr><td>Invoice No:</td><td>${selectedInvoice.invoiceNumber || ''}</td><td>Dated:</td><td>${new Date(selectedInvoice.issueDate).toLocaleDateString()}</td></tr>` : ''}
+          ${selectedInvoice.termsOfDelivery ? `<tr><td>Mode/Terms of Payment:</td><td>${selectedInvoice.termsOfDelivery || ''}</td><td>Reference No. & Date:</td><td>${selectedInvoice.referenceNo || ''} ${selectedInvoice.referenceDate || ''}</td></tr>` : ''}
+          ${selectedInvoice.buyersOrderNo ? `<tr><td>Buyer's Order No:</td><td>${selectedInvoice.buyersOrderNo || ''}</td><td>Dispatch Doc No:</td><td>${selectedInvoice.dispatchDocNo || ''}</td></tr>` : ''}
+          ${selectedInvoice.deliveryNoteDate ? `<tr><td>Delivery Note Date:</td><td>${selectedInvoice.deliveryNoteDate || ''}</td><td>Dispatched Through:</td><td>${selectedInvoice.dispatchedThrough || ''}</td></tr>` : ''}
+          ${selectedInvoice.destination ? `<tr><td>Destination:</td><td>${selectedInvoice.destination || ''}</td></tr>` : ''}
         </table>
-        <table class="buyer-details">
-          <tr><td>Buyer:</td><td>${selectedInvoice.customer?.name || ''}</td></tr>
-          <tr><td>Email:</td><td>${selectedInvoice.customer?.email || ''}</td></tr>
-          <tr><td>Phone:</td><td>${selectedInvoice.customer?.phone || ''}</td></tr>
-          <tr><td>GSTIN:</td><td>${selectedInvoice.customer?.gstNumber || ''}</td></tr>
-          <tr><td>State Name:</td><td>${selectedInvoice.customer?.state || ''}, Code: ${selectedInvoice.customer?.stateCode || ''}</td></tr>
+       <table class="buyer-details">
+          ${selectedInvoice.customer?.name ? `Buyer: ${selectedInvoice.customer?.name}<br>` : ''}
+          ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
+          ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
+          ${selectedInvoice.customer?.gstNumber ? `GSTIN: ${selectedInvoice.customer?.gstNumber}<br>` : ''}
+          ${selectedInvoice.customer?.state ? `State Name: ${selectedInvoice.customer?.state}, Code: ${selectedInvoice.customer?.stateCode}<br>` : ''}
         </table>
+                <div class="from-to-section" style="display: flex; justify-content: space-between; margin-bottom: 25px; gap: 20px;">
+          <div class="from-to-box">
+            <h3>From:</h3>
+            <div>
+              <strong>${selectedInvoice.company?.name || 'Sun Power Services'}</strong><br>
+              ${selectedInvoice.company?.phone ? `Phone: ${selectedInvoice.company?.phone}<br>` : ''}
+              ${selectedInvoice.company?.email ? `Email: ${selectedInvoice.company?.email}<br>` : ''}
+              ${selectedInvoice.company?.pan ? `PAN: ${selectedInvoice.company?.pan}<br>` : ''}
+              ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
+            </div>
+          </div>
+          <div class="from-to-box">
+            <h3>To:</h3>
+            <div>
+              <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
+              ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
+              ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
+              ${selectedInvoice.customerAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.customerAddress.address || 'N/A'}<br>${selectedInvoice.customerAddress.district && selectedInvoice.customerAddress.pincode ? `${selectedInvoice.customerAddress.district}, ${selectedInvoice.customerAddress.pincode}<br>` : ''}${selectedInvoice.customerAddress.state || 'N/A'}` : ''}
+            </div>
+          </div>
+        </div>
         <table class="items">
           <thead>
             <tr>
-              <th>S.No</th><th>Description</th><th>HSN/SAC</th><th>GST Rate</th><th>Part No.</th><th>Quantity</th><th>UOM</th><th>Rate</th><th>per</th><th>Disc. %</th><th>Amount</th>
+              <th>S.No</th><th>Description</th><th>HSN/SAC</th><th>GST Rate</th><th>Part No.</th><th>Quantity</th><th>UOM</th><th>Rate</th><th>Disc. %</th><th>Amount</th>
             </tr>
           </thead>
           <tbody>
@@ -2169,31 +2218,26 @@ const InvoiceManagement: React.FC = () => {
               <tr>
                 <td>${idx + 1}</td>
                 <td>${item.description || ''}</td>
-                <td>${item.hsnSac || ''}</td>
+                <td>${item?.product?.hsnNumber || ''}</td>
                 <td>${item.taxRate || 0}%</td>
-                <td>${item.partNo || ''}</td>
+                <td>${item?.product?.partNo || ''}</td>
                 <td>${item.quantity?.toFixed(2) || ''}</td>
                 <td>${item.uom || ''}</td>
                 <td>${item.unitPrice?.toFixed(2) || ''}</td>
-                <td>${item.uom || ''}</td>
                 <td>${item.discount || 0}</td>
                 <td>${(item.quantity * item.unitPrice - ((item.discount || 0) * item.quantity * item.unitPrice / 100) + ((item.quantity * item.unitPrice - ((item.discount || 0) * item.quantity * item.unitPrice / 100)) * (item.taxRate || 0) / 100)).toFixed(2)}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
-        <table class="summary-table">
-          <tr><td>Output IGST:</td><td>${totalTax(selectedInvoice).toFixed(2)}</td></tr>
-          <tr><td>Round Off:</td><td>${(Math.round(grandTotal(selectedInvoice)) - grandTotal(selectedInvoice)).toFixed(2)}</td></tr>
-          <tr><td>Total:</td><td>${Math.round(grandTotal(selectedInvoice)).toFixed(2)}</td></tr>
-        </table>
-        <div><strong>Amount Chargeable (in words):</strong> ${numberToWords(Math.round(grandTotal(selectedInvoice)))} Only</div>
+        
+        <div style="margin-top: 30px;"><strong>Amount Chargeable (in words):</strong> ${numberToWords(Math.round(grandTotal(selectedInvoice)))} </div>
         <table class="summary-table">
           <tr><td>Taxable Value</td><td>Integrated Tax Rate</td><td>Integrated Tax Amount</td><td>Total</td></tr>
           <tr><td>${subtotal(selectedInvoice).toFixed(2)}</td><td>${selectedInvoice.items[0]?.taxRate || 0}%</td><td>${totalTax(selectedInvoice).toFixed(2)}</td><td>${(subtotal(selectedInvoice) + totalTax(selectedInvoice)).toFixed(2)}</td></tr>
         </table>
         <div class="footer">
-          <div>Declaration: ${selectedInvoice.declaration || ''}</div>
+          ${selectedInvoice.declaration ? `<div>Declaration: ${selectedInvoice.declaration || ''}</div>` : ''}
           <div style="margin-top: 30px;">For ${generalSettings?.companyName || 'Sun Power Services'}</div>
           <div style="margin-top: 30px;">Authorised Signatory</div>
         </div>
@@ -2233,6 +2277,7 @@ const InvoiceManagement: React.FC = () => {
             font-family: Arial, sans-serif; 
             margin: 20px; 
             line-height: 1.6;
+            color: #333;
           }
           .header { 
             text-align: center; 
@@ -2240,57 +2285,156 @@ const InvoiceManagement: React.FC = () => {
             border-bottom: 2px solid #333;
             padding-bottom: 20px;
           }
-          .company-info, .customer-info { 
-            width: 100%; 
-            margin-bottom: 20px; 
+          .header h1 {
+            margin: 0 0 10px 0;
+            font-size: 24px;
+            font-weight: bold;
           }
-          .company-info td, .customer-info td { 
-            padding: 5px 10px; 
-            font-size: 12px; 
-            vertical-align: top;
+          .header div {
+            margin: 2px 0;
+            font-size: 12px;
           }
           .quotation-details {
             margin-bottom: 20px;
-            padding: 10px;
-            background-color: #f9f9f9;
-            border-radius: 5px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+          }
+          .quotation-details h2 {
+            margin: 0 0 15px 0;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+          }
+          .quotation-details table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .quotation-details td {
+            padding: 8px 12px;
+            font-size: 12px;
+            border: 1px solid #dee2e6;
+          }
+          .quotation-details td:first-child {
+            font-weight: bold;
+            background-color: #f8f9fa;
+            width: 25%;
+          }
+          .from-to-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            gap: 20px;
+          }
+          .from-to-box {
+            flex: 1;
+            padding: 15px;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+          }
+          .from-to-box h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+            font-weight: bold;
+            color: #495057;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 5px;
+          }
+          .from-to-box div {
+            font-size: 12px;
+            line-height: 1.4;
+          }
+          .from-to-box strong {
+            color: #212529;
           }
           table.items { 
             width: 100%; 
             border-collapse: collapse; 
-            margin-bottom: 20px; 
+            margin-bottom: 25px; 
+            font-size: 11px;
           }
           table.items th, table.items td { 
-            border: 1px solid #333; 
-            padding: 8px; 
-            font-size: 11px; 
+            border: 1px solid #dee2e6; 
+            padding: 8px 6px; 
             text-align: left;
+            vertical-align: top;
           }
           table.items th { 
-            background: #eee; 
+            background: #e9ecef; 
             font-weight: bold;
+            color: #495057;
           }
-          .summary-table { 
-            width: 100%; 
-            margin-top: 20px; 
+          table.items td {
+            background: #fff;
           }
-          .summary-table td { 
-            font-size: 12px; 
-            padding: 5px 10px; 
+          .summary-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 25px;
+            gap: 20px;
           }
-          .footer { 
-            margin-top: 30px; 
-            font-size: 12px; 
+          .notes-box {
+            flex: 1;
+            padding: 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            min-height: 150px;
           }
-          .total-row {
+          .notes-box h4 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
             font-weight: bold;
-            background-color: #f0f0f0;
+            color: #495057;
+            border-bottom: 1px solid #dee2e6;
+            padding-bottom: 5px;
           }
-          .notes-section {
-            margin-top: 20px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
+          .notes-box div {
+            font-size: 12px;
+            line-height: 1.4;
+          }
+          .summary-box {
+            flex: 1;
+            padding: 15px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background-color: #f8f9fa;
+            min-height: 150px;
+          }
+          .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          .summary-table td {
+            padding: 6px 8px;
+            font-size: 12px;
+            border-bottom: 1px solid #dee2e6;
+          }
+          .summary-table td:first-child {
+            font-weight: bold;
+            color: #495057;
+          }
+          .summary-table .total-row {
+            font-weight: bold;
+            background-color: #e9ecef;
+            border-top: 1px solid #495057;
+          }
+          .summary-table .amount-words {
+            border-top: 1px solid #495057;
+            font-size: 11px;
+            line-height: 1.3;
+            word-wrap: break-word;
+            max-width: 200px;
+          }
+          .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 12px;
+            color: #6c757d;
+          }
+          .footer div {
+            margin: 5px 0;
           }
           @media print {
             body { margin: 0; }
@@ -2301,16 +2445,16 @@ const InvoiceManagement: React.FC = () => {
       <body>
         <div class="header">
           <h1>${quotation.company?.name || 'Sun Power Services'}</h1>
-          <div>${quotation.company?.address || ''}</div>
-          <div>Phone: ${quotation.company?.phone || ''} | Email: ${quotation.company?.email || ''}</div>
-          <div>PAN: ${quotation.company?.pan || ''}</div>
+          ${quotation.company?.address ? `<div>${quotation.company?.address || ''}</div>` : ''}
+          ${quotation.company?.phone ? `<div>Phone: ${quotation.company?.phone || ''} | Email: ${quotation.company?.email || ''}</div>` : ''}
+          ${quotation.company?.pan ? `<div>PAN: ${quotation.company?.pan || ''}</div>` : ''}
         </div>
 
         <div class="quotation-details">
           <h2>QUOTATION</h2>
-          <table class="quotation-details" style="width: 100%; border-collapse: collapse; border: 1px solid #333; border-radius: 5px; padding: 10px; margin-bottom: 20px;">
+          <table>
             <tr>
-              <td><strong>Quotation No:</strong></td>
+              <td>Quotation No:</td>
               <td>${quotation.quotationNumber}</td>
               <td><strong>Issue Date:</strong></td>
               <td>${quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : ''}</td>
@@ -2318,30 +2462,30 @@ const InvoiceManagement: React.FC = () => {
             <tr>
               <td><strong>Valid Until:</strong></td>
               <td>${quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString() : ''}</td>
-              <td><strong>Validity Period:</strong></td>
+              <td>Validity Period:</td>
               <td>${quotation.validityPeriod || 30} days</td>
             </tr>
           </table>
         </div>
 
-        <div style="display: flex; justify-content: space-between; margin-bottom: 20px;">
-          <div style="width: 48%;">
+        <div class="from-to-section">
+          <div class="from-to-box">
             <h3>From:</h3>
             <div>
               <strong>${quotation.company?.name || 'Sun Power Services'}</strong><br>
-              ${quotation.company?.address || ''}<br>
-              Phone: ${quotation.company?.phone || 'N/A'}<br>
-              Email: ${quotation.company?.email || 'N/A'}<br>
-              PAN: ${quotation.company?.pan || 'N/A'}
+              ${quotation.company?.phone ? `Phone: ${quotation.company?.phone}<br>` : ''}
+              ${quotation.company?.email ? `Email: ${quotation.company?.email}<br>` : ''}
+              ${quotation.company?.pan ? `PAN: ${quotation.company?.pan}<br>` : ''}
+              ${quotation.location ? `<br><strong>Address:</strong><br>${quotation.location.name || 'N/A'}<br>${quotation.location.address || 'N/A'}` : ''}
             </div>
           </div>
-          <div style="width: 48%;">
+          <div class="from-to-box">
             <h3>To:</h3>
             <div>
               <strong>${quotation.customer?.name || 'N/A'}</strong><br>
-              Email: ${quotation.customer?.email || 'N/A'}<br>
-              Phone: ${quotation.customer?.phone || 'N/A'}<br>
-              Address: ${`${quotation.customer?.address} (${quotation.customer?.district}, ${quotation.customer?.state}, ${quotation.customer?.pincode})` || 'N/A'}
+              ${quotation.customer?.email ? `Email: ${quotation.customer?.email}<br>` : ''}
+              ${quotation.customer?.phone ? `Phone: ${quotation.customer?.phone}<br>` : ''}
+              ${quotation.customerAddress ? `<br><strong>Address:</strong><br>${quotation.customerAddress.address || 'N/A'}<br>${quotation.customerAddress.district && quotation.customerAddress.pincode ? `${quotation.customerAddress.district}, ${quotation.customerAddress.pincode}<br>` : ''}${quotation.customerAddress.state || 'N/A'}` : ''}
             </div>
           </div>
         </div>
@@ -2379,52 +2523,95 @@ const InvoiceManagement: React.FC = () => {
           </tbody>
         </table>
 
-        <table class="summary-table" style="float: right; width: 300px;">
-          <tr>
-            <td><strong>Subtotal:</strong></td>
-            <td>₹${quotation.subtotal?.toLocaleString() || '0'}</td>
-          </tr>
-          <tr>
-            <td><strong>Total Discount:</strong></td>
-            <td>-₹${quotation.totalDiscount?.toFixed(2) || '0'}</td>
-          </tr>
-          <tr>
-            <td><strong>Total Tax:</strong></td>
-            <td>₹${quotation.totalTax?.toFixed(2) || '0'}</td>
-          </tr>
-          <tr class="total-row">
-            <td><strong>Grand Total:</strong></td>
-            <td><strong>₹${quotation.grandTotal?.toFixed(2) || '0'}</strong></td>
-          </tr>
-        </table>
-
-        ${(quotation.notes || quotation.terms) ? `
-        <div class="notes-section">
-          ${quotation.notes ? `
-          <div style="margin-bottom: 15px;">
-            <strong>Notes:</strong><br>
-            ${quotation.notes}
+        <div class="summary-section">
+        <div class="notes-box">
+        ${(quotation.notes || quotation.terms)
+        ? `
+            ${quotation.notes
+          ? `
+            <h4>Notes:</h4>
+            <div>${quotation.notes}</div>
+            `
+          : ''
+        }
+            ${quotation.terms
+          ? `
+            <h4 style="margin-top: 20px;">Terms & Conditions:</h4>
+            <div>${quotation.terms}</div>
+            `
+          : ''
+        }
           </div>
-          ` : ''}
-          ${quotation.terms ? `
-          <div>
-            <strong>Terms & Conditions:</strong><br>
-            ${quotation.terms}
+          <div class="summary-box">
+            <table class="summary-table">
+              <tr>
+                <td>Subtotal:</td>
+                <td>₹${quotation.subtotal?.toLocaleString() || '0'}</td>
+              </tr>
+              <tr>
+                <td>Total Tax:</td>
+                <td>₹${quotation.totalTax?.toFixed(2) || '0'}</td>
+              </tr>
+              <tr>
+                <td>Total Discount:</td>
+                <td>-₹${quotation.totalDiscount?.toFixed(2) || '0'}</td>
+              </tr>
+              <tr class="total-row">
+                <td>Grand Total:</td>
+                <td><strong>₹${quotation.grandTotal?.toFixed(2) || '0'}</strong></td>
+              </tr>
+              <tr>
+                <td>Amount in Words:</td>
+                <td class="amount-words">
+                  ${quotation.grandTotal ? numberToWords(quotation.grandTotal) : 'Zero Rupees Only'}
+                </td>
+              </tr>
+            </table>
           </div>
-          ` : ''}
         </div>
-        ` : ''}
+        `
+        : `
+        <div class="summary-section">
+        <div class="notes-box" style="border: none;">
+        </div>
+          <div class="summary-box">
+            <table class="summary-table">
+              <tr>
+                <td>Subtotal:</td>
+                <td>₹${quotation.subtotal?.toLocaleString() || '0'}</td>
+              </tr>
+              <tr>
+                <td>Total Tax:</td>
+                <td>₹${quotation.totalTax?.toFixed(2) || '0'}</td>
+              </tr>
+              <tr>
+                <td>Total Discount:</td>
+                <td>-₹${quotation.totalDiscount?.toFixed(2) || '0'}</td>
+              </tr>
+              <tr class="total-row">
+                <td>Grand Total:</td>
+                <td><strong>₹${quotation.grandTotal?.toFixed(2) || '0'}</strong></td>
+              </tr>
+              <tr>
+                <td>Amount in Words:</td>
+                <td class="amount-words">
+                  ${quotation.grandTotal ? numberToWords(quotation.grandTotal) : 'Zero Rupees Only'}
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+        `
+      }
 
         <div class="footer">
-          <div style="margin-top: 50px; text-align: center;">
-            <div style="margin-bottom: 30px;">For ${quotation.company?.name || 'Sun Power Services'}</div>
-            <div>Authorised Signatory</div>
-          </div>
+          <div>For ${quotation.company?.name || 'Sun Power Services'}</div>
+          <div>Authorised Signatory</div>
         </div>
       </body>
     </html>
     `;
-    
+
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(printContent);
@@ -2565,25 +2752,24 @@ const InvoiceManagement: React.FC = () => {
           </div>
           {/* Invoice Type Toggle */}
           <div className="flex bg-gray-100 rounded-lg p-0.5">
-          {INVOICE_TYPES.map(type => (
-  <button
-    key={type.value}
-    onClick={() => {
-      const selectedType = type.value as 'quotation' | 'sale' | 'purchase' | 'challan';
-      setInvoiceType(selectedType);
-      setNewInvoice(prev => ({ ...prev, invoiceType: selectedType }));
-      setShowInvoiceTypeDropdown(false); // optional: close dropdown if open
-    }}
-    className={`px-3 py-2.5 rounded text-sm font-medium flex items-center space-x-1.5 transition-all duration-200 ${
-      invoiceType === type.value
-        ? 'bg-white text-blue-700 shadow-sm'
-        : 'text-gray-600 hover:text-blue-700 hover:bg-gray-50'
-    }`}
-  >
-    <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">{type.icon}</span>
-    <span className="whitespace-nowrap">{type.label}</span>
-  </button>
-))}
+            {INVOICE_TYPES.map(type => (
+              <button
+                key={type.value}
+                onClick={() => {
+                  const selectedType = type.value as 'quotation' | 'sale' | 'purchase' | 'challan';
+                  updateInvoiceType(selectedType);
+                  setNewInvoice(prev => ({ ...prev, invoiceType: selectedType }));
+                  setShowInvoiceTypeDropdown(false); // optional: close dropdown if open
+                }}
+                className={`px-3 py-2.5 rounded text-sm font-medium flex items-center space-x-1.5 transition-all duration-200 ${invoiceType === type.value
+                  ? 'bg-white text-blue-700 shadow-sm'
+                  : 'text-gray-600 hover:text-blue-700 hover:bg-gray-50'
+                  }`}
+              >
+                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">{type.icon}</span>
+                <span className="whitespace-nowrap">{type.label}</span>
+              </button>
+            ))}
 
           </div>
         </div>
@@ -2666,10 +2852,10 @@ const InvoiceManagement: React.FC = () => {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
-  {quotation.validUntil
-    ? new Date(quotation.validUntil).toLocaleDateString('en-GB') // => 17/07/2025
-    : 'N/A'}
-</td>
+                      {quotation.validUntil
+                        ? new Date(quotation.validUntil).toLocaleDateString('en-GB') // => 17/07/2025
+                        : 'N/A'}
+                    </td>
 
                     <td className="px-4 py-3 text-sm font-medium">
                       <div className="flex items-center space-x-1">
@@ -3008,52 +3194,49 @@ const InvoiceManagement: React.FC = () => {
                       }`} />
                 </div>
                 <div>
-  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Type</label>
-  <div className="relative dropdown-container">
-    <button
-      onClick={() => {
-        if (invoiceType !== 'challan') {
-          setShowInvoiceTypeDropdown(prev => !prev);
-        }
-      }}
-      disabled={invoiceType === 'challan'}
-      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg transition-colors ${
-        invoiceType === 'challan'
-          ? 'bg-gray-100 cursor-not-allowed border-gray-300'
-          : 'bg-white border-gray-300 hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
-      }`}
-    >
-      <span className="text-gray-700 truncate mr-1">
-        {getInvoiceTypeLabel(invoiceType)} {/* Use invoiceType here */}
-      </span>
-      <ChevronDown
-        className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${
-          showInvoiceTypeDropdown ? 'rotate-180' : ''
-        }`}
-      />
-    </button>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Type</label>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => {
+                        if (invoiceType !== 'challan') {
+                          setShowInvoiceTypeDropdown(prev => !prev);
+                        }
+                      }}
+                      disabled={invoiceType === 'challan'}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg transition-colors ${invoiceType === 'challan'
+                        ? 'bg-gray-100 cursor-not-allowed border-gray-300'
+                        : 'bg-white border-gray-300 hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                        }`}
+                    >
+                      <span className="text-gray-700 truncate mr-1">
+                        {getInvoiceTypeLabel(invoiceType)} {/* Use invoiceType here */}
+                      </span>
+                      <ChevronDown
+                        className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showInvoiceTypeDropdown ? 'rotate-180' : ''
+                          }`}
+                      />
+                    </button>
 
-    {showInvoiceTypeDropdown && (
-      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-        {INVOICE_TYPES.map(option => (
-          <button
-            key={option.value}
-            onClick={() => {
-              setInvoiceType(option.value as any);
-              setNewInvoice(prev => ({ ...prev, invoiceType: option.value as any }));
-              setShowInvoiceTypeDropdown(false);
-            }}
-            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-              invoiceType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-            }`}
-          >
-            {option.label}
-          </button>
-        ))}
-      </div>
-    )}
-  </div>
-</div>
+                    {showInvoiceTypeDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                        {INVOICE_TYPES.map(option => (
+                          <button
+                            key={option.value}
+                            onClick={() => {
+                              updateInvoiceType(option.value as 'quotation' | 'sale' | 'purchase' | 'challan');
+                              setNewInvoice(prev => ({ ...prev, invoiceType: option.value as any }));
+                              setShowInvoiceTypeDropdown(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${invoiceType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                              }`}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
 
 
               </div>
@@ -3461,10 +3644,6 @@ const InvoiceManagement: React.FC = () => {
                       <span>Grand Total:</span>
                       <span className="text-blue-600">₹{calculateGrandTotal().toLocaleString()}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Amount in Words:</span>
-                      <span>{/* TODO: Convert to words */}</span>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -3472,8 +3651,16 @@ const InvoiceManagement: React.FC = () => {
 
             {/* Footer */}
             <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
-              <div className="text-sm text-gray-600">
-                {newInvoice.items.length} item(s) • Total: ₹{calculateGrandTotal().toLocaleString()}
+              <div className="flex justify-between gap-2 flex-col">
+                <div className="text-sm text-gray-600">
+                  <span className='text-md font-bold text-gray-900'>Amount in Words : </span>
+                  <span className="text-sm text-gray-700 font-medium max-w-xs text-right">
+                    {calculateGrandTotal() ? numberToWords(calculateGrandTotal()) : 'Zero Rupees Only'}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-600">
+                  {newInvoice.items.length} item(s) • Total: ₹{calculateGrandTotal().toLocaleString()}
+                </div>
               </div>
               <div className="flex space-x-3">
                 <button
@@ -3569,7 +3756,7 @@ const InvoiceManagement: React.FC = () => {
                       Due Date: {selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : ''}
                     </p>
                     {selectedInvoice.poNumber && <p className="text-sm text-black-600 mt-1 font-medium">
-                    PONumber: {selectedInvoice.poNumber ? selectedInvoice.poNumber : ''}
+                      PONumber: {selectedInvoice.poNumber ? selectedInvoice.poNumber : ''}
                     </p>}
                   </div>
                   <div className="text-right">
@@ -3586,6 +3773,24 @@ const InvoiceManagement: React.FC = () => {
               </div>
 
               {/* Customer Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                  <h4 className="font-medium text-gray-900 mb-2">From:</h4>
+                  <div className="text-sm text-gray-600">
+                    <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
+                    {selectedInvoice?.company?.phone && <p>Phone: {selectedInvoice?.company?.phone || 'N/A'}</p>}
+                    {selectedInvoice?.company?.email && <p>Email: {selectedInvoice?.company?.email || 'N/A'}</p>}
+                    {selectedInvoice?.company?.pan && <p>PAN: {selectedInvoice?.company?.pan || 'N/A'}</p>}
+                    {selectedInvoice?.location && (
+                      <>
+                        <p className="mt-2 font-medium text-gray-700">Address:</p>
+                        {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name || 'N/A'}</p>}
+                        {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address || 'N/A'}</p>}
+                        {/* <p className="text-xs text-gray-500 capitalize">{selectedInvoice?.location.type?.replace('_', ' ') || 'N/A'}</p> */}
+                      </>
+                    )}
+                  </div>
+                </div>
               <div>
                 <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
                 <div className="text-sm text-gray-600">
@@ -3596,6 +3801,7 @@ const InvoiceManagement: React.FC = () => {
                   <p>{selectedInvoice?.customer ? selectedInvoice?.customer.email : selectedInvoice?.supplierEmail ?? ''}</p>
                   <p>{selectedInvoice?.customer ? selectedInvoice?.customer.phone : ''}</p>
                 </div>
+              </div>
               </div>
 
               {/* Total Amount Mismatch Warning */}
@@ -4434,6 +4640,7 @@ const InvoiceManagement: React.FC = () => {
           }}
           customers={customers}
           products={products}
+          locations={locations}
           mode={modalMode}
           generalSettings={generalSettings}
           initialData={selectedQuotation}
@@ -4446,7 +4653,7 @@ const InvoiceManagement: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Quotation {selectedQuotation.quotationNumber}</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Quotation - {selectedQuotation.quotationNumber}</h2>
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => printQuotation(selectedQuotation)}
@@ -4498,19 +4705,17 @@ const InvoiceManagement: React.FC = () => {
                   <h4 className="font-medium text-gray-900 mb-2">From:</h4>
                   <div className="text-sm text-gray-600">
                     <p className="font-medium">{selectedQuotation.company?.name || 'Sun Power Services'}</p>
-                    <p>{selectedQuotation.company?.address || ''}</p>
-                    <p>Phone: {selectedQuotation.company?.phone || 'N/A'}</p>
-                    <p>Email: {selectedQuotation.company?.email || 'N/A'}</p>
-                    <p>PAN: {selectedQuotation.company?.pan || 'N/A'}</p>
-                    {/* {selectedQuotation.company?.bankDetails && (
-                      <div className="mt-2">
-                        <p className="font-medium text-gray-700">Bank Details:</p>
-                        <p>Bank: {selectedQuotation.company.bankDetails.bankName || 'N/A'}</p>
-                        <p>Account: {selectedQuotation.company.bankDetails.accountNo || 'N/A'}</p>
-                        <p>IFSC: {selectedQuotation.company.bankDetails.ifsc || 'N/A'}</p>
-                        <p>Branch: {selectedQuotation.company.bankDetails.branch || 'N/A'}</p>
-                      </div>
-                    )} */}
+                    {selectedQuotation.company?.phone && <p>Phone: {selectedQuotation.company?.phone || 'N/A'}</p>}
+                    {selectedQuotation.company?.email && <p>Email: {selectedQuotation.company?.email || 'N/A'}</p>}
+                    {selectedQuotation.company?.pan && <p>PAN: {selectedQuotation.company?.pan || 'N/A'}</p>}
+                    {selectedQuotation.location && (
+                      <>
+                        <p className="mt-2 font-medium text-gray-700">Address:</p>
+                        {selectedQuotation.location?.name && <p>{selectedQuotation.location?.name || 'N/A'}</p>}
+                        {selectedQuotation.location?.address && <p>{selectedQuotation.location?.address || 'N/A'}</p>}
+                        {/* <p className="text-xs text-gray-500 capitalize">{selectedQuotation.location.type?.replace('_', ' ') || 'N/A'}</p> */}
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -4518,10 +4723,19 @@ const InvoiceManagement: React.FC = () => {
                   <h4 className="font-medium text-gray-900 mb-2">To:</h4>
                   <div className="text-sm text-gray-600">
                     <p className="font-medium">{selectedQuotation.customer?.name || 'N/A'}</p>
-                    <p>Email: {selectedQuotation.customer?.email || 'N/A'}</p>
-                    <p>Phone: {selectedQuotation.customer?.phone || 'N/A'}</p>
+                    {selectedQuotation.customer?.email && <p>Email: {selectedQuotation.customer?.email || 'N/A'}</p>}
+                    {selectedQuotation.customer?.phone && <p>Phone: {selectedQuotation.customer?.phone || 'N/A'}</p>}
                     {/* <p>PAN: {selectedQuotation.customer?.pan || 'N/A'}</p> */}
-                    <p>Address: {`${selectedQuotation.customer?.address} (${selectedQuotation.customer?.district}, ${selectedQuotation.customer?.state}, ${selectedQuotation.customer?.pincode})` || 'N/A'}</p>
+                    {selectedQuotation.customerAddress && (
+                      <>
+                        <p className="mt-2 font-medium text-gray-700">Address:</p>
+                        {selectedQuotation.customerAddress?.address && <p>{selectedQuotation.customerAddress?.address}</p>}
+                        {selectedQuotation.customerAddress?.district && selectedQuotation.customerAddress?.pincode && (
+                          <p>{selectedQuotation.customerAddress?.district}, {selectedQuotation.customerAddress?.pincode}</p>
+                        )}
+                        {selectedQuotation.customerAddress?.state && <p>{selectedQuotation.customerAddress?.state}</p>}
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
@@ -4563,34 +4777,6 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Quotation Summary */}
-              <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-end">
-                  <div className="w-64 space-y-2 text-right">
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <div className="flex justify-between">
-                        <span>Subtotal:</span>
-                        <span>₹{selectedQuotation.subtotal?.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Total Discount:</span>
-                        <span className="text-green-600">-₹{selectedQuotation.totalDiscount?.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Total Tax:</span>
-                        <span>₹{selectedQuotation.totalTax?.toFixed(2)}</span>
-                      </div>
-                    </div>
-                    <div className="border-t pt-2">
-                      <div className="flex justify-between text-lg font-bold">
-                        <span>Grand Total:</span>
-                        <span className="text-blue-600">₹{selectedQuotation.grandTotal?.toFixed(2)}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* Notes and Terms */}
               {(selectedQuotation.notes || selectedQuotation.terms) && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -4613,11 +4799,41 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
+              {/* Quotation Summary */}
+              <div className="border-t border-gray-200 pt-4">
+                <div className="flex justify-end">
+                  <div className="w-64 space-y-2 text-right">
+                    <div className="text-sm text-gray-600 space-y-1">
+                      <div className="flex justify-between">
+                        <span>Subtotal:</span>
+                        <span>₹{selectedQuotation.subtotal?.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total Tax:</span>
+                        <span>₹{selectedQuotation.totalTax?.toFixed(2)}</span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total Discount:</span>
+                      <span className="text-green-600">-₹{selectedQuotation.totalDiscount?.toFixed(2)}</span>
+                    </div>
+                    <div className="border-t pt-2">
+                      <div className="flex justify-between text-lg font-bold">
+                        <span>Grand Total:</span>
+                        <span className="text-blue-600">₹{selectedQuotation.grandTotal?.toFixed(2)}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+
+
             </div>
           </div>
         </div>
       )}
-     
+
     </div>
   );
 };

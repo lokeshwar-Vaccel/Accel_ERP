@@ -1179,7 +1179,9 @@ export const UserManagement: React.FC = () => {
                     {/* Module Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                       {getAvailableModules().map((module) => {
+                        
                         const config = formData.moduleAccess.find((m) => m.module === module);
+                        
                         return (
                           <div
                             key={module}
@@ -1191,7 +1193,7 @@ export const UserManagement: React.FC = () => {
                                   type="checkbox"
                                   checked={config?.access || false}
                                   onChange={() => handleModuleToggle(module)}
-                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded"
+                                  className="w-4 h-4 text-blue-600 border-gray-300 rounded cursor-pointer"
                                 />
                                 <label className="ml-2 text-sm text-gray-900">
                                   {moduleMap[module]}

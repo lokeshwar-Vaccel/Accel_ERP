@@ -31,6 +31,7 @@ export interface IQuotation {
       branch?: string;
     };
   };
+  location?: string; // Added location field
   items: Array<{
     product: string;
     description: string;
@@ -119,6 +120,11 @@ export class QuotationService {
     //     errors.push({ field: 'company.email', message: 'Invalid company email format' });
     //   }
     // }
+
+    // Location validation
+    if (!data.location?.trim()) {
+      errors.push({ field: 'location', message: 'From location is required' });
+    }
 
     // Items validation
     if (!data.items || data.items.length === 0) {
@@ -230,6 +236,7 @@ export class QuotationService {
         pan: String(data.company?.pan || '').trim(),
         bankDetails: data.company?.bankDetails
       } : undefined,
+      location: String(data.location || '').trim(), // Added location sanitization
       items: Array.isArray(data.items) ? data.items.map((item: any) => ({
         product: String(item.product || '').trim(),
         description: String(item.description || '').trim(),

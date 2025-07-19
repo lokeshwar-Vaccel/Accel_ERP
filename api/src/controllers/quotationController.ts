@@ -238,8 +238,8 @@ export const downloadQuotationPDF = async (
 // @route   GET /api/v1/quotations/:id
 export const getQuotationById = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // No populate needed for Quotation: customer is embedded, items.product is string
-    const quotation = await Quotation.findById(req.params.id);
+    const quotation = await Quotation.findById(req.params.id)
+      .populate('location', 'name address type'); // Populate location details
     if (!quotation) {
       res.status(404).json({ message: 'Quotation not found' });
       return;
@@ -259,11 +259,15 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
 
-    // No populate needed for Quotation: customer is embedded, items.product is string
     const [quotations, total] = await Promise.all([
-      Quotation.find().skip(skip).limit(limit).sort({ issueDate: -1 }),
+      Quotation.find()
+        .populate('location', 'name address type') // populate location details
+        .skip(skip)
+        .limit(limit)
+        .sort({ issueDate: -1 }),
       Quotation.countDocuments()
     ]);
+    
 
     res.json({
       data: quotations,
@@ -354,11 +358,14 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
     const quotation = new Quotation(quotationData);
     await quotation.save();
 
-    // Step 9: Return success response
+    // Step 9: Populate location and return success response
+    const populatedQuotation = await Quotation.findById(quotation._id)
+      .populate('location', 'name address type');
+
     return res.status(201).json({
       success: true,
       message: 'Quotation created successfully',
-      data: quotation
+      data: populatedQuotation
     });
 
   } catch (error) {
@@ -384,9 +391,13 @@ const sanitizeQuotationData = (data: any): any => {
       name: String(data.customer.name || '').trim(),
       email: String(data.customer.email || '').trim(),
       phone: String(data.customer.phone || '').trim(),
-      address: String(data.customer.address || '').trim(), // Store actual address text
-      addressId: data.customer.addressId || undefined, // Preserve address ID for reference
       pan: String(data.customer.pan || '').trim()
+    } : undefined,
+    customerAddress: data.customerAddress ? {
+      address: String(data.customerAddress.address || '').trim(),
+      state: String(data.customerAddress.state || '').trim(),
+      district: String(data.customerAddress.district || '').trim(),
+      pincode: String(data.customerAddress.pincode || '').trim()
     } : undefined,
     company: data.company ? {
       name: String(data.company.name || '').trim(),
@@ -396,12 +407,13 @@ const sanitizeQuotationData = (data: any): any => {
       pan: String(data.company.pan || '').trim(),
       bankDetails: data.company.bankDetails
     } : undefined,
+    location: String(data.location || '').trim(), // Added location sanitization
     items: Array.isArray(data.items) ? data.items.map((item: any) => ({
       product: String(item.product || '').trim(),
       description: String(item.description || '').trim(),
       hsnCode: String(item.hsnCode || '').trim(),
-      hsnNumber: String(item.hsnNumber || '').trim(), // Added hsnNumber field
-      partNo: String(item.partNo || '').trim(), // Added partNo field
+      hsnNumber: String(item.hsnNumber || '').trim(),
+      partNo: String(item.partNo || '').trim(),
       quantity: Number(item.quantity) || 0,
       uom: String(item.uom || 'nos').trim(),
       unitPrice: Number(item.unitPrice) || 0,
@@ -422,18 +434,28 @@ const validateQuotationData = (data: any): { isValid: boolean; errors: any[] } =
   if (!data.customer) {
     errors.push({ field: 'customer', message: 'Customer information is required' });
   } else {
-    if (!data.customer.name?.trim()) {
+    if (!data.customer.name || (typeof data.customer.name === 'string' && !data.customer.name.trim())) {
       errors.push({ field: 'customer.name', message: 'Customer name is required' });
     }
-    if (!data.customer.address?.trim()) {
-      errors.push({ field: 'customer.address', message: 'Customer address is required' });
-    }
-    if (data.customer.email && !isValidEmail(data.customer.email)) {
-      errors.push({ field: 'customer.email', message: 'Invalid email format' });
-    }
-    if (data.customer.phone && !isValidPhone(data.customer.phone)) {
-      errors.push({ field: 'customer.phone', message: 'Invalid phone number format' });
-    }
+  }
+
+  // Customer address validation
+  if (!data.customerAddress || !data.customerAddress.address || (typeof data.customerAddress.address === 'string' && !data.customerAddress.address.trim())) {
+    errors.push({ field: 'customerAddress.address', message: 'Customer address is required' });
+  }
+  // if (!data.customerAddress || !data.customerAddress.state?.trim()) {
+  //   errors.push({ field: 'customerAddress.state', message: 'Customer state is required' });
+  // }
+  // if (!data.customerAddress || !data.customerAddress.district?.trim()) {
+  //   errors.push({ field: 'customerAddress.district', message: 'Customer district is required' });
+  // }
+  // if (!data.customerAddress || !data.customerAddress.pincode?.trim()) {
+  //   errors.push({ field: 'customerAddress.pincode', message: 'Customer pincode is required' });
+  // }
+
+  // Location validation
+  if (!data.location || (typeof data.location === 'string' && !data.location.trim())) {
+    errors.push({ field: 'location', message: 'From location is required' });
   }
 
   // Company validation
@@ -460,7 +482,7 @@ const validateQuotationData = (data: any): { isValid: boolean; errors: any[] } =
     errors.push({ field: 'items', message: 'At least one item is required' });
   } else {
     data.items.forEach((item: any, index: number) => {
-      if (!item.product?.trim()) {
+      if (!item.product || (typeof item.product === 'string' && !item.product.trim())) {
         errors.push({ field: `items[${index}].product`, message: 'Product is required' });
       }
       // if (!item.description?.trim()) {
@@ -478,7 +500,7 @@ const validateQuotationData = (data: any): { isValid: boolean; errors: any[] } =
       if (!isValidNumber(item.taxRate) || item.taxRate < 0 || item.taxRate > 100) {
         errors.push({ field: `items[${index}].taxRate`, message: 'Tax rate must be between 0 and 100%' });
       }
-      if (!item.uom?.trim()) {
+      if (!item.uom || (typeof item.uom === 'string' && !item.uom.trim())) {
         errors.push({ field: `items[${index}].uom`, message: 'Unit of measure is required' });
       }
     });
@@ -560,13 +582,62 @@ const roundTo2Decimals = (value: number): number => {
 // @route   PUT /api/v1/quotations/:id
 export const updateQuotation = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const quotation = await Quotation.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    if (!quotation) {
-      res.status(404).json({ message: 'Quotation not found' });
-      return;
+    console.log("Updating quotation with ID:", req.params.id);
+    console.log("Update data:", req.body);
+    
+    // Check if quotation exists
+    const existingQuotation = await Quotation.findById(req.params.id);
+    if (!existingQuotation) {
+      return next(new AppError('Quotation not found', 404));
     }
-    res.json(quotation);
-    return;
+
+    // Sanitize and validate the update data
+    const sanitizedData = sanitizeQuotationData(req.body);
+    
+    // Preserve the original quotation number and dates
+    sanitizedData.quotationNumber = existingQuotation.quotationNumber;
+    sanitizedData.issueDate = existingQuotation.issueDate;
+    sanitizedData.validUntil = existingQuotation.validUntil;
+    
+    const validationResult = validateQuotationData(sanitizedData);
+
+    if (!validationResult.isValid) {
+      const error = new AppError('Validation failed', 400);
+      (error as any).errors = validationResult.errors;
+      return next(error);
+    }
+
+    // Calculate totals if items are provided
+    if (sanitizedData.items && sanitizedData.items.length > 0) {
+      const calculationResult = calculateQuotationTotals(sanitizedData.items);
+      sanitizedData.subtotal = calculationResult.subtotal;
+      sanitizedData.totalDiscount = calculationResult.totalDiscount;
+      sanitizedData.totalTax = calculationResult.totalTax;
+      sanitizedData.grandTotal = calculationResult.grandTotal;
+      sanitizedData.roundOff = calculationResult.roundOff;
+      sanitizedData.items = calculationResult.items;
+    }
+
+    // Update the quotation
+    const updatedQuotation = await Quotation.findByIdAndUpdate(
+      req.params.id,
+      sanitizedData,
+      { new: true, runValidators: true }
+    ).populate('location', 'name address type'); // Populate location details
+
+    if (!updatedQuotation) {
+      return next(new AppError('Failed to update quotation', 500));
+    }
+
+    console.log("Updated quotation:", updatedQuotation);
+    
+    const response: APIResponse = {
+      success: true,
+      message: 'Quotation updated successfully',
+      data: { quotation: updatedQuotation }
+    };
+
+    res.status(200).json(response);
   } catch (error) {
     next(error);
   }

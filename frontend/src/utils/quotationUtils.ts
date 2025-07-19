@@ -22,8 +22,6 @@ export interface QuotationCustomer {
   name: string;
   email: string;
   phone: string;
-  address: string;
-  addressId?: string; // Add address ID field
   pan?: string;
 }
 
@@ -48,6 +46,7 @@ export interface QuotationData {
   validityPeriod?: number;
   customer: QuotationCustomer;
   company?: QuotationCompany;
+  location?: string;
   items: QuotationItem[];
   subtotal: number;
   totalDiscount: number;
@@ -56,6 +55,12 @@ export interface QuotationData {
   roundOff: number;
   notes?: string;
   terms?: string;
+  customerAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+  };
 }
 
 export interface ValidationError {
@@ -85,19 +90,31 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
   if (!data.customer) {
     errors.push({ field: 'customer', message: 'Customer information is required' });
   } else {
-    if (!data.customer.name?.trim()) {
+    if (!data.customer.name || (typeof data.customer.name === 'string' && !data.customer.name.trim())) {
       errors.push({ field: 'customer.name', message: 'Customer name is required' });
     }
-    if (!data.customer.address?.trim()) {
-      errors.push({ field: 'customer.address', message: 'Customer address is required' });
-    }
-    // if (data.customer.email && !isValidEmail(data.customer.email)) {
-    //   errors.push({ field: 'customer.email', message: 'Invalid email format' });
-    // }
-    // if (data.customer.phone && !isValidPhone(data.customer.phone)) {
-    //   errors.push({ field: 'customer.phone', message: 'Invalid phone number format' });
-    // }
+    // Remove address validation from customer
   }
+  console.log("data.customerAddress:", data);
+
+  // Location validation
+  if (!data.location || (typeof data.location === 'string' && !data.location.trim())) {
+    errors.push({ field: 'location', message: 'From location is required' });
+  }
+
+  // Validate customerAddress
+  if (!data.customerAddress || !data.customerAddress.address || (typeof data.customerAddress.address === 'string' && !data.customerAddress.address.trim())) {
+    errors.push({ field: 'customerAddress.address', message: 'Customer address is required' });
+  }
+  // if (!data.customerAddress || !data.customerAddress.state?.trim()) {
+  //   errors.push({ field: 'customerAddress.state', message: 'Customer state is required' });
+  // }
+  // if (!data.customerAddress || !data.customerAddress.district?.trim()) {
+  //   errors.push({ field: 'customerAddress.district', message: 'Customer district is required' });
+  // }
+  // if (!data.customerAddress || !data.customerAddress.pincode?.trim()) {
+  //   errors.push({ field: 'customerAddress.pincode', message: 'Customer pincode is required' });
+  // }
 
   // Company validation
   // if (!data.company) {
@@ -124,7 +141,7 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
     errors.push({ field: 'items', message: 'At least one item is required' });
   } else {
     data.items.forEach((item, index) => {
-      if (!item.product?.trim()) {
+      if (!item.product || (typeof item.product === 'string' && !item.product.trim())) {
         errors.push({ field: `items[${index}].product`, message: 'Product is required' });
       }
       // if (!item.description?.trim()) {
@@ -142,7 +159,7 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
       if (!isValidNumber(item.taxRate) || item.taxRate < 0 || item.taxRate > 100) {
         errors.push({ field: `items[${index}].taxRate`, message: 'Tax rate must be between 0 and 100%' });
       }
-      if (!item.uom?.trim()) {
+      if (!item.uom || (typeof item.uom === 'string' && !item.uom.trim())) {
         errors.push({ field: `items[${index}].uom`, message: 'Unit of measure is required' });
       }
     });
@@ -225,8 +242,6 @@ export const transformQuotationData = (data: any): QuotationData => {
       name: data.customer?.name || '',
       email: data.customer?.email || '',
       phone: data.customer?.phone || '',
-      address: data.customer?.address || '',
-      addressId: data.customer?.addressId || '', // Include address ID
       pan: data.customer?.pan || ''
     },
     company: {
@@ -244,7 +259,8 @@ export const transformQuotationData = (data: any): QuotationData => {
     grandTotal: calculationResult.grandTotal,
     roundOff: calculationResult.roundOff,
     notes: data.notes || '',
-    terms: data.terms || ''
+    terms: data.terms || '',
+    customerAddress: data.customerAddress
   };
 };
 
@@ -273,7 +289,10 @@ export const getFieldErrorMessage = (field: string): string => {
     'customer.name': 'Customer name is required',
     'customer.email': 'Please enter a valid email address',
     'customer.phone': 'Please enter a valid phone number',
-    'customer.address': 'Customer address is required',
+    'customerAddress.address': 'Customer address is required',
+    // 'customerAddress.state': 'Customer state is required',
+    // 'customerAddress.district': 'Customer district is required',
+    // 'customerAddress.pincode': 'Customer pincode is required',
     // 'company.name': 'Company name is required',
     // 'company.email': 'Please enter a valid company email',
     // 'company.phone': 'Company phone is required',
@@ -299,8 +318,6 @@ export const sanitizeQuotationData = (data: any): any => {
       name: String(data.customer.name || '').trim(),
       email: String(data.customer.email || '').trim(),
       phone: String(data.customer.phone || '').trim(),
-      address: String(data.customer.address || '').trim(), // Store actual address text
-      addressId: data.customer.addressId || undefined, // Preserve address ID for reference
       pan: String(data.customer.pan || '').trim()
     } : undefined,
     company: data.company ? {
@@ -335,8 +352,6 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
     name: '',
     email: '',
     phone: '',
-    address: '',
-    addressId: '', // Add address ID field
     pan: ''
   },
   company: {
@@ -369,7 +384,13 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
   grandTotal: 0,
   roundOff: 0,
   notes: '',
-  terms: ''
+  terms: '',
+  customerAddress: {
+    address: '',
+    state: '',
+    district: '',
+    pincode: ''
+  }
 });
 
 // Export all functions
