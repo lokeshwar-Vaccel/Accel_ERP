@@ -337,6 +337,9 @@ export interface APIResponse<T = any> {
   success: boolean;
   message: string;
   data?: T;
+  totalPurchaseOrdersCount?: number;
+  pendingPurchaseOrdersCount?: number;
+  confirmedPurchaseOrdersCount?: number;
   error?: string;
   totalStock?: number;
   totalLowStock?: number;

@@ -494,7 +494,7 @@ class ApiClient {
   // Purchase Orders APIs
   purchaseOrders = {
     getAll: (params?: any) =>
-      this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/purchase-orders${params ? `?${new URLSearchParams(params)}` : ''}`),
+      this.makeRequest<{ success: boolean; data: any[]; pagination: any; totalPurchaseOrdersCount: number; pendingPurchaseOrdersCount: number; confirmedPurchaseOrdersCount: number }>(`/purchase-orders${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     create: (poData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/purchase-orders', {

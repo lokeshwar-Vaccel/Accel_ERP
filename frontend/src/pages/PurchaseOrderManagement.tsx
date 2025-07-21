@@ -191,7 +191,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   console.log("suppliers-99992:", suppliers);
-    console.log("purchaseOrders-99992:", purchaseOrders);
+  console.log("purchaseOrders-99992:", purchaseOrders);
 
 
   // Filter and search states
@@ -217,6 +217,10 @@ const PurchaseOrderManagement: React.FC = () => {
   // Selected data
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
   const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
+
+  const [totalPurchaseOrdersCount, setTotalPurchaseOrdersCount] = useState(0);
+  const [pendingPurchaseOrdersCount, setPendingPurchaseOrdersCount] = useState(0);
+  const [confirmedPurchaseOrdersCount, setConfirmedPurchaseOrdersCount] = useState(0);
 
 
 
@@ -304,8 +308,8 @@ const PurchaseOrderManagement: React.FC = () => {
     documentDate: new Date().toISOString().split('T')[0],
   });
 
-  console.log("receiveData-12:",receiveData);
-  
+  console.log("receiveData-12:", receiveData);
+
 
 
 
@@ -333,6 +337,7 @@ const PurchaseOrderManagement: React.FC = () => {
   // Add state for address dropdown and addresses
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
   const [addresses, setAddresses] = useState<SupplierAddress[]>([]);
+  console.log("addresses-12:", addresses);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -399,6 +404,9 @@ const PurchaseOrderManagement: React.FC = () => {
       setLimit(response.pagination.limit);
       setTotalDatas(response.pagination.total);
       setTotalPages(response.pagination.pages);
+      setTotalPurchaseOrdersCount(response.totalPurchaseOrdersCount || 0);
+      setPendingPurchaseOrdersCount(response.pendingPurchaseOrdersCount || 0);
+      setConfirmedPurchaseOrdersCount(response.confirmedPurchaseOrdersCount || 0);
 
       let ordersData: PurchaseOrder[] = [];
       if (response.success && response.data) {
@@ -693,6 +701,9 @@ const PurchaseOrderManagement: React.FC = () => {
     if (!formData.supplier) {
       errors.supplier = 'Please select a supplier';
     }
+    if (!formData.supplierAddress?.address) {
+      errors.supplierAddress = 'Please enter a supplier address';
+    }
     if (!formData.expectedDeliveryDate) {
       errors.expectedDeliveryDate = 'Expected delivery date is required';
     }
@@ -887,8 +898,8 @@ const PurchaseOrderManagement: React.FC = () => {
     if (!validateReceiveForm()) return;
 
     setSubmitting(true);
-    console.log("receiveData:",receiveData);
-    
+    console.log("receiveData:", receiveData);
+
     try {
       const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
 
@@ -1209,19 +1220,28 @@ const PurchaseOrderManagement: React.FC = () => {
   const stats = [
     {
       title: 'Total POs',
-      value: purchaseOrders.length.toString(),
+      value: totalPurchaseOrdersCount,
+      action: () => {
+        setStatusFilter('all');
+      },
       icon: <Package className="w-6 h-6" />,
       color: 'blue'
     },
     {
       title: 'Pending Approval',
-      value: purchaseOrders.filter(po => po.status === 'draft' || po.status === 'sent').length.toString(),
+      value: pendingPurchaseOrdersCount,
+      action: () => {
+        setStatusFilter('draft');
+      },
       icon: <Clock className="w-6 h-6" />,
       color: 'orange'
     },
     {
       title: 'Confirmed',
-      value: purchaseOrders.filter(po => po.status === 'confirmed').length.toString(),
+      value: confirmedPurchaseOrdersCount,
+      action: () => {
+        setStatusFilter('confirmed');
+      },
       icon: <CheckCircle className="w-6 h-6" />,
       color: 'green'
     },
@@ -1237,8 +1257,8 @@ const PurchaseOrderManagement: React.FC = () => {
   const statusOptions = [
     { value: 'all', label: 'All Status' },
     { value: 'draft', label: 'Draft' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'approved', label: 'Approved' },
+    { value: 'confirmed', label: 'Confirmed' },
+    { value: 'partially_received', label: 'Partially Received' },
     { value: 'received', label: 'Received' },
     { value: 'cancelled', label: 'Cancelled' }
   ];
@@ -1261,7 +1281,7 @@ const PurchaseOrderManagement: React.FC = () => {
       if (!target.closest('.dropdown-container')) {
         setShowStatusDropdown(false);
         setShowSupplierDropdown(false);
-        setShowAddressDropdown(false);
+        // setShowAddressDropdown(false);
         setShowCreateSupplierDropdown(false);
         setShowEditSupplierDropdown(false);
         setSupplierSearchTerm('');
@@ -1319,10 +1339,15 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const handleAddressSelect = (addressId: string) => {
+    console.log("addressId:", addressId);
+    console.log("addresses-13:", addresses);
     const address = addresses.find(a => a.id === addressId);
+    console.log("address-14:", address);
     setFormData(prev => ({ ...prev, supplierAddress: address }));
     setShowAddressDropdown(false);
   };
+
+  const hasActiveFilters = statusFilter !== ('all' as PurchaseOrderStatus | 'all') || searchTerm !== '';
 
   return (
     <div className="p-4 space-y-3">
@@ -1387,7 +1412,7 @@ const PurchaseOrderManagement: React.FC = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <div key={index} className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div key={index} onClick={stat.action} className={`bg-white p-4 hover:bg-gray-50 rounded-xl shadow-sm border border-gray-100 ${stat.title === 'Total Value' ? 'cursor-not-allowed' : 'cursor-pointer transform transition-transform duration-200 hover:scale-105 active:scale-95'}`}>
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-600">{stat.title}</p>
@@ -1403,7 +1428,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
       {/* Filters and Search */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <div className="relative md:col-span-2">
             <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -1422,7 +1447,7 @@ const PurchaseOrderManagement: React.FC = () => {
                 setShowStatusDropdown(!showStatusDropdown);
                 setShowSupplierDropdown(false);
               }}
-              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+              className="flex items-center justify-between w-full px-2 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
             >
               <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
               <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
@@ -1447,7 +1472,7 @@ const PurchaseOrderManagement: React.FC = () => {
           </div>
 
           {/* Supplier Custom Dropdown */}
-          <div className="relative dropdown-container">
+          {/* <div className="relative dropdown-container">
             <button
               onClick={() => {
                 setShowSupplierDropdown(!showSupplierDropdown);
@@ -1472,14 +1497,37 @@ const PurchaseOrderManagement: React.FC = () => {
                 </button>
               </div>
             )}
-          </div>
+          </div> */}
         </div>
 
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-xs text-gray-600">
-            Showing {filteredPOs.length} of {purchaseOrders.length} purchase orders
-          </span>
-        </div>
+        {/* Active Filters Chips */}
+        {hasActiveFilters && (
+          <div className="mt-0 flex items-center justify-between">
+            <span className="text-xs text-gray-600 pt-3">
+              Showing {filteredPOs.length} of {totalDatas} purchase orders
+            </span>
+            <div className="px-4 pt-2 flex flex-wrap gap-2 items-center border-t border-gray-100">
+              <span className="text-xs text-gray-500">Active filters:</span>
+              {statusFilter !== ('all' as PurchaseOrderStatus | 'all') && (
+                <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs flex items-center">
+                  {getStatusLabel(statusFilter)}
+                  <button
+                    onClick={() => setStatusFilter('all')}
+                    className="ml-1 text-blue-500 hover:text-blue-700"
+                    title="Clear status filter"
+                  >×</button>
+                </span>
+              )}
+              {/* Add more chips here for other filters if you add them in the future */}
+              {searchTerm && (
+                <span className="bg-gray-200 text-gray-700 px-2 py-1 rounded-full text-xs flex items-center">
+                  {searchTerm}
+                  <button onClick={() => setSearchTerm('')} className="ml-1 text-gray-500 hover:text-gray-700">×</button>
+                </span>
+              ) }
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Purchase Orders Table */}
@@ -1686,7 +1734,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     {showSupplierDropdown && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-60 overflow-y-auto">
                         {/* Search Input */}
-                        <div className="px-3 py-2 border-b border-gray-200">
+                        {suppliers.filter(supplier => supplier.type === 'supplier').length > 0 && <div className="px-3 py-2 border-b border-gray-200">
                           <input
                             type="text"
                             placeholder="Search suppliers..."
@@ -1695,10 +1743,10 @@ const PurchaseOrderManagement: React.FC = () => {
                             className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
                             onClick={(e) => e.stopPropagation()}
                           />
-                        </div>
+                        </div>}
                         {/* Supplier List */}
                         <div className="max-h-48 overflow-y-auto">
-                          {suppliers.filter(supplier => supplier.type === 'supplier').length < 0 ? (
+                          {suppliers.filter(supplier => supplier.type === 'supplier').length <= 0 ? (
                             <div className="px-3 py-2 text-sm text-gray-500">
                               {!supplierSearchTerm ? 'No suppliers found' : 'Loading suppliers...'}
                             </div>
@@ -1715,9 +1763,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                   key={supplier._id}
                                   type="button"
                                   onClick={() => handleSupplierSelect(supplier._id)}
-                                  className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
-                                    formData.supplier === supplier._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                  }`}
+                                  className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${formData.supplier === supplier._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                    }`}
                                 >
                                   <div className="font-medium text-gray-900">{supplier.name}</div>
                                   {supplier.email && (
@@ -1726,7 +1773,7 @@ const PurchaseOrderManagement: React.FC = () => {
                                 </button>
                               ))
                           )}
-                          
+
                         </div>
                       </div>
                     )}
@@ -1788,9 +1835,9 @@ const PurchaseOrderManagement: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  {/* {('supplierAddress.address') && (
-                    <p className="mt-1 text-sm text-red-600">{('supplierAddress.address')}</p>
-                  )} */}
+                  {formErrors.supplierAddress && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.supplierAddress}</p>
+                  )}
                 </div>
                 <div className="md:col-span-1">
                   {quickActions.map((action, index) => (
@@ -3683,11 +3730,11 @@ const PurchaseOrderManagement: React.FC = () => {
 
                         // Compare amounts using debounced value
                         const externalTotal = parseFloat(debouncedExternalTotal);
-                        console.log("externalTotal:",externalTotal);
-                        
+                        console.log("externalTotal:", externalTotal);
+
                         //const isMatching = Math.abs(externalTotal - grandTotal) < 0.0001; // Allow small floating point differences
                         const isMatching = externalTotal.toFixed(2) === grandTotal.toFixed(2);
-                        
+
                         return isMatching ? (
                           <div className="flex items-center text-green-700 bg-green-50 p-2 rounded border border-green-300">
                             <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

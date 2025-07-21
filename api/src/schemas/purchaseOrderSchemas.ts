@@ -78,7 +78,7 @@ export interface UpdatePurchaseOrderInput {
   items: POItemInput[];
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
-  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
   deliveryLocation?: string;
   paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
   shippingMethod?: 'standard' | 'express' | 'overnight' | 'pickup';
@@ -171,7 +171,7 @@ export interface PurchaseOrderQueryInput {
   limit?: number;
   sort?: string;
   search?: string;
-  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
   supplier?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   dateFrom?: string;
@@ -231,7 +231,7 @@ export interface PurchaseOrderReportInput {
   dateFrom: string;
   dateTo: string;
   supplier?: string;
-  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
   deliveryLocation?: string;
   format?: 'json' | 'csv' | 'excel' | 'pdf';
   includeGraphs?: boolean;
@@ -267,7 +267,7 @@ const basePOFields = {
   ),
   supplierEmail: Joi.string().email().max(200).trim().allow('', null),
   totalAmount: Joi.number().min(0).precision(2),
-  status: Joi.string().valid('draft', 'sent', 'confirmed', 'received', 'cancelled'),
+  status: Joi.string().valid('draft', 'sent', 'confirmed', 'received', 'cancelled', 'partially_received'),
   orderDate: Joi.date().iso(),
   expectedDeliveryDate: Joi.date().iso(),
   actualDeliveryDate: Joi.date().iso(),

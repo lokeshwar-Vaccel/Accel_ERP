@@ -2655,13 +2655,21 @@ const InventoryManagement: React.FC = () => {
                             Contact Phone
                           </label>
                           <input
-                            type="tel"
-                            name="phone"
-                            value={locationFormData.phone}
-                            onChange={(e) => setLocationFormData({ ...locationFormData, phone: e.target.value })}
-                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Enter phone number"
-                          />
+  type="tel"
+  name="phone"
+  value={locationFormData.phone}
+  onChange={(e) => {
+    const value = e.target.value;
+    // Allow only "+" at the start and digits
+    if (/^$|^\+?[0-9]*$/.test(value)) {
+      setLocationFormData({ ...locationFormData, phone: value });
+    }
+  }}
+  maxLength={15}
+  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+  placeholder="e.g. +1234567890"
+/>
+
                         </div>
                       </div>
                     </div>

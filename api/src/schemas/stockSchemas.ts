@@ -188,7 +188,7 @@ const baseStockLocationFields = {
   address: Joi.string().max(500).trim(),
   type: Joi.string().valid('main_office', 'warehouse', 'service_center'),
   contactPerson: Joi.string().max(100).trim().allow(''),
-  // phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
+  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).max(15).allow(''),
   isActive: Joi.boolean(),
   capacity: Joi.number().min(0), // Storage capacity
   description: Joi.string().max(500).allow('')
@@ -200,7 +200,7 @@ export const createStockLocationSchema = Joi.object<CreateStockLocationInput>({
   address: baseStockLocationFields.address.required(),
   type: baseStockLocationFields.type.required(),
   contactPerson: baseStockLocationFields.contactPerson,
-  // phone: baseStockLocationFields.phone,
+  phone: baseStockLocationFields.phone,
   isActive: baseStockLocationFields.isActive.default(true),
   capacity: baseStockLocationFields.capacity,
   description: baseStockLocationFields.description
@@ -212,7 +212,7 @@ export const updateStockLocationSchema = Joi.object<UpdateStockLocationInput>({
   address: baseStockLocationFields.address,
   type: baseStockLocationFields.type,
   contactPerson: baseStockLocationFields.contactPerson,
-  // phone: baseStockLocationFields.phone,
+  phone: baseStockLocationFields.phone,
   isActive: baseStockLocationFields.isActive,
   capacity: baseStockLocationFields.capacity,
   description: baseStockLocationFields.description

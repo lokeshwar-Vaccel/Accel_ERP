@@ -1063,7 +1063,7 @@ const CustomerManagement: React.FC = () => {
 
   const stats = [
     {
-      title: 'Total Customers',
+      title: customerTypeTab === 'customer' ? 'Total Customers' : 'Total Suppliers',
       value: allCustomers.filter(customer => customer.type === customerTypeTab).length,
       action: () => {
         clearAllFilters();
@@ -1221,8 +1221,6 @@ const CustomerManagement: React.FC = () => {
             <FileText className={`w-4 h-4 ${importing ? 'animate-pulse' : ''}`} />
             <span className="text-sm">{importing ? 'Importing...' : 'Import Excel'}</span>
           </button>
-
-
         </div>
       </PageHeader>
       <input
@@ -1254,7 +1252,7 @@ const CustomerManagement: React.FC = () => {
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
-          <div key={index} onClick={stat.action} className="bg-white cursor-pointer p-4 rounded-xl shadow-sm border border-gray-100">
+          <div key={index} onClick={stat.action} className="bg-white hover:bg-gray-100 cursor-pointer p-4 rounded-xl shadow-sm border border-gray-100 transform transition-transform duration-200 hover:scale-105 active:scale-95">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-xs text-gray-600">{stat.title}</p>
@@ -1412,7 +1410,7 @@ const CustomerManagement: React.FC = () => {
             <span>{customers.filter(customer => customer.type === customerTypeTab).length}</span>
             <span className="ml-1">items found</span>
           </div>
-            <div className="px-4 py-3 flex flex-wrap gap-2 items-center border-t border-gray-100">
+            <div className="px-4 py-3 flex flex-wrap gap-2 items-center">
               <span className="text-xs text-gray-500">Active filters:</span>
               {typeFilter !== 'all' && (
                 <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full text-xs flex items-center">

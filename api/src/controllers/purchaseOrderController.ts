@@ -49,12 +49,18 @@ export const getPurchaseOrders = async (
       status,
       supplier,
       dateFrom,
+      totalPurchaseOrdersStatus,
+      pendingPurchaseOrdersStatus,
+      confirmedPurchaseOrdersStatus,
       dateTo
     } = req.query as QueryParams & {
       status?: PurchaseOrderStatus;
       supplier?: string;
       dateFrom?: string;
       dateTo?: string;
+      totalPurchaseOrdersStatus?: string;
+      pendingPurchaseOrdersStatus?: string;
+      confirmedPurchaseOrdersStatus?: string;
     };
 
     // Build query
@@ -82,6 +88,18 @@ export const getPurchaseOrders = async (
       if (dateTo) query.orderDate.$lte = new Date(dateTo);
     }
 
+    if (totalPurchaseOrdersStatus) {
+      query.status = totalPurchaseOrdersStatus;
+    }
+
+    if (pendingPurchaseOrdersStatus) {
+      query.status = pendingPurchaseOrdersStatus;
+    }
+
+    if (confirmedPurchaseOrdersStatus) {
+      query.status = confirmedPurchaseOrdersStatus;
+    }
+
     // Execute query with pagination
     const orders = await PurchaseOrder.find(query)
       .populate('items.product', 'name category brand modelNumber partNo price gst')
@@ -92,11 +110,17 @@ export const getPurchaseOrders = async (
 
     const total = await PurchaseOrder.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));
+    const totalPurchaseOrdersCount = await PurchaseOrder.countDocuments();
+    const pendingPurchaseOrdersCount = await PurchaseOrder.countDocuments({ status: 'draft' });
+    const confirmedPurchaseOrdersCount = await PurchaseOrder.countDocuments({ status: 'confirmed' });
 
     const response: APIResponse = {
       success: true,
       message: 'Purchase orders retrieved successfully',
       data: { orders },
+      totalPurchaseOrdersCount: totalPurchaseOrdersCount,
+      pendingPurchaseOrdersCount: pendingPurchaseOrdersCount,
+      confirmedPurchaseOrdersCount: confirmedPurchaseOrdersCount,
       pagination: {
         page: Number(page),
         limit: Number(limit),

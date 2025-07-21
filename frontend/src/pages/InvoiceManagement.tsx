@@ -3361,7 +3361,7 @@ const InvoiceManagement: React.FC = () => {
                                         >
                                           <div>
                                             <div className="font-medium">{product?.name}</div>
-                                            <div className="text-xs text-gray-500">₹{product?.price?.toLocaleString()} • {product?.category}</div>
+                                            <div className="text-xs text-gray-500">₹{`${product?.price?.toLocaleString()} • Part No: ${product?.partNo || ''}`}</div>
                                           </div>
                                         </button>
                                       ))
