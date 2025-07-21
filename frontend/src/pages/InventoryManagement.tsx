@@ -536,7 +536,7 @@ const InventoryManagement: React.FC = () => {
         const updatedRecent = [newRoom, ...recentRooms];
         setRecentRooms(updatedRecent);
         fetchLocations();
-        fetchRooms(); 
+        fetchRooms();
       }
 
       // setShowLocationModal(false);
@@ -1759,6 +1759,22 @@ const InventoryManagement: React.FC = () => {
   const [showStockStatusFilterDropdown, setShowStockStatusFilterDropdown] = useState(false);
   const [showSortFilterDropdown, setShowSortFilterDropdown] = useState(false);
   const [showSortOrderFilterDropdown, setShowSortOrderFilterDropdown] = useState(false);
+  const [showScrollIndicator, setShowScrollIndicator] = useState(false);
+
+  const duplicateGroupsScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const checkScrollable = () => {
+      const element = duplicateGroupsScrollRef.current;
+      if (element) {
+        const isScrollable = element.scrollHeight > element.clientHeight;
+        setShowScrollIndicator(isScrollable);
+      }
+    };
+
+    checkScrollable();
+    window.addEventListener('resize', checkScrollable);
+    return () => window.removeEventListener('resize', checkScrollable);
+  }, [previewData?.duplicateGroups]);
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
@@ -2655,20 +2671,20 @@ const InventoryManagement: React.FC = () => {
                             Contact Phone
                           </label>
                           <input
-  type="tel"
-  name="phone"
-  value={locationFormData.phone}
-  onChange={(e) => {
-    const value = e.target.value;
-    // Allow only "+" at the start and digits
-    if (/^$|^\+?[0-9]*$/.test(value)) {
-      setLocationFormData({ ...locationFormData, phone: value });
-    }
-  }}
-  maxLength={15}
-  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-  placeholder="e.g. +1234567890"
-/>
+                            type="tel"
+                            name="phone"
+                            value={locationFormData.phone}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              // Allow only "+" at the start and digits
+                              if (/^$|^\+?[0-9]*$/.test(value)) {
+                                setLocationFormData({ ...locationFormData, phone: value });
+                              }
+                            }}
+                            maxLength={15}
+                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="e.g. +1234567890"
+                          />
 
                         </div>
                       </div>
@@ -4575,7 +4591,7 @@ const InventoryManagement: React.FC = () => {
 
             <div className="p-6 space-y-6">
               {/* Summary Stats */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="flex items-center justify-between">
                     <div>
@@ -4612,7 +4628,18 @@ const InventoryManagement: React.FC = () => {
                     <AlertTriangle className="w-8 h-8 text-red-600" />
                   </div>
                 </div>
+                {/* Duplicate Rows Card */}
+                <div className="bg-yellow-100 p-4 rounded-lg border border-yellow-300">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-yellow-700 font-medium">Duplicate Rows</p>
+                      <p className="text-2xl font-bold text-yellow-900">{previewData.duplicateGroups ? previewData.duplicateGroups.length : 0}</p>
+                    </div>
+                    <BarChart3 className="w-8 h-8 text-yellow-700" />
+                  </div>
+                </div>
               </div>
+
 
               {/* Errors Section */}
               {previewData.errors && previewData.errors.length > 0 && (
@@ -4677,6 +4704,156 @@ const InventoryManagement: React.FC = () => {
                   </div>
                 </div>
               )}
+
+              {/* Duplicate Rows Card */}
+              <div className="bg-yellow-50 p-6 rounded-lg border border-yellow-300 shadow-sm mx-auto">
+                <h3 className="text-xl font-semibold text-yellow-900 mb-4 text-left">
+                  Duplicate Groups (by Part No)
+                </h3>
+
+                <div className="relative">
+                  <div
+                    ref={duplicateGroupsScrollRef}
+                    className="overflow-y-auto max-h-96 pr-2 space-y-4"
+                    style={{ scrollbarWidth: 'thin', scrollbarColor: '#fbbf24 #fef3c7' }}
+                  >
+                    {previewData?.duplicateGroups?.length > 0 ? (
+                      previewData.duplicateGroups.map((group: any, groupIdx: number) => (
+                        <div key={groupIdx} className="border border-yellow-200 rounded-lg p-4 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+                          {/* Group Header */}
+                          <div className="flex items-center justify-between mb-3 pb-2 border-b border-yellow-100">
+                            <div className="flex items-center gap-3">
+                              <span className="font-mono font-semibold bg-yellow-200 px-3 py-1 rounded-md text-yellow-900 text-sm">
+                                {group.key}
+                              </span>
+                              <span className="text-xs text-yellow-700 bg-yellow-100 px-2 py-1 rounded-full">
+                                {group.rows.length} rows
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Data Table */}
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead>
+                                <tr className="bg-yellow-100 border-b border-yellow-200">
+                                  <th className="w-1/4 px-4 py-2 text-left font-semibold text-yellow-900 rounded-tl-md">
+                                    Part No
+                                  </th>
+                                  <th className="w-1/4 px-4 py-2 text-left font-semibold text-yellow-900">
+                                    Room
+                                  </th>
+                                  <th className="w-1/4 px-4 py-2 text-left font-semibold text-yellow-900">
+                                    Rack
+                                  </th>
+                                  <th className="w-1/4 px-4 py-2 text-left font-semibold text-yellow-900 rounded-tr-md">
+                                    Quantity
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {group.rows.map((row: any, idx: number) => (
+                                  <tr
+                                    key={idx}
+                                    className={`
+                            border-b border-yellow-100 transition-colors duration-150
+                            ${idx % 2 === 0 ? 'bg-yellow-25 hover:bg-yellow-50' : 'bg-white hover:bg-yellow-25'}
+                          `}
+                                  >
+                                    <td className="px-4 py-2 font-mono text-gray-800">
+                                      {row['PART NO']}
+                                    </td>
+                                    <td className="px-4 py-2 text-gray-700 font-medium">
+                                      {row.ROOM || row.Room || row.room}
+                                    </td>
+                                    <td className="px-4 py-2 text-gray-700 font-medium">
+                                      {row.RACK || row.Rack || row.rack}
+                                    </td>
+                                    <td className="px-4 py-2 text-gray-800 font-semibold">
+                                      {row.QTY}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-yellow-700 text-center py-8">
+                        <div className="text-lg font-medium mb-2">No duplicate groups found</div>
+                        <div className="text-sm text-yellow-600">All part numbers are unique in your inventory</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Scroll Indicator */}
+                  {showScrollIndicator && (
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-2 pointer-events-none flex justify-center">
+                      <ChevronDown className="w-7 h-7 text-yellow-500 opacity-70 animate-bounce" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Summary Footer */}
+                {previewData?.duplicateGroups?.length > 0 && (
+                  <div className="mt-4 pt-3 border-t border-yellow-200 flex justify-between items-center text-sm text-yellow-700">
+                    <span>
+                      Total duplicate groups: <strong>{previewData.duplicateGroups.length}</strong>
+                    </span>
+                    <span>
+                      Total affected items: <strong>
+                        {previewData.duplicateGroups.reduce((sum: number, group: any) => sum + group.rows.length, 0)}
+                      </strong>
+                    </span>
+                  </div>
+                )}
+              </div>
+
+
+              {/* Duplicate Rows Section */}
+              {/* {previewData.duplicateRows && previewData.duplicateRows.length > 0 && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mt-6">
+                  <h3 className="text-lg font-medium text-yellow-900 mb-2">Duplicate Rows Detected</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-yellow-100 text-yellow-800">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">Part No</th>
+                          <th className="px-3 py-2 text-left font-medium">Room</th>
+                          <th className="px-3 py-2 text-left font-medium">Rack</th>
+                          <th className="px-3 py-2 text-left font-medium">Quantity</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-yellow-200">
+                        {previewData.duplicateRows.map((row: any, idx: number) => (
+                          <tr key={idx} className="hover:bg-yellow-50">
+                            <td className="px-3 py-2 font-mono text-xs">{row['PART NO']}</td>
+                            <td className="px-3 py-2">{row.ROOM || row.Room || row.room}</td>
+                            <td className="px-3 py-2">{row.RACK || row.Rack || row.rack}</td>
+                            <td className="px-3 py-2">{row.QTY}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-yellow-700 text-sm">
+                    {previewData.duplicateRows.length} duplicate row(s) found. These rows have the same Part No, Room, and Rack as another row in your file.
+                  </p>
+                  {previewData.duplicatesFileUrl && (
+                    <a
+                      href={previewData.duplicatesFileUrl}
+                      className="inline-block mt-2 text-yellow-800 underline"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Download Duplicates as Excel
+                    </a>
+                  )}
+                </div>
+              )} */}
+
+
             </div>
 
             {/* Action Buttons */}

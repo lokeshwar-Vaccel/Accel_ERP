@@ -23,12 +23,15 @@ const getDepartmentCategory = (dept: string): ProductCategory => {
 // Helper function to get or create default location/room/rack
 const getOrCreateLocationHierarchy = async (locationName: string = 'Main Office', roomName?: string, rackName?: string) => {
   try {
-    console.log(`🏢 Creating location hierarchy: Location="${locationName}", Room="${roomName}", Rack="${rackName}"`);
+    // Always treat roomName and rackName as strings
+    const roomNameStr = roomName !== undefined && roomName !== null ? String(roomName).trim() : '';
+    const rackNameStr = rackName !== undefined && rackName !== null ? String(rackName).trim() : '';
+    // console.log(`🏢 Creating location hierarchy: Location="${locationName}", Room="${roomNameStr}", Rack="${rackNameStr}"`);
     
     // Find or create location
     let location = await StockLocation.findOne({ name: locationName });
     if (!location) {
-      console.log(`📍 Creating new location: ${locationName}`);
+      // console.log(`📍 Creating new location: ${locationName}`);
       location = await StockLocation.create({
         name: locationName,
         address: 'Main Office - Inventory Location',
@@ -42,16 +45,16 @@ const getOrCreateLocationHierarchy = async (locationName: string = 'Main Office'
     let rackId = null;
 
     // Create or find room if specified
-    if (roomName && roomName.trim()) {
+    if (roomNameStr) {
       let room = await Room.findOne({ 
-        name: roomName.trim(), 
+        name: roomNameStr, 
         location: location._id 
       });
       
       if (!room) {
-        console.log(`🏠 Creating new room: ${roomName} in ${locationName}`);
+        // console.log(`🏠 Creating new room: ${roomNameStr} in ${locationName}`);
         room = await Room.create({
-          name: roomName.trim(),
+          name: roomNameStr,
           location: location._id,
           description: `Room in ${locationName}`,
           isActive: true
@@ -60,20 +63,20 @@ const getOrCreateLocationHierarchy = async (locationName: string = 'Main Office'
       roomId = room._id;
 
       // Create or find rack if specified and room exists
-      if (rackName && rackName.trim()) {
+      if (rackNameStr) {
         let rack = await Rack.findOne({ 
-          name: rackName.trim(), 
+          name: rackNameStr, 
           location: location._id,
           room: roomId
         });
         
         if (!rack) {
-          console.log(`📦 Creating new rack: ${rackName} in room ${roomName}`);
+          console.log(`📦 Creating new rack: ${rackNameStr} in room ${roomNameStr}`);
           rack = await Rack.create({
-            name: rackName.trim(),
+            name: rackNameStr,
             location: location._id,
             room: roomId,
-            description: `Rack in ${roomName}, ${locationName}`,
+            description: `Rack in ${roomNameStr}, ${locationName}`,
             isActive: true
           });
         }
@@ -81,7 +84,7 @@ const getOrCreateLocationHierarchy = async (locationName: string = 'Main Office'
       }
     }
 
-    console.log(`✅ Location hierarchy ready: Location=${location._id}, Room=${roomId}, Rack=${rackId}`);
+    // console.log(`✅ Location hierarchy ready: Location=${location._id}, Room=${roomId}, Rack=${rackId}`);
     
     return {
       locationId: location._id,
@@ -137,6 +140,32 @@ export const previewInventoryImport = async (
       return next(new AppError('No data found in file', 400));
     }
 
+    // --- Duplicate detection logic ---
+    const rowKeyMap: Record<string, number[]> = {}; // key -> array of row indices
+    rawData.forEach((row, idx) => {
+      const partNo = (row as any)['PART NO'] || (row as any)['Part No'] || (row as any)['PartNo'] || (row as any)['partNo'];
+      // Only use partNo for duplicate detection
+      const key = `${partNo}`;
+      if (!rowKeyMap[key]) rowKeyMap[key] = [];
+      rowKeyMap[key].push(idx);
+    });
+    const duplicateRows: { key: string, indices: number[] }[] = [];
+    Object.entries(rowKeyMap).forEach(([key, indices]) => {
+      if (indices.length > 1) {
+        duplicateRows.push({ key, indices });
+      }
+    });
+    // Flat array of all duplicate row objects
+    const duplicateRowObjects = duplicateRows.flatMap(group => group.indices.map(idx => rawData[idx]));
+    // Grouped duplicates: array of { key, rows: [...] }
+    const duplicateGroupsArray = duplicateRows.map(group => ({
+      key: group.key,
+      rows: group.indices.map(idx => rawData[idx])
+    }));
+    // Store duplicate row data in memory for download
+    (req as any).duplicateRowData = duplicateRowObjects;
+    // --- End duplicate detection ---
+
     const preview: InventoryImportPreview = {
       totalRows: rawData.length,
       validRows: 0,
@@ -148,8 +177,13 @@ export const previewInventoryImport = async (
     };
 
     const sampleData: any[] = [];
+    const newProductPartNos = new Set<string>();
     let newProductsCount = 0;
     let stockUpdatesCount = 0;
+
+    // --- Track unstored rows ---
+    const unstoredRows: { row: any, reason: string }[] = [];
+    // --- End track unstored rows ---
 
     // Validate and process each row
     for (let i = 0; i < rawData.length; i++) {
@@ -185,7 +219,6 @@ export const previewInventoryImport = async (
           
           if (possibleDeptColumns.length > 0) {
             dept = (row as any)[possibleDeptColumns[0]];
-            console.log(`🔍 Row ${rowNum} - Using column "${possibleDeptColumns[0]}" for DEPT: "${dept}"`);
           } else {
             // Use a default department based on the description or other fields
             const desc = description?.toLowerCase() || '';
@@ -198,17 +231,14 @@ export const previewInventoryImport = async (
             } else {
               dept = 'GENERAL'; // Default fallback
             }
-            console.log(`🔍 Row ${rowNum} - DEPT column missing, inferred from description: "${dept}"`);
           }
         }
         
         // Only require the core essential fields now
         if (!partNo || !description || !uom) {
-          console.warn(`⚠️ Preview Row ${rowNum}: Missing essential fields`);
-          console.warn(`⚠️ Available columns:`, Object.keys(row));
-          console.warn(`⚠️ Field values: PART NO: "${partNo}", DESCRIPTION: "${description}", UOM: "${uom}", DEPT: "${dept}"`);
           preview.errors.push(`Row ${rowNum}: Missing essential fields (PART NO, DESCRIPTION, UOM) - Available columns: ${Object.keys(row).join(', ')}`);
           preview.invalidRows++;
+          unstoredRows.push({ row, reason: 'Missing essential fields (PART NO, DESCRIPTION, UOM)' });
           continue;
         }
 
@@ -220,28 +250,36 @@ export const previewInventoryImport = async (
         if (isNaN(qty) || qty < 0) {
           preview.errors.push(`Row ${rowNum}: Invalid quantity "${row.QTY}" - must be a positive number`);
           preview.invalidRows++;
+          unstoredRows.push({ row, reason: 'Invalid quantity' });
           continue;
         }
 
         if (isNaN(gndp) || gndp < 0) {
           preview.errors.push(`Row ${rowNum}: Invalid GNDP price "${row.GNDP}" - must be a positive number`);
           preview.invalidRows++;
+          unstoredRows.push({ row, reason: 'Invalid GNDP price' });
           continue;
         }
 
         if (isNaN(mrp) || mrp < 0) {
           preview.errors.push(`Row ${rowNum}: Invalid MRP "${row.MRP}" - must be a positive number`);
           preview.invalidRows++;
+          unstoredRows.push({ row, reason: 'Invalid MRP' });
           continue;
+        }
+
+        // Check for duplicate (by key)
+        let roomName = row.ROOM || (row as any)['Room'] || (row as any)['room'];
+        let rackName = row.RACK || (row as any)['Rack'] || (row as any)['rack'];
+        const key = `${partNo}|Main Office|${roomName || ''}|${rackName || ''}`;
+        if (rowKeyMap[key] && rowKeyMap[key].length > 1) {
+          unstoredRows.push({ row, reason: 'Duplicate row (same PART NO, ROOM, RACK)' });
+          // Note: Duplicates are still processed, but you may want to skip or flag them here.
         }
 
         // Check if product already exists
         const existingProduct = await Product.findOne({ partNo: row['PART NO'] });
         let itemStatus = 'new';
-        console.log("existingProduct:",existingProduct);
-        console.log("newProductsCount:",newProductsCount);
-        
-
         if (existingProduct) {
           itemStatus = 'existing';
           preview.existingProducts.push({
@@ -251,7 +289,11 @@ export const previewInventoryImport = async (
             newQuantity: row.QTY
           });
         } else {
-          newProductsCount++;
+          // Only count unique new PART NOs
+          if (!newProductPartNos.has(partNo)) {
+            newProductPartNos.add(partNo);
+            newProductsCount++;
+          }
           preview.productsToCreate.push({
             partNo: partNo,
             name: description,
@@ -268,9 +310,7 @@ export const previewInventoryImport = async (
         }
 
         stockUpdatesCount++;
-        const roomName = row.ROOM || (row as any)['Room'] || (row as any)['room'];
-        const rackName = row.RACK || (row as any)['Rack'] || (row as any)['rack'];
-        
+        // reuse roomName and rackName here
         preview.stocksToCreate.push({
           partNo: partNo,
           quantity: qty,
@@ -291,8 +331,15 @@ export const previewInventoryImport = async (
       } catch (error: any) {
         preview.errors.push(`Row ${rowNum}: ${error.message}`);
         preview.invalidRows++;
+        unstoredRows.push({ row, reason: error.message });
       }
     }
+
+    // Calculate unique (non-duplicate) PART NOs for stockUpdates count
+    const uniquePartNos = Object.keys(rowKeyMap);
+    const duplicateCount = Object.values(rowKeyMap).reduce((acc, arr) => acc + (arr.length > 1 ? arr.length : 0), 0);
+    const uniqueStockCount = uniquePartNos.length;
+    const productsCount = uniquePartNos.length;
 
     const response: APIResponse = {
       success: true,
@@ -303,14 +350,18 @@ export const previewInventoryImport = async (
           validRows: preview.validRows,
           invalidRows: preview.invalidRows,
           newProducts: newProductsCount,
-          stockUpdates: stockUpdatesCount,
+          stockUpdates: uniqueStockCount, // Only unique PART NOs
+          duplicateCount: duplicateCount,
+          productsCount: productsCount,
           existingProducts: preview.existingProducts.length
         },
         errors: preview.errors,
         sample: sampleData,
         productsToCreate: preview.productsToCreate,
         stocksToCreate: preview.stocksToCreate,
-        existingProducts: preview.existingProducts
+        existingProducts: preview.existingProducts,
+        duplicateGroups: duplicateGroupsArray,
+        duplicateRows: duplicateRowObjects
       }
     };
 
@@ -328,13 +379,6 @@ export const importInventory = async (
   res: Response,
   next: NextFunction
 ): Promise<void> => {
-  console.log('🚀 Starting inventory import process...');
-  console.log('👤 User:', req.user?.email);
-  console.log('📁 File info:', {
-    originalname: req.file?.originalname,
-    mimetype: req.file?.mimetype,
-    size: req.file?.size
-  });
 
   try {
     if (!req.file) {
@@ -342,7 +386,6 @@ export const importInventory = async (
       return next(new AppError('No file uploaded', 400));
     }
 
-    console.log('📊 Parsing Excel/CSV file...');
     // Parse Excel/CSV file
     const workbook = XLSX.read(req.file.buffer);
     console.log('📋 Sheet names:', workbook.SheetNames);
@@ -353,19 +396,17 @@ export const importInventory = async (
     let headerRow = 0;
     const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:Z100');
     
-    console.log('🔍 Searching for header row...');
     for (let row = range.s.r; row <= Math.min(range.e.r, 10); row++) {
       const cellAddress = XLSX.utils.encode_cell({ r: row, c: 1 }); // Column B (where PART NO should be)
       const cell = worksheet[cellAddress];
       if (cell && cell.v && String(cell.v).includes('PART NO')) {
         headerRow = row;
-        console.log(`✅ Found header row at row ${row + 1} (Excel row ${row + 2})`);
+        // console.log(`✅ Found header row at row ${row + 1} (Excel row ${row + 2})`);
         break;
       }
     }
     
     if (headerRow === 0) {
-      console.log('⚠️ Header row not found, trying row 4 (Excel row 5) as default');
       headerRow = 4; // Row 5 in Excel (0-indexed)
     }
     
@@ -374,22 +415,18 @@ export const importInventory = async (
       range: headerRow // Start parsing from the header row
     });
 
-    console.log('📝 Raw data rows found:', rawData.length);
-    if (rawData.length > 0) {
-      console.log('📝 Sample first row:', rawData[0]);
-      console.log('📝 Available columns:', Object.keys(rawData[0]));
-      console.log('📝 Column details:');
-      Object.keys(rawData[0]).forEach(key => {
-        console.log(`  - "${key}" (length: ${key.length}, type: ${typeof key})`);
-      });
+    // if (rawData.length > 0) {
+    //   Object.keys(rawData[0]).forEach(key => {
+    //     console.log(`  - "${key}" (length: ${key.length}, type: ${typeof key})`);
+    //   });
       
-      // Check specifically for the required fields
-      console.log('📝 Required field checks:');
-      console.log(`  - 'PART NO' exists: ${!!rawData[0]['PART NO']}, value: "${rawData[0]['PART NO']}"`);
-      console.log(`  - 'DESCRIPTION' exists: ${!!rawData[0]['DESCRIPTION']}, value: "${rawData[0]['DESCRIPTION']}"`);
-      console.log(`  - 'UOM' exists: ${!!rawData[0]['UOM']}, value: "${rawData[0]['UOM']}"`);
-      console.log(`  - 'DEPT' exists: ${!!rawData[0]['DEPT']}, value: "${rawData[0]['DEPT']}"`);
-    }
+    //   // Check specifically for the required fields
+    //   console.log('📝 Required field checks:');
+    //   console.log(`  - 'PART NO' exists: ${!!rawData[0]['PART NO']}, value: "${rawData[0]['PART NO']}"`);
+    //   console.log(`  - 'DESCRIPTION' exists: ${!!rawData[0]['DESCRIPTION']}, value: "${rawData[0]['DESCRIPTION']}"`);
+    //   console.log(`  - 'UOM' exists: ${!!rawData[0]['UOM']}, value: "${rawData[0]['UOM']}"`);
+    //   console.log(`  - 'DEPT' exists: ${!!rawData[0]['DEPT']}, value: "${rawData[0]['DEPT']}"`);
+    // }
 
     if (!rawData.length) {
       console.error('❌ No data found in file');
@@ -406,21 +443,11 @@ export const importInventory = async (
       updatedStocks: []
     };
 
-    console.log('🔄 Starting to process rows...');
     // Process each row
     for (let i = 0; i < rawData.length; i++) {
       const row = rawData[i];
       const rowNum = i + 2; // Excel row number
 
-      console.log(`🔍 Processing row ${rowNum}:`, {
-        'PART NO': row['PART NO'],
-        'DESCRIPTION': row.DESCRIPTION,
-        'UOM': row.UOM,
-        'DEPT': row.DEPT,
-        'QTY': row.QTY,
-        'MRP': row.MRP,
-        'GNDP': row.GNDP
-      });
 
       try {
         // Basic validation - handle potential column name variations
@@ -444,12 +471,6 @@ export const importInventory = async (
         const mrp = typeof row.MRP === 'number' ? row.MRP : parseFloat(String(row.MRP || 0));
         const gst = typeof row.GST === 'number' ? row.GST : parseFloat(String(row.GST || 0));
         
-        console.log(`🔍 Row ${rowNum} field values:`, {
-          'PART NO': partNo,
-          'DESCRIPTION': description,
-          'UOM': uom,
-          'DEPT': dept
-        });
         
         // Handle DEPT column - provide fallback if missing
         if (!dept) {
@@ -463,7 +484,6 @@ export const importInventory = async (
           } else {
             dept = 'GENERAL';
           }
-          console.log(`🔍 Row ${rowNum}: DEPT missing, inferred "${dept}" from description`);
         }
         
         if (!partNo || !description || !uom) {
@@ -501,26 +521,22 @@ export const importInventory = async (
           continue;
         }
 
-        console.log(`✅ Row ${rowNum}: Basic validation passed`);
         
         // Get or create location hierarchy
         const roomName = row.ROOM || (row as any)['Room'] || (row as any)['room'];
         const rackName = row.RACK || (row as any)['Rack'] || (row as any)['rack'];
         
-        console.log(`🏢 Row ${rowNum}: Getting location hierarchy for ROOM: "${roomName}", RACK: "${rackName}"`);
         const { locationId, roomId, rackId } = await getOrCreateLocationHierarchy(
           'Main Office',
           roomName,
           rackName
         );
-        console.log(`🏢 Row ${rowNum}: Location hierarchy created - Location: ${locationId}, Room: ${roomId}, Rack: ${rackId}`);
 
         // Find or create product
-        console.log(`🔍 Row ${rowNum}: Looking for existing product with partNo: ${row['PART NO']}`);
         let product = await Product.findOne({ partNo: row['PART NO'] });
 
         if (!product) {
-          console.log(`➕ Row ${rowNum}: Creating new product`);
+          // console.log(`➕ Row ${rowNum}: Creating new product`);
           // Create new product
           product = await Product.create({
             name: description,
@@ -540,10 +556,10 @@ export const importInventory = async (
             createdBy: req.user!.id
           });
 
-          console.log(`✅ Row ${rowNum}: Product created with ID: ${product._id}`);
+          // console.log(`✅ Row ${rowNum}: Product created with ID: ${product._id}`);
           result.createdProducts.push(product);
         } else {
-          console.log(`📝 Row ${rowNum}: Found existing product with ID: ${product._id}`);
+          // console.log(`📝 Row ${rowNum}: Found existing product with ID: ${product._id}`);
           // Update existing product with new information
           const updates: any = {};
           if (description && description !== product.name) {
@@ -608,7 +624,7 @@ export const importInventory = async (
           });
         }
 
-        console.log(`✅ Row ${rowNum}: Successfully processed!`);
+        // console.log(`✅ Row ${rowNum}: Successfully processed!`);
         result.successful++;
       } catch (error: any) {
         const errorMsg = `Row ${rowNum}: ${error.message}`;
@@ -630,32 +646,56 @@ export const importInventory = async (
       }
     }
 
-    console.log('✅ Import processing completed');
-    console.log('📊 Final results:', {
-      successful: result.successful,
-      failed: result.failed,
-      errors: result.errors.length,
-      createdProducts: result.createdProducts.length,
-      createdStocks: result.createdStocks.length,
-      updatedProducts: result.updatedProducts.length,
-      updatedStocks: result.updatedStocks.length
-    });
+    // console.log('✅ Import processing completed');
+    // console.log('📊 Final results:', {
+    //   successful: result.successful,
+    //   failed: result.failed,
+    //   errors: result.errors.length,
+    //   createdProducts: result.createdProducts.length,
+    //   createdStocks: result.createdStocks.length,
+    //   updatedProducts: result.updatedProducts.length,
+    //   updatedStocks: result.updatedStocks.length
+    // });
 
     // Log first 10 errors for debugging
     if (result.errors.length > 0) {
-      console.log('❌ First 10 errors:');
+      // console.log('❌ First 10 errors:');
       result.errors.slice(0, 10).forEach((error, index) => {
-        console.log(`  ${index + 1}. ${error}`);
+        // console.log(`  ${index + 1}. ${error}`);
       });
-      if (result.errors.length > 10) {
-        console.log(`  ... and ${result.errors.length - 10} more errors`);
-      }
+      // if (result.errors.length > 10) {
+      //   console.log(`  ... and ${result.errors.length - 10} more errors`);
+      // }
     }
+
+    // Calculate unique (non-duplicate) PART NOs for stockUpdates count
+    const rowKeyMap: Record<string, number[]> = {};
+    rawData.forEach((row, idx) => {
+      const partNo = (row as any)['PART NO'] || (row as any)['Part No'] || (row as any)['PartNo'] || (row as any)['partNo'];
+      const key = `${partNo}`;
+      if (!rowKeyMap[key]) rowKeyMap[key] = [];
+      rowKeyMap[key].push(idx);
+    });
+    const uniquePartNos = Object.keys(rowKeyMap);
+    const duplicateCount = Object.values(rowKeyMap).reduce((acc, arr) => acc + (arr.length > 1 ? arr.length : 0), 0);
+    const uniqueStockCount = uniquePartNos.length;
+    const productsCount = uniquePartNos.length;
+
+    // Set result.successful to uniqueStockCount
+    result.successful = uniqueStockCount;
 
     const response: APIResponse = {
       success: true,
       message: `Import completed. ${result.successful} successful, ${result.failed} failed.`,
-      data: result
+      data: {
+        ...result,
+        summary: {
+          totalRows: rawData.length,
+          stockUpdates: uniqueStockCount,
+          duplicateCount: duplicateCount,
+          productsCount: uniquePartNos.length
+        }
+      }
     };
 
     res.status(200).json(response);
@@ -723,6 +763,35 @@ export const downloadInventoryTemplate = async (
     res.setHeader('Content-Disposition', 'attachment; filename=inventory-import-template.xlsx');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
 
+    res.send(buffer);
+  } catch (error) {
+    next(error);
+  }
+}; 
+
+// --- Add endpoint to download duplicate rows as Excel file ---
+// @desc    Download duplicate inventory rows from last preview
+// @route   GET /api/v1/inventory/duplicates-file
+// @access  Private
+export const downloadDuplicateRows = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    // In a real app, you would store duplicateRowData in a cache or DB per user/session.
+    // For demo, just return an empty file if not found.
+    const duplicateRowData = (req as any).duplicateRowData || [];
+    if (!duplicateRowData.length) {
+      res.status(404).json({ success: false, message: 'No duplicate data available. Please run preview first.' });
+      return;
+    }
+    const ws = XLSX.utils.json_to_sheet(duplicateRowData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Duplicates');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Disposition', 'attachment; filename=inventory-duplicates.xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.send(buffer);
   } catch (error) {
     next(error);
