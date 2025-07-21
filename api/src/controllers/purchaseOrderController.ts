@@ -149,6 +149,10 @@ export const createPurchaseOrder = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    // Validate supplierAddress
+    // if (!req.body.supplierAddress || !req.body.supplierAddress.address || !req.body.supplierAddress.state || !req.body.supplierAddress.district || !req.body.supplierAddress.pincode) {
+    //   return next(new AppError('Supplier address (address, state, district, pincode) is required', 400));
+    // }
     // Handle supplier data from customers collection
     let supplierName = req.body.supplier;
     let supplierEmail = req.body.supplierEmail;
@@ -184,7 +188,8 @@ export const createPurchaseOrder = async (
       supplierEmail: supplierEmail, // Use the resolved supplier email
       totalAmount,
       createdBy: req.user!.id,
-      orderDate: new Date()
+      orderDate: new Date(),
+      supplierAddress: req.body.supplierAddress // ensure supplierAddress is saved
     };
 
     // Convert date strings to Date objects for new fields
@@ -230,6 +235,10 @@ export const updatePurchaseOrder = async (
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
     }
+    // Validate supplierAddress if present
+    // if (req.body.supplierAddress && (!req.body.supplierAddress.address || !req.body.supplierAddress.state || !req.body.supplierAddress.district || !req.body.supplierAddress.pincode)) {
+    //   return next(new AppError('Supplier address (address, state, district, pincode) is required', 400));
+    // }
 
     // Handle supplier data from customers collection
     let supplierName = req.body.supplier;
@@ -266,6 +275,9 @@ export const updatePurchaseOrder = async (
     }
     if (supplierEmail) {
       req.body.supplierEmail = supplierEmail;
+    }
+    if (req.body.supplierAddress) {
+      req.body.supplierAddress = req.body.supplierAddress; // ensure supplierAddress is saved
     }
 
     // Convert date strings to Date objects for new fields
@@ -349,7 +361,8 @@ export const receiveItems = async (
       notes, 
       externalInvoiceTotal, 
       supplierName, 
-      supplierEmail, 
+      supplierEmail,
+      supplierAddress,
       items,
       // New shipping and documentation fields
       shipDate,
@@ -541,6 +554,7 @@ export const receiveItems = async (
       gstInvoiceNumber: gstInvoiceNumber,
       supplierName: supplierName,
       supplierEmail: supplierEmail,
+      supplierAddress: supplierAddress,
       dueDate: receiptDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       discountAmount: req.body.discountAmount || 0,
       notes: req.body.notes || "",
@@ -772,6 +786,7 @@ const createInvoiceFromPO = async ({
   supplierName,
   gstInvoiceNumber,
   supplierEmail,
+  supplierAddress,
   dueDate,
   discountAmount = 0,
   notes,
@@ -785,6 +800,7 @@ const createInvoiceFromPO = async ({
   items: InvoiceItemInput[],
   supplierName: any,
   supplierEmail: any,
+  supplierAddress: any,
   dueDate: string,
   discountAmount?: number,
   notes?: string,
@@ -797,6 +813,8 @@ const createInvoiceFromPO = async ({
   gstInvoiceNumber: string
 }) => {
   const invoiceNumber = gstInvoiceNumber;
+
+  console.log("supplierAddress-99992:", supplierAddress);
 
   let calculatedItems = [];
   let subtotal = 0;
@@ -835,7 +853,8 @@ const totalAmount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discou
   const invoice = new Invoice({
     invoiceNumber,
     supplierName,
-    supplierEmail,
+    supplierEmail,  
+    supplierAddress,
     issueDate: new Date(),
     dueDate: new Date(dueDate),
     items: calculatedItems,

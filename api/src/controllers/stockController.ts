@@ -48,8 +48,8 @@ export const getStockLevels = async (
       stockId?: string;
     };
 
-    console.log('Stock levels request query:', req.query);
-    console.log('Stock status filters - lowStock:', lowStock, 'inStock:', inStock, 'outOfStock:', outOfStock, 'overStocked:', overStocked);
+    // console.log('Stock levels request query:', req.query);
+    // console.log('Stock status filters - lowStock:', lowStock, 'inStock:', inStock, 'outOfStock:', outOfStock, 'overStocked:', overStocked);
 
     // Build query
     const query: any = {};
@@ -75,7 +75,7 @@ export const getStockLevels = async (
       query._id = new mongoose.Types.ObjectId(stockId);
     }
 
-    console.log('Built query:', query); // Debug log
+    // console.log('Built query:', query); // Debug log
 
     // Handle search and product-based filters
     let productFilters: any = {};
@@ -126,8 +126,8 @@ export const getStockLevels = async (
 
     // FIX 3: Debug - Check if stock exists with the query
     const stockExists = await Stock.findOne(query);
-    console.log('Stock exists check:', stockExists ? 'Found' : 'Not found');
-    console.log('Query used:', JSON.stringify(query));
+    // console.log('Stock exists check:', stockExists ? 'Found' : 'Not found');
+    // console.log('Query used:', JSON.stringify(query));
 
     // Determine if we need to use aggregation (for nested sort fields or stock status filters)
     const useAggregation = sort.includes('.') || lowStock === 'true' || outOfStock === 'true' || overStocked === 'true' || inStock === 'true';
@@ -258,7 +258,7 @@ export const getStockLevels = async (
       }
 
       // FIX 5: Add debug for aggregation pipeline
-      console.log('Aggregation pipeline:', JSON.stringify(pipeline, null, 2));
+      // console.log('Aggregation pipeline:', JSON.stringify(pipeline, null, 2));
 
       pipeline.push({ $skip: (Number(page) - 1) * Number(limit) });
       pipeline.push({ $limit: Number(limit) });
@@ -385,7 +385,7 @@ export const getStockLevels = async (
       // --- END FIX ---
 
       const totalStock = await Stock.countDocuments({});
-      console.log("totalStock:",totalStock);
+      // console.log("totalStock:",totalStock);
       const response: APIResponse = {
         success: true,
         message,
@@ -418,11 +418,11 @@ export const getStockLevels = async (
       .skip((Number(page) - 1) * Number(limit));
 
     const total = await Stock.countDocuments(query);
-    console.log("total:",total);
+    // console.log("total:",total);
     
     const pages = Math.ceil(total / Number(limit));
 
-    console.log('Final stock levels found:', stockLevels.length); // Debug log
+    // console.log('Final stock levels found:', stockLevels.length); // Debug log
 
     // --- FIX: Use aggregation for stock status counts ---
     // Low Stock
@@ -622,7 +622,7 @@ export const adjustStock = async (
   try {
     const { stockId, product, location, adjustmentType, quantity, reason, notes, reservationType, referenceId: reservationReferenceId, reservedUntil } = req.body;
 
-    console.log("stock-1:", stockId);
+    // console.log("stock-1:", stockId);
     const stock = await Stock.findById(stockId);
 
     if (!stock) {
@@ -814,10 +814,10 @@ export const transferStock = async (
       notes
     } = req.body;
 
-    console.log('Transfer request:', {
-      product, fromLocation, fromRoom, fromRack,
-      toLocation, toRoom, toRack, quantity
-    });
+    // console.log('Transfer request:', {
+    //   product, fromLocation, fromRoom, fromRack,
+    //   toLocation, toRoom, toRack, quantity
+    // });
 
     // Validate quantity
     if (!quantity || quantity <= 0) {
@@ -833,7 +833,7 @@ export const transferStock = async (
       rack: fromRack || null
     };
 
-    console.log('Source query:', sourceQuery);
+    // console.log('Source query:', sourceQuery);
 
     const sourceStock = await Stock.findOne(sourceQuery);
     // const sourceStock = await Stock.findById(stockId);
@@ -856,17 +856,17 @@ export const transferStock = async (
       return next(new AppError('Source and destination are the same. No transfer needed.', 400));
     }
 
-    console.log("Transfer type:", {
-      isLocationChange,
-      isRoomChange,
-      isRackChange,
-      fromLocation,
-      toLocation,
-      fromRoom,
-      toRoom,
-      fromRack,
-      toRack
-    });
+    // console.log("Transfer type:", {
+    //   isLocationChange,
+    //   isRoomChange,
+    //   isRackChange,
+    //   fromLocation,
+    //   toLocation,
+    //   fromRoom,
+    //   toRoom,
+    //   fromRack,
+    //   toRack
+    // });
 
     const referenceId = await generateReferenceId('transfer');
 

@@ -499,7 +499,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
 
                 {showCustomerDropdown && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                    <div className="p-2 border-b border-gray-200">
+                    {customers.filter(customer => customer.type === 'customer').length > 0 && <div className="p-2 border-b border-gray-200">
                       <input
                         type="text"
                         placeholder="Search customers..."
@@ -508,8 +508,8 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                         className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         autoFocus
                       />
-                    </div>
-                    <button
+                    </div>}
+                    {customers.filter(customer => customer.type === 'customer').length > 0  && <button
                       onClick={() => {
                         setFormData(prev => ({
                           ...prev,
@@ -530,12 +530,18 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                       className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.customer?._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                     >
                       Select customer
-                    </button>
-                    {customers
+                    </button>}
+                    {customers.filter(customer => customer.type === 'customer').length <= 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500">
+                        {!customerSearchTerm ? 'No customers found' : 'Loading customers...'}
+                      </div>
+                    ) : (
+                      customers
                       .filter(customer =>
+                        customer.type === 'customer' && (
                         customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
                         customer.email?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                        customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase())
+                        customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase()))
                       )
                       .map((customer) => (
                         <button
@@ -551,7 +557,8 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
                             <div className="text-xs text-gray-500">{customer.email}</div>
                           </div>
                         </button>
-                      ))}
+                      ))
+                    )}
                   </div>
                 )}
               </div>

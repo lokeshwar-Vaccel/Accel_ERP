@@ -13,15 +13,16 @@ import * as XLSX from 'xlsx';
 import { TransactionCounter } from '../models/TransactionCounter';
 
 // Helper: Get value from possible column names (case-insensitive, trims spaces)
-const getColumnValue = (row: any, keys: string[]): string => {
+const getColumnValue = (row: any, keys: string[]): string | undefined => {
   for (const key of keys) {
     for (const rowKey of Object.keys(row)) {
       if (rowKey.trim().toLowerCase() === key.trim().toLowerCase()) {
-        return row[rowKey]?.toString().trim() || '';
+        const value = row[rowKey]?.toString().trim();
+        return value || undefined;
       }
     }
   }
-  return '';
+  return undefined;
 };
 
 // Helper: Build addresses array so each Address-1, Address-2, Address-3, etc. is a separate address object
@@ -38,9 +39,9 @@ const buildAddresses = (row: any) => {
         addresses.push({
           id: startId + count,
           address: addr,
-          state: getColumnValue(row, [`State${suffix}`, `state${suffix}`]),
-          district: getColumnValue(row, [`District${suffix}`, `district${suffix}`]),
-          pincode: getColumnValue(row, [`Pincode${suffix}`, `PIN${suffix}`, `pin${suffix}`, `pincode${suffix}`]),
+          state: getColumnValue(row, [`State${suffix}`, `state${suffix}`]) || '',
+          district: getColumnValue(row, [`District${suffix}`, `district${suffix}`]) || '',
+          pincode: getColumnValue(row, [`Pincode${suffix}`, `PIN${suffix}`, `pin${suffix}`, `pincode${suffix}`]) || '',
           isPrimary: startId + count === 1
         });
         count++;
@@ -83,14 +84,18 @@ const cleanRowKeys = (row: any) => {
 
 // Helper: Find existing customer by GST or name+phone
 const findExistingCustomer = async (row: any) => {
-//   const gst = getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']);
-//   if (gst) {
-//     const byGst = await Customer.findOne({ gstNumber: gst });
-//     if (byGst) return byGst;
-//   }
+  const gst = getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']);
+  if (gst) {
+    // Check for existing customer with same GST number and type (customer)
+    const byGst = await Customer.findOne({ 
+      gstNumber: gst,
+      type: 'customer' // Import is always for customers
+    });
+    if (byGst) return byGst;
+  }
+  
   const name = getColumnValue(row, ['Name', 'Customer Name', 'name', 'customer name']);
-//   const phone = getColumnValue(row, ['Mobile No', 'Phone', 'phone', 'mobile', 'mobile no']);
-  if (name ) {
+  if (name) {
     return await Customer.findOne({ name });
   }
   return null;
@@ -131,10 +136,10 @@ const findHeaderRowAndData = (worksheet: any) => {
   });
 };
 
-// Utility to get next employeeId (same as in customerController)
-async function getNextEmployeeId() {
+// Utility to get next customerId (same as in customerController)
+async function getNextCustomerId() {
   const counter = await TransactionCounter.findOneAndUpdate(
-    { type: 'employeeId' },
+    { type: 'customerId' },
     { $inc: { sequence: 1 } },
     { new: true, upsert: true }
   );
@@ -189,7 +194,7 @@ export const previewCustomerImport = async (
         // phone: getColumnValue(row, ['Mobile No', 'Phone', 'phone', 'mobile', 'mobile no']) || 'N/A',
         addresses: buildAddresses(row),
         customerType: CustomerType.RETAIL,
-        type: CustomerMainType.CUSTOMER,
+        type: CustomerMainType.CUSTOMER, // Imports are always customers
         leadSource: '',
         status: LeadStatus.NEW,
         notes: ''
@@ -276,15 +281,15 @@ export const importCustomers = async (
       const row = cleanedData[i];
 
       const customerInput: any = {
-        name: getColumnValue(row, ['Name', 'Customer Name', 'name', 'customer name']),
-        designation: getColumnValue(row, ['Designation', 'designation']),
+        name: getColumnValue(row, ['Name', 'Customer Name', 'name', 'customer name']) || '',
+        designation: getColumnValue(row, ['Designation', 'designation']) || '',
         // contactPersonName: getColumnValue(row, ['Contact person Name', 'Contact Person', 'contact person name']),
-        gstNumber: getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']),
+        gstNumber: getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']) || undefined,
         email: getColumnValue(row, ['Email', 'email', 'E-mail']) || undefined, // Set to undefined if empty
         // phone: getColumnValue(row, ['Mobile No', 'Phone', 'phone', 'mobile', 'mobile no']),
         addresses: buildAddresses(row),
         customerType: CustomerType.RETAIL,
-        type: CustomerMainType.CUSTOMER,
+        type: CustomerMainType.CUSTOMER, // This will always be customer for imports
         leadSource: '',
         status: LeadStatus.NEW,
         notes: ''
@@ -311,27 +316,42 @@ export const importCustomers = async (
 
       const existing = await findExistingCustomer(row);
       if (existing) {
-        // results.errors.push(`Row ${i + 2}: Skipped - customer already exists (name: ${existing.name}, phone: ${existing.phone})`);
+        const gst = getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']);
+        if (gst && (existing as any).gstNumber === gst) {
+          results.errors.push(`Row ${i + 2}: Skipped - customer with GST number "${gst}" already exists.`);
+        } else {
+          results.errors.push(`Row ${i + 2}: Skipped - customer with name "${customerInput.name}" already exists.`);
+        }
         results.failed++;
         continue;
       }
 
-    //   try {
-        // Generate employeeId for each imported customer
-        const employeeId = await getNextEmployeeId();
-        const created = await Customer.create({ ...customerInput, createdBy: req.user!.id, employeeId });
+      try {
+        // Generate customerId for each imported customer (imports are always customers)
+        const customerId = await getNextCustomerId();
+        const created = await Customer.create({ ...customerInput, createdBy: req.user!.id, customerId });
         results.successful++;
         results.createdCustomers.push({
           name: created.name,
           phone: created.phone,
           gstNumber: (created as any).gstNumber,
           id: created._id,
-          employeeId: created.employeeId
+          customerId: created.customerId
         });
-    //   } catch (createErr: any) {
-    //     results.failed++;
-    //     results.errors.push(`Row ${i + 2}: ${createErr.message}`);
-    //   }
+      } catch (createErr: any) {
+        results.failed++;
+        if (createErr.code === 11000) {
+          // Duplicate key error
+          const gst = getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']);
+          if (gst) {
+            results.errors.push(`Row ${i + 2}: Customer with GST number "${gst}" already exists.`);
+          } else {
+            results.errors.push(`Row ${i + 2}: Customer with name "${customerInput.name}" already exists.`);
+          }
+        } else {
+          results.errors.push(`Row ${i + 2}: ${createErr.message}`);
+        }
+      }
     }
 
     const response: APIResponse = {

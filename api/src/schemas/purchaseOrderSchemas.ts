@@ -23,6 +23,12 @@ export interface POItemInput {
 export interface CreatePurchaseOrderInput {
   supplier: string; // Can be ObjectId (from customers collection) or supplier name string
   supplierEmail?: string; // Optional, will be fetched from customer if supplier is ObjectId
+  supplierAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+  };
   items: POItemInput[];
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
@@ -63,6 +69,12 @@ export interface CreatePurchaseOrderInput {
 export interface UpdatePurchaseOrderInput {
   supplier?: string; // Can be ObjectId (from customers collection) or supplier name string
   supplierEmail?: string; // Optional, will be fetched from customer if supplier is ObjectId
+  supplierAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+  };
   items: POItemInput[];
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
@@ -253,7 +265,7 @@ const basePOFields = {
     Joi.string().hex().length(24), // ObjectId for supplier from customers collection
     Joi.string().max(200).trim()   // String for supplier name
   ),
-  supplierEmail: Joi.string().email().max(200).trim(),
+  supplierEmail: Joi.string().email().max(200).trim().allow('', null),
   totalAmount: Joi.number().min(0).precision(2),
   status: Joi.string().valid('draft', 'sent', 'confirmed', 'received', 'cancelled'),
   orderDate: Joi.date().iso(),
@@ -297,6 +309,12 @@ const poItemSchema = Joi.object<POItemInput>({
 export const createPurchaseOrderSchema = Joi.object<CreatePurchaseOrderInput>({
   supplier: basePOFields.supplier.required(),
   supplierEmail: basePOFields.supplierEmail.optional(), // Optional since it can be fetched from customer
+  supplierAddress: Joi.object({
+    address: Joi.string().max(200).allow(''),
+    state: Joi.string().max(100).allow(''),
+    district: Joi.string().max(100).allow(''),
+    pincode: Joi.string().max(20).allow('')
+  }),
   items: Joi.array().items(poItemSchema).min(1).max(100).required(),
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
   priority: basePOFields.priority.default('medium'),
@@ -338,6 +356,12 @@ export const createPurchaseOrderSchema = Joi.object<CreatePurchaseOrderInput>({
 export const updatePurchaseOrderSchema = Joi.object<UpdatePurchaseOrderInput>({
   supplier: basePOFields.supplier,
   supplierEmail: basePOFields.supplierEmail,
+  supplierAddress: Joi.object({
+    address: Joi.string().max(200).allow(''),
+    state: Joi.string().max(100).allow(''),
+    district: Joi.string().max(100).allow(''),
+    pincode: Joi.string().max(20).allow('')
+  }),
   items: Joi.array().items(poItemSchema).min(1).max(100).required(),
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
   priority: basePOFields.priority,

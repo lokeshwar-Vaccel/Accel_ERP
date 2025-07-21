@@ -229,12 +229,12 @@ class ApiClient {
   // Stock Management APIs
   stock = {
     // Stock Locations
-    getLocations: () =>
-      this.makeRequest<{ success: boolean; data: any[] }>('/stock/locations'),
-    getRooms: () =>
-      this.makeRequest<{ success: boolean; data: any[] }>('/stock/rooms'),
-    getRacks: () =>
-      this.makeRequest<{ success: boolean; data: any[] }>('/stock/racks'),
+    getLocations: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/stock/locations${params ? `?${new URLSearchParams(params)}` : ''}`),
+    getRooms: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/stock/rooms${params ? `?${new URLSearchParams(params)}` : ''}`), 
+    getRacks: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/stock/racks${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     createLocation: (locationData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/stock/locations', {

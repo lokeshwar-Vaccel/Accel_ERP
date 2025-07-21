@@ -15,6 +15,12 @@ interface IPurchaseOrderSchema extends Document {
   poNumber: string;
   supplier: string;
   supplierEmail: string;
+  supplierAddress: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+  };
   items: IPOItemSchema[];
   totalAmount: number;
   status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
@@ -85,6 +91,12 @@ const purchaseOrderSchema = new Schema({
     type: String,
     trim: true,
     // maxlength: [100, 'Supplier Email cannot exceed 100 characters']
+  },
+  supplierAddress: {
+    address: { type: String, trim: true },
+    state: { type: String, trim: true },
+    district: { type: String, trim: true },
+    pincode: { type: String, trim: true }
   },
   items: {
     type: [poItemSchema],

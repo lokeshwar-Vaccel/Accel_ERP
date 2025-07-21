@@ -5,11 +5,11 @@ import { AppError } from '../middleware/errorHandler';
 import { createAssignmentNotification, createStatusChangeNotification, createFollowUpNotification } from './notificationController';
 import { TransactionCounter } from '../models/TransactionCounter';
 
-// Utility to get next employeeId
-async function getNextEmployeeId() {
-  // Use a single counter document for employeeId
+// Utility to get next customerId
+async function getNextCustomerId() {
+  // Use a single counter document for customerId
   const counter = await TransactionCounter.findOneAndUpdate(
-    { type: 'employeeId' },
+    { type: 'customerId' },
     { $inc: { sequence: 1 } },
     { new: true, upsert: true }
   );
@@ -69,7 +69,7 @@ export const getCustomers = async (
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
-        { employeeId: { $regex: search, $options: 'i' } },
+        { customerId: { $regex: search, $options: 'i' } },
       ];
     }
     
@@ -218,13 +218,29 @@ export const createCustomer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Generate employeeId
-    const employeeId = await getNextEmployeeId();
-    const customerData = {
+    // Check for duplicate GST number if provided - only within the same type (customer or supplier)
+    if (req.body.gstNumber && req.body.gstNumber.trim()) {
+      const existingCustomer = await Customer.findOne({ 
+        gstNumber: req.body.gstNumber.trim(),
+        type: req.body.type, // Only check within the same type (customer or supplier)
+        _id: { $ne: req.params.id } // Exclude current customer for updates
+      });
+      
+      if (existingCustomer) {
+        return next(new AppError(`GST Number already exists for this ${req.body.type}. Please use a different GST Number.`, 400));
+      }
+    }
+
+    // Generate customerId only for customers (not suppliers)
+    let customerData = {
       ...req.body,
-      createdBy: req.user?.id,
-      employeeId
+      createdBy: req.user?.id
     };
+
+    if (req.body.type === 'customer') {
+      const customerId = await getNextCustomerId();
+      customerData.customerId = customerId;
+    }
 
     const customer = await Customer.create(customerData);
 
@@ -270,6 +286,19 @@ export const updateCustomer = async (
     const customer = await Customer.findById(req.params.id);
     if (!customer) {
       return next(new AppError('Customer not found', 404));
+    }
+
+    // Check for duplicate GST number if provided - only within the same type (customer or supplier)
+    if (req.body.gstNumber && req.body.gstNumber.trim()) {
+      const existingCustomer = await Customer.findOne({ 
+        gstNumber: req.body.gstNumber.trim(),
+        type: req.body.type || customer.type, // Use provided type or existing type
+        _id: { $ne: req.params.id } // Exclude current customer for updates
+      });
+      
+      if (existingCustomer) {
+        return next(new AppError(`GST Number already exists for this ${req.body.type || customer.type}. Please use a different GST Number.`, 400));
+      }
     }
 
     // Store old values for notification comparison

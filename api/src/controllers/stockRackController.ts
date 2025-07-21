@@ -41,7 +41,19 @@ export const getRacks = async (req: AuthenticatedRequest, res: Response, next: N
       Rack.countDocuments(filter),
     ]);
 
-    res.json(new APIResponse(true, 'Racks fetched', { racks, total }));
+    const response: any = {
+      success: true,
+      message: 'Racks retrieved successfully',
+      data: { racks },
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit)),
+      },
+    };
+
+    res.status(200).json(response);
   } catch (err) {
     next(err);
   }

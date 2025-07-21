@@ -110,6 +110,7 @@ interface Customer {
   email: string;
   phone: string;
   address: string;
+  type: string;
   addresses?: Array<{
     id: number;
     address: string;
@@ -270,6 +271,7 @@ const InvoiceManagement: React.FC = () => {
   const [showStatusFilterDropdown, setShowStatusFilterDropdown] = useState(false);
   const [showPaymentFilterDropdown, setShowPaymentFilterDropdown] = useState(false);
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showInvoiceTypeDropdown, setShowInvoiceTypeDropdown] = useState(false);
@@ -376,6 +378,9 @@ const InvoiceManagement: React.FC = () => {
   const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create');
   const [showQuotationViewModal, setShowQuotationViewModal] = useState(false);
 
+  console.log("selectedInvoice", selectedInvoice);
+
+
   // Filter products based on search term
   const getFilteredProducts = (searchTerm: string = '') => {
     if (!searchTerm) return products;
@@ -439,14 +444,18 @@ const InvoiceManagement: React.FC = () => {
     setCurrentPage(page);
   };
 
+  const toFixedNumber = (value: number, decimals = 2) =>
+    Number(value.toFixed(decimals));
+
 
   const calculateAdjustedTaxRate = (unitPrice: number, quantity: number, targetTotal: number): number => {
     if (unitPrice === 0 || quantity === 0) return 0;
     const base = unitPrice * quantity;
     const tax = targetTotal - base;
     const taxRate = (tax / base) * 100;
-    return Math.max(0, parseFloat(taxRate.toFixed(2)));
+    return Math.max(0, Math.min(100, toFixedNumber(taxRate))); // Ensure 0–100
   };
+
 
   const autoAdjustTaxRates = () => {
     const items = selectedInvoice.items ?? [];
@@ -461,19 +470,15 @@ const InvoiceManagement: React.FC = () => {
       const quantity = item.quantity ?? 0;
       const unitPrice = item.unitPrice ?? 0;
 
-      if (quantity === 0 || unitPrice === 0) {
-        return item; // Leave the item as-is if not applicable
-      }
+      if (quantity === 0 || unitPrice === 0) return item;
 
       const base = unitPrice * quantity;
       const share = subtotal > 0 ? base / subtotal : 0;
       const targetItemTotal = share * targetTotal;
 
-      const adjustedTaxRateRaw = calculateAdjustedTaxRate(unitPrice, quantity, targetItemTotal);
-      const adjustedTaxRate = Math.min(100, adjustedTaxRateRaw); // Limit to 100%
-
-      let taxAmount = parseFloat(((base * adjustedTaxRate) / 100).toFixed(2));
-      const totalPrice = parseFloat((base + taxAmount).toFixed(2));
+      const adjustedTaxRate = calculateAdjustedTaxRate(unitPrice, quantity, targetItemTotal);
+      const taxAmount = toFixedNumber((base * adjustedTaxRate) / 100);
+      const totalPrice = toFixedNumber(base + taxAmount);
 
       return {
         ...item,
@@ -489,12 +494,13 @@ const InvoiceManagement: React.FC = () => {
     setSelectedInvoice((prev: any) => ({
       ...prev,
       items: adjustedItems,
-      subtotal: parseFloat(subtotal.toFixed(2)),
-      taxAmount: parseFloat(taxAmount.toFixed(2)),
-      totalAmount: parseFloat(totalAmount.toFixed(2)),
-      remainingAmount: parseFloat(((totalAmount - (prev.paidAmount ?? 0))).toFixed(2)),
+      subtotal: toFixedNumber(subtotal),
+      taxAmount: toFixedNumber(taxAmount),
+      totalAmount: toFixedNumber(totalAmount),
+      remainingAmount: toFixedNumber(totalAmount - (prev.paidAmount ?? 0)),
     }));
   };
+
 
 
   const autoAdjustUnitPrice = () => {
@@ -514,18 +520,16 @@ const InvoiceManagement: React.FC = () => {
       const quantity = item.quantity ?? 0;
       const taxRate = item.taxRate ?? 0;
 
-      if (quantity === 0) {
-        return item; // Skip adjustment for zero quantity
-      }
+      if (quantity === 0) return item;
 
       const itemBase = (item.unitPrice ?? 0) * quantity;
       const itemShare = currentTotal > 0 ? (itemBase + (itemBase * taxRate) / 100) / currentTotal : 0;
       const targetItemTotal = itemShare * targetTotal;
 
-      const adjustedUnitPrice = parseFloat(((targetItemTotal / quantity) / (1 + taxRate / 100)).toFixed(2));
+      const adjustedUnitPrice = toFixedNumber((targetItemTotal / quantity) / (1 + taxRate / 100));
       const basePrice = adjustedUnitPrice * quantity;
-      const taxAmount = parseFloat(((basePrice * taxRate) / 100).toFixed(2));
-      const totalPrice = parseFloat((basePrice + taxAmount).toFixed(2));
+      const taxAmount = toFixedNumber((basePrice * taxRate) / 100);
+      const totalPrice = toFixedNumber(basePrice + taxAmount);
 
       return {
         ...item,
@@ -537,20 +541,20 @@ const InvoiceManagement: React.FC = () => {
 
     const subtotal = adjustedItems.reduce((sum: number, item: any) => sum + ((item.unitPrice ?? 0) * (item.quantity ?? 0)), 0);
     const taxAmount = adjustedItems.reduce((sum: number, item: any) => sum + (item.taxAmount ?? 0), 0);
-    const totalAmount = parseFloat((subtotal + taxAmount).toFixed(2));
+    const totalAmount = toFixedNumber(subtotal + taxAmount);
     const paidAmount = selectedInvoice.paidAmount ?? 0;
-    const remainingAmount = parseFloat((totalAmount - paidAmount).toFixed(2));
+    const remainingAmount = toFixedNumber(totalAmount - paidAmount);
 
     setSelectedInvoice((prev: any) => ({
       ...prev,
       items: adjustedItems,
-      subtotal: parseFloat(subtotal.toFixed(2)),
-      taxAmount: parseFloat(taxAmount.toFixed(2)),
+      subtotal: toFixedNumber(subtotal),
+      taxAmount: toFixedNumber(taxAmount),
       totalAmount,
       remainingAmount,
     }));
-
   };
+
 
 
 
@@ -844,7 +848,7 @@ const InvoiceManagement: React.FC = () => {
       // Set "Main Office" as default if not already selected
       const mainOffice = locationsData.find(loc => loc.name === "Main Office");
       // if (mainOffice && !newInvoice.location) {
-      setNewInvoice(prev => ({ ...prev, location: mainOffice._id }));
+      setNewInvoice(prev => ({ ...prev, location: mainOffice?._id }));
       // }
 
     } catch (error) {
@@ -2919,9 +2923,9 @@ const InvoiceManagement: React.FC = () => {
                     </td> : <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
                         {getStatusIcon(invoice.status)}
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(invoice.externalInvoiceTotal?.toFixed(1) === invoice.totalAmount?.toFixed(1))
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(invoice.externalInvoiceTotal?.toFixed(2) === invoice.totalAmount?.toFixed(2))
                           ? "bg-green-100 text-green-800" : invoice.externalInvoiceTotal === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                          {invoice.externalInvoiceTotal?.toFixed(1) === invoice.totalAmount?.toFixed(1) ? "Not Mismatch" : invoice.externalInvoiceTotal === 0 ? "Not Mismatch" : "Amount Mismatch"}
+                          {invoice.externalInvoiceTotal?.toFixed(2) === invoice.totalAmount?.toFixed(2) ? "Not Mismatch" : invoice.externalInvoiceTotal === 0 ? "Not Mismatch" : "Amount Mismatch"}
                         </span>
                       </div>
                     </td>}
@@ -3069,7 +3073,17 @@ const InvoiceManagement: React.FC = () => {
                     </button>
                     {showCustomerDropdown && (
                       <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                        <button
+                        {customers.filter(customer => customer.type === 'customer').length > 0 && <div className="p-2 border-b border-gray-200">
+                          <input
+                            type="text"
+                            placeholder="Search customers..."
+                            value={customerSearchTerm}
+                            onChange={e => setCustomerSearchTerm(e.target.value)}
+                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            autoFocus
+                          />
+                        </div>}
+                        {customers.filter(customer => customer.type === 'customer').length > 0 && <button
                           onClick={() => {
                             setNewInvoice({ ...newInvoice, customer: '', address: '' });
                             setShowCustomerDropdown(false);
@@ -3079,8 +3093,18 @@ const InvoiceManagement: React.FC = () => {
                             }`}
                         >
                           Select customer
-                        </button>
-                        {customers.map(customer => (
+                        </button>}
+                        {customers.filter(customer => customer.type === 'customer').length <= 0 ? (
+                          <div className="px-3 py-2 text-sm text-gray-500">
+                            {!customerSearchTerm ? 'No customers found' : 'Loading customers...'}
+                          </div>
+                        ) : (
+                          customers.filter(customer =>
+                            customer.type === 'customer' && (
+                              customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                              customer.email?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
+                              customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase()))
+                          ).map(customer => (
                           <button
                             key={customer._id}
                             onClick={() => {
@@ -3096,7 +3120,7 @@ const InvoiceManagement: React.FC = () => {
                               <div className="text-xs text-gray-500">{customer.email}</div>
                             </div>
                           </button>
-                        ))}
+                        )))}
                       </div>
                     )}
                   </div>
@@ -3774,7 +3798,7 @@ const InvoiceManagement: React.FC = () => {
 
               {/* Customer Info */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
+                <div>
                   <h4 className="font-medium text-gray-900 mb-2">From:</h4>
                   <div className="text-sm text-gray-600">
                     <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
@@ -3791,21 +3815,32 @@ const InvoiceManagement: React.FC = () => {
                     )}
                   </div>
                 </div>
-              <div>
-                <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
-                <div className="text-sm text-gray-600">
-                  <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.address : selectedInvoice?.supplierAddress ?? ''}</p>
-                  <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.district : selectedInvoice?.supplierDistrict ?? ''}</p>
-                  <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.state : selectedInvoice?.supplierState ?? ''}</p>
-                  <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.pincode : selectedInvoice?.supplierPincode ?? ''}</p>
-                  <p>{selectedInvoice?.customer ? selectedInvoice?.customer.email : selectedInvoice?.supplierEmail ?? ''}</p>
-                  <p>{selectedInvoice?.customer ? selectedInvoice?.customer.phone : ''}</p>
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
+                  {selectedInvoice?.invoiceType !== 'purchase' ?
+                    <div className="text-sm text-gray-600">
+                      <p>{selectedInvoice?.customer ? selectedInvoice?.customer.name : ''}</p>
+                      <p>{selectedInvoice?.customer ? selectedInvoice?.customer.email : selectedInvoice?.supplierEmail ?? ''}</p>
+                      <p>{selectedInvoice?.customer ? selectedInvoice?.customer.phone : ''}</p>
+                      <p className="mt-2 font-medium text-gray-700">Address:</p>
+                      <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.address : selectedInvoice?.supplierAddress ?? ''}</p>
+                      <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.district : selectedInvoice?.supplierDistrict ?? ''}</p>
+                      <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.state : selectedInvoice?.supplierState ?? ''}</p>
+                      <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.pincode : selectedInvoice?.supplierPincode ?? ''}</p>
+                    </div> : <div className="text-sm text-gray-600">
+                      <p>{selectedInvoice?.supplierName ? selectedInvoice?.supplierName : selectedInvoice?.customerName ?? ''}</p>
+                      <p>{selectedInvoice?.supplierEmail ? selectedInvoice?.supplierEmail : selectedInvoice?.customerEmail ?? ''}</p>
+                      <p className="mt-2 font-medium text-gray-700">Address:</p>
+                      <p className="font-medium">{selectedInvoice?.supplierAddress ? selectedInvoice?.supplierAddress.address : selectedInvoice?.supplierAddress ?? ''}</p>
+                      <p className="font-medium">{selectedInvoice?.supplierAddress ? selectedInvoice?.supplierAddress.district : selectedInvoice?.supplierDistrict ?? ''}</p>
+                      <p className="font-medium">{selectedInvoice?.supplierAddress ? selectedInvoice?.supplierAddress.state : selectedInvoice?.supplierState ?? ''}</p>
+                      <p className="font-medium">{selectedInvoice?.supplierAddress ? selectedInvoice?.supplierAddress.pincode : selectedInvoice?.supplierPincode ?? ''}</p>
+                    </div>}
                 </div>
-              </div>
               </div>
 
               {/* Total Amount Mismatch Warning */}
-              {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount !== selectedInvoice?.externalInvoiceTotal && (
+              {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount.toFixed(2) !== selectedInvoice?.externalInvoiceTotal.toFixed(2) && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <div className="flex items-center">
                     <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
@@ -3840,10 +3875,11 @@ const InvoiceManagement: React.FC = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN No</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax (%)</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                         {editMode && (
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -3854,36 +3890,45 @@ const InvoiceManagement: React.FC = () => {
                       {(selectedInvoice.items || []).map((item: any, index: number) => (
                         <tr key={index}>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item?.product?.hsnNumber}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item?.product?.partNo}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode ? (
                               <input
                                 type="number"
-                                value={item.unitPrice}
+                                placeholder="₹0.00"
+                                value={item.unitPrice === null || item.unitPrice === 0 ? '' : item.unitPrice}
                                 onChange={(e) => handleItemEdit(index, 'unitPrice', parseFloat(e.target.value) || 0)}
                                 onBlur={() => recalculateItem(index)}
-                                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 step="1"
                               />
                             ) : (
-                              `₹${(item.unitPrice ?? 0).toLocaleString()}`
+                              `₹${(item.unitPrice ?? 0).toFixed(2)}`
                             )}
                           </td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode ? (
                               <input
                                 type="number"
-                                value={item.taxRate}
-                                onChange={(e) => handleItemEdit(index, 'taxRate', parseFloat(e.target.value) || 0)}
-                                onBlur={() => recalculateItem(index)}
-                                className="w-20 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                step="1"
-                                min="0"
-                                max="100"
+                                value={item.taxRate === null || item.taxRate === 0 ? '' : item.taxRate}
+                                placeholder="0 - 100%"
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  const num = parseFloat(value);
+                                  if (value === '') {
+                                    handleItemEdit(index, 'taxRate', null); // Allow clearing
+                                  } else if (!isNaN(num) && num >= 0 && num <= 100) {
+                                    handleItemEdit(index, 'taxRate', num);
+                                  }
+                                }}
+                                className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
+
+
                             ) : (
-                              `${item.taxRate ?? 0}%`
+                              `${item.taxRate.toFixed(2) ?? 0}%`
                             )}
                           </td>
                           <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{((item.quantity ?? 0) * (item.unitPrice ?? 0) + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate || 0) / 100)).toFixed(2)}</td>
@@ -3917,7 +3962,7 @@ const InvoiceManagement: React.FC = () => {
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-gray-600">
                       <p>Make adjustments to unit prices and tax rates to match the external total.</p>
-                      <p className="font-medium mt-1">Target Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toLocaleString()}</p>
+                      <p className="font-medium mt-1">Target Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toFixed(2)}</p>
                     </div>
                     <div className="flex space-x-2">
                       <button
@@ -3982,11 +4027,11 @@ const InvoiceManagement: React.FC = () => {
                     <div className="border-t pt-2">
                       <div className="flex justify-between text-lg font-bold">
                         <span>Total Amount:</span>
-                        <span className={selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount !== selectedInvoice?.externalInvoiceTotal ? 'text-red-600' : 'text-gray-900'}>
+                        <span className={selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount.toFixed(2) !== selectedInvoice?.externalInvoiceTotal.toFixed(2) ? 'text-red-600' : 'text-gray-900'}>
                           ₹{safeToFixed(selectedInvoice?.totalAmount)}
                         </span>
                       </div>
-                      {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount !== selectedInvoice?.externalInvoiceTotal && (
+                      {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount.toFixed(2) !== selectedInvoice?.externalInvoiceTotal.toFixed(2) && (
                         <div className="flex justify-between text-sm text-gray-600 mt-1">
                           <span>External Total:</span>
                           <span>₹{safeToFixed(selectedInvoice?.externalInvoiceTotal)}</span>

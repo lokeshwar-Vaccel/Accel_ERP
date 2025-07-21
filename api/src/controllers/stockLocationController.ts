@@ -30,8 +30,8 @@ export const getStockLocations = async (
     // Execute query with pagination
     const locations = await StockLocation.find(query)
       .sort({"name": 1})
-      .limit(Number(limit))
-      .skip((Number(page) - 1) * Number(limit))
+      // .limit(Number(limit))
+      // .skip((Number(page) - 1) * Number(limit))
       .select('-__v'); // Exclude __v field
 
     const total = await StockLocation.countDocuments(query);

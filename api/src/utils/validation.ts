@@ -48,7 +48,7 @@ export const updateUserSchema = Joi.object({
 // Customer validation schemas
 export const createCustomerSchema = Joi.object({
   name: Joi.string().min(2).max(100).required(),
-  // email: Joi.string().email(),
+  email: Joi.string().email().allow('', null),
   phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).allow('', null),
   address: Joi.string().max(500).required(),
   customerType: Joi.string().valid(...Object.values(CustomerType)).required(),

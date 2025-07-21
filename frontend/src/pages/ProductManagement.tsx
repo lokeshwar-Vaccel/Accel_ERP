@@ -512,7 +512,7 @@ const ProductManagement: React.FC = () => {
     label: dept
   }));
 
-  const formUomOptions = ["nos", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll", "nos"].sort().map(unit => ({
+  const formUomOptions = ["nos", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll"].sort().map(unit => ({
     value: unit,
     label: unit
   }));

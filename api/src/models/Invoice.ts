@@ -57,6 +57,12 @@ export interface IInvoice extends mongoose.Document {
     district: string;
     pincode: string;
   };
+  supplierAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+  };
   referenceNo?: string;
   referenceDate?: string;
 }
@@ -280,6 +286,24 @@ const invoiceSchema = new Schema<IInvoice>({
       trim: true
     }
   },
+  supplierAddress: {
+    address: {
+      type: String,
+      trim: true
+    },
+    state: {
+      type: String,
+      trim: true
+    },
+    district: {
+      type: String,
+      trim: true
+    },
+    pincode: {
+      type: String,
+      trim: true
+    }
+  },
   referenceNo: {
     type: String,
     trim: true
@@ -293,35 +317,29 @@ const invoiceSchema = new Schema<IInvoice>({
 });
 
 // Pre-save middleware to calculate totals
-invoiceSchema.pre('save', function(this: IInvoice, next) {
+invoiceSchema.pre('save', function (this: IInvoice, next) {
+  const round2 = (n: number): number => Number(n.toFixed(2));
 
-  function truncateTo(n: number): number {
-  return Math.floor(n * 100) / 100;
-}
+  // 1. Recalculate subtotal and taxAmount
+  this.subtotal = round2(this.items.reduce((sum, item) => sum + round2(item.totalPrice), 0));
+  this.taxAmount = round2(this.items.reduce((sum, item) => sum + round2(item.taxAmount || 0), 0));
+  console.log("____step 1", this.totalAmount ,this.taxAmount, this.subtotal);
 
-  // Calculate subtotal and taxes
-  this.subtotal = this.items.reduce((sum, item) => sum + item.totalPrice, 0);
-  this.taxAmount = this.items.reduce((sum, item) => sum + (item.taxAmount || 0), 0);
-  // this.totalAmount = this.subtotal + this.taxAmount - this.discountAmount;
-  console.log("____step 2", this.totalAmount ,this.taxAmount);
+  const discount = round2(this.discountAmount || 0);
 
-  // this.taxAmount = truncateTo(this.taxAmount)
-  const discount = this.discountAmount || 0;
-  this.totalAmount = parseFloat((this.subtotal + this.taxAmount - discount).toFixed(2));
-console.log("____step 1", this.totalAmount);
- 
+  // 2. Calculate totalAmount = subtotal + tax - discount
+  this.totalAmount = round2(this.subtotal + this.taxAmount - discount);
+    console.log("____step 2", this.totalAmount ,this.taxAmount);
 
-
-  
-  // Ensure paidAmount doesn't exceed totalAmount
+  // 3. Ensure paidAmount doesn't exceed total
   if (this.paidAmount > this.totalAmount) {
     this.paidAmount = this.totalAmount;
   }
-  
-  // Calculate remaining amount
-  this.remainingAmount = Math.max(0, this.totalAmount - this.paidAmount);
-  
-  // Auto-update payment status based on amounts
+
+  // 4. Remaining amount = total - paid
+  this.remainingAmount = round2(Math.max(0, this.totalAmount - this.paidAmount));
+
+  // 5. Auto-update payment status
   if (this.totalAmount === 0) {
     this.paymentStatus = 'paid';
     this.paidAmount = 0;
@@ -331,12 +349,13 @@ console.log("____step 1", this.totalAmount);
   } else if (this.paidAmount >= this.totalAmount) {
     this.paymentStatus = 'paid';
     this.remainingAmount = 0;
-  } else if (this.paidAmount > 0 && this.paidAmount < this.totalAmount) {
+  } else {
     this.paymentStatus = 'partial';
   }
-  
+
   next();
 });
+
 
 // Index for efficient queries
 invoiceSchema.index({ customer: 1, issueDate: -1 });

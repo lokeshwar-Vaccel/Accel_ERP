@@ -140,6 +140,9 @@ const InventoryManagement: React.FC = () => {
   const [previewData, setPreviewData] = useState<any>(null);
   const [products, setProducts] = useState<ProductData[]>([]);
   const [locations, setLocations] = useState<StockLocationData[]>([]);
+  const [recentLocations, setRecentLocations] = useState<StockLocationData[]>([]);
+  const [recentRooms, setRecentRooms] = useState<any[]>([]);
+  const [recentRacks, setRecentRacks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [totalStock, setTotalStock] = useState(0);
@@ -148,8 +151,7 @@ const InventoryManagement: React.FC = () => {
   const [totalOverStocked, setTotalOverStocked] = useState(0);
   const [totalInStock, setTotalInStock] = useState(0);
 
-  // Search and filter states - these are now handled by the filters object
-
+  console.log("recentRacks:", recentRacks);
   // Custom dropdown states
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -253,6 +255,9 @@ const InventoryManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(100);
 
+  console.log("editingLocationId:", editingLocationId);
+
+
   // Ensure limit is never too small
   React.useEffect(() => {
     if (limit < 10) {
@@ -261,6 +266,9 @@ const InventoryManagement: React.FC = () => {
   }, [limit]);
   const [totalPages, setTotalPages] = useState(0);
   const [totalDatas, setTotalDatas] = useState(0);
+
+
+  // Update location paginatio
 
   const [filters, setFilters] = useState<any>({
     search: '',
@@ -283,34 +291,35 @@ const InventoryManagement: React.FC = () => {
   const getStockStatusTable = (item: StockItem) => {
     const minStock = item.product?.minStockLevel ?? 0;
     const maxStock = item.product?.maxStockLevel ?? 0;
-  
+
     if (item.quantity <= 0) {
       return { label: 'Out of Stock', variant: 'danger' as const, icon: AlertTriangle };
     }
-  
+
     if (minStock > 0 && item.quantity < minStock) {
       return { label: 'Low Stock', variant: 'warning' as const, icon: TrendingDown };
     }
-  
+
     if (maxStock > 0 && item.quantity > maxStock) {
       return { label: 'Overstocked', variant: 'info' as const, icon: TrendingUp };
     }
-  
+
     if (
       (minStock === 0 || item.quantity >= minStock) &&
       (maxStock === 0 || item.quantity <= maxStock)
     ) {
       return { label: 'In Stock', variant: 'success' as const, icon: Package };
     }
-  
+
     // fallback if somehow none of the conditions matched
     return { label: 'Unknown', variant: 'default' as const, icon: HelpCircle };
   };
-  
+
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
+
 
 
   const stockStatusOptions = [
@@ -355,6 +364,7 @@ const InventoryManagement: React.FC = () => {
     });
     setRoomErrors({});
     setSelectedRoom(undefined);
+    // setRecentRooms([]);
   };
 
   const handleRackModalClose = () => {
@@ -366,6 +376,7 @@ const InventoryManagement: React.FC = () => {
       isActive: true
     });
     setRackErrors({});
+    // setRecentRacks([]);
     setSelectedRack(undefined);
   };
 
@@ -430,7 +441,7 @@ const InventoryManagement: React.FC = () => {
     if (selectedRoom) {
       setRoomFormData({
         name: selectedRoom.name,
-        location: selectedRoom.location._id,
+        location: typeof selectedRoom.location === "string" ? selectedRoom.location : selectedRoom.location._id,
         description: selectedRoom.description || '',
         isActive: selectedRoom.isActive
       });
@@ -506,18 +517,26 @@ const InventoryManagement: React.FC = () => {
         // Update existing location
         const response = await apiClient.stock.updateRoom(selectedRoom._id, roomFormData);
         const updatedRoom = (response.data as any).room || response.data;
-        setRooms(rooms.map(loc =>
+        setRecentRooms(recentRooms.map(loc =>
           loc._id === selectedRoom._id ? updatedRoom : loc
         ));
+        if (typeof selectedRoom.location !== "string") {
+          setRooms(rooms.map(room =>
+            room._id === selectedRoom._id ? updatedRoom : room
+          ));
+        }
         fetchLocations();
+        setSelectedRoom(undefined);
         fetchRooms();
       } else {
         // Create new location
         const response = await apiClient.stock.createRoom(roomFormData);
         const newRoom = (response.data as any).room || response.data;
-        setRooms([...rooms, newRoom]);
+        // setRooms([...rooms, newRoom]);
+        const updatedRecent = [newRoom, ...recentRooms];
+        setRecentRooms(updatedRecent);
         fetchLocations();
-        fetchRooms();
+        fetchRooms(); 
       }
 
       // setShowLocationModal(false);
@@ -548,15 +567,24 @@ const InventoryManagement: React.FC = () => {
         const response = await apiClient.stock.updateRack(selectedRack._id, rackFormData);
         const updatedRack = (response.data as any).rack || response.data;
 
-        setRacks(racks.map(loc =>
+        setRecentRacks(recentRacks.map(loc =>
           loc._id === selectedRack._id ? updatedRack : loc
         ));
-        fetchRacks();
+        if (typeof selectedRack.location !== "string") {
+          setRacks(racks.map(rack =>
+            rack._id === selectedRack._id ? updatedRack : rack
+          ));
+        }
+        // fetchRacks();
+        setSelectedRack(undefined);
+        fetchLocations();
+        fetchRooms();
       } else {
         // Create new location
         const response = await apiClient.stock.createRack(rackFormData);
         const newRack = (response.data as any).rack || response.data;
-        setRacks([...racks, newRack]);
+        // setRacks([...racks, newRack]);
+        setRecentRacks([newRack, ...recentRacks]);
       }
       fetchLocations();
       fetchRooms();
@@ -622,9 +650,9 @@ const InventoryManagement: React.FC = () => {
       await Promise.all([
         fetchInventory(),
         fetchProducts(),
-        fetchLocations(),
-        fetchRooms(),
-        fetchRacks()
+        fetchLocations(), // Use pagination function for initial load
+        fetchRooms(), // Use pagination function for initial load
+        fetchRacks() // Use pagination function for initial load
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -658,8 +686,6 @@ const InventoryManagement: React.FC = () => {
 
     try {
       const response = await apiClient.stock.getStock(params);
-      console.log("response-2:", response);
-
 
       setCurrentPage(response.pagination.page);
       setTotalStock(response.totalStock);
@@ -729,7 +755,7 @@ const InventoryManagement: React.FC = () => {
     }
   };
 
-  const fetchLocations = async () => {
+  const fetchLocations = async (page: number = 1) => {
     try {
       const response = await apiClient.stock.getLocations();
       let locationsData: any[] = [];
@@ -747,13 +773,14 @@ const InventoryManagement: React.FC = () => {
         return aTime - bTime;
       });
       setLocations(locationsData);
+      // setRecentLocations(locationsData);
     } catch (error) {
       console.error('Error fetching locations:', error);
       setLocations([]);
     }
   };
 
-  const fetchRooms = async () => {
+  const fetchRooms = async (page: number = 1) => {
     try {
       const response = await apiClient.stock.getRooms();
       let roomsData: any[] = [];
@@ -770,9 +797,11 @@ const InventoryManagement: React.FC = () => {
         const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return aTime - bTime;
       });
+      // 3. Set the remaining rooms
       setRooms(roomsData);
+      console.log("rooms-99992:", rooms);
     } catch (error) {
-      console.error('Error fetching locations:', error);
+      console.error('Error fetching rooms:', error);
       setRooms([]);
     }
   };
@@ -792,7 +821,7 @@ const InventoryManagement: React.FC = () => {
     }
   }, [rackFormData.location, rooms]);
 
-  const fetchRacks = async () => {
+  const fetchRacks = async (page: number = 1) => {
     try {
       const response = await apiClient.stock.getRacks();
       let racksData: any[] = [];
@@ -811,7 +840,7 @@ const InventoryManagement: React.FC = () => {
       });
       setRacks(racksData);
     } catch (error) {
-      console.error('Error fetching locations:', error);
+      console.error('Error fetching racks:', error);
       setRacks([]);
     }
   };
@@ -832,6 +861,8 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleEditLocation = (location: StockLocationData) => {
+    console.log("location-------:", location);
+
     setLocationFormData({
       name: location.name,
       address: location.address,
@@ -863,7 +894,6 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleUpdateStock = (stockItem: StockItem) => {
-    console.log("stockItem:", stockItem);
 
     setSelectedItem(stockItem);
     setAdjustmentFormData({
@@ -884,7 +914,6 @@ const InventoryManagement: React.FC = () => {
   };
 
   const handleTransferStock = (stockItem: StockItem) => {
-    console.log("stockItem--22:", stockItem);
     setSelectedItem(stockItem); // Store the selected item for access to stock details
 
     // Calculate available quantity and set reasonable default
@@ -936,16 +965,22 @@ const InventoryManagement: React.FC = () => {
         // Update existing location
         const response = await apiClient.stock.updateLocation(editingLocationId, locationFormData);
         const updatedLocation = (response.data as any).location || response.data;
-        setLocations(locations.map(loc =>
+        setRecentLocations(recentLocations.map(loc =>
           loc._id === editingLocationId ? updatedLocation : loc
         ));
-        await fetchLocations();
+        if (recentLocations.some(loc => loc._id !== editingLocationId)) {
+          setLocations(locations.map(loc =>
+            loc._id === editingLocationId ? updatedLocation : loc
+          ));
+        }
+        fetchLocations();
       } else {
         // Create new location
         const response = await apiClient.stock.createLocation(locationFormData);
         const newLocation = (response.data as any).location || response.data;
-        setLocations([newLocation, ...locations]); // Add new location at the top
-        await fetchLocations(); // Optionally, you can skip await fetchLocations(); here to avoid re-sorting
+        setRecentLocations([newLocation, ...recentLocations]);
+        // setLocations([newLocation, ...locations]); // Add new location at the top
+        fetchLocations(); // Optionally, you can skip await fetchLocations(); here to avoid re-sorting
       }
 
       // setShowLocationModal(false);
@@ -1120,8 +1155,6 @@ const InventoryManagement: React.FC = () => {
     try {
       const response = await apiClient.stock.getStock({ stockId: stockId, product: productId, location: locationId });
 
-      console.log("response1:", response);
-
       let stockData: any[] = [];
       if (response.data) {
         if (Array.isArray(response.data)) {
@@ -1144,12 +1177,8 @@ const InventoryManagement: React.FC = () => {
     try {
       setFormErrors({});
       const { stockId, product, fromLocation, fromRoom, fromRack, toLocation, toRoom, toRack, quantity, notes } = transferFormData;
-      console.log("stockId:", stockId);
-
       // Get fresh stock data before transfer
       const currentStock = await getCurrentStockStatus(stockId, product, fromLocation);
-      console.log("currentStock:", currentStock);
-
 
       if (currentStock) {
         const availableQuantity = currentStock.availableQuantity || (currentStock.quantity - (currentStock.reservedQuantity || 0));
@@ -2506,6 +2535,9 @@ const InventoryManagement: React.FC = () => {
                 onClick={() => {
                   setShowLocationModal(false);
                   setShowLocationTypeDropdown(false);
+                  setRecentLocations([]);
+                  setRecentRooms([]);
+                  setRecentRacks([]);
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -2652,6 +2684,9 @@ const InventoryManagement: React.FC = () => {
                             setShowLocationTypeDropdown(false);
                           } else {
                             setShowLocationModal(false);
+                            setRecentLocations([]);
+                            setRecentRooms([]);
+                            setRecentRacks([]);
                           }
                         }}
                         className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -2801,7 +2836,7 @@ const InventoryManagement: React.FC = () => {
               <div className="w-1/2 p-4">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-900">Existing Locations</h3>
-                  <span className="text-sm text-gray-500">{activeTab === 'locations' ? locations.length : activeTab === 'rooms' ? rooms.length : racks.length} {activeTab === 'locations' ? 'locations' : activeTab === 'rooms' ? 'rooms' : 'racks'}</span>
+                  <span className="text-sm text-gray-500">{activeTab === 'locations' ? locations.length : activeTab === 'rooms' ? rooms.length : racks.length + recentRacks.length} {activeTab === 'locations' ? 'locations' : activeTab === 'rooms' ? 'rooms' : 'racks'}</span>
                 </div>
 
                 <div className="space-y-6">
@@ -2816,7 +2851,9 @@ const InventoryManagement: React.FC = () => {
                           }`}
                       >
                         <Building className="w-4 h-4 inline mr-2" />
-                        Locations ({locations.length})
+                        Locations ({locations.filter(
+                          (location) => !recentLocations.some((recent) => recent._id === location._id)
+                        ).length + recentLocations.length})
                       </button>
                       <button
                         onClick={() => setActiveTab('rooms')}
@@ -2826,7 +2863,9 @@ const InventoryManagement: React.FC = () => {
                           }`}
                       >
                         <Archive className="w-4 h-4 inline mr-2" />
-                        Rooms ({rooms.length})
+                        Rooms ({rooms.filter(
+                          (room) => !recentRooms.some((recent) => recent._id === room._id)
+                        ).length + recentRooms.length})
                       </button>
                       <button
                         onClick={() => setActiveTab('racks')}
@@ -2836,7 +2875,7 @@ const InventoryManagement: React.FC = () => {
                           }`}
                       >
                         <MapPin className="w-4 h-4 inline mr-2" />
-                        Racks ({racks.length})
+                        Racks ({racks.length + recentRacks.length})
                       </button>
                     </nav>
                   </div>
@@ -2849,14 +2888,15 @@ const InventoryManagement: React.FC = () => {
                       </div>
 
                       <div className="grid gap-4">
-                        {locations.sort((a,b) => a.name.localeCompare(b.name)).map((location) => (
-                          <div key={location._id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                        {/* Recent Locations */}
+                        {recentLocations.map((location) => (
+                          <div key={location._id} className="border border-gray-200 bg-green-100 hover:bg-green-50 rounded-lg p-3 hover:bg-gray-50 transition-colors">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center space-x-2">
                                   <h4 className="font-medium text-gray-900">{location.name}</h4>
                                   <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${location.isActive
-                                    ? 'bg-green-100 text-green-800'
+                                    ? 'bg-green-200 text-green-800'
                                     : 'bg-red-100 text-red-800'
                                     }`}>
                                     {location.isActive ? 'Active' : 'Inactive'}
@@ -2892,6 +2932,54 @@ const InventoryManagement: React.FC = () => {
                             </div>
                           </div>
                         ))}
+
+                        {/* All Locations with Pagination */}
+                        {locations.filter(
+                          (location) => !recentLocations.some((recent) => recent._id === location._id)
+                        ).sort((a, b) => a.name.localeCompare(b.name))
+                          .map((location) => (
+                            <div key={location._id} className="border border-gray-200 rounded-lg p-3 hover:bg-gray-50 transition-colors">
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center space-x-2">
+                                    <h4 className="font-medium text-gray-900">{location.name}</h4>
+                                    <span className={`px-1.5 py-0.5 rounded-full text-xs font-medium ${location.isActive
+                                      ? 'bg-green-100 text-green-800'
+                                      : 'bg-red-100 text-red-800'
+                                      }`}>
+                                      {location.isActive ? 'Active' : 'Inactive'}
+                                    </span>
+                                  </div>
+                                  <p className="text-sm text-gray-600 mt-1">{location.address}</p>
+                                  <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                                    <span className="capitalize">{location.type.replace('_', ' ')}</span>
+                                    {location.contactPerson && (
+                                      <span>👤 {location.contactPerson}</span>
+                                    )}
+                                    {location.phone && (
+                                      <span>📞 {location.phone}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center space-x-1 ml-2">
+                                  <button
+                                    onClick={() => handleEditLocation(location)}
+                                    className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg transition-colors"
+                                    title="Edit Location"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteLocation(location._id)}
+                                    className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors"
+                                    title="Delete Location"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
                       </div>
                     </div>
                   )}
@@ -2904,7 +2992,53 @@ const InventoryManagement: React.FC = () => {
                       </div>
 
                       <div className="grid gap-4">
-                        {rooms.sort((a,b) => a.name.localeCompare(b.name)).map((room) => (
+                        {recentRooms.map((room) => (
+                          <div key={room._id} className="border border-gray-200 bg-green-100 hover:bg-green-50 rounded-lg p-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center">
+                                  <Archive className="w-4 h-4 text-green-500 mr-2" />
+                                  <h4 className="font-medium text-gray-900">{room.name}</h4>
+                                  <span className={`ml-2 px-1.5 py-0.5 text-xs font-medium rounded-full ${room.isActive ? 'bg-green-200 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                    {room.isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                  <span className="text-sm ml-4 text-gray-600">
+                                    Racks Count: {racks.filter(rack => rack.room._id === room._id).length}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  Location: {
+                                    locations.find(loc => loc._id === room.location)?.name || 'Unknown'
+                                  }
+                                </p>
+                                {room.description && (
+                                  <p className="text-xs text-gray-500 mt-1">{room.description}</p>
+                                )}
+                                {/* <div className="mt-1">
+                                  <span className="text-sm text-gray-600">
+                                    Racks: {racks.filter(rack => rack.room._id === room._id).length}
+                                  </span>
+                                </div> */}
+                              </div>
+                              <div className="flex space-x-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedRoom(room);
+                                    // setShowRoomModal(true);
+                                  }}
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {rooms.filter(
+                          (room) => !recentRooms.some((recent) => recent._id === room._id)
+                        ).sort((a, b) => a.name.localeCompare(b.name)).map((room) => (
                           <div key={room._id} className="border border-gray-200 rounded-lg p-4">
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
@@ -2915,18 +3049,23 @@ const InventoryManagement: React.FC = () => {
                                     }`}>
                                     {room.isActive ? 'Active' : 'Inactive'}
                                   </span>
+                                  <span className="text-sm ml-4 text-gray-600">
+                                    Racks Count: {racks.filter(rack => rack.room._id === room._id).length}
+                                  </span>
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1">
-                                  {/* Location: {getLocationName(room.locationId)} */}
+                                  Location: {
+                                    locations.find(loc => loc._id === room.location._id)?.name || 'Unknown'
+                                  }
                                 </p>
                                 {room.description && (
-                                  <p className="text-sm text-gray-500 mt-1">{room.description}</p>
+                                  <p className="text-xs text-gray-500 mt-1">{room.description}</p>
                                 )}
-                                <div className="mt-1">
+                                {/* <div className="mt-1">
                                   <span className="text-sm text-gray-600">
                                     Racks: {racks.filter(rack => rack.room._id === room._id).length}
                                   </span>
-                                </div>
+                                </div> */}
                               </div>
                               <div className="flex space-x-2">
                                 <Button
@@ -2955,7 +3094,45 @@ const InventoryManagement: React.FC = () => {
                       </div>
 
                       <div className="grid gap-4">
-                        {racks.sort((a,b) => a.name.localeCompare(b.name)).map((rack) => (
+                        {recentRacks.map((rack) => (
+                          <div key={rack._id} className="border border-gray-200 bg-green-100 hover:bg-green-50 rounded-lg p-4">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="flex items-center">
+                                  <MapPin className="w-4 h-4 text-purple-500 mr-2" />
+                                  <h4 className="font-medium text-gray-900">{rack.name}</h4>
+                                  <span className={`ml-2 px-1.5 py-0.5 text-xs font-medium rounded-full ${rack.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                                    }`}>
+                                    {rack.isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  Location: {
+                                    locations.find(loc => loc._id === rack.location)?.name || 'Unknown'
+                                  } &rarr; Room: {
+                                    rooms.find(room => room._id === rack.room)?.name || 'Unknown'
+                                  }
+                                </p>
+                                {rack.description && (
+                                  <p className="text-sm text-gray-500 mt-1">{rack.description}</p>
+                                )}
+                              </div>
+                              <div className="flex space-x-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setSelectedRack(rack);
+                                    // setShowRackModal(true);
+                                  }}
+                                >
+                                  <Edit2 className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                        {racks.sort((a, b) => a.name.localeCompare(b.name)).map((rack) => (
                           <div key={rack._id} className="border border-gray-200 rounded-lg p-4">
                             <div className="flex justify-between items-start">
                               <div className="flex-1">
@@ -3060,13 +3237,14 @@ const InventoryManagement: React.FC = () => {
                 </div> */}
 
                 {locations.length > 0 && (
-                  <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                  <div className="mt-2 p-3 bg-blue-50 rounded-lg">
                     <p className="text-xs text-blue-700">
                       💡 <strong>Tip:</strong> You can edit any location by clicking the edit icon.
                       Locations with active stock cannot be deleted.
                     </p>
                   </div>
                 )}
+
               </div>
             </div>
           </div>
@@ -4243,15 +4421,11 @@ const InventoryManagement: React.FC = () => {
                   </div>
                   <button
                     onClick={async () => {
-                      console.log('📥 Starting template download...');
                       try {
                         const token = localStorage.getItem('authToken');
-                        console.log('🔑 Auth token present:', !!token);
 
-                        console.log('📤 Making request to download template');
                         const blob = await apiClient.inventory.downloadTemplate();
 
-                        console.log('✅ Template download successful');
                         const url = window.URL.createObjectURL(blob);
                         const link = document.createElement('a');
                         link.href = url;
@@ -4340,19 +4514,10 @@ const InventoryManagement: React.FC = () => {
                       return;
                     }
 
-                    console.log('🚀 Starting Excel preview process...');
-                    console.log('📁 Selected file:', {
-                      name: selectedFile.name,
-                      size: selectedFile.size,
-                      type: selectedFile.type
-                    });
-
                     setImporting(true);
                     try {
-                      console.log('📤 Making preview request using apiClient');
                       const result = await apiClient.inventory.previewImport(selectedFile);
 
-                      console.log('✅ Preview successful:', result);
                       setPreviewData(result.data);
                       setShowPreviewModal(true);
                       setShowImportModal(false);
@@ -4364,7 +4529,6 @@ const InventoryManagement: React.FC = () => {
                       toast.error(`Preview failed: ${errorMessage}`);
                     } finally {
                       setImporting(false);
-                      console.log('🏁 Preview process completed');
                     }
                   }}
                   disabled={!selectedFile || importing}
@@ -4492,8 +4656,8 @@ const InventoryManagement: React.FC = () => {
                             <td className="px-3 py-2">₹{item.MRP?.toLocaleString()}</td>
                             <td className="px-3 py-2">
                               <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${item.status === 'new' ? 'bg-green-100 text-green-800' :
-                                  item.status === 'existing' ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-red-100 text-red-800'
+                                item.status === 'existing' ? 'bg-yellow-100 text-yellow-800' :
+                                  'bg-red-100 text-red-800'
                                 }`}>
                                 {item.status || 'Unknown'}
                               </span>
@@ -4545,7 +4709,7 @@ const InventoryManagement: React.FC = () => {
                         }
                       }
                     };
-                    
+
                     xhr.onload = async function () {
                       setImporting(false);
                       setProcessing(false);
@@ -4588,31 +4752,31 @@ const InventoryManagement: React.FC = () => {
           </div>
         </div>
       )}
-{importing && (
-  <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
-    <div className="bg-white rounded-lg p-6 shadow-xl w-[90%] max-w-md space-y-6">
-      <div className="flex items-center space-x-3">
-        <RefreshCw className="animate-spin w-6 h-6 text-green-600" />
-        <span className="text-base font-semibold text-green-700">
-          {processing ? 'Processing file, please wait...' : 'Uploading file...'}
-        </span>
-      </div>
+      {importing && (
+        <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 shadow-xl w-[90%] max-w-md space-y-6">
+            <div className="flex items-center space-x-3">
+              <RefreshCw className="animate-spin w-6 h-6 text-green-600" />
+              <span className="text-base font-semibold text-green-700">
+                {processing ? 'Processing file, please wait...' : 'Uploading file...'}
+              </span>
+            </div>
 
-      {/* Progress bar wrapper */}
-      <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden">
-        <div
-          className="absolute top-0 left-0 h-full bg-green-500 rounded-full transition-all duration-300 ease-in-out"
-          style={{ width: `${importProgress}%` }}
-        ></div>
-      </div>
+            {/* Progress bar wrapper */}
+            <div className="relative w-full h-4 bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="absolute top-0 left-0 h-full bg-green-500 rounded-full transition-all duration-300 ease-in-out"
+                style={{ width: `${importProgress}%` }}
+              ></div>
+            </div>
 
-      {/* Percentage */}
-      {processing && (
-        <div className="text-sm text-right font-medium text-gray-700">{importProgress}%</div>
+            {/* Percentage */}
+            {processing && (
+              <div className="text-sm text-right font-medium text-gray-700">{importProgress}%</div>
+            )}
+          </div>
+        </div>
       )}
-    </div>
-  </div>
-)}
 
 
     </div>

@@ -31,13 +31,36 @@ export const getRooms = async (req: AuthenticatedRequest, res: Response, next: N
     const [rooms, total] = await Promise.all([
       Room.find(filter)
         .populate('location', 'name type ')
-        .skip((+page - 1) * +limit)
-        .limit(+limit)
+        // .skip((+page - 1) * +limit)
+        // .limit(+limit)
         .sort({"name":1}),
       Room.countDocuments(filter),
     ]);
 
-    res.json(new APIResponse(true, 'Rooms fetched', { rooms, total }));
+    const pages = Math.ceil(total / Number(limit));
+
+    // res.json(new APIResponse(true, 'Rooms fetched', { 
+    //   rooms, 
+    //   pagination: {
+    //   page: Number(page),
+    //   limit: Number(limit),
+    //   total,
+    //   pages,
+    // } }));
+    const response: any = {
+      success: true,
+      message: 'Rooms retrieved successfully',
+      data: { rooms },
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages,
+      },
+    };
+
+    res.status(200).json(response);
+
   } catch (err) {
     next(err);
   }

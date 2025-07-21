@@ -82,7 +82,7 @@ interface User {
 
 interface Customer {
   _id: string;
-  employeeId?: string;
+  customerId?: string;
   name: string;
   designation?: string;
   contactPersonName?: string;
@@ -154,6 +154,9 @@ const CustomerManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  console.log("customers-99992:", customers);
+
 
   const [draggedCustomer, setDraggedCustomer] = useState<string | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
@@ -263,7 +266,7 @@ const CustomerManagement: React.FC = () => {
 
   const searchParams = new URLSearchParams(location.search);
   // Add at the top, after useState imports
-  const [customerTypeTab, setCustomerTypeTab] = useState<'customer' | 'supplier'>(searchParams.get('action') !== 'create-supplier'?'customer':'supplier');
+  const [customerTypeTab, setCustomerTypeTab] = useState<'customer' | 'supplier'>(searchParams.get('action') !== 'create-supplier' ? 'customer' : 'supplier');
 
   // Add after other useState hooks for filters
   const [sortField, setSortField] = useState('all');
@@ -512,10 +515,10 @@ const CustomerManagement: React.FC = () => {
       let hasMore = true;
 
       while (hasMore) {
-        const response: any = await apiClient.customers.getAll({ 
-          page, 
+        const response: any = await apiClient.customers.getAll({
+          page,
           limit: 100,
-          type: customerTypeTab 
+          type: customerTypeTab
         });
         let customersData: Customer[] = [];
         if (response?.data) {
@@ -604,7 +607,7 @@ const CustomerManagement: React.FC = () => {
       const response = await apiClient.customers.getAll(params);
       console.log('API response data:', response);
       setCounts(response.data.counts);
-      
+
       // Set individual status counts
       setNewLeadStatusCount((response.data as any).newLeadStatusCount || 0);
       setQualifiedStatusCount((response.data as any).qualifiedStatusCount || 0);
@@ -612,7 +615,7 @@ const CustomerManagement: React.FC = () => {
       setLostStatusCount((response.data as any).lostStatusCount || 0);
       setContactedStatusCount((response.data as any).contactedStatusCount || 0);
       setTotalCustomersCount((response.data as any).totalCustomersCount || 0);
-      
+
       setCurrentPage(response.pagination.page);
       setLimit(response.pagination.limit);
       setTotalDatas(response.pagination.total);
@@ -671,85 +674,97 @@ const CustomerManagement: React.FC = () => {
   //   return matchesSearch && matchesStatus && matchesType;
   // }) : [];
 
-const validateCustomerForm = (): boolean => {
-  const errors: Record<string, any> = {};
-  const missingFields: string[] = [];
+  const validateCustomerForm = (): boolean => {
+    const errors: Record<string, any> = {};
+    const missingFields: string[] = [];
 
-  // Top-level field checks
-  if (!customerFormData.name.trim()) {
-    errors.name = 'Customer name is required';
-    missingFields.push('Customer Name');
-  }
+    // Top-level field checks
+    if (!customerFormData.name.trim()) {
+      errors.name = 'Customer name is required';
+      missingFields.push('Customer Name');
+    }
 
-  if (!customerFormData.gstNumber.trim()) {
-    errors.gstNumber = 'GST Number is required';
-    missingFields.push('GST Number');
-  }
+    if (!customerFormData.gstNumber.trim()) {
+      errors.gstNumber = 'GST Number is required';
+      missingFields.push('GST Number');
+    }
 
-  // if (!customerFormData.email.trim()) {
-  //   errors.email = 'Email is required';
-  //   missingFields.push('Email');
-  // } else if (!/\S+@\S+\.\S+/.test(customerFormData.email)) {
-  //   errors.email = 'Please enter a valid email address';
-  //   missingFields.push('Valid Email');
-  // }
+    // if (!customerFormData.email.trim()) {
+    //   errors.email = 'Email is required';
+    //   missingFields.push('Email');
+    // } else if (!/\S+@\S+\.\S+/.test(customerFormData.email)) {
+    //   errors.email = 'Please enter a valid email address';
+    //   missingFields.push('Valid Email');
+    // }
 
-  // Address field validation
-  if (!customerFormData.addresses.length) {
-    errors.address = ['At least one address is required'];
-    missingFields.push('Address');
-  } else {
-    const addressErrors: string[] = [];
+    // Address field validation
+    if (!customerFormData.addresses.length) {
+      errors.address = ['At least one address is required'];
+      missingFields.push('Address');
+    } else {
+      const addressErrors: string[] = [];
 
-    customerFormData.addresses.forEach((addr, index) => {
-      const addrMissing: string[] = [];
+      customerFormData.addresses.forEach((addr, index) => {
+        const addrMissing: string[] = [];
 
-      if (!addr.address.trim()) addrMissing.push('address');
-      if (!addr.state.trim()) addrMissing.push('state');
-      if (!addr.district.trim()) addrMissing.push('district');
-      if (!addr.pincode.trim()) addrMissing.push('pincode');
-      else if (!/^\d{6}$/.test(addr.pincode)) addrMissing.push('valid 6-digit pincode');
+        if (!addr.address.trim()) addrMissing.push('address');
+        if (!addr.state.trim()) addrMissing.push('state');
+        if (!addr.district.trim()) addrMissing.push('district');
+        if (!addr.pincode.trim()) addrMissing.push('pincode');
+        else if (!/^\d{6}$/.test(addr.pincode)) addrMissing.push('valid 6-digit pincode');
 
-      if (addrMissing.length > 0) {
-        addressErrors[index] = `Please fill in ${addrMissing.join(', ')}`;
-        missingFields.push(`Address #${index + 1}`);
+        if (addrMissing.length > 0) {
+          addressErrors[index] = `Please fill in ${addrMissing.join(', ')}`;
+          missingFields.push(`Address #${index + 1}`);
+        }
+      });
+
+      const primaryCount = customerFormData.addresses.filter(addr => addr.isPrimary).length;
+      if (primaryCount !== 1) {
+        errors.addressPrimary = 'There must be exactly one primary address';
+        missingFields.push('Primary Address');
       }
-    });
 
-    const primaryCount = customerFormData.addresses.filter(addr => addr.isPrimary).length;
-    if (primaryCount !== 1) {
-      errors.addressPrimary = 'There must be exactly one primary address';
-      missingFields.push('Primary Address');
+      if (addressErrors.length > 0) {
+        errors.address = addressErrors;
+      }
     }
 
-    if (addressErrors.length > 0) {
-      errors.address = addressErrors;
+    // General error summary
+    if (missingFields.length > 1) {
+      errors.general = `Please fix the following: ${missingFields.join(', ')}`;
+    } else if (missingFields.length === 1) {
+      errors.general = `Please fix the error in: ${missingFields[0]}`;
     }
-  }
 
-  // General error summary
-  if (missingFields.length > 1) {
-    errors.general = `Please fix the following: ${missingFields.join(', ')}`;
-  } else if (missingFields.length === 1) {
-    errors.general = `Please fix the error in: ${missingFields[0]}`;
-  }
-
-  if (errors.general) {
-    toast.error(errors.general);
-  }
-
-  // GST Number validation
-  if (customerFormData.gstNumber) {
-    const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-    if (!gstRegex.test(customerFormData.gstNumber)) {
-      errors.gstNumber = 'GST Number must be 15 characters, uppercase, and in valid GSTIN format (e.g., 22AAAAA0000A1Z5)';
-      missingFields.push('Valid GST Number');
+    if (errors.general) {
+      toast.error(errors.general);
     }
-  }
 
-  setFormErrors(errors);
-  return Object.keys(errors).length === 0;
-};
+    // GST Number validation
+    if (customerFormData.gstNumber) {
+      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+      if (!gstRegex.test(customerFormData.gstNumber)) {
+        errors.gstNumber = 'GST Number must be 15 characters, uppercase, and in valid GSTIN format (e.g., 22AAAAA0000A1Z5)';
+        missingFields.push('Valid GST Number');
+      } else {
+        // Check for duplicate GST number only within the same type (customer or supplier)
+        const existingCustomer = customers.find(customer =>
+          customer.gstNumber === customerFormData.gstNumber &&
+          (customer.type === customerTypeTab ||
+            (!editingCustomer || customer._id !== editingCustomer._id))
+        );
+
+        if (existingCustomer) {
+          errors.gstNumber = `GST Number already exists for this ${customerTypeTab}. Please use a different GST Number.`;
+          missingFields.push('Unique GST Number');
+        }
+      }
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
 
 
@@ -762,7 +777,9 @@ const validateCustomerForm = (): boolean => {
       if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
         delete (submitData as any).assignedTo;
       }
+      console.log("submitData-99992:", submitData);
       const response = await apiClient.customers.create(submitData);
+      console.log("response-99992:", response);
       fetchCustomers();
       fetchAllCustomers();
       setShowAddModal(false);
@@ -981,7 +998,7 @@ const validateCustomerForm = (): boolean => {
         fetchCustomers();
       }
     }
-    
+
 
     setDraggedCustomer(null);
     setDragOverColumn(null);
@@ -1042,15 +1059,15 @@ const validateCustomerForm = (): boolean => {
   };
 
   const stats = [
-          {
-        title: 'Total Customers',
-        value: totalCustomersCount,
-        action: () => {
-          clearAllFilters();
-        },
-        icon: <Users className="w-6 h-6" />,
-        color: 'blue'
+    {
+      title: 'Total Customers',
+      value: customers.filter(customer => customer.type === customerTypeTab).length,
+      action: () => {
+        clearAllFilters();
       },
+      icon: <Users className="w-6 h-6" />,
+      color: 'blue'
+    },
     {
       title: 'New Leads',
       value: newLeadStatusCount,
@@ -1250,66 +1267,66 @@ const validateCustomerForm = (): boolean => {
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
-      {/* Header Section - Single Row */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-4">
-          {/* Search Bar */}
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search customers by name, email, or ID..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm text-sm placeholder-gray-500"
-            />
-          </div>
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={() => setShowFilters(v => !v)}
-              className="px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 border border-gray-300 text-sm font-medium flex items-center gap-2 shadow-sm"
-            >
-              <Filter className="w-4 h-4" />
-              Filters
-              <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
-            </button>
-            
-          </div>
+        {/* Header Section - Single Row */}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
+          <div className="flex items-center gap-4">
+            {/* Search Bar */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Search customers by name, email, or ID..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm text-sm placeholder-gray-500"
+              />
+            </div>
+            {/* Action Buttons */}
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowFilters(v => !v)}
+                className="px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 border border-gray-300 text-sm font-medium flex items-center gap-2 shadow-sm"
+              >
+                <Filter className="w-4 h-4" />
+                Filters
+                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+              </button>
 
-          {/* Customer Type Tabs */}
-          <div className="flex space-x-1 bg-white p-1 rounded-lg border border-gray-200">
-            <button
-              className={`px-4 py-2.5 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'customer'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              onClick={() => setCustomerTypeTab('customer')}
-              type="button"
-            >
-              <div className="flex items-center space-x-2">
-                <Users className="w-4 h-4" />
-                <span>Customers</span>
-              </div>
-            </button>
-            <button
-              className={`px-4 py-2.5 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'supplier'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                }`}
-              onClick={() => setCustomerTypeTab('supplier')}
-              type="button"
-            >
-              <div className="flex items-center space-x-2">
-                <Building className="w-4 h-4" />
-                <span>Suppliers</span>
-              </div>
-            </button>
+            </div>
+
+            {/* Customer Type Tabs */}
+            <div className="flex space-x-1 bg-white p-1 rounded-lg border border-gray-200">
+              <button
+                className={`px-4 py-2.5 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'customer'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                onClick={() => setCustomerTypeTab('customer')}
+                type="button"
+              >
+                <div className="flex items-center space-x-2">
+                  <Users className="w-4 h-4" />
+                  <span>Customers</span>
+                </div>
+              </button>
+              <button
+                className={`px-4 py-2.5 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'supplier'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                onClick={() => setCustomerTypeTab('supplier')}
+                type="button"
+              >
+                <div className="flex items-center space-x-2">
+                  <Building className="w-4 h-4" />
+                  <span>Suppliers</span>
+                </div>
+              </button>
+            </div>
+
+
           </div>
-          
-          
         </div>
-      </div>
         {/* Collapsible Filter Panel */}
         {showFilters && (
           <div className="px-6 py-6 bg-gray-50">
@@ -1335,8 +1352,8 @@ const validateCustomerForm = (): boolean => {
                   onChange={e => setSortOrder(e.target.value as any)}
                   className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
                 >
-                 <option value="asc">Ascending (A-Z)</option>
-                 <option value="desc">Descending (Z-A)</option>
+                  <option value="asc">Ascending (A-Z)</option>
+                  <option value="desc">Descending (Z-A)</option>
                 </select>
               </div>
               {/* Status */}
@@ -1372,11 +1389,10 @@ const validateCustomerForm = (): boolean => {
                 <button
                   onClick={clearAllFilters}
                   // disabled={!hasActiveFilters}
-                  className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                    hasActiveFilters
+                  className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${hasActiveFilters
                       ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
                       : 'bg-gray-100 text-gray-400 border border-gray-200 hover-gray-700 '
-                  }`}
+                    }`}
                 >
                   Clear All Filters
                 </button>
@@ -1386,38 +1402,46 @@ const validateCustomerForm = (): boolean => {
         )}
         {/* Active Filters Chips */}
         {hasActiveFilters && (
-          <div className="px-4 py-3 flex flex-wrap gap-2 items-center border-t border-gray-100">
-            <span className="text-xs text-gray-500">Active filters:</span>
-            {typeFilter !== 'all' && (
-              <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full text-xs flex items-center">
-                {getTypeLabel(typeFilter)}
-                <button onClick={() => setTypeFilter('all')} className="ml-1 text-purple-500 hover:text-purple-700">×</button>
-              </span>
-            )}
-            {statusFilter !== 'all' && (
-              <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs flex items-center">
-                {getStatusLabel(statusFilter)}
-                <button onClick={() => setStatusFilter('all')} className="ml-1 text-blue-500 hover:text-blue-700">×</button>
-              </span>
-            )}
-            {sortField !== 'all' && (
-              <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs flex items-center">
-                {(() => {
-                  let label = '';
-                  if (sortField === 'name') label = 'Customer Name';
-                  else if (sortField === 'email') label = 'Email';
-                  else if (sortField === 'createdAt') label = 'Created Date';
-                  return `${label} - ${sortOrder === 'asc' ? 'A-Z (Ascending)' : 'Z-A (Descending)'}`;
-                })()}
-                <button onClick={() => setSortField('all')} className="ml-1 text-green-500 hover:text-green-700">×</button>
-              </span>
-            )}
-            {searchTerm && (
-              <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs flex items-center">
-                {`Search: "${searchTerm}"`}
-                <button onClick={() => setSearchTerm('')} className="ml-1 text-yellow-500 hover:text-yellow-700">×</button>
-              </span>
-            )}
+          <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-100">
+          <div className="flex items-center text-sm text-gray-600">
+            <span className="font-medium">{customers.filter(customer => customer.type === customerTypeTab).length}</span>
+            <span className="mx-1">of</span>
+            <span>{customers.filter(customer => customer.type === customerTypeTab).length}</span>
+            <span className="ml-1">items found</span>
+          </div>
+            <div className="px-4 py-3 flex flex-wrap gap-2 items-center border-t border-gray-100">
+              <span className="text-xs text-gray-500">Active filters:</span>
+              {typeFilter !== 'all' && (
+                <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full text-xs flex items-center">
+                  {getTypeLabel(typeFilter)}
+                  <button onClick={() => setTypeFilter('all')} className="ml-1 text-purple-500 hover:text-purple-700">×</button>
+                </span>
+              )}
+              {statusFilter !== 'all' && (
+                <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs flex items-center">
+                  {getStatusLabel(statusFilter)}
+                  <button onClick={() => setStatusFilter('all')} className="ml-1 text-blue-500 hover:text-blue-700">×</button>
+                </span>
+              )}
+              {sortField !== 'all' && (
+                <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs flex items-center">
+                  {(() => {
+                    let label = '';
+                    if (sortField === 'name') label = 'Customer Name';
+                    else if (sortField === 'email') label = 'Email';
+                    else if (sortField === 'createdAt') label = 'Created Date';
+                    return `${label} - ${sortOrder === 'asc' ? 'A-Z (Ascending)' : 'Z-A (Descending)'}`;
+                  })()}
+                  <button onClick={() => setSortField('all')} className="ml-1 text-green-500 hover:text-green-700">×</button>
+                </span>
+              )}
+              {searchTerm && (
+                <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs flex items-center">
+                  {`Search: "${searchTerm}"`}
+                  <button onClick={() => setSearchTerm('')} className="ml-1 text-yellow-500 hover:text-yellow-700">×</button>
+                </span>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -1475,7 +1499,9 @@ const validateCustomerForm = (): boolean => {
                         </div>
                         <div className="text-xs text-gray-500">
                           {/* ID: {customer._id.slice(-6)} */}
-                          Customer ID: {customer.employeeId}
+                          {customer.type === 'customer' && customer.customerId && (
+                            <>Customer ID: {customer.customerId}</>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -1996,7 +2022,7 @@ const validateCustomerForm = (): boolean => {
                             <div className="flex justify-between my-1">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Address {index + 1} *{' '}
-                                 {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                                {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
                               </label>
                               {!address.isPrimary && (
                                 <button
@@ -2350,7 +2376,7 @@ const validateCustomerForm = (): boolean => {
                             <div className="flex justify-between my-1">
                               <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Address {index + 1} *{' '}
-                                 {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                                {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
                               </label>
                               {!address.isPrimary && (
                                 <button
@@ -2473,6 +2499,12 @@ const validateCustomerForm = (): boolean => {
                   {/* Status Dropdown as Tag - moved here above the grid */}
 
                   <div className="grid grid-cols-2 gap-4">
+                    {selectedCustomer.type === 'customer' && selectedCustomer.customerId && (
+                      <div>
+                        <p className="text-xs text-gray-500">Customer ID</p>
+                        <p className="font-medium">{selectedCustomer.customerId}</p>
+                      </div>
+                    )}
                     <div>
                       <p className="text-xs text-gray-500">Customer Type</p>
                       <p className="font-medium capitalize">{selectedCustomer.customerType}</p>

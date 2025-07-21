@@ -424,44 +424,46 @@ export const updateInvoiceProductPriceAndGST = async (
     const { invoiceId } = req.params;
     const { products } = req.body;
 
+    console.log("📥 Incoming Request:", { invoiceId, products });
+
     if (!Array.isArray(products) || products.length === 0) {
       return next(new AppError('Products array is required and cannot be empty', 400));
     }
 
-    // 1. Fetch Invoice
     const invoice = await Invoice.findById(invoiceId);
     if (!invoice) return next(new AppError('Invoice not found', 404));
+    console.log("📄 Found Invoice:", invoice._id);
 
     let updated = false;
     let subtotal = 0;
     let totalTax = 0;
 
-     const truncateTo2 = (value: number) => Math.floor(value * 10) / 10;
+    const round2 = (n: number) => Number(n.toFixed(2));
 
-    // 2. Process each product update
     for (const { product: productId, price, gst } of products) {
       if (price < 0 || gst < 0) {
         return next(new AppError('Price and GST must be non-negative', 400));
       }
 
+      console.log(`🔄 Processing Product: ${productId} | New Price: ${price} | GST: ${gst}`);
+
       const product = await Product.findById(productId);
       if (!product) return next(new AppError(`Product not found: ${productId}`, 404));
 
-      // Update Product price & GST
-      product.price = price;
-      product.gst = gst;
+      product.price = round2(price);
+      product.gst = round2(gst);
       await product.save();
-     
+      console.log(`✅ Product Updated: ${product.name} | Price: ${product.price} | GST: ${product.gst}`);
 
-      // Update matching Invoice item
       invoice.items = invoice.items.map(item => {
         if (item.product.toString() === productId.toString()) {
-          const totalPrice = item.quantity * price;
-          let taxAmount = (gst * totalPrice) / 100;
-          // taxAmount = truncateTo2(taxAmount)
+          const totalPrice = round2(item.quantity * price);
+          const taxAmount = round2((gst * totalPrice) / 100);
 
-          item.unitPrice = price;
-          item.taxRate = gst;
+          console.log(`🧾 Updating Invoice Item - QTY: ${item.quantity} | Total: ${totalPrice} | Tax: ${taxAmount}`);
+
+          item.unitPrice = round2(price);
+          item.taxRate = round2(gst);
           item.totalPrice = totalPrice;
           item.taxAmount = taxAmount;
 
@@ -470,23 +472,23 @@ export const updateInvoiceProductPriceAndGST = async (
         return item;
       });
 
-      // Update optional stock record
       const stock = await Stock.findOne({ product: productId, location: invoice.location });
       if (stock) {
         stock.lastUpdated = new Date();
         await stock.save();
+        console.log(`📦 Stock Updated for Product ${productId} at Location ${invoice.location}`);
       }
 
-      // 🔁 Optional: Update purchase order item if invoice is linked
       if (invoice.poNumber) {
         const purchaseOrder = await PurchaseOrder.findOne({ poNumber: invoice.poNumber });
         if (purchaseOrder) {
           for (const item of purchaseOrder.items) {
             if (item.product.toString() === productId.toString()) {
-              item.unitPrice = price;
-              item.taxRate = gst;
-              item.totalPrice = item.quantity * price;
+              item.unitPrice = round2(price);
+              item.taxRate = round2(gst);
+              item.totalPrice = round2(item.quantity * price);
               updated = true;
+              console.log(`📑 PO Updated: ${invoice.poNumber} | Product: ${productId}`);
             }
           }
           await purchaseOrder.save();
@@ -497,41 +499,41 @@ export const updateInvoiceProductPriceAndGST = async (
     if (!updated) {
       return next(new AppError('No matching products found in invoice items', 404));
     }
-    function roundTo2(n: number) {
-      return Math.round(n * 100) / 100;
-    }
-    function truncateTo(n: number) {
-  return Math.floor(n * 100) / 100;
-}
 
-
-    // 3. Recalculate invoice totals
+    // 3. Recalculate totals
     for (const item of invoice.items) {
-      subtotal += item.totalPrice;
-      totalTax += item.taxAmount ?? 0;
+      subtotal += round2(item.totalPrice);
+      totalTax += round2(item.taxAmount ?? 0);
     }
-    totalTax = truncateTo(totalTax)
 
-    invoice.subtotal = subtotal;
-    invoice.taxAmount = Number(totalTax.toFixed(2));
-    invoice.totalAmount = Number((subtotal + totalTax).toFixed(2)) - invoice.discountAmount;
-    invoice.remainingAmount = invoice.totalAmount - invoice.paidAmount;
+    invoice.subtotal = round2(subtotal);
+    invoice.taxAmount = round2(totalTax);
+    invoice.totalAmount = round2(invoice.subtotal + invoice.taxAmount - invoice.discountAmount);
+    invoice.remainingAmount = round2(invoice.totalAmount - invoice.paidAmount);
+
+    console.log("💰 Final Invoice Totals:", {
+      subtotal: invoice.subtotal,
+      taxAmount: invoice.taxAmount,
+      discount: invoice.discountAmount,
+      totalAmount: invoice.totalAmount,
+      paidAmount: invoice.paidAmount,
+      remainingAmount: invoice.remainingAmount,
+    });
 
     await invoice.save();
 
-    // 4. Send response
-    const response: APIResponse = {
+    res.status(200).json({
       success: true,
       message: 'Product prices and GST updated successfully in invoice (and purchase order if linked)',
       data: { invoice }
-    };
-
-    res.status(200).json(response);
+    });
   } catch (error) {
-    console.error('Error updating invoice:', error);
+    console.error('❌ Error updating invoice:', error);
     next(error);
   }
 };
+
+
 
 // @desc    Send invoice email with payment link
 // @route   POST /api/v1/invoices/:id/send-email

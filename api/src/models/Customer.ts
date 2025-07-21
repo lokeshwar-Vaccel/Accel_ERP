@@ -128,10 +128,10 @@ const customerSchema = new Schema({
     maxlength: [2000, 'Notes cannot exceed 2000 characters']
   },
   contactHistory: [contactHistorySchema],
-  employeeId: {
+  customerId: {
     type: String,
     unique: true,
-    sparse: true, // allow legacy customers without employeeId
+    sparse: true, // allow legacy customers without customerId
     trim: true
   },
   createdBy: {
@@ -150,8 +150,12 @@ customerSchema.index({ name: 'text', email: 'text', phone: 'text' });
 customerSchema.index({ status: 1 });
 customerSchema.index({ customerType: 1 });
 customerSchema.index({ assignedTo: 1 });
-// Add unique index for gstNumber if present
-customerSchema.index({ gstNumber: 1 }, { unique: true, sparse: true });
+// Add compound unique index for gstNumber + type to allow same GST number for customers and suppliers
+// Only includes documents where gstNumber exists and is a string (excludes null/undefined values)
+customerSchema.index({ gstNumber: 1, type: 1 }, { 
+  unique: true, 
+  partialFilterExpression: { gstNumber: { $exists: true, $type: "string" } }
+});
 // Add unique compound index for name + phone
 customerSchema.index({ name: 1, phone: 1 }, { unique: true, sparse: true });
 

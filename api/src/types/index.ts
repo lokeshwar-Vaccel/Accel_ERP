@@ -162,7 +162,7 @@ export interface ICustomer extends Document {
   notes?: string;
   contactHistory: IContactHistory[];
   createdBy: string;
-  employeeId?: string;
+  customerId?: string;
 }
 
 // Contact History Interface

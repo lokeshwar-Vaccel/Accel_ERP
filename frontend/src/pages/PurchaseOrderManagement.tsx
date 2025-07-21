@@ -66,13 +66,23 @@ interface POItem1 {
 
 }
 
+interface SupplierAddress {
+  address: string;
+  state: string;
+  district: string;
+  pincode: string;
+  id?: string; // for frontend keying
+  isPrimary?: boolean;
+}
+
 interface Supplier {
   _id: string;
   name: string;
   email?: string;
   phone?: string;
-  address?: string;
+  addresses?: SupplierAddress[];
   contactPerson?: string;
+  type?: string;
 }
 
 interface StockLocation {
@@ -140,6 +150,7 @@ interface ReceiveItemsData {
   notes?: string;
   supplierName?: string;
   supplierEmail?: string;
+  supplierAddress?: SupplierAddress;
   externalInvoiceTotal?: number;
   // New shipping and documentation fields
   shipDate: string;
@@ -154,6 +165,7 @@ interface ReceiveItemsData {
 interface POFormData {
   supplier: string;
   supplierEmail: string;
+  supplierAddress?: SupplierAddress; // now an object, not a string
   expectedDeliveryDate: string;
   priority: 'low' | 'medium' | 'high' | 'urgent';
   sourceType: 'manual' | 'amc' | 'service' | 'inventory';
@@ -178,8 +190,9 @@ const PurchaseOrderManagement: React.FC = () => {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  console.log("purchaseOrders-99992:",purchaseOrders);
-  
+  console.log("suppliers-99992:", suppliers);
+    console.log("purchaseOrders-99992:", purchaseOrders);
+
 
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
@@ -251,6 +264,12 @@ const PurchaseOrderManagement: React.FC = () => {
   const [formData, setFormData] = useState<POFormData>({
     supplier: '',
     supplierEmail: '',
+    supplierAddress: {
+      address: '',
+      state: '',
+      district: '',
+      pincode: ''
+    }, // now undefined or object
     expectedDeliveryDate: '',
     priority: 'low',
     sourceType: 'manual',
@@ -267,6 +286,12 @@ const PurchaseOrderManagement: React.FC = () => {
     inspectedBy: '',
     supplierName: '',
     supplierEmail: '',
+    supplierAddress: {
+      address: '',
+      state: '',
+      district: '',
+      pincode: ''
+    },
     externalInvoiceTotal: 0,
     notes: '',
     // New shipping and documentation fields
@@ -304,6 +329,10 @@ const PurchaseOrderManagement: React.FC = () => {
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewData, setPreviewData] = useState<any>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Add state for address dropdown and addresses
+  const [showAddressDropdown, setShowAddressDropdown] = useState(false);
+  const [addresses, setAddresses] = useState<SupplierAddress[]>([]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -522,6 +551,12 @@ const PurchaseOrderManagement: React.FC = () => {
     setFormData({
       supplier: '',
       supplierEmail: '',
+      supplierAddress: {
+        address: '',
+        state: '',
+        district: '',
+        pincode: ''
+      }, // now undefined or object
       expectedDeliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       priority: 'low',
       sourceType: 'manual',
@@ -546,10 +581,14 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const handleEditPO = async (po: PurchaseOrder) => {
     setEditingPO(po);
-
+    let supplierAddress: SupplierAddress | undefined = undefined;
+    if (po.supplier && typeof po.supplier !== 'string' && Array.isArray(po.supplier.addresses) && po.supplier.addresses.length > 0) {
+      supplierAddress = po.supplier.addresses[0]; // default to first address, or use logic to match
+    }
     setFormData({
-      supplier: typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)._id,
+      supplier: typeof po.supplier === 'string' ? po.supplier : po.supplier._id,
       supplierEmail: typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)._id,
+      supplierAddress,
       expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : '',
       priority: po.priority || 'low',
       sourceType: po.sourceType || 'manual',
@@ -563,12 +602,16 @@ const PurchaseOrderManagement: React.FC = () => {
       }))
     });
     setFormErrors({});
-
     // Ensure suppliers are loaded when editing
     if (suppliers.length === 0) {
       await fetchSuppliers();
     }
-
+    // Set addresses for dropdown
+    if (po.supplier && typeof po.supplier !== 'string' && Array.isArray(po.supplier.addresses)) {
+      setAddresses(po.supplier.addresses);
+    } else {
+      setAddresses([]);
+    }
     setShowEditModal(true);
   };
 
@@ -579,7 +622,7 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const openReceiveModal = (po: PurchaseOrder) => {
-    console.log("po-12:",po);
+    console.log("po-12:", po);
 
     setSelectedPO(po);
     setReceiveSearchTerm(''); // Clear search when opening modal
@@ -587,6 +630,19 @@ const PurchaseOrderManagement: React.FC = () => {
     // Extract supplier name from purchase order
     const extractedSupplierName = typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier).name;
     const extractedSupplierEmail = typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any);
+
+    // Prefer the supplierAddress stored in the PO (from creation)
+    let extractedSupplierAddress: SupplierAddress = {
+      address: '',
+      state: '',
+      district: '',
+      pincode: ''
+    };
+    if ((po as any).supplierAddress && (po as any).supplierAddress.address) {
+      extractedSupplierAddress = (po as any).supplierAddress;
+    } else if (po.supplier && typeof po.supplier !== 'string' && Array.isArray(po.supplier.addresses) && po.supplier.addresses.length > 0) {
+      extractedSupplierAddress = po.supplier.addresses[0];
+    }
 
     // Use the first available location or a default if none exist
     const defaultLocation = locations.length > 0 ? locations[0]._id : 'loc-main-warehouse';
@@ -602,9 +658,6 @@ const PurchaseOrderManagement: React.FC = () => {
       items: po.items.map(item => {
         const product = item.product;
         const productId = typeof product === 'string' ? product : product?._id;
-        // const unitPrice = typeof product === 'object' && product?.price ? product.price : 0;
-        // const taxRate = typeof product === 'object' && product?.gst ? product.gst : 0;
-
         return {
           product: productId,
           description: '',
@@ -618,6 +671,7 @@ const PurchaseOrderManagement: React.FC = () => {
       inspectedBy: 'Admin',
       supplierName: extractedSupplierName, // Set supplier name from purchase order
       supplierEmail: extractedSupplierEmail,
+      supplierAddress: extractedSupplierAddress,
       externalInvoiceTotal: 0,
       notes: '',
       // New shipping and documentation fields
@@ -857,6 +911,12 @@ const PurchaseOrderManagement: React.FC = () => {
         inspectedBy: 'Admin',
         supplierName: '',
         supplierEmail: '',
+        supplierAddress: {
+          address: '',
+          state: '',
+          district: '',
+          pincode: ''
+        },
         externalInvoiceTotal: 0,
         notes: '',
         // New shipping and documentation fields
@@ -1010,6 +1070,12 @@ const PurchaseOrderManagement: React.FC = () => {
     setFormData({
       supplier: '',
       supplierEmail: '',
+      supplierAddress: {
+        address: '',
+        state: '',
+        district: '',
+        pincode: ''
+      }, // now undefined or object
       expectedDeliveryDate: '',
       priority: 'low',
       sourceType: 'manual',
@@ -1019,6 +1085,7 @@ const PurchaseOrderManagement: React.FC = () => {
     });
     setFormErrors({});
     setShowSupplierDropdown(false);
+    setShowAddressDropdown(false);
     setShowCreateSupplierDropdown(false);
     setShowEditSupplierDropdown(false);
     setSupplierSearchTerm('');
@@ -1194,6 +1261,7 @@ const PurchaseOrderManagement: React.FC = () => {
       if (!target.closest('.dropdown-container')) {
         setShowStatusDropdown(false);
         setShowSupplierDropdown(false);
+        setShowAddressDropdown(false);
         setShowCreateSupplierDropdown(false);
         setShowEditSupplierDropdown(false);
         setSupplierSearchTerm('');
@@ -1229,6 +1297,31 @@ const PurchaseOrderManagement: React.FC = () => {
       gstAmount,
       total: subtotal + gstAmount
     };
+  };
+
+  // When a supplier is selected, set addresses to the supplier's address array
+  const handleSupplierSelect = (supplierId: string) => {
+    const supplier = suppliers.find(s => s._id === supplierId);
+    let addrArr: SupplierAddress[] = [];
+    if (Array.isArray(supplier?.addresses)) {
+      addrArr = supplier.addresses as SupplierAddress[];
+    }
+    setFormData({
+      ...formData,
+      supplier: supplierId,
+      supplierEmail: supplier?.email || '',
+      supplierAddress: undefined
+    });
+    setAddresses(addrArr);
+    setShowSupplierDropdown(false);
+    setSupplierSearchTerm('');
+    setShowAddressDropdown(false);
+  };
+
+  const handleAddressSelect = (addressId: string) => {
+    const address = addresses.find(a => a.id === addressId);
+    setFormData(prev => ({ ...prev, supplierAddress: address }));
+    setShowAddressDropdown(false);
   };
 
   return (
@@ -1566,7 +1659,7 @@ const PurchaseOrderManagement: React.FC = () => {
               )}
 
               {/* Basic Information */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Select Supplier *
@@ -1605,30 +1698,26 @@ const PurchaseOrderManagement: React.FC = () => {
                         </div>
                         {/* Supplier List */}
                         <div className="max-h-48 overflow-y-auto">
-                          {suppliers.length === 0 ? (
+                          {suppliers.filter(supplier => supplier.type === 'supplier').length < 0 ? (
                             <div className="px-3 py-2 text-sm text-gray-500">
-                              {supplierSearchTerm ? 'No suppliers found' : 'Loading suppliers...'}
+                              {!supplierSearchTerm ? 'No suppliers found' : 'Loading suppliers...'}
                             </div>
                           ) : (
                             suppliers
                               .filter(supplier =>
-                                supplier.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
-                                supplier.email?.toLowerCase().includes(supplierSearchTerm.toLowerCase())
+                                supplier.type === 'supplier' && (
+                                  supplier.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
+                                  supplier.email?.toLowerCase().includes(supplierSearchTerm.toLowerCase())
+                                )
                               )
                               .map(supplier => (
                                 <button
                                   key={supplier._id}
                                   type="button"
-                                  onClick={() => {
-                                    setFormData({
-                                      ...formData,
-                                      supplier: supplier._id,
-                                      supplierEmail: supplier.email || ''
-                                    });
-                                    setShowSupplierDropdown(false);
-                                    setSupplierSearchTerm('');
-                                  }}
-                                  className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
+                                  onClick={() => handleSupplierSelect(supplier._id)}
+                                  className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${
+                                    formData.supplier === supplier._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                  }`}
                                 >
                                   <div className="font-medium text-gray-900">{supplier.name}</div>
                                   {supplier.email && (
@@ -1637,6 +1726,7 @@ const PurchaseOrderManagement: React.FC = () => {
                                 </button>
                               ))
                           )}
+                          
                         </div>
                       </div>
                     )}
@@ -1645,18 +1735,75 @@ const PurchaseOrderManagement: React.FC = () => {
                     <p className="text-red-500 text-xs mt-1">{formErrors.supplier}</p>
                   )}
                 </div>
-                <div>
+                {/* Supplier Address Field */}
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Delivery Address *
+                  </label>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddressDropdown(!showAddressDropdown)}
+                      disabled={!formData.supplier}
+                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${!formData.supplier ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300 hover:border-gray-400'}`}
+                    >
+                      <span className="text-gray-700 truncate mr-1">
+                        {formData.supplierAddress && formData.supplierAddress.address ?
+                          `${formData.supplierAddress.address}${formData.supplierAddress.district || formData.supplierAddress.pincode ? ` (${formData.supplierAddress.district || ''}${formData.supplierAddress.district && formData.supplierAddress.pincode ? ', ' : ''}${formData.supplierAddress.pincode || ''})` : ''}` :
+                          'Select address'}
+                      </span>
+                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAddressDropdown ? 'rotate-180' : ''
+                        }`} />
+                    </button>
+
+                    {showAddressDropdown && formData.supplier && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                        <button
+                          onClick={() => {
+                            setFormData(prev => ({
+                              ...prev,
+                              supplierAddress: undefined
+                            }));
+                            setShowAddressDropdown(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.supplierAddress ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                        >
+                          Select address
+                        </button>
+                        {addresses.map((address, idx) => (
+                          <button
+                            key={address.id || idx}
+                            onClick={() => handleAddressSelect(address.id || idx.toString())}
+                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${formData.supplierAddress?.id === address.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                          >
+                            <div>
+                              <div className="font-medium">{address.address}</div>
+                              <div className="text-xs text-gray-500">{address.district}, {address.pincode}</div>
+                              {address.isPrimary && (
+                                <div className="text-xs text-blue-600 font-medium">Primary</div>
+                              )}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* {('supplierAddress.address') && (
+                    <p className="mt-1 text-sm text-red-600">{('supplierAddress.address')}</p>
+                  )} */}
+                </div>
+                <div className="md:col-span-1">
                   {quickActions.map((action, index) => (
                     <div
                       key={index}
-                      // className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-2.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+                    // className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-2.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
                     >
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         {action.title}
                       </label>
                       <div
                         onClick={() => {
-                            action.action(); // Run navigation only if form is valid
+                          action.action(); // Run navigation only if form is valid
                         }}
                         className="bg-gradient-to-r from-blue-600 cursor-pointer to-blue-700 text-white px-3 py-2.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
                       >
@@ -1666,6 +1813,10 @@ const PurchaseOrderManagement: React.FC = () => {
                     </div>
                   ))}
                 </div>
+              </div>
+
+              {/* Advanced Options */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Expected Delivery Date *
@@ -1682,10 +1833,6 @@ const PurchaseOrderManagement: React.FC = () => {
                     <p className="text-red-500 text-xs mt-1">{formErrors.expectedDeliveryDate}</p>
                   )}
                 </div>
-              </div>
-
-              {/* Advanced Options */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Priority
@@ -2173,15 +2320,7 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <button
                                   key={supplier._id}
                                   type="button"
-                                  onClick={() => {
-                                    setFormData({
-                                      ...formData,
-                                      supplier: supplier._id,
-                                      supplierEmail: supplier.email || ''
-                                    });
-                                    setShowSupplierDropdown(false);
-                                    setSupplierSearchTerm('');
-                                  }}
+                                  onClick={() => handleSupplierSelect(supplier._id)}
                                   className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
                                 >
                                   <div className="font-medium text-gray-900">{supplier.name}</div>
@@ -3601,11 +3740,11 @@ const PurchaseOrderManagement: React.FC = () => {
                 >
                   Cancel
                 </button>
-                                  <button
-                    onClick={() => {
-                      handleReceiveItems();
-                    }}
-                    disabled={submitting}
+                <button
+                  onClick={() => {
+                    handleReceiveItems();
+                  }}
+                  disabled={submitting}
                   className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                   {submitting ? 'Receiving...' : 'Confirm Receipt'}
