@@ -380,6 +380,7 @@ const CustomerManagement: React.FC = () => {
             setImportMessage({ type: 'success', text: successMessage });
             toast.success(successMessage);
             await fetchCustomers();
+            await fetchAllCustomers();
           } else {
             const errorMessage = response.data.errors?.[0] || 'Import failed. Please check your file format.';
             setImportMessage({ type: 'error', text: errorMessage });
@@ -748,8 +749,10 @@ const CustomerManagement: React.FC = () => {
         errors.gstNumber = 'GST Number must be 15 characters, uppercase, and in valid GSTIN format (e.g., 22AAAAA0000A1Z5)';
         missingFields.push('Valid GST Number');
       } else {
+        console.log("customers:",customers);
+        
         // Check for duplicate GST number only within the same type (customer or supplier)
-        const existingCustomer = customers.find(customer =>
+        const existingCustomer = allCustomers.find(customer =>
           customer.gstNumber === customerFormData.gstNumber &&
           (customer.type === customerTypeTab ||
             (!editingCustomer || customer._id !== editingCustomer._id))
@@ -1061,7 +1064,7 @@ const CustomerManagement: React.FC = () => {
   const stats = [
     {
       title: 'Total Customers',
-      value: customers.filter(customer => customer.type === customerTypeTab).length,
+      value: allCustomers.filter(customer => customer.type === customerTypeTab).length,
       action: () => {
         clearAllFilters();
       },
