@@ -863,6 +863,16 @@ class ApiClient {
         return res.blob();
       }),
 
+    exportExcel: () =>
+      fetch(`${this.baseURL}/inventory/export-excel`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
+        }
+      }).then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        return res.blob();
+      }),
+
     import: (file: File) => {
       const formData = new FormData();
       formData.append('file', file);

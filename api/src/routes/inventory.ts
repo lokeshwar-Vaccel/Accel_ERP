@@ -5,7 +5,8 @@ import multer from 'multer';
 import {
   previewInventoryImport,
   importInventory,
-  downloadInventoryTemplate
+  downloadInventoryTemplate,
+  exportInventoryExcel
 } from '../controllers/inventoryImportController';
 
 const router = Router();
@@ -39,6 +40,15 @@ router.get('/import-template',
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
   checkPermission('write'),
   downloadInventoryTemplate
+);
+
+// @route   GET /api/v1/inventory/export-excel
+// @desc    Export inventory as Excel in import format
+// @access  Private (Admin, Manager)
+router.get('/export-excel',
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  checkPermission('write'),
+  exportInventoryExcel
 );
 
 // @route   POST /api/v1/inventory/preview-import

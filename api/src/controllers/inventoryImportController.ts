@@ -769,6 +769,127 @@ export const downloadInventoryTemplate = async (
   }
 }; 
 
+// @desc    Export current inventory as Excel in import format
+// @route   GET /api/v1/inventory/export-excel
+// @access  Private
+export const exportInventoryExcel = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const stocks = await Stock.find({})
+      .populate('product')
+      .populate('location')
+      .populate('room')
+      .populate('rack');
+
+    const rows = stocks.map((stock, idx) => {
+      const product = stock.product as any;
+      return {
+        'SNO': `${idx + 1}`, // convert to string for left alignment
+        'PART NO': product?.partNo || '',
+        'DESCRIPTION': product?.name || '',
+        'CPCB Norms': product?.cpcbNo || '',
+        'UOM': product?.uom || '',
+        'QTY': `${stock.quantity ?? ''}`,
+        'RACK': stock.rack && (stock.rack as any).name ? (stock.rack as any).name : '',
+        'ROOM': stock.room && (stock.room as any).name ? (stock.room as any).name : '',
+        'DEPT': product?.dept || '',
+        'GNDP': product?.gndp != null ? product.gndp.toFixed(2) : '',
+        'MRP': product?.price != null ? product.price.toFixed(2) : '',
+        'HSN CODE': product?.hsnNumber || '',
+        'GST': product?.gst != null ? product.gst.toFixed(2) : ''
+      };
+    });
+
+    const XLSX = require('xlsx');
+    const wb = XLSX.utils.book_new();
+    const title = 'Inventory Export';
+
+    const header = [
+      'SNO', 'PART NO', 'DESCRIPTION', 'CPCB Norms', 'UOM',
+      'QTY', 'RACK', 'ROOM', 'DEPT', 'GNDP', 'MRP', 'HSN CODE', 'GST'
+    ];
+
+    const data = [header, ...rows.map(row => header.map(h => (row as Record<string, any>)[h]))];
+    data.unshift([title]);
+
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Merge title row
+    ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: header.length - 1 } }];
+
+    // Title row style
+    ws['A1'].s = {
+      font: { bold: true, sz: 16 },
+      alignment: { horizontal: 'center', vertical: 'center' }
+    };
+
+    // Header style
+    for (let c = 0; c < header.length; c++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: 1, c })];
+      if (cell) {
+        cell.s = {
+          font: { bold: true },
+          fill: { fgColor: { rgb: 'FFD700' } },
+          alignment: { horizontal: 'left', vertical: 'center' },
+          border: {
+            top: { style: 'thin', color: { rgb: '000000' } },
+            bottom: { style: 'thin', color: { rgb: '000000' } },
+            left: { style: 'thin', color: { rgb: '000000' } },
+            right: { style: 'thin', color: { rgb: '000000' } }
+          }
+        };
+      }
+    }
+
+    // Data rows style: all left-aligned, no number formatting
+    for (let r = 2; r < data.length; r++) {
+      for (let c = 0; c < header.length; c++) {
+        const cell = ws[XLSX.utils.encode_cell({ r, c })];
+        if (cell) {
+          cell.s = {
+            alignment: { horizontal: 'left', vertical: 'center' },
+            border: {
+              top: { style: 'thin', color: { rgb: 'AAAAAA' } },
+              bottom: { style: 'thin', color: { rgb: 'AAAAAA' } },
+              left: { style: 'thin', color: { rgb: 'AAAAAA' } },
+              right: { style: 'thin', color: { rgb: 'AAAAAA' } }
+            }
+          };
+        }
+      }
+    }
+
+    // Freeze header
+    ws['!freeze'] = { xSplit: 0, ySplit: 2 };
+
+    // Auto-size columns (DESCRIPTION column wider)
+    ws['!cols'] = header.map((h, i) => {
+      let maxLen = h.length;
+      for (let r = 2; r < data.length; r++) {
+        const val = data[r][i];
+        if (val && String(val).length > maxLen) maxLen = String(val).length;
+      }
+      return {
+        wch: i === 2 ? Math.max(maxLen + 10, 30) : Math.min(Math.max(maxLen + 2, 10), 30)
+      };
+    });
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Inventory Export');
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx', cellStyles: true });
+
+    res.setHeader('Content-Disposition', 'attachment; filename=inventory-export.xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.send(buffer);
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
 // --- Add endpoint to download duplicate rows as Excel file ---
 // @desc    Download duplicate inventory rows from last preview
 // @route   GET /api/v1/inventory/duplicates-file

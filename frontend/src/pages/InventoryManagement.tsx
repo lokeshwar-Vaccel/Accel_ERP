@@ -23,7 +23,8 @@ import {
   Edit2,
   Filter,
   Hash,
-  HelpCircle
+  HelpCircle,
+  File
 } from 'lucide-react';
 import { Table } from '../components/ui/Table';
 import { Modal } from '../components/ui/Modal';
@@ -37,6 +38,7 @@ import { Select } from 'components/ui/Select';
 import { Badge } from 'components/ui/Badge';
 import { Pagination } from 'components/ui/Pagination';
 import toast from 'react-hot-toast';
+import { saveAs } from 'file-saver';
 
 // Types
 interface ProductData {
@@ -1776,6 +1778,17 @@ const InventoryManagement: React.FC = () => {
     return () => window.removeEventListener('resize', checkScrollable);
   }, [previewData?.duplicateGroups]);
 
+    // Export inventory as Excel
+    const handleExportExcel = async () => {
+      try {
+        const blob = await apiClient.inventory.exportExcel();
+        saveAs(blob, 'inventory-export.xlsx');
+        toast.success('Inventory exported successfully!');
+      } catch (error: any) {
+        toast.error('Failed to export inventory: ' + (error.message || error));
+      }
+    };
+
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader
@@ -1810,6 +1823,13 @@ const InventoryManagement: React.FC = () => {
           >
             <RefreshCw className="w-4 h-4" />
             <span className="text-sm">Refresh</span>
+          </button>
+          <button
+            onClick={handleExportExcel}
+            className="bg-gradient-to-r from-yellow-600 to-yellow-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-yellow-700 hover:to-yellow-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <File className="w-4 h-4" />
+            <span className="text-sm">Export Excel</span>
           </button>
         </div>
       </PageHeader>
