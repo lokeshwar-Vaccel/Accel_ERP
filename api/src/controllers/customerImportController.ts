@@ -35,14 +35,19 @@ const buildAddresses = (row: any) => {
         `Address-${i}${suffix}`, `Address ${i}${suffix}`, `address-${i}${suffix}`, `address${i}${suffix}`, `address ${i}${suffix}`
       ]);
       if (addr) {
-        addresses.push({
+        const addressObj: any = {
           id: startId + count,
           address: addr,
           state: getColumnValue(row, [`State${suffix}`, `state${suffix}`]),
           district: getColumnValue(row, [`District${suffix}`, `district${suffix}`]),
           pincode: getColumnValue(row, [`Pincode${suffix}`, `PIN${suffix}`, `pin${suffix}`, `pincode${suffix}`]),
           isPrimary: startId + count === 1
-        });
+        };
+        // Only add gstNumber to the very first address (id === 1)
+        if (startId + count === 1) {
+          addressObj.gstNumber = getColumnValue(row, [`GST DETAILS`, `GST`, `gst`, `gst number`, `gstNumber`]);
+        }
+        addresses.push(addressObj);
         count++;
       }
     }
@@ -69,6 +74,11 @@ const buildAddresses = (row: any) => {
     id += addAddressesForSuffix(suffix, id);
     suffixIdx++;
   }
+  // Add GST number to the first address if present
+  const gstNumber = getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']);
+  if (gstNumber && addresses.length > 0) {
+    addresses[0].gstNumber = gstNumber;
+  }
   return addresses;
 };
 
@@ -83,13 +93,13 @@ const cleanRowKeys = (row: any) => {
 
 // Helper: Find existing customer by GST or name+phone
 const findExistingCustomer = async (row: any) => {
-//   const gst = getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']);
-//   if (gst) {
-//     const byGst = await Customer.findOne({ gstNumber: gst });
-//     if (byGst) return byGst;
-//   }
+  // const gst = getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']);
+  // if (gst) {
+  //   const byGst = await Customer.findOne({ 'addresses.gstNumber': gst });
+  //   if (byGst) return byGst;
+  // }
   const name = getColumnValue(row, ['Name', 'Customer Name', 'name', 'customer name']);
-//   const phone = getColumnValue(row, ['Mobile No', 'Phone', 'phone', 'mobile', 'mobile no']);
+  // const phone = getColumnValue(row, ['Mobile No', 'Phone', 'phone', 'mobile', 'mobile no']);
   if (name ) {
     return await Customer.findOne({ name });
   }
@@ -180,24 +190,31 @@ export const previewCustomerImport = async (
     for (let i = 0; i < cleanedData.length; i++) {
       const row = cleanedData[i];
 
+      // Determine mainType: priority is req.body.type, then row, then default
+      let mainType = CustomerMainType.CUSTOMER;
+      if (req.body && req.body.type && Object.values(CustomerMainType).includes(req.body.type)) {
+        mainType = req.body.type;
+      } else {
+        const typeValue = getColumnValue(row, ['Type', 'type', 'Customer Type', 'customer type']);
+        if (typeValue && typeValue.trim().toLowerCase() === 'supplier') {
+          mainType = CustomerMainType.SUPPLIER;
+        }
+      }
       const customerInput: any = {
         name: getColumnValue(row, ['Name', 'Customer Name', 'name', 'customer name']),
         designation: getColumnValue(row, ['Designation', 'designation']) || 'N/A',
-        // contactPersonName: getColumnValue(row, ['Contact person Name', 'Contact Person', 'contact person name']) || 'N/A',
-        gstNumber: getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber']) || 'N/A',
         email: getColumnValue(row, ['Email', 'email', 'E-mail']) || undefined,
-        // phone: getColumnValue(row, ['Mobile No', 'Phone', 'phone', 'mobile', 'mobile no']) || 'N/A',
         addresses: buildAddresses(row),
         customerType: CustomerType.RETAIL,
-        type: CustomerMainType.CUSTOMER, // Imports are always customers
+        type: mainType, // Set based on req.body or import column
         leadSource: '',
         status: LeadStatus.NEW,
         notes: ''
       };
 
-      // Remove empty email field if not provided (assuming email is optional)
-      if (!customerInput.email) {
-        delete (customerInput as any).email;
+      // Ensure phone is always a string (empty if missing)
+      if (!customerInput.phone) {
+        customerInput.phone = '';
       }
 
       // Skip header row and rows where name is missing (essential field)
@@ -211,14 +228,12 @@ export const previewCustomerImport = async (
         continue;
       }
 
-      const existing = await findExistingCustomer(row);
-      
+      // Check for existing customer with same name, type, and phone
+      const existing = await Customer.findOne({ name: customerInput.name, type: mainType, phone: customerInput.phone });
       if (existing) {
         preview.existingCustomers.push({
           name: existing.name,
-        //   phone: existing.phone,
           gstNumber: (existing as any).gstNumber,
-        //   id: existing._id
         });
         preview.summary.existingCustomers++;
         continue;
@@ -275,6 +290,16 @@ export const importCustomers = async (
     for (let i = 0; i < cleanedData.length; i++) {
       const row = cleanedData[i];
 
+      // Determine mainType: priority is req.body.type, then row, then default
+      let mainType = CustomerMainType.CUSTOMER;
+      if (req.body && req.body.type && Object.values(CustomerMainType).includes(req.body.type)) {
+        mainType = req.body.type;
+      } else {
+        const typeValue = getColumnValue(row, ['Type', 'type', 'Customer Type', 'customer type']);
+        if (typeValue && typeValue.trim().toLowerCase() === 'supplier') {
+          mainType = CustomerMainType.SUPPLIER;
+        }
+      }
       const customerInput: any = {
         name: getColumnValue(row, ['Name', 'Customer Name', 'name', 'customer name']),
         designation: getColumnValue(row, ['Designation', 'designation']),
@@ -284,7 +309,7 @@ export const importCustomers = async (
         // phone: getColumnValue(row, ['Mobile No', 'Phone', 'phone', 'mobile', 'mobile no']),
         addresses: buildAddresses(row),
         customerType: CustomerType.RETAIL,
-        type: CustomerMainType.CUSTOMER, // This will always be customer for imports
+        type: mainType, // This will always be customer for imports
         leadSource: '',
         status: LeadStatus.NEW,
         notes: ''
@@ -293,6 +318,11 @@ export const importCustomers = async (
       // Remove empty email field if not provided to avoid validation error
       if (!customerInput.email) {
         delete (customerInput as any).email;
+      }
+
+      // Ensure phone is always a string (empty if missing)
+      if (!customerInput.phone) {
+        customerInput.phone = '';
       }
 
       // Skip header row and rows where name is missing (essential field)
@@ -309,24 +339,31 @@ export const importCustomers = async (
     //     continue;
     //   }
 
-      const existing = await findExistingCustomer(row);
+      // Check for existing customer with same name, type, and phone
+      const existing = await Customer.findOne({ name: customerInput.name, type: mainType, phone: customerInput.phone });
       if (existing) {
-        // results.errors.push(`Row ${i + 2}: Skipped - customer already exists (name: ${existing.name}, phone: ${existing.phone})`);
         results.failed++;
         continue;
       }
 
     //   try {
-        // Generate customerId for each imported customer (imports are always customers)
-        const customerId = await getNextCustomerId();
-        const created = await Customer.create({ ...customerInput, createdBy: req.user!.id, customerId });
+        // Only generate customerId for CUSTOMER type
+        let customerId: string | undefined = undefined;
+        if (mainType === CustomerMainType.CUSTOMER) {
+          customerId = await getNextCustomerId();
+        }
+        const createData = { ...customerInput, createdBy: req.user!.id };
+        if (customerId) {
+          createData.customerId = customerId;
+        }
+        const created = await Customer.create(createData);
         results.successful++;
         results.createdCustomers.push({
           name: created.name,
           phone: created.phone,
-          gstNumber: (created as any).gstNumber,
+          gstNumber: created.addresses && created.addresses[0] ? created.addresses[0].gstNumber : undefined,
           id: created._id,
-          customerId: created.customerId
+          ...(customerId ? { customerId: created.customerId } : {})
         });
     //   } catch (createErr: any) {
     //     results.failed++;
@@ -334,16 +371,19 @@ export const importCustomers = async (
     //   }
     }
 
+    const isSupplierImport = req.body && req.body.type === CustomerMainType.SUPPLIER;
     const response: APIResponse = {
       success: true,
-      message: `Import completed. ${results.successful} customers created, ${results.failed} failed.`,
+      message: `Import completed. ${results.successful} ${isSupplierImport ? 'suppliers' : 'customers'} created, ${results.failed} failed.`,
       data: {
         summary: {
           totalRows: cleanedData.length,
           successful: results.successful,
           failed: results.failed
         },
-        createdCustomers: results.createdCustomers,
+        ...(isSupplierImport
+          ? { createdSuppliers: results.createdCustomers }
+          : { createdCustomers: results.createdCustomers }),
         errors: results.errors
       }
     };

@@ -6,9 +6,9 @@ export interface CreateCustomerInput {
   name: string;
   designation?: string;
   contactPersonName?: string;
-  gstNumber?: string;
   email?: string;
   phone?: string;
+  panNumber?: string;
   addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean }[];
   customerType: CustomerType;
   type: CustomerMainType; // 'customer' or 'supplier'
@@ -22,9 +22,9 @@ export interface UpdateCustomerInput {
   name?: string;
   designation?: string;
   contactPersonName?: string;
-  gstNumber?: string;
   email?: string;
   phone?: string;
+  panNumber?: string;
   addresses?: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean }[];
   customerType?: CustomerType;
   type?: CustomerMainType; // 'customer' or 'supplier'
@@ -102,6 +102,7 @@ const addressJoiSchema = Joi.object({
   state: Joi.string().max(100).required(),
   district: Joi.string().max(100).required(),
   pincode: Joi.string().pattern(/^\d{6}$/).allow('').optional(),
+  gstNumber: Joi.string().max(15).trim().allow(''),
   isPrimary: Joi.boolean().default(false)
 });
 
@@ -113,6 +114,7 @@ const baseCustomerFields = {
   gstNumber: Joi.string().max(50).trim().allow(''),
   email: Joi.string().email().lowercase().allow('', null),
   phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).allow('', null),
+  panNumber: Joi.string().max(10).trim().allow(''),
   addresses: Joi.array().items(addressJoiSchema).min(1),
   customerType: Joi.string().valid(...Object.values(CustomerType)),
   type: Joi.string().valid(...Object.values(CustomerMainType)),
@@ -127,9 +129,9 @@ export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   name: baseCustomerFields.name.required(),
   designation: baseCustomerFields.designation,
   contactPersonName: baseCustomerFields.contactPersonName,
-  gstNumber: baseCustomerFields.gstNumber,
   email: baseCustomerFields?.email.allow('', null),
-  phone: baseCustomerFields.phone.allow('', null),
+  phone: baseCustomerFields?.phone.allow('', null),
+  panNumber: baseCustomerFields.panNumber,
   addresses: baseCustomerFields.addresses,
   customerType: baseCustomerFields.customerType,
   type: baseCustomerFields.type,
@@ -144,9 +146,9 @@ export const updateCustomerSchema = Joi.object<UpdateCustomerInput>({
   name: baseCustomerFields.name,
   designation: baseCustomerFields.designation,
   contactPersonName: baseCustomerFields.contactPersonName,
-  gstNumber: baseCustomerFields.gstNumber,
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone,
+  panNumber: baseCustomerFields.panNumber,
   addresses: baseCustomerFields.addresses,
   customerType: baseCustomerFields.customerType,
   type: baseCustomerFields.type,

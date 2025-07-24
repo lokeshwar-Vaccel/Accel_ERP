@@ -20,6 +20,16 @@ export enum UserRole {
   VIEWER = 'viewer'
 }
 
+export interface Address {
+  id: number;
+  address: string;
+  state?: string;
+  district?: string;
+  pincode?: string;
+  isPrimary?: boolean;
+  gstNumber?: string; // Add GST number per address, optional
+}
+
 export interface Customer {
   _id: string;
   name: string;
@@ -35,6 +45,7 @@ export interface Customer {
   contactHistory: ContactHistory[];
   createdAt: string;
   updatedAt: string;
+  addresses: Address[];
 }
 
 export enum CustomerType {

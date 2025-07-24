@@ -55,6 +55,12 @@ const addressSchema = new Schema({
   isPrimary: {
     type: Boolean,
     default: false
+  },
+  gstNumber: {
+    type: String,
+    trim: true,
+    maxlength: [50, 'GST number cannot exceed 50 characters'],
+    required: false
   }
 }, { _id: false });
 
@@ -76,11 +82,6 @@ const customerSchema = new Schema({
     trim: true,
     maxlength: [100, 'Contact person name cannot exceed 100 characters']
   },
-  gstNumber: {
-    type: String,
-    trim: true,
-    maxlength: [50, 'GST number cannot exceed 50 characters']
-  },
   email: {
     type: String,
     lowercase: true,
@@ -93,6 +94,13 @@ const customerSchema = new Schema({
     type: String,
     // required: [true, 'Phone number is required'],
     // match: [/^\+?[1-9]\d{1,14}$/, 'Please provide a valid phone number']
+  },
+  panNumber: {
+    type: String,
+    trim: true,
+    maxlength: [10, 'PAN number cannot exceed 10 characters'],
+    match: [/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'PAN must be 10 characters: 5 letters, 4 digits, 1 letter (e.g., ABCDE1234F)'],
+    required: false
   },
   addresses: {
     type: [addressSchema],
@@ -150,12 +158,6 @@ customerSchema.index({ name: 'text', email: 'text', phone: 'text' });
 customerSchema.index({ status: 1 });
 customerSchema.index({ customerType: 1 });
 customerSchema.index({ assignedTo: 1 });
-// Add compound unique index for gstNumber + type to allow same GST number for customers and suppliers
-// Only includes documents where gstNumber exists and is a string (excludes null/undefined values)
-customerSchema.index({ gstNumber: 1, type: 1 }, { 
-  unique: true, 
-  partialFilterExpression: { gstNumber: { $exists: true, $type: "string" } }
-});
 // Add unique compound index for name + phone
 customerSchema.index({ name: 1, phone: 1 }, { unique: true, sparse: true });
 

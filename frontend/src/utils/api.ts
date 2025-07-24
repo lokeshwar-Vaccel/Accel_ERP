@@ -158,9 +158,10 @@ class ApiClient {
         body: JSON.stringify(contactData),
       }),
     // Excel import preview
-    previewImportFromFile: (file: File) => {
+    previewImportFromFile: (file: File, type: string) => {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('type', type);
       return this.makeRequest<{
         success: boolean;
         data: {
@@ -179,9 +180,10 @@ class ApiClient {
       });
     },
     // Excel import
-    importFromFile: (file: File) => {
+    importFromFile: (file: File, type: string) => {
       const formData = new FormData();
       formData.append('file', file);
+      formData.append('type', type);
       return this.makeRequest<{
         success: boolean;
         data: {

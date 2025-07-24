@@ -89,6 +89,7 @@ interface Customer {
   gstNumber?: string;
   email?: string;
   phone?: string;
+  panNumber?: string;
   address: string;
   customerType: CustomerType;
   leadSource?: string;
@@ -112,15 +113,16 @@ interface Address {
   district: string;
   pincode: string;
   isPrimary: boolean;
+  gstNumber?: string; // <-- Add GST number per address, optional
 }
 
 interface CustomerFormData {
   name: string;
   designation: string;
   contactPersonName: string;
-  gstNumber: string;
   email: string;
   phone: string;
+  panNumber: string;
   address: string;
   customerType: CustomerType;
   leadSource: string;
@@ -211,9 +213,9 @@ const CustomerManagement: React.FC = () => {
     name: '',
     designation: '',
     contactPersonName: '',
-    gstNumber: '',
     email: '',
     phone: '',
+    panNumber: '',
     address: '',
     customerType: 'retail',
     leadSource: '',
@@ -225,7 +227,8 @@ const CustomerManagement: React.FC = () => {
       state: '',
       district: '',
       pincode: '',
-      isPrimary: true
+      isPrimary: true,
+      gstNumber: '', // Add default
     }],
     type: 'customer'
   });
@@ -327,7 +330,14 @@ const CustomerManagement: React.FC = () => {
     setImporting(true);
     setImportMessage(null);
     try {
-      const response = await apiClient.customers.previewImportFromFile(file);
+      // Construct FormData with file and customerTypeTab
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', customerTypeTab); // assuming this is a string
+  
+      // Call API with FormData
+      const response = await apiClient.customers.previewImportFromFile(file, customerTypeTab);
+  
       if (response.success) {
         setSelectedFile(file);
         setPreviewData(response.data);
@@ -357,6 +367,7 @@ const CustomerManagement: React.FC = () => {
       // Use XMLHttpRequest to track progress
       const formData = new FormData();
       formData.append('file', selectedFile);
+      formData.append('type', customerTypeTab);
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/v1/customers/import', true);
       // Add Authorization header from localStorage
@@ -430,7 +441,8 @@ const CustomerManagement: React.FC = () => {
       state: '',
       district: '',
       pincode: '',
-      isPrimary: false
+      isPrimary: false,
+      gstNumber: '',
     };
     setCustomerFormData(prev => ({
       ...prev,
@@ -678,96 +690,103 @@ const CustomerManagement: React.FC = () => {
   const validateCustomerForm = (): boolean => {
     const errors: Record<string, any> = {};
     const missingFields: string[] = [];
-
+    const addressErrors: string[] = [];
+    const gstErrors: string[] = [];
+  
     // Top-level field checks
     if (!customerFormData.name.trim()) {
       errors.name = 'Customer name is required';
       missingFields.push('Customer Name');
+    } else {
+      const isDuplicateName = allCustomers.some(customer =>
+        customer.name.trim().toLowerCase() === customerFormData.name.trim().toLowerCase() &&
+        (!editingCustomer || customer._id !== editingCustomer._id)
+      );
+      if (isDuplicateName) {
+        errors.name = 'Customer name already exists. Please use a unique name.';
+        missingFields.push('Unique Customer Name');
+      }
     }
-
-    if (!customerFormData.gstNumber.trim()) {
-      errors.gstNumber = 'GST Number is required';
-      missingFields.push('GST Number');
+  
+    if (customerFormData.panNumber && customerFormData.panNumber.trim() !== '') {
+      const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+      if (!panRegex.test(customerFormData.panNumber)) {
+        errors.panNumber = 'PAN must be 10 characters: 5 letters, 4 digits, 1 letter (e.g., ABCDE1234F)';
+        missingFields.push('Valid PAN Number');
+      }
     }
-
-    // if (!customerFormData.email.trim()) {
-    //   errors.email = 'Email is required';
-    //   missingFields.push('Email');
-    // } else if (!/\S+@\S+\.\S+/.test(customerFormData.email)) {
-    //   errors.email = 'Please enter a valid email address';
-    //   missingFields.push('Valid Email');
-    // }
-
+  
     // Address field validation
     if (!customerFormData.addresses.length) {
-      errors.address = ['At least one address is required'];
+      addressErrors[0] = 'At least one address is required';
       missingFields.push('Address');
     } else {
-      const addressErrors: string[] = [];
-
       customerFormData.addresses.forEach((addr, index) => {
         const addrMissing: string[] = [];
-
+  
         if (!addr.address.trim()) addrMissing.push('address');
         if (!addr.state.trim()) addrMissing.push('state');
         if (!addr.district.trim()) addrMissing.push('district');
         if (!addr.pincode.trim()) addrMissing.push('pincode');
         else if (!/^\d{6}$/.test(addr.pincode)) addrMissing.push('valid 6-digit pincode');
-
+  
+        if (addr.gstNumber && addr.gstNumber.trim() !== '') {
+          const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+          if (!gstRegex.test(addr.gstNumber)) {
+            gstErrors[index] = 'GST Number must be 15 characters, uppercase, and in valid GSTIN format (e.g., 22AAAAA0000A1Z5)';
+          } else {
+            const existingCustomer = allCustomers.find(customer =>
+              customer.addresses?.some(a => a.gstNumber === addr.gstNumber) &&
+              (!editingCustomer || customer._id !== editingCustomer._id)
+            );
+            if (existingCustomer) {
+              gstErrors[index] = 'GST Number already exists. Please use a different GST Number.';
+            } else {
+              const duplicateInForm = customerFormData.addresses.filter(
+                (a, i) => a.gstNumber === addr.gstNumber && a.gstNumber && i !== index
+              ).length > 0;
+              if (duplicateInForm) {
+                gstErrors[index] = 'GST Number must be unique for each address.';
+              }
+            }
+          }
+        }
+  
         if (addrMissing.length > 0) {
           addressErrors[index] = `Please fill in ${addrMissing.join(', ')}`;
           missingFields.push(`Address #${index + 1}`);
         }
       });
-
+  
       const primaryCount = customerFormData.addresses.filter(addr => addr.isPrimary).length;
       if (primaryCount !== 1) {
         errors.addressPrimary = 'There must be exactly one primary address';
         missingFields.push('Primary Address');
       }
-
+  
       if (addressErrors.length > 0) {
         errors.address = addressErrors;
       }
+      if (gstErrors.length > 0) {
+        errors.gst = gstErrors;
+      }
     }
-
+  
     // General error summary
     if (missingFields.length > 1) {
       errors.general = `Please fix the following: ${missingFields.join(', ')}`;
     } else if (missingFields.length === 1) {
       errors.general = `Please fix the error in: ${missingFields[0]}`;
     }
-
+  
     if (errors.general) {
       toast.error(errors.general);
     }
-
-    // GST Number validation
-    if (customerFormData.gstNumber) {
-      const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-      if (!gstRegex.test(customerFormData.gstNumber)) {
-        errors.gstNumber = 'GST Number must be 15 characters, uppercase, and in valid GSTIN format (e.g., 22AAAAA0000A1Z5)';
-        missingFields.push('Valid GST Number');
-      } else {
-        console.log("customers:",customers);
-        
-        // Check for duplicate GST number only within the same type (customer or supplier)
-        const existingCustomer = allCustomers.find(customer =>
-          customer.gstNumber === customerFormData.gstNumber &&
-          (customer.type === customerTypeTab ||
-            (!editingCustomer || customer._id !== editingCustomer._id))
-        );
-
-        if (existingCustomer) {
-          errors.gstNumber = `GST Number already exists for this ${customerTypeTab}. Please use a different GST Number.`;
-          missingFields.push('Unique GST Number');
-        }
-      }
-    }
-
+  
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
+  
 
 
 
@@ -890,9 +909,9 @@ const CustomerManagement: React.FC = () => {
       name: '',
       designation: '',
       contactPersonName: '',
-      gstNumber: '',
       email: '',
       phone: '',
+      panNumber: '',
       address: '',
       customerType: 'retail',
       leadSource: '',
@@ -904,7 +923,8 @@ const CustomerManagement: React.FC = () => {
         state: '',
         district: '',
         pincode: '',
-        isPrimary: true
+        isPrimary: true,
+        gstNumber: '',
       }],
       type: customerTypeTab
     });
@@ -930,23 +950,24 @@ const CustomerManagement: React.FC = () => {
       name: customer.name,
       designation: customer.designation || '',
       contactPersonName: customer.contactPersonName || '',
-      gstNumber: customer.gstNumber || '',
       email: customer.email || '',
       phone: customer.phone || '',
+      panNumber: customer.panNumber || '',
       address: customer.address || '',
       customerType: customer.customerType || 'retail',
       leadSource: customer.leadSource || '',
       assignedTo: getUserId(customer.assignedTo),
       notes: customer.notes || '',
       addresses: (customer as any).addresses && Array.isArray((customer as any).addresses)
-        ? (customer as any).addresses
+        ? (customer as any).addresses.map((addr: any) => ({ ...addr, gstNumber: addr.gstNumber || '' }))
         : [{
           id: Date.now(),
           address: '',
           state: '',
           district: '',
           pincode: '',
-          isPrimary: true
+          isPrimary: true,
+          gstNumber: '',
         }],
       type: (customer as any).type || customerTypeTab // <-- ensure type is set
     });
@@ -1391,8 +1412,8 @@ const CustomerManagement: React.FC = () => {
                   onClick={clearAllFilters}
                   // disabled={!hasActiveFilters}
                   className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${hasActiveFilters
-                      ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
-                      : 'bg-gray-100 text-gray-400 border border-gray-200 hover-gray-700 '
+                    ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
+                    : 'bg-gray-100 text-gray-400 border border-gray-200 hover-gray-700 '
                     }`}
                 >
                   Clear All Filters
@@ -1404,12 +1425,12 @@ const CustomerManagement: React.FC = () => {
         {/* Active Filters Chips */}
         {hasActiveFilters && (
           <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-100">
-          <div className="flex items-center text-sm text-gray-600">
-            <span className="font-medium">{customers.filter(customer => customer.type === customerTypeTab).length}</span>
-            <span className="mx-1">of</span>
-            <span>{customers.filter(customer => customer.type === customerTypeTab).length}</span>
-            <span className="ml-1">items found</span>
-          </div>
+            <div className="flex items-center text-sm text-gray-600">
+              <span className="font-medium">{customers.filter(customer => customer.type === customerTypeTab).length}</span>
+              <span className="mx-1">of</span>
+              <span>{customers.filter(customer => customer.type === customerTypeTab).length}</span>
+              <span className="ml-1">items found</span>
+            </div>
             <div className="px-4 py-3 flex flex-wrap gap-2 items-center">
               <span className="text-xs text-gray-500">Active filters:</span>
               {typeFilter !== 'all' && (
@@ -1453,9 +1474,12 @@ const CustomerManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                {customerTypeTab === 'customer' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Customer
-                </th>
+                </th>}
+                {customerTypeTab === 'supplier' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Supplier
+                </th>}
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Contact Info
                 </th>
@@ -1620,7 +1644,7 @@ const CustomerManagement: React.FC = () => {
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-blue-600 font-medium">New Customers</p>
+                      <p className="text-sm text-blue-600 font-medium">{customerTypeTab === 'customer' ? 'New Customers' : 'New Suppliers'}</p>
                       <p className="text-2xl font-bold text-blue-900">{previewData.summary.newCustomers}</p>
                     </div>
                     <Plus className="w-8 h-8 text-blue-600" />
@@ -1629,7 +1653,7 @@ const CustomerManagement: React.FC = () => {
                 <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-yellow-600 font-medium">Existing Customers</p>
+                      <p className="text-sm text-yellow-600 font-medium">{customerTypeTab === 'customer' ? 'Existing Customers' : 'Existing Suppliers'}</p>
                       <p className="text-2xl font-bold text-yellow-900">{previewData.summary.existingCustomers}</p>
                     </div>
                     <CheckCircle className="w-8 h-8 text-yellow-600" />
@@ -1666,7 +1690,7 @@ const CustomerManagement: React.FC = () => {
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <h3 className="text-lg font-medium text-green-900 mb-4 flex items-center">
                     <Plus className="w-5 h-5 mr-2" />
-                    Customers to be Created ({previewData.customersToCreate.length})
+                    {customerTypeTab === 'customer' ? 'Customers to be Created' : 'Suppliers to be Created'} ({previewData.customersToCreate.length})
                   </h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -1693,7 +1717,7 @@ const CustomerManagement: React.FC = () => {
                     </table>
                     {previewData.customersToCreate.length > 10 && (
                       <p className="text-sm text-green-600 mt-2 text-center">
-                        ... and {previewData.customersToCreate.length - 10} more customers
+                        ... and {previewData.customersToCreate.length - 10} {customerTypeTab === 'customer' ? 'more customers' : 'more suppliers'}
                       </p>
                     )}
                   </div>
@@ -1703,7 +1727,7 @@ const CustomerManagement: React.FC = () => {
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <h3 className="text-lg font-medium text-yellow-900 mb-4 flex items-center">
                     <CheckCircle className="w-5 h-5 mr-2" />
-                    Existing Customers ({previewData.existingCustomers.length})
+                    {customerTypeTab === 'customer' ? 'Existing Customers' : 'Existing Suppliers'} ({previewData.existingCustomers.length})
                   </h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -1871,24 +1895,6 @@ const CustomerManagement: React.FC = () => {
                       />
                     </div>
                   </div>
-                  <div className="mt-4">
-                    {/* GST Number */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        GST Number
-                      </label>
-                      <input
-                        type="text"
-                        value={customerFormData.gstNumber}
-                        onChange={(e) => setCustomerFormData({ ...customerFormData, gstNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15) })}
-                        className={`w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500${formErrors.gstNumber ? ' border-red-500' : ''}`}
-                        placeholder="Enter gst number"
-                      />
-                      {formErrors.gstNumber && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.gstNumber}</p>
-                      )}
-                    </div>
-                  </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1908,17 +1914,33 @@ const CustomerManagement: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone Number (Optional)
+                        Phone Number
                       </label>
                       <input
                         type="tel"
                         value={customerFormData.phone}
                         onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
                         className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter phone number (optional)"
+                        placeholder="Enter phone number"
                       />
                     </div>
                   </div>
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        PAN Number
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.panNumber || ''}
+                        onChange={e => setCustomerFormData({ ...customerFormData, panNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) })}
+                        className={`w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500${formErrors.panNumber ? ' border-red-500' : ''}`}
+                        placeholder="Enter PAN number"
+                        maxLength={10}
+                      />
+                      {formErrors.panNumber && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.panNumber}</p>
+                      )}
+                    </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2041,34 +2063,66 @@ const CustomerManagement: React.FC = () => {
                               className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
                               placeholder="Enter full address"
                             />
+                            {/* GST Number per address */}
+                            <div className="mt-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                GST Number
+                              </label>
+                              <input
+                                type="text"
+                                value={address.gstNumber || ''}
+                                onChange={(e) => updateAddress(address.id, 'gstNumber', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15))}
+                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                placeholder="GST Number"
+                                maxLength={15}
+                              />
+                              {Array.isArray(formErrors.gst) && formErrors.gst[index] && (
+                                <p className="text-red-500 text-xs mt-1 pt-2">{formErrors.gst[index]}</p>
+                              )}
+                            </div>
                             {/* New fields for state, district, pincode */}
                             <div className="grid grid-cols-3 gap-2 mt-2">
-                              <input
-                                type="text"
-                                value={address.state}
-                                onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                placeholder="State *"
-                              />
-                              <input
-                                type="text"
-                                value={address.district}
-                                onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                placeholder="District *"
-                              />
-                              <input
-                                type="text"
-                                value={address.pincode}
-                                onChange={(e) => {
-                                  const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                                  updateAddress(address.id, 'pincode', value);
-                                }}
-                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                placeholder="Pincode *"
-                                pattern="[0-9]{6}"
-                                maxLength={6}
-                              />
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  State *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={address.state}
+                                  onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                  placeholder="State"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  District *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={address.district}
+                                  onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                  placeholder="District"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Pincode *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={address.pincode}
+                                  onChange={(e) => {
+                                    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                    updateAddress(address.id, 'pincode', value);
+                                  }}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                  placeholder="Pincode"
+                                  pattern="[0-9]{6}"
+                                  maxLength={6}
+                                />
+                              </div>
                             </div>
                             {Array.isArray(formErrors.address) && formErrors.address[index] && (
                               <p className="text-red-500 text-xs mt-1 pt-2">{formErrors.address[index]}</p>
@@ -2109,7 +2163,7 @@ const CustomerManagement: React.FC = () => {
                   disabled={submitting}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  {submitting ? 'Creating...' : 'Create Customer'}
+                  {customerTypeTab === 'customer' ? submitting ? 'Creating...' : 'Create Customer' : submitting ? 'Creating...' : 'Create Supplier'}
                 </button>
               </div>
             </form>
@@ -2127,6 +2181,7 @@ const CustomerManagement: React.FC = () => {
                 onClick={() => {
                   setShowEditModal(false);
                   resetCustomerForm();
+                  setFormErrors({});
                   setShowAssignedToDropdown(false);
                 }}
                 className="text-gray-400 hover:text-gray-600"
@@ -2225,24 +2280,6 @@ const CustomerManagement: React.FC = () => {
                       />
                     </div>
                   </div>
-                  <div className="mt-4">
-                    {/* GST Number */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        GST Number
-                      </label>
-                      <input
-                        type="text"
-                        value={customerFormData.gstNumber}
-                        onChange={(e) => setCustomerFormData({ ...customerFormData, gstNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15) })}
-                        className={`w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500${formErrors.gstNumber ? ' border-red-500' : ''}`}
-                        placeholder="Enter gst number"
-                      />
-                      {formErrors.gstNumber && (
-                        <p className="text-red-500 text-xs mt-1">{formErrors.gstNumber}</p>
-                      )}
-                    </div>
-                  </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2262,7 +2299,7 @@ const CustomerManagement: React.FC = () => {
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Phone Number (Optional)
+                        Phone Number
                       </label>
                       <input
                         type="tel"
@@ -2273,6 +2310,22 @@ const CustomerManagement: React.FC = () => {
                       />
                     </div>
                   </div>
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        PAN Number
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.panNumber || ''}
+                        onChange={e => setCustomerFormData({ ...customerFormData, panNumber: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10) })}
+                        className={`w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500${formErrors.panNumber ? ' border-red-500' : ''}`}
+                        placeholder="Enter PAN number"
+                        maxLength={10}
+                      />
+                      {formErrors.panNumber && (
+                        <p className="text-red-500 text-xs mt-1">{formErrors.panNumber}</p>
+                      )}
+                    </div>
                   <div className="grid grid-cols-2 gap-4 mt-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2395,34 +2448,66 @@ const CustomerManagement: React.FC = () => {
                               className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
                               placeholder="Enter full address"
                             />
+                            {/* GST Number per address */}
+                            <div className="mt-2">
+                              <label className="block text-sm font-medium text-gray-700 mb-1">
+                                GST Number
+                              </label>
+                              <input
+                                type="text"
+                                value={address.gstNumber || ''}
+                                onChange={(e) => updateAddress(address.id, 'gstNumber', e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15))}
+                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                placeholder="GST Number"
+                                maxLength={15}
+                              />
+                              {Array.isArray(formErrors.gst) && formErrors.gst[index] && (
+                                <p className="text-red-500 text-xs mt-1 pt-2">{formErrors.gst[index]}</p>
+                              )}
+                            </div>
                             {/* New fields for state, district, pincode */}
                             <div className="grid grid-cols-3 gap-2 mt-2">
-                              <input
-                                type="text"
-                                value={address.state}
-                                onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                placeholder="State *"
-                              />
-                              <input
-                                type="text"
-                                value={address.district}
-                                onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
-                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                placeholder="District *"
-                              />
-                              <input
-                                type="text"
-                                value={address.pincode}
-                                onChange={(e) => {
-                                  const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                                  updateAddress(address.id, 'pincode', value);
-                                }}
-                                className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
-                                placeholder="Pincode *"
-                                pattern="[0-9]{6}"
-                                maxLength={6}
-                              />
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  State *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={address.state}
+                                  onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                  placeholder="State"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  District *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={address.district}
+                                  onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                  placeholder="District"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Pincode *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={address.pincode}
+                                  onChange={(e) => {
+                                    const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                    updateAddress(address.id, 'pincode', value);
+                                  }}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                  placeholder="Pincode"
+                                  pattern="[0-9]{6}"
+                                  maxLength={6}
+                                />
+                              </div>
                             </div>
                             {Array.isArray(formErrors.address) && formErrors.address[index] && (
                               <p className="text-red-500 text-xs mt-1 pt-2">{formErrors.address[index]}</p>
@@ -2620,6 +2705,11 @@ const CustomerManagement: React.FC = () => {
                               <span><strong>District:</strong> {address.district}</span>
                               <span><strong>Pincode:</strong> {address.pincode}</span>
                             </div>
+                            {address.gstNumber && (
+                              <div className="text-xs text-gray-700 mt-1">
+                                <strong>GST Number:</strong> {address.gstNumber}
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}

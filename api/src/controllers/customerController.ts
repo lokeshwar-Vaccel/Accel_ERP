@@ -218,16 +218,18 @@ export const createCustomer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Check for duplicate GST number if provided - only within the same type (customer or supplier)
-    if (req.body.gstNumber && req.body.gstNumber.trim()) {
-      const existingCustomer = await Customer.findOne({ 
-        gstNumber: req.body.gstNumber.trim(),
-        type: req.body.type, // Only check within the same type (customer or supplier)
-        _id: { $ne: req.params.id } // Exclude current customer for updates
-      });
-      
-      if (existingCustomer) {
-        return next(new AppError(`GST Number already exists for this ${req.body.type}. Please use a different GST Number.`, 400));
+    // Check for duplicate GST number in addresses if provided - only within the same type (customer or supplier)
+    if (Array.isArray(req.body.addresses)) {
+      for (const address of req.body.addresses) {
+        if (address.gstNumber && address.gstNumber.trim()) {
+          const existingCustomer = await Customer.findOne({
+            'addresses.gstNumber': address.gstNumber.trim(),
+            type: req.body.type,
+          });
+          if (existingCustomer) {
+            return next(new AppError(`GST Number ${address.gstNumber} already exists for this ${req.body.type}. Please use a different GST Number.`, 400));
+          }
+        }
       }
     }
 
@@ -287,17 +289,19 @@ export const updateCustomer = async (
     if (!customer) {
       return next(new AppError('Customer not found', 404));
     }
-
-    // Check for duplicate GST number if provided - only within the same type (customer or supplier)
-    if (req.body.gstNumber && req.body.gstNumber.trim()) {
-      const existingCustomer = await Customer.findOne({ 
-        gstNumber: req.body.gstNumber.trim(),
-        type: req.body.type || customer.type, // Use provided type or existing type
-        _id: { $ne: req.params.id } // Exclude current customer for updates
-      });
-      
-      if (existingCustomer) {
-        return next(new AppError(`GST Number already exists for this ${req.body.type || customer.type}. Please use a different GST Number.`, 400));
+    // Check for duplicate GST number in addresses if provided - only within the same type (customer or supplier)
+    if (Array.isArray(req.body.addresses)) {
+      for (const address of req.body.addresses) {
+        if (address.gstNumber && address.gstNumber.trim()) {
+          const existingCustomer = await Customer.findOne({
+            'addresses.gstNumber': address.gstNumber.trim(),
+            type: req.body.type || customer.type,
+            _id: { $ne: req.params.id }
+          });
+          if (existingCustomer) {
+            return next(new AppError(`GST Number ${address.gstNumber} already exists for this ${req.body.type || customer.type}. Please use a different GST Number.`, 400));
+          }
+        }
       }
     }
 
