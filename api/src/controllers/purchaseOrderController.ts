@@ -485,6 +485,8 @@ export const receiveItems = async (
         location: new mongoose.Types.ObjectId(location)
       });
 
+      const originalQuantity = stock?.quantity ?? 0;
+
       const currentTime = new Date();
 
       if (stock) {
@@ -518,6 +520,7 @@ export const receiveItems = async (
         transactionType: 'inward',
         quantity: validQuantity, // Use the validated quantity
         resultingQuantity: stock.quantity,
+        previousQuantity: originalQuantity,
         reason: `Purchase Order Receipt - ${order.poNumber}`,
         referenceType: 'purchase_order',
         referenceId: referenceId, // Use unique reference ID

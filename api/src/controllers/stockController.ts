@@ -7,6 +7,11 @@ import { generateReferenceId } from '../utils/generateReferenceId';
 import { StockLedger } from '../models/StockLedger';
 import mongoose from 'mongoose';
 
+// Utility to escape regex special characters in user input
+function escapeRegex(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // @desc    Get all stock levels
 // @route   GET /api/v1/stock
 // @access  Private
@@ -81,13 +86,15 @@ export const getStockLevels = async (
     let productFilters: any = {};
 
     if (search) {
+      const escapedSearch = escapeRegex(search);
       productFilters.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { brand: { $regex: search, $options: 'i' } },
-        { modelNumber: { $regex: search, $options: 'i' } },
-        { partNo: { $regex: search, $options: 'i' } }
+        { name: { $regex: escapedSearch, $options: 'i' } },
+        { brand: { $regex: escapedSearch, $options: 'i' } },
+        { modelNumber: { $regex: escapedSearch, $options: 'i' } },
+        { partNo: { $regex: escapedSearch, $options: 'i' } }
       ];
     }
+    
 
     if (category) {
       productFilters.category = category;
@@ -629,6 +636,10 @@ export const adjustStock = async (
       return next(new AppError('Stock record not found', 404));
     }
 
+    // Store the original quantity before adjustment
+    const originalQuantity = stock.quantity;
+    console.log("originalQuantity:", originalQuantity);
+    console.log("quantity:", quantity);
 
     if (adjustmentType === 'add') {
       stock.quantity += quantity;
@@ -651,6 +662,8 @@ export const adjustStock = async (
       }
       stock.reservedQuantity -= quantity;
     }
+
+    console.log("stock.quantity:", originalQuantity);
 
 
     stock.availableQuantity = stock.quantity - stock.reservedQuantity;
@@ -679,6 +692,9 @@ export const adjustStock = async (
       ledgerQuantity = adjustmentType === 'subtract' ? -quantity : quantity;
     }
 
+    console.log("ledgerQuantity:", originalQuantity);
+    
+
     await StockLedger.create({
       product,
       location,
@@ -691,6 +707,7 @@ export const adjustStock = async (
       performedBy: req.user!.id,
       transactionDate: new Date(),
       resultingQuantity: stock.quantity,
+      previousQuantity: originalQuantity,
       referenceId,
       referenceType: adjustmentType === 'reserve' || adjustmentType === 'release' ? 'reservation' : 'adjustment',
     });

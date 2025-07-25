@@ -249,6 +249,8 @@ export const createInvoice = async (
           location: location
         });
 
+        const originalQuantity = stock?.quantity ?? 0;
+
         if (stock) {
           stock.quantity -= item.quantity;
           stock.availableQuantity = stock.quantity - stock.reservedQuantity;
@@ -265,6 +267,7 @@ export const createInvoice = async (
             performedBy: req.user!.id,
             transactionDate: new Date(),
             resultingQuantity: stock.quantity,
+            previousQuantity: originalQuantity,
             referenceId: invoiceNumber,
             referenceType: 'sale'
           });

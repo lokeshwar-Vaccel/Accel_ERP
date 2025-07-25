@@ -132,6 +132,7 @@ export interface IStockLedger extends Document {
   performedBy: Types.ObjectId;
   transactionDate?: Date;
   resultingQuantity: number;
+  previousQuantity: number;
   referenceId: string;
   referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'sale' | 'reservation';
   unitCost?: number;
