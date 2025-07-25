@@ -394,7 +394,7 @@ class ApiClient {
   // Stock Ledger APIs
   stockLedger = {
     getAll: (params?: any) =>
-      this.makeRequest<{ success: boolean; data: { ledgers: any[] }; pagination: any }>(`/ledger${params ? `?${new URLSearchParams(params)}` : ''}`),
+      this.makeRequest<{ success: boolean; data: { ledgers: any[], totalInward: number, totalOutward: number, totalAdjustment: number }; pagination: any }>(`/ledger${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     getByProduct: (productId: string, locationId?: string, params?: any) => {
       const allParams = { stockId: productId, ...(locationId && { location: locationId }), ...params };
