@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
+import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -35,7 +36,6 @@ import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
 import { Pagination } from 'components/ui/Pagination';
 import apiClientQuotation from '../utils/api';
-import QuotationForm from '../components/QuotationForm';
 
 
 // Types
@@ -233,6 +233,9 @@ const INVOICE_TYPES = [
 ];
 
 const InvoiceManagement: React.FC = () => {
+  // Navigation hook
+  const navigate = useNavigate();
+  
   // Get current user from Redux
   const currentUser = useSelector((state: RootState) => state.auth.user);
 
@@ -281,12 +284,11 @@ const InvoiceManagement: React.FC = () => {
   const [showPaymentMethodDropdown, setShowPaymentMethodDropdown] = useState(false);
 
   // Modal states
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
-  // Initialize invoiceType from localStorage or default to 'sale'
+  // Initialize invoiceType from localStorage or default to 'quotation'
   const [invoiceType, setInvoiceType] = useState<'quotation' | 'sale' | 'purchase' | 'challan'>(() => {
     const savedInvoiceType = localStorage.getItem('selectedInvoiceType');
     return (savedInvoiceType as 'quotation' | 'sale' | 'purchase' | 'challan') || 'quotation';
@@ -360,6 +362,29 @@ const InvoiceManagement: React.FC = () => {
 
   const [editMode, setEditMode] = useState(false);
   const [editModeChanges, setEditModeChanges] = useState(true);
+
+  // Helper function to check if there's a real amount mismatch that allows editing
+  const hasAmountMismatch = (invoice: any) => {
+    if (!invoice) return false;
+    
+    const externalTotal = invoice.externalInvoiceTotal ?? 0;
+    const calculatedTotal = invoice.totalAmount ?? 0;
+    
+    // Only allow editing if:
+    // 1. External total is not empty/zero
+    // 2. External total is different from calculated total
+    return externalTotal !== 0 && 
+           calculatedTotal !== 0 && 
+           externalTotal.toFixed(2) !== calculatedTotal.toFixed(2);
+  };
+
+  // Auto-exit edit mode when amount mismatch conditions are no longer met
+  useEffect(() => {
+    if (editMode && selectedInvoice && !hasAmountMismatch(selectedInvoice)) {
+      setEditMode(false);
+      setOriginalInvoiceData(null);
+    }
+  }, [editMode, selectedInvoice]);
   const [originalInvoiceData, setOriginalInvoiceData] = useState<any>(null);
   const [savingChanges, setSavingChanges] = useState(false);
 
@@ -373,9 +398,7 @@ const InvoiceManagement: React.FC = () => {
   const [showUomDropdowns, setShowUomDropdowns] = useState<Record<number, boolean>>({});
 
   // Quotation-specific state
-  const [showQuotationForm, setShowQuotationForm] = useState(false);
   const [selectedQuotation, setSelectedQuotation] = useState<any | null>(null);
-  const [modalMode, setModalMode] = useState<'create' | 'edit' | 'view'>('create');
   const [showQuotationViewModal, setShowQuotationViewModal] = useState(false);
 
   console.log("selectedInvoice", selectedInvoice);
@@ -645,6 +668,62 @@ const InvoiceManagement: React.FC = () => {
     fetchAllData();
   }, []);
 
+  // 🚀 KEYBOARD SHORTCUTS FOR QUICK INVOICE CREATION
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Only trigger shortcuts when not typing in input fields
+      const activeElement = document.activeElement;
+      const isInputField = activeElement?.tagName === 'INPUT' || 
+                          activeElement?.tagName === 'TEXTAREA' || 
+                          activeElement?.tagName === 'SELECT' ||
+                          (activeElement as HTMLElement)?.contentEditable === 'true';
+
+      if (isInputField) return;
+
+      // Ctrl/Cmd + Number shortcuts for different invoice types
+      if (event.ctrlKey || event.metaKey) {
+        switch (event.key) {
+          case '1':
+            event.preventDefault();
+            handleCreateInvoice('quotation');
+            toast.success('Creating Quotation...', { duration: 2000 });
+            break;
+          case '2':
+            event.preventDefault();
+            handleCreateInvoice('sale');
+            toast.success('Creating Sales Invoice...', { duration: 2000 });
+            break;
+          case '3':
+            event.preventDefault();
+            handleCreateInvoice('challan');
+            toast.success('Creating Delivery Challan...', { duration: 2000 });
+            break;
+          case 'n':
+            event.preventDefault();
+            handleCreateInvoice();
+            toast.success(`Creating ${getInvoiceTypeLabel(invoiceType)}...`, { duration: 2000 });
+            break;
+          case 'r':
+            event.preventDefault();
+            fetchAllData();
+            toast.success('Refreshing data...', { duration: 1500 });
+            break;
+          case 'f':
+            event.preventDefault();
+            const searchInput = document.querySelector('[data-field="search"]') as HTMLInputElement;
+            if (searchInput) {
+              searchInput.focus();
+              searchInput.select();
+            }
+            break;
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [invoiceType]); // Re-run when invoiceType changes
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -893,78 +972,37 @@ const InvoiceManagement: React.FC = () => {
     }
   };
 
-  const handleCreateInvoice = () => {
-    setNewInvoice({
-      customer: '',
-      dueDate: '',
-      invoiceType: 'sale',
-      location: newInvoice.location,
-      notes: '',
-      items: [
-        {
-          product: '',
-          description: '',
-          quantity: 1,
-          unitPrice: 0,
-          taxRate: 0,
-          gstRate: 0,
-          partNo: '',
-          hsnSac: '',
-          uom: 'nos',
-          discount: 0
-        }
-      ],
-      discountAmount: 0,
-      reduceStock: true,
-      externalInvoiceNumber: '',
-      externalInvoiceTotal: 0,
-      referenceNo: '',
-      referenceDate: '',
-      buyersOrderNo: '',
-      buyersOrderDate: '',
-      dispatchDocNo: '',
-      deliveryNoteDate: '',
-      dispatchedThrough: '',
-      destination: '',
-      termsOfDelivery: '',
-      sellerGSTIN: '',
-      sellerState: '',
-      sellerStateCode: '',
-      buyerGSTIN: '',
-      buyerState: '',
-      buyerStateCode: '',
-      pan: generalSettings?.companyPan || '',
-      bankName: generalSettings?.companyBankDetails?.bankName || '',
-      bankAccountNo: generalSettings?.companyBankDetails?.accNo || '',
-      bankIFSC: generalSettings?.companyBankDetails?.ifscCode || '',
-      bankBranch: generalSettings?.companyBankDetails?.branch || '',
-      declaration: '',
-      signature: ''
+  const handleCreateInvoice = (specificType?: 'quotation' | 'sale' | 'purchase' | 'challan') => {
+    const typeToUse = specificType || invoiceType;
+    console.log("typeToUse:", typeToUse);
+  
+    const path = typeToUse === 'quotation' 
+      ? '/billing/quotation/create' 
+      : '/billing/create';
+  
+    navigate(path, { 
+      state: { invoiceType: typeToUse } 
     });
-    setStockValidation({});
-    setFormErrors({});
-    // Reset all dropdown states
-    setShowCustomerDropdown(false);
-    setShowLocationDropdown(false);
-    setShowInvoiceTypeDropdown(false);
-    setShowProductDropdowns({});
-    setShowUomDropdowns({});
-    setUomSearchTerms({});
-    setShowCreateModal(true);
+  };
+  
+
+  const handleCreateInvoiceClick = () => {
+    handleCreateInvoice();
   };
 
   const handleViewInvoice = (invoice: Invoice) => {
-
     setSelectedInvoice(invoice);
     setOriginalInvoiceData(JSON.parse(JSON.stringify(invoice))); // Deep copy for backup
     setShowViewModal(true);
   };
 
+  const handleEditInvoice = (invoice: Invoice) => {
+    navigate(`/billing/edit/${invoice._id}`);
+  };
+
   // Quotation handlers
   const handleCreateQuotation = () => {
-    setSelectedQuotation(null);
-    setModalMode('create');
-    setShowQuotationForm(true);
+    navigate('/billing/quotation/create');
   };
 
   const handleViewQuotation = (quotation: any) => {
@@ -973,9 +1011,21 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const handleEditQuotation = (quotation: any) => {
-    setSelectedQuotation(quotation);
-    setModalMode('edit');
-    setShowQuotationForm(true);
+    console.log('Editing quotation:', quotation);
+    console.log('Quotation ID:', quotation._id);
+    
+    if (!quotation._id) {
+      console.error('No _id found in quotation object!');
+      toast.error('Cannot edit quotation: ID not found');
+      return;
+    }
+    
+    navigate('/billing/quotation/edit', {
+      state: {
+        quotation: quotation,
+        mode: 'edit'
+      }
+    });
   };
 
   const handleDeleteQuotation = async (quotation: any) => {
@@ -1275,6 +1325,14 @@ const InvoiceManagement: React.FC = () => {
       action: () => handleViewInvoice(invoice),
       color: 'text-blue-600 hover:text-blue-900 hover:bg-blue-50'
     });
+
+    // Edit invoice - Available for all invoice types
+    // actions.push({
+    //   icon: <Edit className="w-4 h-4" />,
+    //   label: 'Edit',
+    //   action: () => handleEditInvoice(invoice),
+    //   color: 'text-green-600 hover:text-green-900 hover:bg-green-50'
+    // });
 
     // Only show payment-related actions for sales invoices
     if (invoice.invoiceType === 'sale') {
@@ -1722,14 +1780,10 @@ const InvoiceManagement: React.FC = () => {
       await apiClient.invoices.create(invoiceData);
       await fetchInvoices();
       await fetchStats();
-      setShowCreateModal(false);
-      setStockValidation({}); // Clear stock validation
-      setFormErrors({}); // Clear form errors
       toast.success('Invoice created successfully!');
     } catch (error) {
       console.error('Error creating invoice:', error);
       toast.error('Failed to create invoice. Please try again.');
-      setFormErrors({ general: 'Failed to create invoice. Please try again.' });
     } finally {
       setSubmitting(false);
     }
@@ -2632,7 +2686,7 @@ const InvoiceManagement: React.FC = () => {
       >
         {(invoiceType === 'sale' || invoiceType === 'challan') && (
           <Button
-            onClick={handleCreateInvoice}
+            onClick={handleCreateInvoiceClick}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Plus className="w-4 h-4" />
@@ -2652,6 +2706,35 @@ const InvoiceManagement: React.FC = () => {
           </Button>
         )}
       </PageHeader>
+
+      {/* 🚀 KEYBOARD SHORTCUTS GUIDE */}
+      <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-4 mb-4">
+        <div className="flex items-center mb-2">
+          <span className="text-lg">⚡</span>
+          <h3 className="text-sm font-semibold text-purple-900 ml-2">Keyboard Shortcuts Available!</h3>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs text-purple-800">
+          <div>
+            <p className="font-medium mb-1">🎯 Quick Create:</p>
+            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+1</kbd> Create Quotation</p>
+            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+2</kbd> Create Sales Invoice</p>
+            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+3</kbd> Create Delivery Challan</p>
+            <p className="text-gray-500 italic">Purchase Invoice: View/Edit only (no create)</p>
+          </div>
+          <div>
+            <p className="font-medium mb-1">🔧 General Actions:</p>
+            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+N</kbd> Create Current Type</p>
+            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+R</kbd> Refresh Data</p>
+            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+F</kbd> Focus Search</p>
+          </div>
+          <div>
+            <p className="font-medium mb-1">💡 Pro Tips:</p>
+            <p>• Shortcuts work when not typing in input fields</p>
+            <p>• Works on both Windows (Ctrl) and Mac (Cmd)</p>
+            <p>• Current type: <span className="font-bold text-purple-900">{getInvoiceTypeLabel(invoiceType)}</span></p>
+          </div>
+        </div>
+      </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -2681,6 +2764,7 @@ const InvoiceManagement: React.FC = () => {
                 placeholder="Search invoices..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
+                data-field="search"
                 className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
@@ -2905,13 +2989,13 @@ const InvoiceManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
-                      ₹{invoice.totalAmount.toFixed(2)}
+                      ₹{(invoice.totalAmount || 0).toFixed(2)}
                     </td>
                     {invoiceType === 'sale' && <td className="px-4 py-3 text-sm font-medium text-green-600">
                       ₹{(invoice.paidAmount || 0).toLocaleString()}
                     </td>}
                     {invoiceType === 'sale' && <td className="px-4 py-3 text-sm font-medium text-red-600">
-                      ₹{(invoice.remainingAmount.toFixed(2) || invoice.totalAmount - (invoice.paidAmount || 0)).toLocaleString()}
+                                              ₹{((invoice.remainingAmount || 0).toFixed(2) || (invoice.totalAmount || 0) - (invoice.paidAmount || 0)).toLocaleString()}
                     </td>}
                     {invoice.invoiceType === 'sale' ? <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
@@ -2923,9 +3007,9 @@ const InvoiceManagement: React.FC = () => {
                     </td> : <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
                         {getStatusIcon(invoice.status)}
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(invoice.externalInvoiceTotal?.toFixed(2) === invoice.totalAmount?.toFixed(2))
-                          ? "bg-green-100 text-green-800" : invoice.externalInvoiceTotal === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                          {invoice.externalInvoiceTotal?.toFixed(2) === invoice.totalAmount?.toFixed(2) ? "Not Mismatch" : invoice.externalInvoiceTotal === 0 ? "Not Mismatch" : "Amount Mismatch"}
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${((invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2))
+                          ? "bg-green-100 text-green-800" : (invoice.externalInvoiceTotal || 0) === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                          {(invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2) ? "Not Mismatch" : (invoice.externalInvoiceTotal || 0) === 0 ? "Not Mismatch" : "Amount Mismatch"}
                         </span>
                       </div>
                     </td>}
@@ -2970,757 +3054,7 @@ const InvoiceManagement: React.FC = () => {
         itemsPerPage={limit}
       />
 
-      {/* Create Invoice Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">
-                {invoiceType === 'quotation'
-                  ? 'Create New Quotation'
-                  : invoiceType === 'sale'
-                    ? 'Create New Sales Invoice'
-                    : invoiceType === 'purchase'
-                      ? 'Create New Purchase Invoice'
-                      : 'Create New Delivery Challan'}
-              </h2>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Form Errors */}
-              {formErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-red-600 text-sm">{formErrors.general}</p>
-                </div>
-              )}
-
-              {/* Customer and Basic Info */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    From Location *
-                  </label>
-                  <div className="relative dropdown-container">
-                    <button
-                      onClick={() => setShowLocationDropdown(!showLocationDropdown)}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.location ? 'border-red-500' : 'border-gray-300'
-                        } hover:border-gray-400`}
-                    >
-                      <span className="text-gray-700 truncate mr-1">{getLocationLabel(newInvoice.location)}</span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLocationDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showLocationDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                        <button
-                          onClick={() => {
-                            setNewInvoice({ ...newInvoice, location: '' });
-                            setShowLocationDropdown(false);
-                          }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!newInvoice.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          Select location
-                        </button>
-                        {locations.map((location) => (
-                          <button
-                            key={location._id}
-                            onClick={() => {
-                              setNewInvoice({ ...newInvoice, location: location._id });
-                              setShowLocationDropdown(false);
-                              // Re-validate all items when location changes
-                              newInvoice.items.forEach((item, index) => {
-                                if (item.product) {
-                                  validateStockForItem(index, item.product, item.quantity);
-                                }
-                              });
-                            }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.location === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                              }`}
-                          >
-                            <div>
-                              <div className="font-medium">{location.name}</div>
-                              <div className="text-xs text-gray-500 capitalize">{location.type.replace('_', ' ')}</div>
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {formErrors.location && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.location}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer *
-                  </label>
-                  <div className="relative dropdown-container">
-                    <button
-                      onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.customer ? 'border-red-500' : 'border-gray-300'
-                        } hover:border-gray-400`}
-                    >
-                      <span className="text-gray-700 truncate mr-1">{getCustomerLabel(newInvoice.customer)}</span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCustomerDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showCustomerDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                        {customers.filter(customer => customer.type === 'customer').length > 0 && <div className="p-2 border-b border-gray-200">
-                          <input
-                            type="text"
-                            placeholder="Search customers..."
-                            value={customerSearchTerm}
-                            onChange={e => setCustomerSearchTerm(e.target.value)}
-                            className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            autoFocus
-                          />
-                        </div>}
-                        {customers.filter(customer => customer.type === 'customer').length > 0 && <button
-                          onClick={() => {
-                            setNewInvoice({ ...newInvoice, customer: '', address: '' });
-                            setShowCustomerDropdown(false);
-                            setAddresses([]);
-                          }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!newInvoice.customer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          Select customer
-                        </button>}
-                        {customers.filter(customer => customer.type === 'customer').length <= 0 ? (
-                          <div className="px-3 py-2 text-sm text-gray-500">
-                            {!customerSearchTerm ? 'No customers found' : 'Loading customers...'}
-                          </div>
-                        ) : (
-                          customers.filter(customer =>
-                            customer.type === 'customer' && (
-                              customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                              customer.email?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                              customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase()))
-                          ).map(customer => (
-                          <button
-                            key={customer._id}
-                            onClick={() => {
-                              setNewInvoice({ ...newInvoice, customer: customer._id, address: '' });
-                              setShowCustomerDropdown(false);
-                              setAddresses(customer.addresses || []);
-                            }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.customer === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                              }`}
-                          >
-                            <div>
-                              <div className="font-medium">{customer.name}</div>
-                              <div className="text-xs text-gray-500">{customer.email}</div>
-                            </div>
-                          </button>
-                        )))}
-                      </div>
-                    )}
-                  </div>
-                  {formErrors.customer && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.customer}</p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Delivery Address
-                  </label>
-                  <div className="relative dropdown-container">
-                    <button
-                      onClick={() => setShowAddressDropdown(!showAddressDropdown)}
-                      disabled={!newInvoice.customer}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${!newInvoice.customer ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300 hover:border-gray-400'}`}
-                    >
-                      <span className="text-gray-700 truncate mr-1">{getAddressLabel(newInvoice.address)}</span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAddressDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showAddressDropdown && newInvoice.customer && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                        <button
-                          onClick={() => {
-                            setNewInvoice({ ...newInvoice, address: '' });
-                            setShowAddressDropdown(false);
-                          }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!newInvoice.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          Select address
-                        </button>
-                        {addresses.map(address => (
-                          <button
-                            key={address.id}
-                            onClick={() => {
-                              setNewInvoice({ ...newInvoice, address: address.id.toString() });
-                              setShowAddressDropdown(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${newInvoice.address === address.id.toString() ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                              }`}
-                          >
-                            <div>
-                              <div className="font-medium">{address.address}</div>
-                              <div className="text-xs text-gray-500">{address.district}, {address.pincode}</div>
-                              {address.isPrimary && (
-                                <div className="text-xs text-blue-600 font-medium">Primary</div>
-                              )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Due Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={newInvoice.dueDate}
-                    onChange={(e) => setNewInvoice({ ...newInvoice, dueDate: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.dueDate ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                    required
-                  />
-                  {formErrors.dueDate && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.dueDate}</p>
-                  )}
-                </div>
-
-                {/* Reference No. & Date */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Reference No
-                  </label>
-                  <input
-                    type="text"
-                    placeholder='Reference No'
-                    value={newInvoice.referenceNo}
-                    onChange={e => setNewInvoice({ ...newInvoice, referenceNo: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.referenceNo ? 'border-red-500' : 'border-gray-300'
-                      }`} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700">Reference Date</label>
-                  <input
-                    type="date"
-                    value={newInvoice.referenceDate}
-                    onChange={e => setNewInvoice({ ...newInvoice, referenceDate: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.referenceDate ? 'border-red-500' : 'border-gray-300'
-                      }`} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Invoice Type</label>
-                  <div className="relative dropdown-container">
-                    <button
-                      onClick={() => {
-                        if (invoiceType !== 'challan') {
-                          setShowInvoiceTypeDropdown(prev => !prev);
-                        }
-                      }}
-                      disabled={invoiceType === 'challan'}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg transition-colors ${invoiceType === 'challan'
-                        ? 'bg-gray-100 cursor-not-allowed border-gray-300'
-                        : 'bg-white border-gray-300 hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
-                        }`}
-                    >
-                      <span className="text-gray-700 truncate mr-1">
-                        {getInvoiceTypeLabel(invoiceType)} {/* Use invoiceType here */}
-                      </span>
-                      <ChevronDown
-                        className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showInvoiceTypeDropdown ? 'rotate-180' : ''
-                          }`}
-                      />
-                    </button>
-
-                    {showInvoiceTypeDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                        {INVOICE_TYPES.map(option => (
-                          <button
-                            key={option.value}
-                            onClick={() => {
-                              updateInvoiceType(option.value as 'quotation' | 'sale' | 'purchase' | 'challan');
-                              setNewInvoice(prev => ({ ...prev, invoiceType: option.value as any }));
-                              setShowInvoiceTypeDropdown(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${invoiceType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                              }`}
-                          >
-                            {option.label}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-
-              </div>
-
-              {/* Stock Reduction Option */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <label className="flex items-center space-x-3">
-                  <input
-                    type="checkbox"
-                    checked={newInvoice.reduceStock}
-                    onChange={(e) => setNewInvoice({ ...newInvoice, reduceStock: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                  />
-                  <div>
-                    <div className="text-sm font-medium text-blue-900">Reduce inventory stock</div>
-                    <div className="text-xs text-blue-700">Automatically reduce stock quantities when invoice is created</div>
-                  </div>
-                </label>
-              </div>
-
-              {/* Invoice Items */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Invoice Items</h3>
-                  <button
-                    onClick={addInvoiceItem}
-                    type="button"
-                    className="bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-1"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Item</span>
-                  </button>
-                </div>
-
-                <div className="space-y-4">
-                  {newInvoice.items.map((item, index) => {
-                    const stockInfo = stockValidation[index];
-                    let cardBg = 'bg-white';
-                    if (stockInfo) {
-                      if (stockInfo.available === 0) cardBg = 'bg-red-100';
-                      else if (stockInfo.isValid) cardBg = 'bg-green-50';
-                      else cardBg = 'bg-red-50';
-                    }
-                    return (
-                      <div key={index} className={`border rounded-lg p-4 ${cardBg}`}>
-                        {/* Row 1: Product Selection and Description */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Product *
-                            </label>
-                            <div className="relative dropdown-container">
-                              <button
-                                onClick={() => setShowProductDropdowns({
-                                  ...showProductDropdowns,
-                                  [index]: !showProductDropdowns[index]
-                                })}
-                                className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors[`item_${index}_product`] ? 'border-red-500' : 'border-gray-300'} hover:border-gray-400`}
-                              >
-                                <span className="text-gray-700 truncate mr-1">{getProductLabel(item.product)}</span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showProductDropdowns[index] ? 'rotate-180' : ''}`} />
-                              </button>
-                              {showProductDropdowns[index] && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-80 overflow-hidden flex flex-col">
-                                  <div className="p-2 border-b border-gray-200">
-                                    <input
-                                      type="text"
-                                      placeholder="Search products..."
-                                      value={productSearchTerms[index] || ''}
-                                      onChange={(e) => updateProductSearchTerm(index, e.target.value)}
-                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                      autoFocus
-                                    />
-                                  </div>
-                                  <div className="overflow-y-auto max-h-60 py-0.5">
-                                    <button
-                                      onClick={() => {
-                                        updateInvoiceItem(index, 'product', '');
-                                        setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
-                                        updateProductSearchTerm(index, '');
-                                      }}
-                                      className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!item.product ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                                    >
-                                      Select product
-                                    </button>
-                                    {getFilteredProducts(productSearchTerms[index] || '').length === 0 ? (
-                                      <div className="px-3 py-2 text-sm text-gray-500">No products found</div>
-                                    ) : (
-                                      getFilteredProducts(productSearchTerms[index] || '').map(product => (
-                                        <button
-                                          key={product._id}
-                                          onClick={() => {
-                                            updateInvoiceItem(index, 'product', product._id);
-                                            setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
-                                            updateProductSearchTerm(index, '');
-                                          }}
-                                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${item.product === product._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                                        >
-                                          <div>
-                                            <div className="font-medium">{product?.name}</div>
-                                            <div className="text-xs text-gray-500">₹{`${product?.price?.toLocaleString()} • Part No: ${product?.partNo || ''}`}</div>
-                                          </div>
-                                        </button>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                            {formErrors[`item_${index}_product`] && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_product`]}</p>
-                            )}
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Description
-                            </label>
-                            <input
-                              type="text"
-                              value={item.description}
-                              onChange={(e) => updateInvoiceItem(index, 'description', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Item description"
-                            />
-                            {/* Show available stock info below description */}
-                            {stockInfo && (
-                              <div className="text-xs mt-1">
-                                <span className={stockInfo.available === 0 ? 'text-red-600 font-bold' : stockInfo.isValid ? 'text-gray-500' : 'text-red-600 font-semibold'}>
-                                  Available: {stockInfo.available} units
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Row 2: HSN/SAC, GST, Part No, Quantity, UOM */}
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              HSN/SAC
-                            </label>
-                            <input
-                              type="text"
-                              value={item.hsnNumber || ''}
-                              onChange={(e) => updateInvoiceItem(index, 'hsnNumber', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="HSN/SAC"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              GST %
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="0.01"
-                              value={item.gst || ''}
-                              onChange={(e) => updateInvoiceItem(index, 'gst', parseFloat(e.target.value) || 0)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="0.00"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Part No
-                            </label>
-                            <input
-                              type="text"
-                              value={item.partNo || ''}
-                              onChange={(e) => updateInvoiceItem(index, 'partNo', e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="Part number"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Quantity *
-                            </label>
-                            <input
-                              type="number"
-                              min="1"
-                              max={stockInfo?.available || undefined}
-                              value={item.quantity}
-                              onChange={(e) => updateInvoiceItem(index, 'quantity', parseFloat(e.target.value))}
-                              disabled={stockInfo?.available === 0}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_quantity`] ? 'border-red-500' : 'border-gray-300'} ${stockInfo?.available === 0 ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                            />
-                            {formErrors[`item_${index}_quantity`] && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_quantity`]}</p>
-                            )}
-                            {formErrors[`item_${index}_stock`] && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_stock`]}</p>
-                            )}
-                          </div>
-
-                          <div className="relative">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              UOM
-                            </label>
-                            <div className="relative">
-                              <button
-                                onClick={() => setShowUomDropdowns({
-                                  ...showUomDropdowns,
-                                  [index]: !showUomDropdowns[index]
-                                })}
-                                className="flex items-center justify-between w-full px-3 py-2 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400"
-                              >
-                                <span className="text-gray-700">{item.uom || 'nos'}</span>
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showUomDropdowns[index] ? 'rotate-180' : ''}`} />
-                              </button>
-                              {showUomDropdowns[index] && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-hidden flex flex-col">
-                                  <div className="p-2 border-b border-gray-200">
-                                    <input
-                                      type="text"
-                                      placeholder="Search UOM..."
-                                      value={uomSearchTerms[index] || ''}
-                                      onChange={(e) => updateUomSearchTerm(index, e.target.value)}
-                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                      autoFocus
-                                    />
-                                  </div>
-                                  <div className="overflow-y-auto max-h-48 py-0.5">
-                                    {getFilteredUomOptions(uomSearchTerms[index] || '').length === 0 ? (
-                                      <div className="px-3 py-2 text-sm text-gray-500">No UOM found</div>
-                                    ) : (
-                                      getFilteredUomOptions(uomSearchTerms[index] || '').map(uomOption => (
-                                        <button
-                                          key={uomOption}
-                                          onClick={() => {
-                                            updateInvoiceItem(index, 'uom', uomOption);
-                                            setShowUomDropdowns({ ...showUomDropdowns, [index]: false });
-                                            updateUomSearchTerm(index, '');
-                                          }}
-                                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${item.uom === uomOption ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                                        >
-                                          {uomOption}
-                                        </button>
-                                      ))
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Row 3: Unit Price, Discount, Total, Remove Button */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Unit Price (₹) *
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              value={item.unitPrice}
-                              onChange={(e) => updateInvoiceItem(index, 'unitPrice', parseFloat(e.target.value))}
-                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`item_${index}_price`] ? 'border-red-500' : 'border-gray-300'}`}
-                              placeholder="0.00"
-                            />
-                            {formErrors[`item_${index}_price`] && (
-                              <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_price`]}</p>
-                            )}
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Discount (%)
-                            </label>
-                            <input
-                              type="number"
-                              min="0"
-                              max="100"
-                              step="1"
-                              value={item.discount || ''}
-                              onChange={(e) => {
-                                updateInvoiceItem(index, 'discount', parseFloat(e.target.value) || 0);
-                                // Auto-calculate discountAmount based on item discounts
-                                const updatedItems = [...newInvoice.items];
-                                updatedItems[index] = { ...updatedItems[index], discount: parseFloat(e.target.value) || 0 };
-
-                                const totalItemDiscounts = updatedItems.reduce((sum, item) => {
-                                  const subtotal = item.quantity * item.unitPrice || 0;
-                                  const itemDiscount = (item.discount || 0) * subtotal / 100;
-                                  return sum + itemDiscount;
-                                }, 0);
-
-                                setNewInvoice(prev => ({
-                                  ...prev,
-                                  discountAmount: totalItemDiscounts
-                                }));
-                              }}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              placeholder="0"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Total (₹)
-                            </label>
-                            <div className="px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg text-sm font-medium">
-                              ₹{calculateItemTotal(item).toLocaleString() || 0}
-                            </div>
-                          </div>
-
-                          <div>
-                            {newInvoice.items.length > 1 && (
-                              <button
-                                onClick={() => removeInvoiceItem(index)}
-                                type="button"
-                                className="w-full p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded-lg transition-colors border border-red-200"
-                              >
-                                <X className="w-4 h-4 mx-auto" />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes (Optional)
-                </label>
-                <textarea
-                  value={newInvoice.notes}
-                  onChange={(e) => setNewInvoice({ ...newInvoice, notes: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  placeholder="Additional notes or terms..."
-                />
-              </div>
-
-              {/* Totals */}
-              <div className="border-t border-gray-200 pt-4">
-                <div className="flex justify-end">
-
-                  {/* <div className=''>
-                    <div className="flex items-center space-x-2 mb-4">
-                      <h3 className="text-lg font-semibold text-gray-900">External Invoice details</h3>
-                    </div>
-                    <div className='flex gap-4'>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          External Invoice No
-                        </label>
-                        <input
-                          type="text"
-                          value={newInvoice.externalInvoiceNumber}
-                          onChange={(e) => setNewInvoice({ ...newInvoice, externalInvoiceNumber: e.target.value })}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.externalInvoiceNumber ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                          placeholder="External Invoice No"
-                        />
-                        {formErrors.externalInvoiceNumber && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors.externalInvoiceNumber}</p>
-                        )}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          External Invoice Total
-                        </label>
-                        <input
-                          type="text"
-                          value={newInvoice.externalInvoiceTotal}
-                          onChange={(e) => setNewInvoice({ ...newInvoice, externalInvoiceTotal: Number(e.target.value) })}
-                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.externalInvoiceTotal ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                          placeholder="External Invoice Total"
-                        />
-                        {formErrors.externalInvoiceTotal && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors.externalInvoiceTotal}</p>
-                        )}
-                      </div>
-                    </div>
-                  </div> */}
-
-                  <div className="w-80 space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Subtotal:</span>
-                      <span className="font-medium">₹{calculateSubtotal().toLocaleString() || 0}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Total Tax:</span>
-                      <span className="font-medium">₹{calculateTotalTax().toLocaleString() || 0}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Total Discount:</span>
-                      <span className="font-medium text-green-600">-₹{calculateTotalDiscount().toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between font-bold text-lg border-t pt-3">
-                      <span>Grand Total:</span>
-                      <span className="text-blue-600">₹{calculateGrandTotal().toLocaleString()}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="px-6 py-4 border-t border-gray-200 flex justify-between items-center">
-              <div className="flex justify-between gap-2 flex-col">
-                <div className="text-sm text-gray-600">
-                  <span className='text-md font-bold text-gray-900'>Amount in Words : </span>
-                  <span className="text-sm text-gray-700 font-medium max-w-xs text-right">
-                    {calculateGrandTotal() ? numberToWords(calculateGrandTotal()) : 'Zero Rupees Only'}
-                  </span>
-                </div>
-                <div className="text-sm text-gray-600">
-                  {newInvoice.items.length} item(s) • Total: ₹{calculateGrandTotal().toLocaleString()}
-                </div>
-              </div>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  disabled={submitting}
-                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSubmitInvoice}
-                  disabled={submitting}
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
-                >
-                  {submitting ? (
-                    <>
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Creating...</span>
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="w-4 h-4" />
-                      <span>
-                        {invoiceType === 'quotation' ? 'Create Quotation' :
-                          invoiceType === 'sale' ? 'Create Invoice' :
-                            invoiceType === 'purchase' ? 'Create Purchase' :
-                              invoiceType === 'challan' ? 'Create Challan' : 'Create Invoice'}
-                      </span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* View Invoice Modal */}
       {showViewModal && selectedInvoice && (
@@ -3840,7 +3174,7 @@ const InvoiceManagement: React.FC = () => {
               </div>
 
               {/* Total Amount Mismatch Warning */}
-              {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount.toFixed(2) !== selectedInvoice?.externalInvoiceTotal.toFixed(2) && (
+              {hasAmountMismatch(selectedInvoice) && (
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <div className="flex items-center">
                     <AlertTriangle className="w-5 h-5 text-yellow-600 mr-2" />
@@ -3853,13 +3187,21 @@ const InvoiceManagement: React.FC = () => {
                     </div>
                     <button
                       onClick={() => {
-                        // Create a backup of current state when entering edit mode
-                        if (selectedInvoice && !originalInvoiceData) {
-                          setOriginalInvoiceData(JSON.parse(JSON.stringify(selectedInvoice)));
+                        // Only allow edit if there's a real amount mismatch
+                        if (hasAmountMismatch(selectedInvoice)) {
+                          // Create a backup of current state when entering edit mode
+                          if (selectedInvoice && !originalInvoiceData) {
+                            setOriginalInvoiceData(JSON.parse(JSON.stringify(selectedInvoice)));
+                          }
+                          setEditMode(true);
                         }
-                        setEditMode(true);
                       }}
-                      className="ml-3 bg-yellow-600 text-white px-3 py-1 rounded-md text-sm hover:bg-yellow-700"
+                      className={`ml-3 px-3 py-1 rounded-md text-sm transition-colors ${
+                        hasAmountMismatch(selectedInvoice) 
+                          ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
+                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      }`}
+                      disabled={!hasAmountMismatch(selectedInvoice)}
                     >
                       Edit Items
                     </button>
@@ -3881,7 +3223,7 @@ const InvoiceManagement: React.FC = () => {
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax (%)</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
-                        {editMode && (
+                        {editMode && hasAmountMismatch(selectedInvoice) && (
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                         )}
                       </tr>
@@ -3894,7 +3236,7 @@ const InvoiceManagement: React.FC = () => {
                           <td className="px-4 py-2 text-sm text-gray-900">{item?.product?.partNo}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">
-                            {editMode ? (
+                            {editMode && hasAmountMismatch(selectedInvoice) ? (
                               <input
                                 type="number"
                                 placeholder="₹0.00"
@@ -3909,7 +3251,7 @@ const InvoiceManagement: React.FC = () => {
                             )}
                           </td>
                           <td className="px-4 py-2 text-sm text-gray-900">
-                            {editMode ? (
+                            {editMode && hasAmountMismatch(selectedInvoice) ? (
                               <input
                                 type="number"
                                 value={item.taxRate === null || item.taxRate === 0 ? '' : item.taxRate}
@@ -3928,11 +3270,11 @@ const InvoiceManagement: React.FC = () => {
 
 
                             ) : (
-                              `${item.taxRate.toFixed(2) ?? 0}%`
+                              `${(item.taxRate || 0).toFixed(2)}%`
                             )}
                           </td>
                           <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{((item.quantity ?? 0) * (item.unitPrice ?? 0) + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate || 0) / 100)).toFixed(2)}</td>
-                          {editMode && item.quantity !== 0 && (
+                          {editMode && hasAmountMismatch(selectedInvoice) && item.quantity !== 0 && (
                             <td className="px-4 py-2 flex text-sm">
                               <button
                                 onClick={autoAdjustTaxRates}
@@ -3957,7 +3299,7 @@ const InvoiceManagement: React.FC = () => {
 
 
               {/* Edit Mode Actions */}
-              {editMode && (
+              {editMode && hasAmountMismatch(selectedInvoice) && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-gray-600">
@@ -4027,11 +3369,11 @@ const InvoiceManagement: React.FC = () => {
                     <div className="border-t pt-2">
                       <div className="flex justify-between text-lg font-bold">
                         <span>Total Amount:</span>
-                        <span className={selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount.toFixed(2) !== selectedInvoice?.externalInvoiceTotal.toFixed(2) ? 'text-red-600' : 'text-gray-900'}>
+                        <span className={hasAmountMismatch(selectedInvoice) ? 'text-red-600' : 'text-gray-900'}>
                           ₹{safeToFixed(selectedInvoice?.totalAmount)}
                         </span>
                       </div>
-                      {selectedInvoice?.externalInvoiceTotal !== 0 && selectedInvoice?.totalAmount.toFixed(2) !== selectedInvoice?.externalInvoiceTotal.toFixed(2) && (
+                      {hasAmountMismatch(selectedInvoice) && (
                         <div className="flex justify-between text-sm text-gray-600 mt-1">
                           <span>External Total:</span>
                           <span>₹{safeToFixed(selectedInvoice?.externalInvoiceTotal)}</span>
@@ -4674,24 +4016,9 @@ const InvoiceManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Quotation Modal */}
-      {showQuotationForm && (
-        <QuotationForm
-          isOpen={showQuotationForm}
-          onClose={() => setShowQuotationForm(false)}
-          onSuccess={() => {
-            setShowQuotationForm(false);
-            fetchQuotations();
-          }}
-          customers={customers}
-          products={products}
-          locations={locations}
-          mode={modalMode}
-          generalSettings={generalSettings}
-          initialData={selectedQuotation}
-          quotationId={selectedQuotation?._id}
-        />
-      )}
+
+
+      
 
       {/* Quotation View Modal */}
       {showQuotationViewModal && selectedQuotation && (
@@ -4758,7 +4085,6 @@ const InvoiceManagement: React.FC = () => {
                         <p className="mt-2 font-medium text-gray-700">Address:</p>
                         {selectedQuotation.location?.name && <p>{selectedQuotation.location?.name || 'N/A'}</p>}
                         {selectedQuotation.location?.address && <p>{selectedQuotation.location?.address || 'N/A'}</p>}
-                        {/* <p className="text-xs text-gray-500 capitalize">{selectedQuotation.location.type?.replace('_', ' ') || 'N/A'}</p> */}
                       </>
                     )}
                   </div>
@@ -4770,7 +4096,6 @@ const InvoiceManagement: React.FC = () => {
                     <p className="font-medium">{selectedQuotation.customer?.name || 'N/A'}</p>
                     {selectedQuotation.customer?.email && <p>Email: {selectedQuotation.customer?.email || 'N/A'}</p>}
                     {selectedQuotation.customer?.phone && <p>Phone: {selectedQuotation.customer?.phone || 'N/A'}</p>}
-                    {/* <p>PAN: {selectedQuotation.customer?.pan || 'N/A'}</p> */}
                     {selectedQuotation.customerAddress && (
                       <>
                         <p className="mt-2 font-medium text-gray-700">Address:</p>
@@ -4871,9 +4196,6 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-
-
             </div>
           </div>
         </div>
