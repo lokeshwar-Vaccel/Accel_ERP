@@ -137,9 +137,9 @@ export class QuotationService {
         // if (!item.description?.trim()) {
         //   errors.push({ field: `items[${index}].description`, message: 'Description is required' });
         // }
-        if (!this.isValidNumber(item.quantity) || item.quantity <= 0) {
-          errors.push({ field: `items[${index}].quantity`, message: 'Quantity must be greater than 0' });
-        }
+        // if (!this.isValidNumber(item.quantity) || item.quantity <= 0) {
+        //   errors.push({ field: `items[${index}].quantity`, message: 'Quantity must be greater than 0' });
+        // }
         if (!this.isValidNumber(item.unitPrice) || item.unitPrice < 0) {
           errors.push({ field: `items[${index}].unitPrice`, message: 'Unit price must be non-negative' });
         }
