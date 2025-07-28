@@ -35,6 +35,7 @@ export interface UpdateServiceTicketInput {
   customerSignature?: string;
   serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
   urgencyLevel?: 'low' | 'medium' | 'high' | 'critical';
+  serialNumber?: string;
   resolution?: string;
   workDuration?: number;
   customerFeedback?: {
@@ -155,6 +156,10 @@ export interface BulkServiceImportInput {
   assignedTechnician?: string;
 }
 
+export interface UpdateServiceStatusInput {
+  status: TicketStatus;
+}
+
 // Base service ticket fields
 const baseServiceTicketFields = {
   customer: Joi.string().hex().length(24),
@@ -208,6 +213,7 @@ export const updateServiceTicketSchema = Joi.object<UpdateServiceTicketInput>({
   customerSignature: baseServiceTicketFields.customerSignature,
   serviceType: baseServiceTicketFields.serviceType,
   urgencyLevel: baseServiceTicketFields.urgencyLevel,
+  serialNumber: baseServiceTicketFields.serialNumber,
   resolution: Joi.string().max(2000),
   workDuration: Joi.number().min(0), // in hours
   customerFeedback: Joi.object({
@@ -359,4 +365,9 @@ export const bulkServiceImportSchema = Joi.array().items(
     scheduledDate: baseServiceTicketFields.scheduledDate,
     assignedTechnician: Joi.string() // Will be looked up by name
   })
-).min(1).max(500); 
+).min(1).max(500);
+
+// Update service status schema
+export const updateServiceStatusSchema = Joi.object<UpdateServiceStatusInput>({
+  status: Joi.string().valid('open', 'in_progress', 'resolved', 'closed', 'cancelled').required()
+}); 

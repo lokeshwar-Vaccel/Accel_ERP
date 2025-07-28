@@ -32,6 +32,8 @@ import {
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
+import { Pagination } from '../components/ui/Pagination';
+import { exportServiceTicketToPDF, exportMultipleTicketsToPDF, ServiceTicketPDFData } from '../utils/pdfExport';
 
 // Types matching backend structure
 type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'cancelled';
@@ -174,9 +176,22 @@ const ServiceManagement: React.FC = () => {
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
   const [showSlaDropdown, setShowSlaDropdown] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalDatas, setTotalDatas] = useState(0);
+
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  // Refetch tickets when any filter or pagination changes (like CustomerManagement)
+  useEffect(() => {
+    if (!loading) {
+      fetchTickets();
+    }
+  }, [currentPage, limit, searchTerm, statusFilter, priorityFilter, assigneeFilter, slaFilter]);
 
   // Check for URL parameters to auto-open create modal
   useEffect(() => {
@@ -205,118 +220,102 @@ const ServiceManagement: React.FC = () => {
   };
 
   const fetchTickets = async () => {
+    console.log('fetchTickets called with:', { currentPage, limit, searchTerm, statusFilter, priorityFilter, assigneeFilter, slaFilter });
+    
+    // Reset to page 1 when filters change (but not when page changes)
+    const hasFilterChanged = searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' || assigneeFilter !== 'all' || slaFilter !== 'all';
+    if (hasFilterChanged && currentPage !== 1) {
+      setCurrentPage(1);
+      return; // Don't fetch yet, let the page change trigger the fetch
+    }
+    
     try {
-      const response = await apiClient.services.getAll();
+      // Build query parameters
+      const params: any = {
+        page: currentPage,
+        limit: limit,
+        sort: '-createdAt'
+      };
+
+      // Add search parameter if not empty
+      if (searchTerm.trim()) {
+        params.search = searchTerm.trim();
+      }
+
+      // Add filter parameters
+      if (statusFilter !== 'all') {
+        params.status = statusFilter;
+      }
+
+      if (priorityFilter !== 'all') {
+        params.priority = priorityFilter;
+      }
+
+      if (assigneeFilter !== 'all' && assigneeFilter.match(/^[0-9a-fA-F]{24}$/)) {
+        params.assignedTo = assigneeFilter;
+      }
+
+      if (slaFilter !== 'all') {
+        params.slaStatus = slaFilter;
+      }
+
+      const response = await apiClient.services.getAll(params);
       
       let ticketsData: ServiceTicket[] = [];
+      let total = 0;
+      let pages = 0;
+      
       if (response.success && response.data) {
         if (Array.isArray(response.data)) {
           ticketsData = response.data;
         } else if ((response.data as any).tickets && Array.isArray((response.data as any).tickets)) {
           ticketsData = (response.data as any).tickets;
         }
-      }
-      
-      // Set fallback data if no real data
-      if (ticketsData.length === 0) {
-        ticketsData = [
-          {
-            _id: '1',
-            ticketNumber: 'TKT-202412-0001',
-            customer: {
-              _id: 'c1',
-              name: 'Mumbai Industries Ltd',
-              email: 'service@mumbaiind.com',
-              phone: '+91 9876543210',
-              address: 'Plot 15, Industrial Area, Mumbai, Maharashtra',
-              customerType: 'retail'
-            },
-            product: {
-              _id: 'p1',
-              name: '250 KVA Diesel Generator',
-              category: 'genset',
-              brand: 'Cummins',
-              modelNumber: 'C250D5'
-            },
-            serialNumber: 'GEN-250-001',
-            description: 'Generator not starting - electrical issue suspected. Customer reports power failure during startup.',
-            priority: 'high',
-            status: 'in_progress',
-            assignedTo: {
-              _id: 'u1',
-              firstName: 'Rajesh',
-              lastName: 'Kumar',
-              email: 'rajesh@sunpower.com',
-              phone: '+91 9876543211',
-              fullName: 'Rajesh Kumar'
-            },
-            scheduledDate: new Date().toISOString(),
-            partsUsed: [
-              {
-                product: {
-                  _id: 'p2',
-                  name: 'Starter Motor',
-                  category: 'spare_part',
-                  brand: 'Cummins'
-                },
-                quantity: 1,
-                serialNumbers: ['SM-001']
-              }
-            ],
-            slaDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            serviceReport: 'Initial diagnosis completed. Starter motor replacement required.',
-            createdBy: 'Admin User',
-            createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date().toISOString(),
-            turnaroundTime: 2,
-            slaStatus: 'on_track'
-          },
-          {
-            _id: '2',
-            ticketNumber: 'TKT-202412-0002',
-            customer: {
-              _id: 'c2',
-              name: 'TechCorp Solutions',
-              email: 'admin@techcorp.com',
-              phone: '+91 8765432109',
-              address: 'Block B, Tech Park, Bangalore, Karnataka',
-              customerType: 'telecom'
-            },
-            product: {
-              _id: 'p3',
-              name: '500 KVA Diesel Generator',
-              category: 'genset',
-              brand: 'Caterpillar',
-              modelNumber: 'CAT-500D'
-            },
-            serialNumber: 'GEN-500-002',
-            description: 'Routine maintenance and oil change required as per AMC schedule.',
-            priority: 'medium',
-            status: 'open',
-            scheduledDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-            partsUsed: [],
-            slaDeadline: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
-            createdBy: 'Admin User',
-            createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-            updatedAt: new Date().toISOString(),
-            slaStatus: 'on_track'
-          }
-        ];
+        
+        // Extract pagination info
+        if ((response.data as any).pagination) {
+          total = (response.data as any).pagination.total || 0;
+          pages = (response.data as any).pagination.pages || 0;
+        } else if (response.pagination) {
+          total = response.pagination.total || 0;
+          pages = response.pagination.pages || 0;
+        }
       }
       
       setTickets(ticketsData);
+      setTotalDatas(total);
+      setTotalPages(pages);
+      
+      console.log('Pagination data:', {
+        total,
+        pages,
+        currentPage,
+        limit,
+        ticketsCount: ticketsData.length,
+        params: params
+      });
     } catch (error) {
       console.error('Error fetching tickets:', error);
       setTickets([]);
+      setTotalDatas(0);
+      setTotalPages(0);
     }
   };
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll({});
+      const response = await apiClient.customers.getAll({
+        page: 1,
+        limit: 100,
+        type: 'customer'
+      });
       let customersData: Customer[] = [];
-      if (response.success && response.data && Array.isArray(response.data)) {
-        customersData = response.data;
+      if (response.success && response.data) {
+        if (Array.isArray(response.data)) {
+          customersData = response.data;
+        } else if (response.data.customers && Array.isArray(response.data.customers)) {
+          customersData = response.data.customers;
+        }
       }
       setCustomers(customersData);
     } catch (error) {
@@ -327,10 +326,18 @@ const ServiceManagement: React.FC = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await apiClient.products.getAll();
+      const response = await apiClient.products.getAll({
+        page: 1,
+        limit: 100,
+        isActive: true
+      });
       let productsData: Product[] = [];
-      if (response.success && response.data && Array.isArray(response.data)) {
-        productsData = response.data;
+      if (response.success && response.data) {
+        if (Array.isArray(response.data)) {
+          productsData = response.data;
+        } else if ((response.data as any).products && Array.isArray((response.data as any).products)) {
+          productsData = (response.data as any).products;
+        }
       }
       setProducts(productsData);
     } catch (error) {
@@ -341,14 +348,52 @@ const ServiceManagement: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await apiClient.users.getAll();
-      let usersData: User[] = [];
-      if (response.success && response.data && Array.isArray(response.data)) {
-        usersData = response.data;
-      }
-      setUsers(usersData);
+      // Hardcoded technician data for service management with proper MongoDB ObjectId format
+      const hardcodedTechnicians: User[] = [
+        {
+          _id: '507f1f77bcf86cd799439011',
+          firstName: 'Rajesh',
+          lastName: 'Kumar',
+          email: 'rajesh.kumar@sunpower.com',
+          phone: '+91 9876543210',
+          fullName: 'Rajesh Kumar'
+        },
+        {
+          _id: '507f1f77bcf86cd799439012',
+          firstName: 'Priya',
+          lastName: 'Sharma',
+          email: 'priya.sharma@sunpower.com',
+          phone: '+91 9876543211',
+          fullName: 'Priya Sharma'
+        },
+        {
+          _id: '507f1f77bcf86cd799439013',
+          firstName: 'Amit',
+          lastName: 'Patel',
+          email: 'amit.patel@sunpower.com',
+          phone: '+91 9876543212',
+          fullName: 'Amit Patel'
+        },
+        {
+          _id: '507f1f77bcf86cd799439014',
+          firstName: 'Suresh',
+          lastName: 'Reddy',
+          email: 'suresh.reddy@sunpower.com',
+          phone: '+91 9876543213',
+          fullName: 'Suresh Reddy'
+        },
+        {
+          _id: '507f1f77bcf86cd799439015',
+          firstName: 'Kavita',
+          lastName: 'Singh',
+          email: 'kavita.singh@sunpower.com',
+          phone: '+91 9876543214',
+          fullName: 'Kavita Singh'
+        }
+      ];
+      setUsers(hardcodedTechnicians);
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('Error setting hardcoded technicians:', error);
       setUsers([]);
     }
   };
@@ -443,8 +488,31 @@ const ServiceManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const response = await apiClient.services.create(ticketFormData);
-      setTickets([...tickets, response.data]);
+      
+      // Format payload according to backend schema
+      const payload: any = {
+        customer: ticketFormData.customer,
+        product: ticketFormData.product || undefined,
+        serialNumber: ticketFormData.serialNumber || undefined,
+        description: ticketFormData.description,
+        priority: ticketFormData.priority,
+        scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined
+      };
+
+      // Only include assignedTo if it's not empty
+      if (ticketFormData.assignedTo && ticketFormData.assignedTo.trim() !== '') {
+        payload.assignedTo = ticketFormData.assignedTo;
+      }
+
+      console.log('Creating service ticket with payload:', payload);
+      const response = await apiClient.services.create(payload);
+      
+      // Add the new ticket to the list
+      if (response.success && response.data) {
+        const newTicket = response.data.ticket || response.data;
+        setTickets([newTicket, ...tickets]);
+      }
+      
       setShowCreateModal(false);
       resetTicketForm();
     } catch (error: any) {
@@ -465,8 +533,31 @@ const ServiceManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const response = await apiClient.services.update(editingTicket._id, ticketFormData);
-      setTickets(tickets.map(t => t._id === editingTicket._id ? response.data : t));
+      
+      // Format payload according to backend schema
+      const payload: any = {
+        customer: ticketFormData.customer,
+        product: ticketFormData.product || undefined,
+        serialNumber: ticketFormData.serialNumber || undefined,
+        description: ticketFormData.description,
+        priority: ticketFormData.priority,
+        scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined
+      };
+
+      // Only include assignedTo if it's not empty
+      if (ticketFormData.assignedTo && ticketFormData.assignedTo.trim() !== '') {
+        payload.assignedTo = ticketFormData.assignedTo;
+      }
+
+      console.log('Updating service ticket with payload:', payload);
+      const response = await apiClient.services.update(editingTicket._id, payload);
+      
+      // Update the ticket in the list
+      if (response.success && response.data) {
+        const updatedTicket = response.data.ticket || response.data;
+        setTickets(tickets.map(t => t._id === editingTicket._id ? updatedTicket : t));
+      }
+      
       setShowEditModal(false);
       setEditingTicket(null);
       resetTicketForm();
@@ -494,24 +585,8 @@ const ServiceManagement: React.FC = () => {
     });
   };
 
-  const filteredTickets = tickets.filter(ticket => {
-    const customerName = getCustomerName(ticket.customer);
-    const productName = getProductName(ticket.product);
-    const assigneeName = getUserName(ticket.assignedTo);
-    
-    const matchesSearch = ticket.ticketNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ticket.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         productName.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || ticket.status === statusFilter;
-    const matchesPriority = priorityFilter === 'all' || ticket.priority === priorityFilter;
-    const matchesAssignee = assigneeFilter === 'all' || 
-                           (ticket.assignedTo && typeof ticket.assignedTo === 'object' && ticket.assignedTo._id === assigneeFilter);
-    const matchesSLA = slaFilter === 'all' || ticket.slaStatus === slaFilter;
-    
-    return matchesSearch && matchesStatus && matchesPriority && matchesAssignee && matchesSLA;
-  });
+  // Since filtering is now handled by the backend, we just use the tickets directly
+  const filteredTickets = tickets;
 
   const getStatusColor = (status: TicketStatus) => {
     switch (status) {
@@ -586,7 +661,7 @@ const ServiceManagement: React.FC = () => {
   const stats = [
     {
       title: 'Total Tickets',
-      value: tickets.length.toString(),
+      value: totalDatas.toString(),
       icon: <FileText className="w-6 h-6" />,
       color: 'blue'
     },
@@ -658,6 +733,134 @@ const ServiceManagement: React.FC = () => {
     return user ? getUserName(user) : 'All Assignees';
   };
 
+  const handlePageChange = (page: number) => {
+    console.log('Page change requested:', page);
+    setCurrentPage(page);
+  };
+
+  const handleStatusUpdate = async (ticketId: string, newStatus: TicketStatus) => {
+    try {
+      console.log('Updating ticket status:', { ticketId, newStatus });
+      const response = await apiClient.services.updateStatus(ticketId, newStatus);
+      
+      if (response.success) {
+        // Update the ticket in the local state
+        setTickets(tickets.map(ticket => 
+          ticket._id === ticketId 
+            ? { ...ticket, status: newStatus }
+            : ticket
+        ));
+        
+        // Update selected ticket if it's the same one
+        if (selectedTicket && selectedTicket._id === ticketId) {
+          setSelectedTicket({ ...selectedTicket, status: newStatus });
+        }
+        
+        // Show success message
+        console.log('Status updated successfully');
+        alert('Ticket status updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error updating ticket status:', error);
+      alert('Failed to update ticket status. Please try again.');
+    }
+  };
+
+  const handleExportToPDF = async (ticket: ServiceTicket) => {
+    try {
+      const pdfData: ServiceTicketPDFData = {
+        ticketNumber: ticket.ticketNumber,
+        customer: {
+          name: getCustomerName(ticket.customer),
+          email: typeof ticket.customer === 'object' ? ticket.customer.email : undefined,
+          phone: typeof ticket.customer === 'object' ? ticket.customer.phone : '',
+          address: typeof ticket.customer === 'object' && (ticket.customer as any).address?.address 
+            ? (ticket.customer as any).address.address 
+            : undefined,
+        },
+        product: ticket.product && typeof ticket.product === 'object' ? {
+          name: ticket.product.name,
+          category: ticket.product.category,
+          brand: ticket.product.brand,
+          modelNumber: ticket.product.modelNumber,
+        } : undefined,
+        serialNumber: ticket.serialNumber,
+        description: ticket.description,
+        priority: ticket.priority,
+        status: ticket.status,
+        assignedTo: getUserName(ticket.assignedTo),
+        scheduledDate: ticket.scheduledDate,
+        completedDate: ticket.completedDate,
+        createdAt: ticket.createdAt,
+        serviceReport: ticket.serviceReport,
+        partsUsed: ticket.partsUsed?.map(part => ({
+          product: getProductName(part.product),
+          quantity: part.quantity,
+          serialNumbers: part.serialNumbers,
+        })),
+        slaDeadline: ticket.slaDeadline,
+        slaStatus: ticket.slaStatus,
+      };
+
+      await exportServiceTicketToPDF(pdfData);
+      console.log('PDF exported successfully');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Failed to export PDF. Please try again.');
+    }
+  };
+
+  const handleBulkExportToPDF = async () => {
+    if (tickets.length === 0) {
+      alert('No tickets to export');
+      return;
+    }
+
+    try {
+      // Convert all tickets to PDF data format
+      const pdfDataArray: ServiceTicketPDFData[] = tickets.map(ticket => ({
+        ticketNumber: ticket.ticketNumber,
+        customer: {
+          name: getCustomerName(ticket.customer),
+          email: typeof ticket.customer === 'object' ? ticket.customer.email : undefined,
+          phone: typeof ticket.customer === 'object' ? ticket.customer.phone : '',
+          address: typeof ticket.customer === 'object' && (ticket.customer as any).address?.address 
+            ? (ticket.customer as any).address.address 
+            : undefined,
+        },
+        product: ticket.product && typeof ticket.product === 'object' ? {
+          name: ticket.product.name,
+          category: ticket.product.category,
+          brand: ticket.product.brand,
+          modelNumber: ticket.product.modelNumber,
+        } : undefined,
+        serialNumber: ticket.serialNumber,
+        description: ticket.description,
+        priority: ticket.priority,
+        status: ticket.status,
+        assignedTo: getUserName(ticket.assignedTo),
+        scheduledDate: ticket.scheduledDate,
+        completedDate: ticket.completedDate,
+        createdAt: ticket.createdAt,
+        serviceReport: ticket.serviceReport,
+        partsUsed: ticket.partsUsed?.map(part => ({
+          product: getProductName(part.product),
+          quantity: part.quantity,
+          serialNumbers: part.serialNumbers,
+        })),
+        slaDeadline: ticket.slaDeadline,
+        slaStatus: ticket.slaStatus,
+      }));
+
+      // Export all tickets in a single PDF
+      await exportMultipleTicketsToPDF(pdfDataArray);
+      console.log('Bulk PDF export completed');
+    } catch (error) {
+      console.error('Error in bulk PDF export:', error);
+      alert('Failed to export PDF. Please try again.');
+    }
+  };
+
   // Click outside handler for dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -684,10 +887,11 @@ const ServiceManagement: React.FC = () => {
       >
         <div className="flex space-x-3">
           <button
+            onClick={handleBulkExportToPDF}
             className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Download className="w-4 h-4" />
-            <span className="text-sm">Export</span>
+            <span className="text-sm">Export All</span>
           </button>
           <button
             onClick={handleCreateTicket}
@@ -880,7 +1084,7 @@ const ServiceManagement: React.FC = () => {
         
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xs text-gray-600">
-            Showing {filteredTickets.length} of {tickets.length} tickets
+            Showing {filteredTickets.length} of {totalDatas} tickets
           </span>
         </div>
       </div>
@@ -953,9 +1157,17 @@ const ServiceManagement: React.FC = () => {
                           {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
                         </span>
                         <br />
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(ticket.status)}`}>
-                          {ticket.status.replace('_', ' ').charAt(0).toUpperCase() + ticket.status.replace('_', ' ').slice(1)}
-                        </span>
+                        <select
+                          value={ticket.status}
+                          onChange={(e) => handleStatusUpdate(ticket._id, e.target.value as TicketStatus)}
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${getStatusColor(ticket.status)}`}
+                        >
+                          <option value="open">Open</option>
+                          <option value="in_progress">In Progress</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                          <option value="cancelled">Cancelled</option>
+                        </select>
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -1006,6 +1218,13 @@ const ServiceManagement: React.FC = () => {
                         >
                           <Edit className="w-4 h-4" />
                         </button>
+                        {/* <button
+                          onClick={() => handleExportToPDF(ticket)}
+                          className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
+                          title="Export PDF"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button> */}
                       </div>
                     </td>
                   </tr>
@@ -1015,6 +1234,37 @@ const ServiceManagement: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Pagination Controls */}
+      {!loading && totalDatas > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-2">
+              <select
+                value={limit}
+                onChange={(e) => {
+                  setLimit(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className="px-2 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value={5}>5 per page</option>
+                <option value={10}>10 per page</option>
+                <option value={20}>20 per page</option>
+                <option value={50}>50 per page</option>
+              </select>
+            </div>
+          </div>
+          
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            totalItems={totalDatas}
+            itemsPerPage={limit}
+          />
+        </div>
+      )}
 
       {/* Create Ticket Modal */}
       {showCreateModal && (
@@ -1392,7 +1642,11 @@ const ServiceManagement: React.FC = () => {
                        </div>
                        <div>
                          <p className="text-xs text-gray-600">Address</p>
-                         <p className="font-medium text-sm">{selectedTicket.customer.address}</p>
+                         <p className="font-medium text-sm">
+                           {typeof selectedTicket.customer === 'object' && (selectedTicket.customer as any).address?.address 
+                             ? (selectedTicket.customer as any).address.address 
+                             : 'No address available'}
+                         </p>
                        </div>
                      </div>
                    ) : (
@@ -1566,6 +1820,32 @@ const ServiceManagement: React.FC = () => {
                  </div>
                )}
 
+               {/* Status Update Section */}
+               <div className="bg-gray-50 p-4 rounded-lg">
+                 <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
+                   <Settings className="w-5 h-5 mr-2" />
+                   Update Status
+                 </h3>
+                 <div className="flex items-center space-x-3">
+                   <span className="text-sm text-gray-600">Current Status:</span>
+                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedTicket.status)}`}>
+                     {selectedTicket.status.replace('_', ' ').charAt(0).toUpperCase() + selectedTicket.status.replace('_', ' ').slice(1)}
+                   </span>
+                   <span className="text-sm text-gray-600">→</span>
+                   <select
+                     value={selectedTicket.status}
+                     onChange={(e) => handleStatusUpdate(selectedTicket._id, e.target.value as TicketStatus)}
+                     className="px-3 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                   >
+                     <option value="open">Open</option>
+                     <option value="in_progress">In Progress</option>
+                     <option value="resolved">Resolved</option>
+                     <option value="closed">Closed</option>
+                     <option value="cancelled">Cancelled</option>
+                   </select>
+                 </div>
+               </div>
+
                {/* Action Buttons */}
                <div className="flex space-x-3 pt-4 border-t border-gray-200">
                  <button
@@ -1589,6 +1869,7 @@ const ServiceManagement: React.FC = () => {
                    <span>Service Report</span>
                  </button>
                  <button
+                   onClick={() => handleExportToPDF(selectedTicket)}
                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
                  >
                    <Download className="w-4 h-4" />

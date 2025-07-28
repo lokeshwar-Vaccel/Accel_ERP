@@ -13,6 +13,7 @@ export const getServiceTickets = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    console.log('Service tickets query params:', req.query);
     const { 
       page = 1, 
       limit = 10, 
@@ -23,7 +24,8 @@ export const getServiceTickets = async (
       assignedTo,
       customer,
       dateFrom,
-      dateTo
+      dateTo,
+      slaStatus
     } = req.query as QueryParams & {
       status?: TicketStatus;
       priority?: TicketPriority;
@@ -31,6 +33,7 @@ export const getServiceTickets = async (
       customer?: string;
       dateFrom?: string;
       dateTo?: string;
+      slaStatus?: 'on_track' | 'breached' | 'met' | 'no_sla';
     };
 
     // Build query
@@ -66,24 +69,204 @@ export const getServiceTickets = async (
       if (dateTo) query.createdAt.$lte = new Date(dateTo);
     }
 
-    // Execute query with pagination
-    const tickets = await ServiceTicket.find(query)
-      .populate('customer', 'name email phone customerType')
-      .populate('product', 'name category brand modelNumber')
-      .populate('assignedTo', 'firstName lastName email')
-      .populate('createdBy', 'firstName lastName email')
-      .populate('partsUsed.product', 'name category price')
-      .sort(sort as string)
-      .limit(Number(limit))
-      .skip((Number(page) - 1) * Number(limit));
+        // Handle SLA status filtering
+    if (slaStatus) {
+      const now = new Date();
+      
+      switch (slaStatus) {
+        case 'on_track':
+          query.$and = [
+            { slaDeadline: { $gte: now } },
+            { status: { $nin: [TicketStatus.RESOLVED, TicketStatus.CLOSED] } }
+          ];
+          break;
+        case 'breached':
+          query.$or = [
+            {
+              slaDeadline: { $lt: now },
+              status: { $nin: [TicketStatus.RESOLVED, TicketStatus.CLOSED] }
+            }
+          ];
+          break;
+        case 'met':
+          query.$and = [
+            { status: { $in: [TicketStatus.RESOLVED, TicketStatus.CLOSED] } }
+          ];
+          break;
+        case 'no_sla':
+          query.slaDeadline = { $exists: false };
+          break;
+      }
+    }
 
-    const total = await ServiceTicket.countDocuments(query);
+    let tickets: any[] = [];
+    let total = 0;
+
+    // Handle complex SLA filtering with aggregation
+    if (slaStatus && (slaStatus === 'breached' || slaStatus === 'met')) {
+      const now = new Date();
+      
+      const pipeline: any[] = [
+        {
+          $lookup: {
+            from: 'customers',
+            localField: 'customer',
+            foreignField: '_id',
+            as: 'customer'
+          }
+        },
+        {
+          $lookup: {
+            from: 'products',
+            localField: 'product',
+            foreignField: '_id',
+            as: 'product'
+          }
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'assignedTo',
+            foreignField: '_id',
+            as: 'assignedTo'
+          }
+        },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'createdBy',
+            foreignField: '_id',
+            as: 'createdBy'
+          }
+        },
+        {
+          $addFields: {
+            customer: { $arrayElemAt: ['$customer', 0] },
+            product: { $arrayElemAt: ['$product', 0] },
+            assignedTo: { $arrayElemAt: ['$assignedTo', 0] },
+            createdBy: { $arrayElemAt: ['$createdBy', 0] }
+          }
+        }
+      ];
+
+      // Add SLA filtering logic
+      if (slaStatus === 'breached') {
+        pipeline.push({
+          $match: {
+            $or: [
+              {
+                slaDeadline: { $lt: now },
+                status: { $nin: [TicketStatus.RESOLVED, TicketStatus.CLOSED] }
+              },
+              {
+                $expr: {
+                  $and: [
+                    { $lt: ['$slaDeadline', '$completedDate'] },
+                    { $in: ['$status', [TicketStatus.RESOLVED, TicketStatus.CLOSED]] }
+                  ]
+                }
+              }
+            ]
+          }
+        });
+      } else if (slaStatus === 'met') {
+        pipeline.push({
+          $match: {
+            $expr: {
+              $and: [
+                { $gte: ['$slaDeadline', '$completedDate'] },
+                { $in: ['$status', [TicketStatus.RESOLVED, TicketStatus.CLOSED]] }
+              ]
+            }
+          }
+        });
+      }
+
+      // Add other filters
+      if (search) {
+        pipeline.push({
+          $match: {
+            $or: [
+              { ticketNumber: { $regex: search, $options: 'i' } },
+              { description: { $regex: search, $options: 'i' } },
+              { serialNumber: { $regex: search, $options: 'i' } }
+            ]
+          }
+        });
+      }
+
+      if (status) {
+        pipeline.push({ $match: { status } });
+      }
+
+      if (priority) {
+        pipeline.push({ $match: { priority } });
+      }
+
+      if (assignedTo) {
+        pipeline.push({ $match: { assignedTo: assignedTo } });
+      }
+
+      if (customer) {
+        pipeline.push({ $match: { customer: customer } });
+      }
+
+      if (dateFrom || dateTo) {
+        const dateFilter: any = {};
+        if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+        if (dateTo) dateFilter.$lte = new Date(dateTo);
+        pipeline.push({ $match: { createdAt: dateFilter } });
+      }
+
+      // Add sorting and pagination
+      pipeline.push({ $sort: { [sort.replace('-', '')]: sort.startsWith('-') ? -1 : 1 } });
+      
+      // Get total count
+      const countPipeline = [...pipeline, { $count: 'total' }];
+      const countResult = await ServiceTicket.aggregate(countPipeline);
+      total = countResult.length > 0 ? countResult[0].total : 0;
+
+      // Add pagination
+      pipeline.push(
+        { $skip: (Number(page) - 1) * Number(limit) },
+        { $limit: Number(limit) }
+      );
+
+      console.log('Using aggregation pipeline:', JSON.stringify(pipeline, null, 2));
+      tickets = await ServiceTicket.aggregate(pipeline);
+    } else {
+      // Use regular find for simple queries
+      console.log('Using simple find query:', JSON.stringify(query, null, 2));
+      tickets = await ServiceTicket.find(query)
+        .populate('customer', 'name email phone customerType addresses')
+        .populate('product', 'name category brand modelNumber')
+        .populate('assignedTo', 'firstName lastName email')
+        .populate('createdBy', 'firstName lastName email')
+        .populate('partsUsed.product', 'name category price')
+        .sort(sort as string)
+        .limit(Number(limit))
+        .skip((Number(page) - 1) * Number(limit));
+
+      total = await ServiceTicket.countDocuments(query);
+    }
+
+    // Process tickets to include primary address
+    const processedTickets = tickets.map((ticket: any) => {
+      if (ticket.customer && ticket.customer.addresses && Array.isArray(ticket.customer.addresses)) {
+        const primaryAddress = ticket.customer.addresses.find((addr: any) => addr.isPrimary === true);
+        if (primaryAddress) {
+          ticket.customer.primaryAddress = primaryAddress;
+        }
+      }
+      return ticket;
+    });
+
     const pages = Math.ceil(total / Number(limit));
 
     const response: APIResponse = {
       success: true,
       message: 'Service tickets retrieved successfully',
-      data: { tickets },
+      data: { tickets: processedTickets },
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -108,7 +291,7 @@ export const getServiceTicket = async (
 ): Promise<void> => {
   try {
     const ticket = await ServiceTicket.findById(req.params.id)
-      .populate('customer', 'name email phone address customerType')
+      .populate('customer', 'name email phone customerType addresses')
       .populate('product', 'name category brand modelNumber specifications')
       .populate('assignedTo', 'firstName lastName email phone')
       .populate('createdBy', 'firstName lastName email')
@@ -116,6 +299,14 @@ export const getServiceTicket = async (
 
     if (!ticket) {
       return next(new AppError('Service ticket not found', 404));
+    }
+
+    // Process ticket to include primary address
+    if (ticket.customer && (ticket.customer as any).addresses && Array.isArray((ticket.customer as any).addresses)) {
+      const primaryAddress = (ticket.customer as any).addresses.find((addr: any) => addr.isPrimary === true);
+      if (primaryAddress) {
+        (ticket.customer as any).primaryAddress = primaryAddress;
+      }
     }
 
     const response: APIResponse = {
@@ -164,9 +355,17 @@ export const createServiceTicket = async (
     const ticket = await ServiceTicket.create(ticketData);
 
     const populatedTicket = await ServiceTicket.findById(ticket._id)
-      .populate('customer', 'name email phone')
+      .populate('customer', 'name email phone customerType addresses')
       .populate('product', 'name category brand')
       .populate('createdBy', 'firstName lastName email');
+
+    // Process ticket to include primary address
+    if (populatedTicket && populatedTicket.customer && (populatedTicket.customer as any).addresses && Array.isArray((populatedTicket.customer as any).addresses)) {
+      const primaryAddress = (populatedTicket.customer as any).addresses.find((addr: any) => addr.isPrimary === true);
+      if (primaryAddress) {
+        (populatedTicket.customer as any).primaryAddress = primaryAddress;
+      }
+    }
 
     const response: APIResponse = {
       success: true,
@@ -193,15 +392,24 @@ export const updateServiceTicket = async (
     if (!ticket) {
       return next(new AppError('Service ticket not found', 404));
     }
+    console.log("req.body==>",req.body);
 
     const updatedTicket = await ServiceTicket.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     )
-      .populate('customer', 'name email phone')
+      .populate('customer', 'name email phone customerType addresses')
       .populate('product', 'name category brand')
       .populate('assignedTo', 'firstName lastName email');
+
+    // Process ticket to include primary address
+    if (updatedTicket && updatedTicket.customer && (updatedTicket.customer as any).addresses && Array.isArray((updatedTicket.customer as any).addresses)) {
+      const primaryAddress = (updatedTicket.customer as any).addresses.find((addr: any) => addr.isPrimary === true);
+      if (primaryAddress) {
+        (updatedTicket.customer as any).primaryAddress = primaryAddress;
+      }
+    }
 
     const response: APIResponse = {
       success: true,
@@ -350,6 +558,59 @@ export const addPartsUsed = async (
     };
 
     res.status(201).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update service ticket status
+// @route   PUT /api/v1/services/:id/status
+// @access  Private
+export const updateServiceTicketStatus = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { status } = req.body;
+    const { id } = req.params;
+
+    const ticket = await ServiceTicket.findById(id);
+    if (!ticket) {
+      return next(new AppError('Service ticket not found', 404));
+    }
+
+    // Update the status
+    ticket.status = status;
+    
+    // If status is resolved or closed, set completed date
+    if (status === TicketStatus.RESOLVED || status === TicketStatus.CLOSED) {
+      ticket.completedDate = new Date();
+    }
+
+    await ticket.save();
+
+    const populatedTicket = await ServiceTicket.findById(ticket._id)
+      .populate('customer', 'name email phone customerType addresses')
+      .populate('product', 'name category brand')
+      .populate('assignedTo', 'firstName lastName email')
+      .populate('createdBy', 'firstName lastName email');
+
+    // Process ticket to include primary address
+    if (populatedTicket && populatedTicket.customer && (populatedTicket.customer as any).addresses && Array.isArray((populatedTicket.customer as any).addresses)) {
+      const primaryAddress = (populatedTicket.customer as any).addresses.find((addr: any) => addr.isPrimary === true);
+      if (primaryAddress) {
+        (populatedTicket.customer as any).primaryAddress = primaryAddress;
+      }
+    }
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Service ticket status updated successfully',
+      data: { ticket: populatedTicket }
+    };
+
+    res.status(200).json(response);
   } catch (error) {
     next(error);
   }

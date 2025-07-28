@@ -6,7 +6,8 @@ import {
   updateServiceTicketSchema,
   serviceTicketQuerySchema,
   completeServiceSchema,
-  assignServiceSchema
+  assignServiceSchema,
+  updateServiceStatusSchema
 } from '../schemas';
 import { UserRole } from '../types';
 import {
@@ -17,7 +18,8 @@ import {
   assignServiceTicket,
   completeServiceTicket,
   addPartsUsed,
-  getServiceStats
+  getServiceStats,
+  updateServiceTicketStatus
 } from '../controllers/serviceController';
 
 const router = Router();
@@ -50,6 +52,7 @@ router.route('/:id')
 // Service ticket actions
 router.post('/:id/assign', validate(assignServiceSchema), checkPermission('write'), assignServiceTicket);
 router.post('/:id/complete', validate(completeServiceSchema), checkPermission('write'), completeServiceTicket);
+router.put('/:id/status', validate(updateServiceStatusSchema), checkPermission('write'), updateServiceTicketStatus);
 
 // Statistics
 router.get('/stats/overview', checkPermission('read'), getServiceStats);
