@@ -530,6 +530,9 @@ class ApiClient {
         body: JSON.stringify(receiptData),
       }),
 
+    checkGstInvoiceNumber: (gstInvoiceNumber: string) =>
+      this.makeRequest<{ success: boolean; data: { exists: boolean; gstInvoiceNumber: string; foundIn: string | null }; message: string }>(`/purchase-orders/check-gst-invoice/${encodeURIComponent(gstInvoiceNumber)}`),
+
     // Preview import from Excel/CSV - shows what will be imported without saving
     previewImportFromFile: (file: File) => {
       const formData = new FormData();
