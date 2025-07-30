@@ -368,6 +368,50 @@ export const sendPurchaseOrder = async (
   }
 };
 
+// @desc    Check if GST Invoice Number already exists
+// @route   GET /api/v1/purchase-orders/check-gst-invoice/:gstInvoiceNumber
+// @access  Private
+export const checkGstInvoiceNumber = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { gstInvoiceNumber } = req.params;
+
+    if (!gstInvoiceNumber || gstInvoiceNumber.trim() === '') {
+      return next(new AppError('GST Invoice Number is required', 400));
+    }
+
+    // Check in Purchase Orders
+    const existingPO = await PurchaseOrder.findOne({ 
+      gstInvoiceNumber: gstInvoiceNumber.trim() 
+    });
+
+    // Check in Invoices (for purchase invoices)
+    const existingInvoice = await Invoice.findOne({ 
+      invoiceNumber: gstInvoiceNumber.trim(),
+      invoiceType: 'purchase'
+    });
+
+    const exists = !!(existingPO || existingInvoice);
+
+    const response: APIResponse = {
+      success: true,
+      message: exists ? 'GST Invoice Number already exists' : 'GST Invoice Number is available',
+      data: { 
+        exists,
+        gstInvoiceNumber: gstInvoiceNumber.trim(),
+        foundIn: existingPO ? 'purchase_order' : existingInvoice ? 'invoice' : null
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Receive purchase order items
 // @route   POST /api/v1/purchase-orders/:id/receive
 // @access  Private

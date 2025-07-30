@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   Plus,
@@ -339,9 +339,77 @@ const PurchaseOrderManagement: React.FC = () => {
   const [addresses, setAddresses] = useState<SupplierAddress[]>([]);
   console.log("addresses-12:", addresses);
 
+  // Add state for GST Invoice Number validation
+  const [gstInvoiceValidation, setGstInvoiceValidation] = useState<{
+    isValidating: boolean;
+    isDuplicate: boolean;
+    message: string;
+  }>({
+    isValidating: false,
+    isDuplicate: false,
+    message: ''
+  });
+
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
+
+  // Debounced GST Invoice Number validation
+  const validateGstInvoiceNumber = useCallback(
+    (() => {
+      let timeoutId: NodeJS.Timeout;
+      return async (gstInvoiceNumber: string) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(async () => {
+          if (!gstInvoiceNumber || gstInvoiceNumber.trim() === '') {
+            setGstInvoiceValidation({
+              isValidating: false,
+              isDuplicate: false,
+              message: ''
+            });
+            return;
+          }
+
+          setGstInvoiceValidation(prev => ({ ...prev, isValidating: true }));
+
+          try {
+            const response = await apiClient.purchaseOrders.checkGstInvoiceNumber(gstInvoiceNumber.trim());
+            if (response.data.exists) {
+              const foundIn = response.data.foundIn === 'purchase_order' ? 'Purchase Order' : 'Invoice';
+              setGstInvoiceValidation({
+                isValidating: false,
+                isDuplicate: true,
+                message: `GST Invoice Number already exists in ${foundIn}`
+              });
+            } else {
+              setGstInvoiceValidation({
+                isValidating: false,
+                isDuplicate: false,
+                message: ''
+              });
+            }
+          } catch (error) {
+            console.error('Error checking GST Invoice Number:', error);
+            setGstInvoiceValidation({
+              isValidating: false,
+              isDuplicate: false,
+              message: ''
+            });
+          }
+        }, 500);
+      };
+    })(),
+    []
+  );
+
+  // Cleanup function to clear validation timeout
+  const clearGstInvoiceValidation = useCallback(() => {
+    setGstInvoiceValidation({
+      isValidating: false,
+      isDuplicate: false,
+      message: ''
+    });
+  }, []);
 
   useEffect(() => {
     fetchAllData();
@@ -693,6 +761,7 @@ const PurchaseOrderManagement: React.FC = () => {
     });
 
     setShowReceiveModal(true);
+    clearGstInvoiceValidation();
   };
 
   const validatePOForm = (): boolean => {
@@ -845,7 +914,7 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   // Add validation for Receive Items form
-  const validateReceiveForm = (): boolean => {
+  const validateReceiveForm = async (): Promise<boolean> => {
     const errors: Record<string, string> = {};
 
     // Validate all required fields marked with asterisks in the form
@@ -858,24 +927,36 @@ const PurchaseOrderManagement: React.FC = () => {
     if (!receiveData.shipDate || receiveData.shipDate.trim() === '') {
       errors.shipDate = 'Ship Date is required';
     }
-    if (!receiveData.docketNumber || receiveData.docketNumber.trim() === '') {
-      errors.docketNumber = 'Docket Number is required';
-    }
+    // if (!receiveData.docketNumber || receiveData.docketNumber.trim() === '') {
+    //   errors.docketNumber = 'Docket Number is required';
+    // }
     if (!receiveData.noOfPackages || receiveData.noOfPackages <= 0) {
       errors.noOfPackages = 'Number of Packages must be greater than 0';
     }
     if (!receiveData.gstInvoiceNumber || receiveData.gstInvoiceNumber.trim() === '') {
       errors.gstInvoiceNumber = 'GST Invoice Number is required';
+    } else {
+      // Check for duplicate GST Invoice Number
+      try {
+        const response = await apiClient.purchaseOrders.checkGstInvoiceNumber(receiveData.gstInvoiceNumber.trim());
+        if (response.data.exists) {
+          const foundIn = response.data.foundIn === 'purchase_order' ? 'Purchase Order' : 'Invoice';
+          errors.gstInvoiceNumber = `GST Invoice Number "${receiveData.gstInvoiceNumber}" already exists in ${foundIn}. Please use a different GST Invoice Number.`;
+        }
+      } catch (error) {
+        console.error('Error checking GST Invoice Number:', error);
+        // Don't block validation if the check fails, but log the error
+      }
     }
     if (!receiveData.invoiceDate || receiveData.invoiceDate.trim() === '') {
       errors.invoiceDate = 'Invoice Date is required';
     }
-    if (!receiveData.documentNumber || receiveData.documentNumber.trim() === '') {
-      errors.documentNumber = 'Document Number is required';
-    }
-    if (!receiveData.documentDate || receiveData.documentDate.trim() === '') {
-      errors.documentDate = 'Document Date is required';
-    }
+    // if (!receiveData.documentNumber || receiveData.documentNumber.trim() === '') {
+    //   errors.documentNumber = 'Document Number is required';
+    // }
+    // if (!receiveData.documentDate || receiveData.documentDate.trim() === '') {
+    //   errors.documentDate = 'Document Date is required';
+    // }
 
     // Validate that at least one item has been selected to receive
     if (receiveData.receivedItems.every(item => (item.quantityReceived || 0) === 0)) {
@@ -895,7 +976,7 @@ const PurchaseOrderManagement: React.FC = () => {
     if (!selectedPO) return;
 
     // Validate form before submitting
-    if (!validateReceiveForm()) return;
+    if (!(await validateReceiveForm())) return;
 
     setSubmitting(true);
     console.log("receiveData:", receiveData);
@@ -941,6 +1022,7 @@ const PurchaseOrderManagement: React.FC = () => {
       });
 
       setShowReceiveModal(false);
+      clearGstInvoiceValidation();
       toast.success('Items received successfully');
     } catch (error: any) {
       console.error('Error receiving items:', error);
@@ -1707,7 +1789,7 @@ const PurchaseOrderManagement: React.FC = () => {
               )}
 
               {/* Basic Information */}
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="md:col-span-2">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Select Supplier *
@@ -1839,7 +1921,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     <p className="text-red-500 text-xs mt-1">{formErrors.supplierAddress}</p>
                   )}
                 </div>
-                <div className="md:col-span-1">
+                {/* <div className="md:col-span-1">
                   {quickActions.map((action, index) => (
                     <div
                       key={index}
@@ -1859,7 +1941,7 @@ const PurchaseOrderManagement: React.FC = () => {
                       </div>
                     </div>
                   ))}
-                </div>
+                </div> */}
               </div>
 
               {/* Advanced Options */}
@@ -2977,6 +3059,8 @@ const PurchaseOrderManagement: React.FC = () => {
                 onClick={() => {
                   setShowReceiveModal(false);
                   setDebouncedExternalTotal('')
+                  setFormErrors({})
+                  clearGstInvoiceValidation()
                   setReceiveData({
                     location: '',
                     receiptDate: '',
@@ -3103,18 +3187,18 @@ const PurchaseOrderManagement: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Docket Number <span className="text-red-500">*</span>
+                      Docket Number
                     </label>
                     <input
                       type="text"
                       value={receiveData.docketNumber}
                       onChange={(e) => setReceiveData({ ...receiveData, docketNumber: e.target.value })}
                       placeholder="Docket Number"
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.docketNumber ? 'border-red-500' : 'border-gray-300'}`}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors border-gray-300`}
                     />
-                    {formErrors.docketNumber && (
+                    {/* {formErrors.docketNumber && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.docketNumber}</p>
-                    )}
+                    )} */}
                   </div>
 
                   <div>
@@ -3138,15 +3222,30 @@ const PurchaseOrderManagement: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       GST Invoice Number <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="text"
-                      value={receiveData.gstInvoiceNumber}
-                      onChange={(e) => setReceiveData({ ...receiveData, gstInvoiceNumber: e.target.value })}
-                      placeholder="GST Invoice Number"
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.gstInvoiceNumber ? 'border-red-500' : 'border-gray-300'}`}
-                    />
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={receiveData.gstInvoiceNumber}
+                        onChange={(e) => {
+                          setReceiveData({ ...receiveData, gstInvoiceNumber: e.target.value });
+                          validateGstInvoiceNumber(e.target.value);
+                        }}
+                        placeholder="GST Invoice Number"
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                          formErrors.gstInvoiceNumber || gstInvoiceValidation.isDuplicate ? 'border-red-500' : 
+                          gstInvoiceValidation.message && !gstInvoiceValidation.isDuplicate ? '' : 'border-gray-300'
+                        }`}
+                      />
+                    </div>
                     {formErrors.gstInvoiceNumber && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.gstInvoiceNumber}</p>
+                    )}
+                    {gstInvoiceValidation.message && !formErrors.gstInvoiceNumber && (
+                      <p className={`text-xs mt-1 ${
+                        gstInvoiceValidation.isDuplicate ? 'text-red-500' : ''
+                      }`}>
+                        {gstInvoiceValidation.message}
+                      </p>
                     )}
                   </div>
 
@@ -3167,23 +3266,23 @@ const PurchaseOrderManagement: React.FC = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Document Number <span className="text-red-500">*</span>
+                      Document Number
                     </label>
                     <input
                       type="text"
                       value={receiveData.documentNumber}
                       onChange={(e) => setReceiveData({ ...receiveData, documentNumber: e.target.value })}
                       placeholder="Document Number"
-                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.documentNumber ? 'border-red-500' : 'border-gray-300'}`}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors border-gray-300`}
                     />
-                    {formErrors.documentNumber && (
+                    {/* {formErrors.documentNumber && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.documentNumber}</p>
-                    )}
+                    )} */}
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Document Date <span className="text-red-500">*</span>
+                      Document Date
                     </label>
                     <input
                       type="date"
@@ -3767,6 +3866,8 @@ const PurchaseOrderManagement: React.FC = () => {
                   onClick={() => {
                     setShowReceiveModal(false);
                     setDebouncedExternalTotal('')
+                    setFormErrors({})
+                    clearGstInvoiceValidation()
                     setReceiveData({
                       location: '',
                       receiptDate: '',

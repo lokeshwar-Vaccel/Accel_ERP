@@ -19,7 +19,8 @@ import {
   sendPurchaseOrder,
   receiveItems,
   cancelPurchaseOrder,
-  getPurchaseOrderStats
+  getPurchaseOrderStats,
+  checkGstInvoiceNumber
 } from '../controllers/purchaseOrderController';
 import { importPurchaseOrders, previewPurchaseOrderImport } from '../controllers/purchaseOrderImportController';
 import multer from 'multer';
@@ -114,6 +115,9 @@ router.get('/pending/approvals',
   checkPermission('read'), 
   getPendingApprovals
 );
+
+// Check GST Invoice Number for duplicates
+router.get('/check-gst-invoice/:gstInvoiceNumber', checkPermission('read'), checkGstInvoiceNumber);
 
 router.get('/stats/overview', checkPermission('read'), getPurchaseOrderStats);
 
