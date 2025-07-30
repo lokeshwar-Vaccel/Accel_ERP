@@ -1,39 +1,50 @@
-import { Router } from 'express';
-import { protect, restrictTo, checkPermission } from '../middleware/auth';
-import { UserRole } from '../types';
-import {
-  upload,
-  uploadSingleFile,
-  uploadMultipleFiles,
-  downloadFile,
-  getFileMetadata,
-  listFiles,
-  deleteFile,
-  uploadSignature,
-  getFileStats
+import express from 'express';
+import { 
+  uploadFile, 
+  uploadMultipleFiles, 
+  uploadDigitalReportFiles,
+  serveFile, 
+  deleteFileController, 
+  getFileInfo 
 } from '../controllers/fileController';
+import { protect, checkModuleAccess } from '../middleware/auth';
 
-const router = Router();
+const router = express.Router();
 
-// All routes are protected
+// Serve file (public access for viewing) - must come first
+router.get('/:filename', serveFile);
+
+// All other routes require authentication
 router.use(protect);
 
-// File upload routes
-router.post('/upload', upload.single('file'), uploadSingleFile);
-router.post('/upload-multiple', upload.array('files', 5), uploadMultipleFiles);
+// Upload single file
+router.post('/upload', 
+  checkModuleAccess('service_management'),
+  uploadFile
+);
 
-// Signature upload (special handling for base64 data)
-router.post('/signature', uploadSignature);
+// Upload multiple files
+router.post('/upload-multiple', 
+  checkModuleAccess('service_management'),
+  uploadMultipleFiles
+);
 
-// File download route (public access for public files)
-router.get('/:fileId/download', downloadFile);
+// Upload files for digital service report
+router.post('/upload-digital-report', 
+  checkModuleAccess('service_management'),
+  uploadDigitalReportFiles
+);
 
-// File metadata and management
-router.get('/:fileId', getFileMetadata);
-router.delete('/:fileId', deleteFile);
+// Get file info
+router.get('/info/:filename', 
+  checkModuleAccess('service_management'),
+  getFileInfo
+);
 
-// File listing and statistics
-router.get('/', listFiles);
-router.get('/stats/overview', getFileStats);
+// Delete file
+router.delete('/:filename', 
+  checkModuleAccess('service_management'),
+  deleteFileController
+);
 
 export default router; 

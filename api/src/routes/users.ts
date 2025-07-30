@@ -7,7 +7,8 @@ import {
   deleteUser,
   restoreUser,
   resetPassword,
-  getUserStats
+  getUserStats,
+  getFieldOperators
 } from '../controllers/userController';
 import { protect, restrictTo, checkModuleAccess, checkPermission } from '../middleware/auth';
 import { UserRole } from '../types';
@@ -24,6 +25,12 @@ router.use(checkModuleAccess('user_management'));
 router.get('/stats', 
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), 
   getUserStats  
+);
+
+// Get field operators for dropdown
+router.get('/field-operators', 
+  checkPermission('read'), 
+  getFieldOperators
 );
 
 // CRUD operations

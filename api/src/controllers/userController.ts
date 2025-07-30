@@ -167,6 +167,23 @@ export const createUser = async (
       }
     }
 
+    // Additional role assignment validations
+    if (req.user?.role === UserRole.HR) {
+      if (role !== UserRole.VIEWER) {
+        return next(new AppError('HR can only assign Viewer role', 403));
+      }
+    }
+
+    if (req.user?.role === UserRole.MANAGER) {
+      if (role === UserRole.SUPER_ADMIN || role === UserRole.ADMIN) {
+        return next(new AppError('Manager cannot assign admin roles', 403));
+      }
+    }
+
+    if (req.user?.role === UserRole.FIELD_OPERATOR || req.user?.role === UserRole.VIEWER) {
+      return next(new AppError('You cannot assign any roles', 403));
+    }
+
     // Create user
     const user = await User.create({
       firstName,
@@ -228,6 +245,23 @@ export const updateUser = async (
       if (role === UserRole.SUPER_ADMIN) {
         return next(new AppError('Only super admin can assign super admin role', 403));
       }
+    }
+
+    // Additional role assignment validations for updates
+    if (role && req.user?.role === UserRole.HR) {
+      if (role !== UserRole.VIEWER) {
+        return next(new AppError('HR can only assign Viewer role', 403));
+      }
+    }
+
+    if (role && req.user?.role === UserRole.MANAGER) {
+      if (role === UserRole.SUPER_ADMIN || role === UserRole.ADMIN) {
+        return next(new AppError('Manager cannot assign admin roles', 403));
+      }
+    }
+
+    if (role && (req.user?.role === UserRole.FIELD_OPERATOR || req.user?.role === UserRole.VIEWER)) {
+      return next(new AppError('You cannot assign any roles', 403));
     }
 
     // Update fields
@@ -436,6 +470,44 @@ export const getUserStats = async (
         deletedUsers,
         usersByRole,
         recentUsers
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+}; 
+
+// @desc    Get field operators for dropdown
+// @route   GET /api/v1/users/field-operators
+// @access  Private
+export const getFieldOperators = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    // Get all active field operators
+    const fieldOperators = await User.find({
+      role: UserRole.FIELD_OPERATOR,
+      status: UserStatus.ACTIVE
+    })
+    .select('_id firstName lastName email phone')
+    .sort({ firstName: 1, lastName: 1 });
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Field operators retrieved successfully',
+      data: {
+        fieldOperators: fieldOperators.map(operator => ({
+          id: operator._id,
+          name: `${operator.firstName} ${operator.lastName}`,
+          firstName: operator.firstName,
+          lastName: operator.lastName,
+          email: operator.email,
+          phone: operator.phone
+        }))
       }
     };
 

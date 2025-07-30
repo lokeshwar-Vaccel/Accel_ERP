@@ -12,6 +12,7 @@ import { PurchaseOrder } from '../models/PurchaseOrder';
 import { 
   UserRole, 
   CustomerType, 
+  CustomerMainType,
   LeadStatus, 
   ProductCategory, 
   TicketStatus, 
@@ -98,6 +99,21 @@ const sampleUsers = [
       { module: 'amc_management', access: true, permission: 'write' },
       { module: 'reports_analytics', access: true, permission: 'read' },
       { module: 'communications', access: true, permission: 'read' }
+    ]
+  },
+  {
+    firstName: 'Alex',
+    lastName: 'Field',
+    email: 'alex.field@sunpowerservices.com',
+    password: 'field123',
+    role: UserRole.FIELD_OPERATOR,
+    status: 'active',
+    moduleAccess: [
+      { module: 'dashboard', access: true, permission: 'read' },
+      { module: 'service_management', access: true, permission: 'write' },
+      { module: 'amc_management', access: true, permission: 'write' },
+      { module: 'inventory_management', access: true, permission: 'write' },
+      { module: 'product_management', access: true, permission: 'write' }
     ]
   },
   {
@@ -212,6 +228,8 @@ const sampleProducts = [
     category: ProductCategory.GENSET,
     brand: 'Mahindra',
     modelNumber: 'MDG-100',
+    partNo: 'MDG-100-001',
+    quantity: 0,
     specifications: {
       power: '100KVA',
       fuel: 'Diesel',
@@ -231,6 +249,8 @@ const sampleProducts = [
     category: ProductCategory.GENSET,
     brand: 'Cummins',
     modelNumber: 'CDG-250',
+    partNo: 'CDG-250-001',
+    quantity: 0,
     specifications: {
       power: '250KVA',
       fuel: 'Diesel',
@@ -250,6 +270,8 @@ const sampleProducts = [
     category: ProductCategory.SPARE_PART,
     brand: 'Mann Filter',
     modelNumber: 'W950/26',
+    partNo: 'W950-26-001',
+    quantity: 0,
     specifications: {
       compatibility: 'Multiple generator models',
       material: 'Cellulose',
@@ -265,6 +287,8 @@ const sampleProducts = [
     category: ProductCategory.SPARE_PART,
     brand: 'Donaldson',
     modelNumber: 'P181064',
+    partNo: 'P181064-001',
+    quantity: 0,
     specifications: {
       compatibility: 'Cummins engines',
       material: 'Paper element',
@@ -280,6 +304,8 @@ const sampleProducts = [
     category: ProductCategory.ACCESSORY,
     brand: 'Exide',
     modelNumber: 'BC-24-10A',
+    partNo: 'BC-24-10A-001',
+    quantity: 0,
     specifications: {
       voltage: '24V',
       current: '10A',
@@ -296,6 +322,8 @@ const sampleProducts = [
     category: ProductCategory.ACCESSORY,
     brand: 'Deep Sea',
     modelNumber: 'DSE7320',
+    partNo: 'DSE7320-001',
+    quantity: 0,
     specifications: {
       display: 'LCD',
       functions: 'Auto start/stop, monitoring, alarms',
@@ -311,6 +339,8 @@ const sampleProducts = [
     category: ProductCategory.SPARE_PART,
     brand: 'Bosch',
     modelNumber: 'FP-12V-40L',
+    partNo: 'FP-12V-40L-001',
+    quantity: 0,
     specifications: {
       voltage: '12V',
       flowRate: '40L/min',
@@ -327,7 +357,17 @@ const sampleCustomers = [
     name: 'Tech Solutions Pvt Ltd',
     email: 'info@techsolutions.com',
     phone: '+919876543220',
-    address: '15th Floor, IT Tower, Gurgaon, Haryana 122001',
+    type: CustomerMainType.CUSTOMER,
+    addresses: [
+      {
+        id: 1,
+        address: '15th Floor, IT Tower, Gurgaon, Haryana 122001',
+        state: 'Haryana',
+        district: 'Gurgaon',
+        pincode: '122001',
+        isPrimary: true
+      }
+    ],
     customerType: CustomerType.TELECOM,
     leadSource: 'Website',
     status: LeadStatus.CONVERTED,
@@ -337,7 +377,17 @@ const sampleCustomers = [
     name: 'Mumbai Manufacturing Co',
     email: 'purchase@mumbaimanufacturing.com',
     phone: '+919876543221',
-    address: 'Plot 45, Industrial Estate, Mumbai, Maharashtra 400001',
+    type: CustomerMainType.CUSTOMER,
+    addresses: [
+      {
+        id: 1,
+        address: 'Plot 45, Industrial Estate, Mumbai, Maharashtra 400001',
+        state: 'Maharashtra',
+        district: 'Mumbai',
+        pincode: '400001',
+        isPrimary: true
+      }
+    ],
     customerType: CustomerType.RETAIL,
     leadSource: 'Referral',
     status: LeadStatus.CONVERTED,
@@ -347,7 +397,17 @@ const sampleCustomers = [
     name: 'Delhi Data Center',
     email: 'ops@delhidatacenter.com',
     phone: '+919876543222',
-    address: 'Sector 62, Noida, Uttar Pradesh 201301',
+    type: CustomerMainType.CUSTOMER,
+    addresses: [
+      {
+        id: 1,
+        address: 'Sector 62, Noida, Uttar Pradesh 201301',
+        state: 'Uttar Pradesh',
+        district: 'Noida',
+        pincode: '201301',
+        isPrimary: true
+      }
+    ],
     customerType: CustomerType.TELECOM,
     leadSource: 'Cold Call',
     status: LeadStatus.CONVERTED,
@@ -357,7 +417,17 @@ const sampleCustomers = [
     name: 'Retail Chain Stores',
     email: 'facilities@retailchain.com',
     phone: '+919876543223',
-    address: 'Corporate Office, Bangalore, Karnataka 560001',
+    type: CustomerMainType.CUSTOMER,
+    addresses: [
+      {
+        id: 1,
+        address: 'Corporate Office, Bangalore, Karnataka 560001',
+        state: 'Karnataka',
+        district: 'Bangalore',
+        pincode: '560001',
+        isPrimary: true
+      }
+    ],
     customerType: CustomerType.RETAIL,
     leadSource: 'Exhibition',
     status: LeadStatus.QUALIFIED,
@@ -367,7 +437,17 @@ const sampleCustomers = [
     name: 'Hospital Complex',
     email: 'admin@hospitalcomplex.com',
     phone: '+919876543224',
-    address: 'Medical District, Chennai, Tamil Nadu 600001',
+    type: CustomerMainType.CUSTOMER,
+    addresses: [
+      {
+        id: 1,
+        address: 'Medical District, Chennai, Tamil Nadu 600001',
+        state: 'Tamil Nadu',
+        district: 'Chennai',
+        pincode: '600001',
+        isPrimary: true
+      }
+    ],
     customerType: CustomerType.RETAIL,
     leadSource: 'Website',
     status: LeadStatus.CONVERTED,

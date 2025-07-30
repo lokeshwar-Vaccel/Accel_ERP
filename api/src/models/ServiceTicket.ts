@@ -24,6 +24,7 @@ interface IServiceTicketSchema extends Document {
   serviceReport?: string;
   customerSignature?: string;
   slaDeadline?: Date;
+  serviceCharge?: number;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -105,6 +106,11 @@ const serviceTicketSchema = new Schema({
   },
   slaDeadline: {
     type: Date
+  },
+  serviceCharge: {
+    type: Number,
+    min: [0, 'Service charge cannot be negative'],
+    default: 0
   },
   createdBy: {
     type: Schema.Types.ObjectId,

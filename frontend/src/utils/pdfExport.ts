@@ -14,6 +14,7 @@ export interface ServiceTicketPDFData {
     category: string;
     brand?: string;
     modelNumber?: string;
+    price?: number;
   };
   serialNumber?: string;
   description: string;
@@ -24,6 +25,7 @@ export interface ServiceTicketPDFData {
   completedDate?: string;
   createdAt: string;
   serviceReport?: string;
+  serviceCharge?: number;
   partsUsed?: Array<{
     product: string;
     quantity: number;
@@ -34,6 +36,7 @@ export interface ServiceTicketPDFData {
 }
 
 export const exportServiceTicketToPDF = async (ticket: ServiceTicketPDFData) => {
+  console.log("ticket",ticket);
   const pdf = new jsPDF('p', 'mm', 'a4');
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -64,6 +67,49 @@ export const exportServiceTicketToPDF = async (ticket: ServiceTicketPDFData) => 
     return 8 + contentHeight + 10; // Return height used
   };
 
+  // Helper function to create a table
+  const createTable = (headers: string[], data: string[][], startY: number, colWidths: number[]) => {
+    let currentY = startY;
+    
+    // Draw table header
+    pdf.setFillColor(52, 152, 219); // Blue background
+    pdf.rect(margin, currentY, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+    
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(255, 255, 255);
+    
+    let xPos = margin;
+    headers.forEach((header, index) => {
+      pdf.text(header, xPos + 2, currentY + 6);
+      xPos += colWidths[index];
+    });
+    
+    currentY += 8;
+    
+    // Draw table data
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(44, 62, 80);
+    
+    data.forEach((row, rowIndex) => {
+      // Alternate row colors
+      if (rowIndex % 2 === 0) {
+        pdf.setFillColor(248, 249, 250); // Light gray
+        pdf.rect(margin, currentY, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+      }
+      
+      xPos = margin;
+      row.forEach((cell, cellIndex) => {
+        pdf.text(cell, xPos + 2, currentY + 6);
+        xPos += colWidths[cellIndex];
+      });
+      
+      currentY += 8;
+    });
+    
+    return currentY + 10; // Return new Y position
+  };
+
   // Header
   pdf.setFillColor(52, 152, 219); // Blue background
   pdf.rect(0, 0, pageWidth, 40, 'F');
@@ -78,67 +124,74 @@ export const exportServiceTicketToPDF = async (ticket: ServiceTicketPDFData) => 
   
   yPosition = 50;
 
-  // Ticket Information
-  pdf.setFontSize(12);
+  // Ticket Information Table
+  pdf.setFontSize(14);
   pdf.setFont('helvetica', 'bold');
   pdf.setTextColor(44, 62, 80);
   pdf.text('Ticket Information', margin, yPosition);
   yPosition += 8;
 
-  // Ticket details in a table format
-  const details = [
-    { label: 'Status', value: ticket.status.toUpperCase() },
-    { label: 'Priority', value: ticket.priority.toUpperCase() },
-    { label: 'Created Date', value: new Date(ticket.createdAt).toLocaleDateString() },
-    { label: 'Scheduled Date', value: ticket.scheduledDate ? new Date(ticket.scheduledDate).toLocaleDateString() : 'Not scheduled' },
-    { label: 'Completed Date', value: ticket.completedDate ? new Date(ticket.completedDate).toLocaleDateString() : 'Not completed' },
-    { label: 'SLA Deadline', value: ticket.slaDeadline ? new Date(ticket.slaDeadline).toLocaleDateString() : 'No SLA' },
-    { label: 'SLA Status', value: ticket.slaStatus || 'Not set' },
+  const ticketData = [
+    ['Status', ticket.status.toUpperCase()],
+    ['Priority', ticket.priority.toUpperCase()],
+    ['Created Date', new Date(ticket.createdAt).toLocaleDateString()],
+    ['Scheduled Date', ticket.scheduledDate ? new Date(ticket.scheduledDate).toLocaleDateString() : 'Not scheduled'],
+    ['SLA Deadline', ticket.slaDeadline ? new Date(ticket.slaDeadline).toLocaleDateString() : 'No SLA'],
+    ['SLA Status', ticket.slaStatus || 'Not set'],
+    ['Working Demand', ticket.assignedTo || 'Unassigned'],
+    ['Problem Description', ticket.description]
   ];
+  
+  yPosition = createTable(['Field', 'Value'], ticketData, yPosition, [50, 120]);
 
-  details.forEach((detail, index) => {
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(52, 73, 94);
-    pdf.text(detail.label + ':', margin, yPosition + (index * 6));
-    
-    pdf.setFont('helvetica', 'normal');
-    pdf.setTextColor(44, 62, 80);
-    pdf.text(detail.value, margin + 40, yPosition + (index * 6));
-  });
+  // Customer Information Table
+  pdf.setFontSize(14);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setTextColor(44, 62, 80);
+  pdf.text('Customer Information', margin, yPosition);
+  yPosition += 8;
 
-  yPosition += (details.length * 6) + 15;
+  const customerData = [
+    ['Name', ticket.customer.name],
+    ['Phone', ticket.customer.phone],
+    ['Email', ticket.customer.email || 'Not provided'],
+    ['Address', ticket.customer.address || 'Not provided']
+  ];
+  
+  yPosition = createTable(['Field', 'Value'], customerData, yPosition, [50, 120]);
 
-  // Customer Information
-  yPosition += addSection('Customer Information', 
-    `Name: ${ticket.customer.name}\n` +
-    `Phone: ${ticket.customer.phone}\n` +
-    `Email: ${ticket.customer.email || 'Not provided'}\n` +
-    `Address: ${ticket.customer.address || 'Not provided'}`, 
-    yPosition
-  );
-
-  // Product Information
+  // Product and Pricing Information Table
   if (ticket.product) {
-    yPosition += addSection('Product Information',
-      `Product: ${ticket.product.name}\n` +
-      `Category: ${ticket.product.category}\n` +
-      `Brand: ${ticket.product.brand || 'Not specified'}\n` +
-      `Model: ${ticket.product.modelNumber || 'Not specified'}\n` +
-      `Serial Number: ${ticket.serialNumber || 'Not provided'}`,
-      yPosition
-    );
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(44, 62, 80);
+    pdf.text('Product and Pricing Information', margin, yPosition);
+    yPosition += 8;
+
+    const productPrice = ticket.product.price || 0;
+    const serviceCharge = ticket.serviceCharge || 0;
+    const totalAmount = productPrice + serviceCharge;
+
+    const pricingData = [
+      ['Product Name', ticket.product.name],
+      ['Category', ticket.product.category],
+      ['Serial Number', ticket.serialNumber || 'Not provided'],
+      ['Product Price', `${productPrice.toFixed(2)}`],
+      ['Service Charge', `${serviceCharge.toFixed(2)}`],
+      ['Total Amount', `${totalAmount.toFixed(2)}`]
+    ];
+    
+    yPosition = createTable(['Field', 'Value'], pricingData, yPosition, [50, 120]);
   }
 
-  // Problem Description
-  yPosition += addSection('Problem Description', ticket.description, yPosition);
+
 
   // Service Report
   if (ticket.serviceReport) {
     yPosition += addSection('Service Report', ticket.serviceReport, yPosition);
   }
 
-  // Parts Used
+  // Parts Used Table
   if (ticket.partsUsed && ticket.partsUsed.length > 0) {
     pdf.setFontSize(14);
     pdf.setFont('helvetica', 'bold');
@@ -146,35 +199,21 @@ export const exportServiceTicketToPDF = async (ticket: ServiceTicketPDFData) => 
     pdf.text('Parts Used', margin, yPosition);
     yPosition += 8;
 
-    pdf.setFontSize(10);
-    pdf.setFont('helvetica', 'bold');
-    pdf.setTextColor(52, 73, 94);
-    pdf.text('Product', margin, yPosition);
-    pdf.text('Quantity', margin + 80, yPosition);
-    pdf.text('Serial Numbers', margin + 120, yPosition);
-    yPosition += 6;
-
-    pdf.setFont('helvetica', 'normal');
-    ticket.partsUsed.forEach(part => {
-      pdf.text(part.product, margin, yPosition);
-      pdf.text(part.quantity.toString(), margin + 80, yPosition);
-      pdf.text(part.serialNumbers?.join(', ') || '-', margin + 120, yPosition);
-      yPosition += 5;
-    });
-    yPosition += 10;
-  }
-
-  // Assigned To
-  if (ticket.assignedTo) {
-    yPosition += addSection('Assigned To', ticket.assignedTo, yPosition);
+    const partsData = ticket.partsUsed.map(part => [
+      part.product,
+      part.quantity.toString(),
+      part.serialNumbers?.join(', ') || '-'
+    ]);
+    
+    yPosition = createTable(['Product', 'Quantity', 'Serial Numbers'], partsData, yPosition, [80, 30, 80]);
   }
 
   // Footer
-  const footerY = pageHeight - 20;
-  pdf.setFontSize(8);
-  pdf.setFont('helvetica', 'normal');
-  pdf.setTextColor(128, 128, 128);
-  pdf.text(`Generated on ${new Date().toLocaleString()}`, pageWidth / 2, footerY, { align: 'center' });
+  // const footerY = pageHeight - 20;
+  // pdf.setFontSize(8);
+  // pdf.setFont('helvetica', 'normal');
+  // pdf.setTextColor(128, 128, 128);
+  // pdf.text(`Generated on ${new Date().toLocaleString()}`, pageWidth / 2, footerY, { align: 'center' });
 
   // Save the PDF
   pdf.save(`service-ticket-${ticket.ticketNumber}.pdf`);
@@ -211,6 +250,49 @@ export const exportMultipleTicketsToPDF = async (tickets: ServiceTicketPDFData[]
     return 8 + contentHeight + 10; // Return height used
   };
 
+  // Helper function to create a table
+  const createTable = (headers: string[], data: string[][], startY: number, colWidths: number[]) => {
+    let currentY = startY;
+    
+    // Draw table header
+    pdf.setFillColor(52, 152, 219); // Blue background
+    pdf.rect(margin, currentY, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+    
+    pdf.setFontSize(10);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(255, 255, 255);
+    
+    let xPos = margin;
+    headers.forEach((header, index) => {
+      pdf.text(header, xPos + 2, currentY + 6);
+      xPos += colWidths[index];
+    });
+    
+    currentY += 8;
+    
+    // Draw table data
+    pdf.setFont('helvetica', 'normal');
+    pdf.setTextColor(44, 62, 80);
+    
+    data.forEach((row, rowIndex) => {
+      // Alternate row colors
+      if (rowIndex % 2 === 0) {
+        pdf.setFillColor(248, 249, 250); // Light gray
+        pdf.rect(margin, currentY, colWidths.reduce((a, b) => a + b, 0), 8, 'F');
+      }
+      
+      xPos = margin;
+      row.forEach((cell, cellIndex) => {
+        pdf.text(cell, xPos + 2, currentY + 6);
+        xPos += colWidths[cellIndex];
+      });
+      
+      currentY += 8;
+    });
+    
+    return currentY + 10; // Return new Y position
+  };
+
   // Helper function to add ticket to PDF
   const addTicketToPDF = (ticket: ServiceTicketPDFData, startY: number) => {
     let yPosition = startY;
@@ -232,67 +314,74 @@ export const exportMultipleTicketsToPDF = async (tickets: ServiceTicketPDFData[]
     
     yPosition += 35;
 
-    // Ticket Information
-    pdf.setFontSize(12);
+    // Ticket Information Table
+    pdf.setFontSize(14);
     pdf.setFont('helvetica', 'bold');
     pdf.setTextColor(44, 62, 80);
     pdf.text('Ticket Information', margin, yPosition);
     yPosition += 8;
 
-    // Ticket details in a table format
-    const details = [
-      { label: 'Status', value: ticket.status.toUpperCase() },
-      { label: 'Priority', value: ticket.priority.toUpperCase() },
-      { label: 'Created Date', value: new Date(ticket.createdAt).toLocaleDateString() },
-      { label: 'Scheduled Date', value: ticket.scheduledDate ? new Date(ticket.scheduledDate).toLocaleDateString() : 'Not scheduled' },
-      { label: 'Completed Date', value: ticket.completedDate ? new Date(ticket.completedDate).toLocaleDateString() : 'Not completed' },
-      { label: 'SLA Deadline', value: ticket.slaDeadline ? new Date(ticket.slaDeadline).toLocaleDateString() : 'No SLA' },
-      { label: 'SLA Status', value: ticket.slaStatus || 'Not set' },
+    const ticketData = [
+      ['Status', ticket.status.toUpperCase()],
+      ['Priority', ticket.priority.toUpperCase()],
+      ['Created Date', new Date(ticket.createdAt).toLocaleDateString()],
+      ['Scheduled Date', ticket.scheduledDate ? new Date(ticket.scheduledDate).toLocaleDateString() : 'Not scheduled'],
+      ['SLA Deadline', ticket.slaDeadline ? new Date(ticket.slaDeadline).toLocaleDateString() : 'No SLA'],
+      ['SLA Status', ticket.slaStatus || 'Not set'],
+      ['Working Demand', ticket.assignedTo || 'Unassigned'],
+      ['Problem Description', ticket.description]
     ];
+    
+    yPosition = createTable(['Field', 'Value'], ticketData, yPosition, [50, 120]);
 
-    details.forEach((detail, index) => {
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(52, 73, 94);
-      pdf.text(detail.label + ':', margin, yPosition + (index * 6));
-      
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(44, 62, 80);
-      pdf.text(detail.value, margin + 40, yPosition + (index * 6));
-    });
+    // Customer Information Table
+    pdf.setFontSize(14);
+    pdf.setFont('helvetica', 'bold');
+    pdf.setTextColor(44, 62, 80);
+    pdf.text('Customer Information', margin, yPosition);
+    yPosition += 8;
 
-    yPosition += (details.length * 6) + 15;
+    const customerData = [
+      ['Name', ticket.customer.name],
+      ['Phone', ticket.customer.phone],
+      ['Email', ticket.customer.email || 'Not provided'],
+      ['Address', ticket.customer.address || 'Not provided']
+    ];
+    
+    yPosition = createTable(['Field', 'Value'], customerData, yPosition, [50, 120]);
 
-    // Customer Information
-    yPosition += addSection('Customer Information', 
-      `Name: ${ticket.customer.name}\n` +
-      `Phone: ${ticket.customer.phone}\n` +
-      `Email: ${ticket.customer.email || 'Not provided'}\n` +
-      `Address: ${ticket.customer.address || 'Not provided'}`, 
-      yPosition
-    );
-
-    // Product Information
+    // Product and Pricing Information Table
     if (ticket.product) {
-      yPosition += addSection('Product Information',
-        `Product: ${ticket.product.name}\n` +
-        `Category: ${ticket.product.category}\n` +
-        `Brand: ${ticket.product.brand || 'Not specified'}\n` +
-        `Model: ${ticket.product.modelNumber || 'Not specified'}\n` +
-        `Serial Number: ${ticket.serialNumber || 'Not provided'}`,
-        yPosition
-      );
-    }
+      pdf.setFontSize(14);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setTextColor(44, 62, 80);
+      pdf.text('Product and Pricing Information', margin, yPosition);
+      yPosition += 8;
 
-    // Problem Description
-    yPosition += addSection('Problem Description', ticket.description, yPosition);
+      const productPrice = ticket.product.price || 0;
+      const serviceCharge = ticket.serviceCharge || 0;
+      const totalAmount = productPrice + serviceCharge;
+
+      const pricingData = [
+        ['Product Name', ticket.product.name],
+        ['Category', ticket.product.category],
+        ['Brand', ticket.product.brand || 'Not specified'],
+        ['Model', ticket.product.modelNumber || 'Not specified'],
+        ['Serial Number', ticket.serialNumber || 'Not provided'],
+        ['Product Price', `₹${productPrice.toFixed(2)}`],
+        ['Service Charge', `₹${serviceCharge.toFixed(2)}`],
+        ['Total Amount', `₹${totalAmount.toFixed(2)}`]
+      ];
+      
+      yPosition = createTable(['Field', 'Value'], pricingData, yPosition, [50, 120]);
+    }
 
     // Service Report
     if (ticket.serviceReport) {
       yPosition += addSection('Service Report', ticket.serviceReport, yPosition);
     }
 
-    // Parts Used
+    // Parts Used Table
     if (ticket.partsUsed && ticket.partsUsed.length > 0) {
       pdf.setFontSize(14);
       pdf.setFont('helvetica', 'bold');
@@ -300,27 +389,13 @@ export const exportMultipleTicketsToPDF = async (tickets: ServiceTicketPDFData[]
       pdf.text('Parts Used', margin, yPosition);
       yPosition += 8;
 
-      pdf.setFontSize(10);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(52, 73, 94);
-      pdf.text('Product', margin, yPosition);
-      pdf.text('Quantity', margin + 80, yPosition);
-      pdf.text('Serial Numbers', margin + 120, yPosition);
-      yPosition += 6;
-
-      pdf.setFont('helvetica', 'normal');
-      ticket.partsUsed.forEach(part => {
-        pdf.text(part.product, margin, yPosition);
-        pdf.text(part.quantity.toString(), margin + 80, yPosition);
-        pdf.text(part.serialNumbers?.join(', ') || '-', margin + 120, yPosition);
-        yPosition += 5;
-      });
-      yPosition += 10;
-    }
-
-    // Assigned To
-    if (ticket.assignedTo) {
-      yPosition += addSection('Assigned To', ticket.assignedTo, yPosition);
+      const partsData = ticket.partsUsed.map(part => [
+        part.product,
+        part.quantity.toString(),
+        part.serialNumbers?.join(', ') || '-'
+      ]);
+      
+      yPosition = createTable(['Product', 'Quantity', 'Serial Numbers'], partsData, yPosition, [80, 30, 80]);
     }
 
     // Add separator line

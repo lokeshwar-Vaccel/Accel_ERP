@@ -403,3 +403,195 @@ export const searchProducts = async (
     next(error);
   }
 }; 
+
+// @desc    Get products with inventory details
+// @route   GET /api/v1/products/with-inventory
+// @access  Private
+export const getProductsWithInventory = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      search, 
+      category, 
+      brand,
+      isActive = true
+    } = req.query as {
+      search?: string;
+      category?: string;
+      brand?: string;
+      isActive?: string | boolean;
+    };
+
+    // Build query for products
+    const query: any = {};
+    
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { brand: { $regex: search, $options: 'i' } },
+        { modelNumber: { $regex: search, $options: 'i' } },
+        { partNo: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (category) {
+      query.category = category;
+    }
+    
+    if (brand) {
+      query.brand = { $regex: brand, $options: 'i' };
+    }
+    
+    if (isActive !== undefined) {
+      query.isActive = isActive === true || isActive === 'true';
+    }
+
+    // Optimized: Use aggregation pipeline to get products with inventory in a single query
+    const productsWithInventory = await Product.aggregate([
+      // Match products based on query
+      { $match: query },
+      
+      // Lookup stock information for each product
+      {
+        $lookup: {
+          from: 'stocks',
+          localField: '_id',
+          foreignField: 'product',
+          as: 'stockDetails'
+        }
+      },
+      
+      // Add computed fields for total inventory
+      {
+        $addFields: {
+          stockQuantity: {
+            $sum: '$stockDetails.availableQuantity'
+          },
+          totalQuantity: {
+            $sum: '$stockDetails.quantity'
+          },
+          reservedQuantity: {
+            $sum: '$stockDetails.reservedQuantity'
+          }
+        }
+      },
+      
+      // Populate stock details with location, room, and rack information
+      {
+        $lookup: {
+          from: 'stocklocations',
+          localField: 'stockDetails.location',
+          foreignField: '_id',
+          as: 'stockDetailsWithLocation'
+        }
+      },
+      
+      {
+        $lookup: {
+          from: 'stockrooms',
+          localField: 'stockDetails.room',
+          foreignField: '_id',
+          as: 'stockDetailsWithRoom'
+        }
+      },
+      
+      {
+        $lookup: {
+          from: 'stockracks',
+          localField: 'stockDetails.rack',
+          foreignField: '_id',
+          as: 'stockDetailsWithRack'
+        }
+      },
+      
+      // Transform stock details to include populated location, room, and rack
+      {
+        $addFields: {
+          stockDetails: {
+            $map: {
+              input: '$stockDetails',
+              as: 'stock',
+              in: {
+                location: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: '$stockDetailsWithLocation',
+                        as: 'loc',
+                        cond: { $eq: ['$$loc._id', '$$stock.location'] }
+                      }
+                    },
+                    0
+                  ]
+                },
+                room: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: '$stockDetailsWithRoom',
+                        as: 'room',
+                        cond: { $eq: ['$$room._id', '$$stock.room'] }
+                      }
+                    },
+                    0
+                  ]
+                },
+                rack: {
+                  $arrayElemAt: [
+                    {
+                      $filter: {
+                        input: '$stockDetailsWithRack',
+                        as: 'rack',
+                        cond: { $eq: ['$$rack._id', '$$stock.rack'] }
+                      }
+                    },
+                    0
+                  ]
+                },
+                quantity: '$$stock.quantity',
+                reservedQuantity: '$$stock.reservedQuantity',
+                availableQuantity: '$$stock.availableQuantity',
+                lastUpdated: '$$stock.lastUpdated'
+              }
+            }
+          }
+        }
+      },
+      
+      // Remove temporary lookup arrays
+      {
+        $project: {
+          stockDetailsWithLocation: 0,
+          stockDetailsWithRoom: 0,
+          stockDetailsWithRack: 0
+        }
+      },
+      
+      // Sort by product name
+      { $sort: { name: 1 } }
+    ]);
+
+    // Populate createdBy information (since aggregation doesn't support populate)
+    const populatedProducts = await Product.populate(productsWithInventory, {
+      path: 'createdBy',
+      select: 'firstName lastName email'
+    });
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Products with inventory details retrieved successfully',
+      data: { 
+        products: populatedProducts,
+        totalProducts: populatedProducts.length
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+}; 

@@ -7,6 +7,7 @@ export enum UserRole {
   ADMIN = 'admin',
   HR = 'hr',
   MANAGER = 'manager',
+  FIELD_OPERATOR = 'field_operator',
   VIEWER = 'viewer'
 }
 
