@@ -256,7 +256,7 @@ const InvoiceFormPage: React.FC = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll({});
+      const response = await apiClient.customers.getAll({limit: 100, page: 1});
       const responseData = response.data as any;
       const customersData = responseData.customers || responseData || [];
       setCustomers(customersData);
