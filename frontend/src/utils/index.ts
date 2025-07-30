@@ -1,3 +1,5 @@
+import { apiClient } from './api';
+
 export function classNames(...classes: unknown[]): string {
   return classes.filter(Boolean).join(' ')
 }
@@ -68,4 +70,23 @@ export const numberToWords = (amount: number): string => {
   }
 
   return result + ' Only';
+};
+
+// Field Operators API utility
+export const fetchFieldOperators = async () => {
+  try {
+    const response = await apiClient.users.getFieldOperators();
+    if (response.success && response.data.fieldOperators) {
+      return response.data.fieldOperators.map((operator: any) => ({
+        value: operator.id,
+        label: operator.name,
+        email: operator.email,
+        phone: operator.phone
+      }));
+    }
+    return [];
+  } catch (error) {
+    console.error('Error fetching field operators:', error);
+    return [];
+  }
 };

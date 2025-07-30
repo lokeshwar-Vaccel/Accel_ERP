@@ -121,6 +121,14 @@ export const checkPermission = (action: 'read' | 'write' | 'delete') => {
       }
     }
 
+    // Field Operator-specific restrictions
+    if (req.user.role === UserRole.FIELD_OPERATOR) {
+      const fieldOperatorModules = ['services', 'amc', 'inventory', 'products'];
+      if (!fieldOperatorModules.includes(requestedModule)) {
+        return next(new AppError('You do not have access to this module', 403));
+      }
+    }
+
     // Check if the user has permission for this module and action
     const modulePermission = req.user.moduleAccess.find(
       m => m.module === requestedModule && m.access

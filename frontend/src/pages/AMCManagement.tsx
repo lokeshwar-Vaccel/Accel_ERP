@@ -20,10 +20,18 @@ import {
   Package,
   RefreshCw,
   ChevronDown,
-  IndianRupee
+  IndianRupee,
+  Filter,
+  MoreHorizontal,
+  BarChart3,
+  Download,
+  Settings
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
+import AMCReport from '../components/AMCReport';
+import VisitScheduler from '../components/VisitScheduler';
+import ContractRenewal from '../components/ContractRenewal';
 
 // Types matching backend structure
 type AMCStatus = 'active' | 'expired' | 'cancelled' | 'pending' | 'suspended' | 'draft';
@@ -212,11 +220,19 @@ const AMCManagement: React.FC = () => {
   const [showRenewalModal, setShowRenewalModal] = useState(false);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showPOModal, setShowPOModal] = useState(false);
-  
+  const [showReportModal, setShowReportModal] = useState(false);
+  const [showVisitScheduler, setShowVisitScheduler] = useState(false);
+  const [showContractRenewal, setShowContractRenewal] = useState(false);
+  const [showBulkRenewal, setShowBulkRenewal] = useState(false);
+
   // Selected data
   const [selectedAMC, setSelectedAMC] = useState<AMC | null>(null);
   const [editingAMC, setEditingAMC] = useState<AMC | null>(null);
   const [selectedVisit, setSelectedVisit] = useState<VisitSchedule | null>(null);
+  const [selectedAMCForVisit, setSelectedAMCForVisit] = useState<AMC | null>(null);
+  const [selectedAMCForRenewal, setSelectedAMCForRenewal] = useState<AMC | null>(null);
+  const [selectedContractsForBulkRenewal, setSelectedContractsForBulkRenewal] = useState<AMC[]>([]);
+  const [bulkSelectionMode, setBulkSelectionMode] = useState(false);
   
   // Form data
   const [amcFormData, setAmcFormData] = useState<AMCFormData>({
@@ -918,7 +934,8 @@ const AMCManagement: React.FC = () => {
 
   const filteredAMCs = amcs.filter(amc => {
     const customerName = getCustomerName(amc.customer);
-    const matchesSearch = amc.contractNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const contractNumber = amc.contractNumber || '';
+    const matchesSearch = contractNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          customerName.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || amc.status === statusFilter;
     const matchesCustomer = customerFilter === 'all' || 
@@ -1131,23 +1148,8 @@ const AMCManagement: React.FC = () => {
   };
 
   const handleScheduleVisit = (amc: AMC) => {
-    setSelectedAMC(amc);
-    setVisitFormData({
-      scheduledDate: '',
-      assignedTo: '',
-      visitType: 'routine',
-      duration: 2,
-      notes: '',
-      checklistItems: [
-        { item: 'Visual inspection of equipment', completed: false, notes: '' },
-        { item: 'Check oil levels and quality', completed: false, notes: '' },
-        { item: 'Inspect air filters', completed: false, notes: '' },
-        { item: 'Test safety systems', completed: false, notes: '' },
-        { item: 'Check electrical connections', completed: false, notes: '' }
-      ]
-    });
-    setFormErrors({});
-    setShowVisitModal(true);
+    setSelectedAMCForVisit(amc);
+    setShowVisitScheduler(true);
   };
 
   const handleCreateServiceTicket = (amc: AMC) => {
@@ -1161,19 +1163,8 @@ const AMCManagement: React.FC = () => {
   };
 
   const handleRenewContract = (amc: AMC) => {
-    setSelectedAMC(amc);
-    const currentEndDate = new Date(amc.endDate);
-    const newEndDate = new Date(currentEndDate);
-    newEndDate.setFullYear(newEndDate.getFullYear() + 1);
-    
-    setRenewalFormData({
-      newEndDate: newEndDate.toISOString().split('T')[0],
-      contractValue: amc.contractValue,
-      scheduledVisits: amc.scheduledVisits,
-      terms: amc.renewalTerms || amc.terms || ''
-    });
-    setFormErrors({});
-    setShowRenewalModal(true);
+    setSelectedAMCForRenewal(amc);
+    setShowContractRenewal(true);
   };
 
   const handleCompleteVisit = async (amc: AMC, visitId: string) => {
@@ -1434,6 +1425,33 @@ const AMCManagement: React.FC = () => {
     }
   };
 
+  // Enhanced functionality handlers
+  const handleGenerateReport = () => {
+    setShowReportModal(true);
+  };
+
+  const handleBulkRenewal = () => {
+    const expiringContracts = getExpiringContracts();
+    setSelectedContractsForBulkRenewal(expiringContracts);
+    setShowBulkRenewal(true);
+  };
+
+  const handleBulkSelectionToggle = () => {
+    setBulkSelectionMode(!bulkSelectionMode);
+    if (bulkSelectionMode) {
+      setSelectedContractsForBulkRenewal([]);
+    }
+  };
+
+  const handleContractSelection = (amc: AMC) => {
+    const isSelected = selectedContractsForBulkRenewal.some(c => c._id === amc._id);
+    if (isSelected) {
+      setSelectedContractsForBulkRenewal(prev => prev.filter(c => c._id !== amc._id));
+    } else {
+      setSelectedContractsForBulkRenewal(prev => [...prev, amc]);
+    }
+  };
+
   return (
     <div className="p-4 space-y-3">
       <PageHeader 
@@ -1448,6 +1466,37 @@ const AMCManagement: React.FC = () => {
             <Bell className="w-4 h-4" />
             <span className="text-sm">Expiry Alerts</span>
           </button>
+          
+          <button
+            onClick={handleGenerateReport}
+            className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span className="text-sm">Generate Reports</span>
+          </button>
+
+          <button
+            onClick={handleBulkSelectionToggle}
+            className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 ${
+              bulkSelectionMode 
+                ? 'bg-gradient-to-r from-green-600 to-green-700 text-white hover:from-green-700 hover:to-green-800'
+                : 'bg-gradient-to-r from-gray-600 to-gray-700 text-white hover:from-gray-700 hover:to-gray-800'
+            }`}
+          >
+            <Settings className="w-4 h-4" />
+            <span className="text-sm">{bulkSelectionMode ? 'Cancel Selection' : 'Bulk Actions'}</span>
+          </button>
+
+          {bulkSelectionMode && selectedContractsForBulkRenewal.length > 0 && (
+            <button
+              onClick={handleBulkRenewal}
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span className="text-sm">Renew Selected ({selectedContractsForBulkRenewal.length})</span>
+            </button>
+          )}
+
           <button
             onClick={handleCreateAMC}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
@@ -1585,199 +1634,152 @@ const AMCManagement: React.FC = () => {
       {/* AMC Contracts Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                {bulkSelectionMode && (
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    <input
+                      type="checkbox"
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedContractsForBulkRenewal(filteredAMCs);
+                        } else {
+                          setSelectedContractsForBulkRenewal([]);
+                        }
+                      }}
+                      checked={selectedContractsForBulkRenewal.length === filteredAMCs.length && filteredAMCs.length > 0}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                  </th>
+                )}
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Contract
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Customer
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Products
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Value
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Value & Duration
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Visits
-                </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Next Visit
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Progress
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Expiry
+                </th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">Loading AMC contracts...</td>
-                </tr>
-              ) : filteredAMCs.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No AMC contracts found</td>
-                </tr>
-              ) : (
-                filteredAMCs.map((amc) => (
-                  <tr key={amc._id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-blue-600">{amc.contractNumber}</div>
-                        <div className="text-xs text-gray-500">
-                          {formatDate(amc.startDate)} - {formatDate(amc.endDate)}
-                        </div>
+              {filteredAMCs.map((amc) => (
+                <tr key={amc._id} className="hover:bg-gray-50">
+                  {bulkSelectionMode && (
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        checked={selectedContractsForBulkRenewal.some(c => c._id === amc._id)}
+                        onChange={() => handleContractSelection(amc)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                    </td>
+                  )}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{amc.contractNumber}</div>
+                      <div className="text-sm text-gray-500">{formatDate(amc.startDate)} - {formatDate(amc.endDate)}</div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">{getCustomerName(amc.customer)}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm font-medium text-gray-900">{formatCurrency(amc.contractValue)}</div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(amc.status)}`}>
+                      {getStatusIcon(amc.status)}
+                      <span className="ml-1 capitalize">{amc.status}</span>
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className="flex-1 bg-gray-200 rounded-full h-2 mr-2">
+                        <div 
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                          style={{ width: `${(amc.completedVisits / amc.scheduledVisits) * 100}%` }}
+                        ></div>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-xs font-medium text-gray-900">{getCustomerName(amc.customer)}</div>
-                        {typeof amc.customer === 'object' && amc.customer && amc.customer.phone && (
-                          <div className="text-xs text-gray-500">{amc.customer.phone}</div>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-xs text-gray-900">
-                        {Array.isArray(amc.products) ? (
-                          <div>
-                            <div className="font-medium">{amc.products.length} product(s)</div>
-                            <div className="text-gray-500 text-xs">
-                              {amc.products.slice(0, 2).map(p => getProductName(p)).join(', ')}
-                              {amc.products.length > 2 && '...'}
-                            </div>
-                          </div>
-                        ) : (
-                          <span>No products</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-xs font-medium text-gray-900">{formatCurrency(amc.contractValue)}</div>
-                        <div className="text-xs text-gray-500">
-                          {amc.daysUntilExpiry ? `${amc.daysUntilExpiry} days left` : 'Expired'}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-sm">
-                        <div className="font-medium text-gray-900">
-                          {amc.completedVisits}/{amc.scheduledVisits}
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
-                          <div 
-                            className="bg-blue-600 h-1.5 rounded-full" 
-                            style={{ width: `${(amc.completedVisits / amc.scheduledVisits) * 100}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(amc.status)}`}>
-                        {getStatusIcon(amc.status)}
-                        <span className="ml-1 capitalize">{amc.status}</span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {amc.nextVisitDate ? (
-                        <div>
-                          <div className="font-medium">{formatDate(amc.nextVisitDate)}</div>
-                          <div className="text-xs text-gray-500">
-                            {Math.ceil((new Date(amc.nextVisitDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days
-                          </div>
-                        </div>
+                      <span className="text-sm text-gray-600">{amc.completedVisits}/{amc.scheduledVisits}</span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {amc.daysUntilExpiry !== null && amc.daysUntilExpiry !== undefined ? (
+                        <span className={amc.daysUntilExpiry <= 30 ? 'text-red-600 font-medium' : 'text-gray-600'}>
+                          {amc.daysUntilExpiry} days
+                        </span>
                       ) : (
-                        <span className="text-gray-400">No upcoming visit</span>
+                        <span className="text-gray-400">N/A</span>
                       )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => openDetailsModal(amc)}
-                          className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
-                          title="View Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        
-                        {/* Show Resume Draft button for draft status, Edit button for others */}
-                        {amc.status === 'draft' ? (
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <div className="flex items-center justify-end space-x-2">
+                      <button
+                        onClick={() => openDetailsModal(amc)}
+                        className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
+                        title="View Details"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                      
+                      {!bulkSelectionMode && (
+                        <>
                           <button
-                            onClick={() => handleResumeDraft(amc)}
-                            className="text-orange-600 hover:text-orange-900 p-1 rounded hover:bg-orange-50 transition-colors"
-                            title="Resume Draft Workflow"
+                            onClick={() => handleScheduleVisit(amc)}
+                            className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50"
+                            title="Schedule Visit"
                           >
-                            <Edit className="w-4 h-4" />
+                            <CalendarDays className="w-4 h-4" />
                           </button>
-                        ) : (
+                          
                           <button
                             onClick={() => handleEditAMC(amc)}
-                            className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
+                            className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
                             title="Edit Contract"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
-                        )}
-                        
-                        <button
-                          onClick={() => handleDeleteAMC(amc)}
-                          className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                          title="Delete Contract"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                        
-                        {/* Quick Actions - only show for active contracts, not drafts */}
-                        {amc.status !== 'draft' && (
-                          <div className="border-l border-gray-200 pl-2 ml-2">
-                            {amc.status === 'active' && (
-                              <>
-                                <button
-                                  onClick={() => handleEmergencyService(amc)}
-                                  className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                                  title="Emergency Service"
-                                >
-                                  <AlertTriangle className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleScheduleVisit(amc)}
-                                  className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
-                                  title="Schedule Visit"
-                                >
-                                  <Calendar className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => handleInvoiceGeneration(amc)}
-                                  className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
-                                  title="Generate Invoice"
-                                >
-                                  <IndianRupee className="w-4 h-4" />
-                                </button>
-                              </>
-                            )}
-                            
-                            {(amc.status === 'active' || amc.status === 'expired') && amc.daysUntilExpiry && amc.daysUntilExpiry <= 90 && (
-                              <button
-                                onClick={() => handleContractRenewal(amc)}
-                                className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
-                                title="Renew Contract"
-                              >
-                                <RefreshCw className="w-4 h-4" />
-                              </button>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
+                          
+                          {amc.status === 'active' && amc.daysUntilExpiry && amc.daysUntilExpiry <= 60 && (
+                            <button
+                              onClick={() => handleRenewContract(amc)}
+                              className="text-orange-600 hover:text-orange-900 p-1 rounded hover:bg-orange-50"
+                              title="Renew Contract"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                            </button>
+                          )}
+                          
+                          <button
+                            onClick={() => handleDeleteAMC(amc)}
+                            className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
+                            title="Delete Contract"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
@@ -2894,6 +2896,33 @@ const AMCManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Enhanced Modals */}
+      <AMCReport 
+        isOpen={showReportModal}
+        onClose={() => setShowReportModal(false)}
+      />
+
+      <VisitScheduler
+        isOpen={showVisitScheduler}
+        onClose={() => setShowVisitScheduler(false)}
+        amcId={selectedAMCForVisit?._id || ''}
+        amcData={selectedAMCForVisit}
+      />
+
+      <ContractRenewal
+        isOpen={showContractRenewal}
+        onClose={() => setShowContractRenewal(false)}
+        amcData={selectedAMCForRenewal}
+        isBulkRenewal={false}
+      />
+
+      <ContractRenewal
+        isOpen={showBulkRenewal}
+        onClose={() => setShowBulkRenewal(false)}
+        isBulkRenewal={true}
+        selectedContracts={selectedContractsForBulkRenewal}
+      />
     </div>
   );
 };

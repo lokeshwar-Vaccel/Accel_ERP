@@ -123,6 +123,9 @@ class ApiClient {
 
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/users/stats'),
+
+    getFieldOperators: () =>
+      this.makeRequest<{ success: boolean; data: { fieldOperators: any[] } }>('/users/field-operators'),
   };
 
   // Lead Management APIs
@@ -206,6 +209,9 @@ class ApiClient {
   products = {
     getAll: (params?: any) =>
       this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/products${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getWithInventory: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { products: any[]; totalProducts: number } }>(`/products/with-inventory${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     create: (productData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/products', {
@@ -452,6 +458,54 @@ class ApiClient {
       }),
   };
 
+  // Digital Service Report APIs
+  digitalServiceReports = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/digital-service-reports${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    create: (reportData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/digital-service-reports', {
+        method: 'POST',
+        body: JSON.stringify(reportData),
+      }),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/digital-service-reports/${id}`),
+
+    getByTicket: (ticketId: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/digital-service-reports/ticket/${ticketId}`),
+
+    update: (id: string, data: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/digital-service-reports/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean }>(`/digital-service-reports/${id}`, {
+        method: 'DELETE',
+      }),
+
+    approve: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/digital-service-reports/${id}/approve`, {
+        method: 'PUT',
+      }),
+
+    reject: (id: string, rejectionReason: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/digital-service-reports/${id}/reject`, {
+        method: 'PUT',
+        body: JSON.stringify({ rejectionReason }),
+      }),
+
+    complete: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/digital-service-reports/${id}/complete`, {
+        method: 'PUT',
+      }),
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/digital-service-reports/stats/overview'),
+  };
+
   // AMC Management APIs
   amc = {
     getAll: (params?: any) =>
@@ -473,8 +527,20 @@ class ApiClient {
       }),
 
     delete: (id: string) =>
-      this.makeRequest<{ success: boolean }>(`/amc/${id}`, {
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/${id}`, {
         method: 'DELETE',
+      }),
+
+    bulkDelete: (contractIds: string[], reason?: string) =>
+      this.makeRequest<{ success: boolean; data: any }>('/amc/bulk-delete', {
+        method: 'DELETE',
+        body: JSON.stringify({ contractIds, reason }),
+      }),
+
+    archive: (id: string, reason?: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/${id}/archive`, {
+        method: 'PUT',
+        body: JSON.stringify({ reason }),
       }),
 
     scheduleVisit: (id: string, visitData: any) =>
@@ -488,9 +554,56 @@ class ApiClient {
 
     renew: (id: string, renewalData: any) =>
       this.makeRequest<{ success: boolean; data: any }>(`/amc/${id}/renew`, {
-        method: 'PUT',
+        method: 'POST',
         body: JSON.stringify(renewalData),
       }),
+
+    // Enhanced functionality
+    scheduleEnhancedVisit: (id: string, visitData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/${id}/schedule-visit-enhanced`, {
+        method: 'POST',
+        body: JSON.stringify(visitData),
+      }),
+
+    bulkRenew: (contractIds: string[], renewalData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/amc/bulk-renew', {
+        method: 'POST',
+        body: JSON.stringify({ contractIds, ...renewalData }),
+      }),
+
+    getPerformance: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/${id}/performance`),
+
+    generateReport: (type: string, params?: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/reports/${type}${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getExpiringContracts: () =>
+      this.makeRequest<{ success: boolean; data: any[] }>('/amc/expiring/contracts'),
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/amc/stats/overview'),
+
+    // Additional functionality
+    getDetails: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/${id}/details`),
+
+    updateStatus: (id: string, statusData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/${id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify(statusData),
+      }),
+
+    getByCustomer: (customerId: string, params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/amc/customer/${customerId}${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getExpiringSoon: (days?: number) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/expiring-soon${days ? `?days=${days}` : ''}`),
+
+    getVisitsDue: (days?: number) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/visits-due${days ? `?days=${days}` : ''}`),
+
+    getDashboard: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/amc/dashboard'),
   };
 
   // Purchase Orders APIs
@@ -652,7 +765,6 @@ class ApiClient {
 
       return this.makeRequest<{ success: boolean; data: any }>('/files/upload', {
         method: 'POST',
-        headers: {},
         body: formData,
       });
     },
@@ -668,7 +780,17 @@ class ApiClient {
 
       return this.makeRequest<{ success: boolean; data: any[] }>('/files/upload-multiple', {
         method: 'POST',
-        headers: {},
+        body: formData,
+      });
+    },
+
+    uploadDigitalReport: (photos: File[], attachments: File[]) => {
+      const formData = new FormData();
+      photos.forEach(file => formData.append('photos', file));
+      attachments.forEach(file => formData.append('attachments', file));
+
+      return this.makeRequest<{ success: boolean; data: any }>('/files/upload-digital-report', {
+        method: 'POST',
         body: formData,
       });
     },
@@ -692,10 +814,15 @@ class ApiClient {
     getAll: (params?: any) =>
       this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/files${params ? `?${new URLSearchParams(params)}` : ''}`),
 
-    delete: (fileId: string) =>
-      this.makeRequest<{ success: boolean }>(`/files/${fileId}`, {
+    delete: (filename: string) =>
+      this.makeRequest<{ success: boolean }>(`/files/${filename}`, {
         method: 'DELETE',
       }),
+
+    getInfo: (filename: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/files/info/${filename}`),
+
+    getFileUrl: (filename: string) => `${this.baseURL}/files/${filename}`,
 
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/files/stats/overview'),

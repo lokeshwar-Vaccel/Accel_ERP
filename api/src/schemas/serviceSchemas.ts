@@ -10,6 +10,7 @@ export interface CreateServiceTicketInput {
   priority?: TicketPriority;
   assignedTo?: string;
   scheduledDate?: string;
+  serviceCharge?: number;
   serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
   urgencyLevel?: 'low' | 'medium' | 'high' | 'critical';
   customerNotes?: string;
@@ -33,8 +34,10 @@ export interface UpdateServiceTicketInput {
   scheduledDate?: string;
   serviceReport?: string;
   customerSignature?: string;
+  serviceCharge?: number;
   serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
   urgencyLevel?: 'low' | 'medium' | 'high' | 'critical';
+  serialNumber?: string;
   resolution?: string;
   workDuration?: number;
   customerFeedback?: {
@@ -155,6 +158,10 @@ export interface BulkServiceImportInput {
   assignedTechnician?: string;
 }
 
+export interface UpdateServiceStatusInput {
+  status: TicketStatus;
+}
+
 // Base service ticket fields
 const baseServiceTicketFields = {
   customer: Joi.string().hex().length(24),
@@ -169,6 +176,7 @@ const baseServiceTicketFields = {
   serviceReport: Joi.string().max(5000).allow(''),
   customerSignature: Joi.string().max(10000), // Base64 encoded signature
   slaDeadline: Joi.date().iso(),
+  serviceCharge: Joi.number().min(0).precision(2),
   urgencyLevel: Joi.string().valid('low', 'medium', 'high', 'critical'),
   serviceType: Joi.string().valid('installation', 'repair', 'maintenance', 'inspection', 'other')
 };
@@ -182,6 +190,7 @@ export const createServiceTicketSchema = Joi.object<CreateServiceTicketInput>({
   priority: baseServiceTicketFields.priority.default(TicketPriority.MEDIUM),
   assignedTo: baseServiceTicketFields.assignedTo,
   scheduledDate: baseServiceTicketFields.scheduledDate,
+  serviceCharge: baseServiceTicketFields.serviceCharge.default(0),
   serviceType: baseServiceTicketFields.serviceType.default('repair'),
   urgencyLevel: baseServiceTicketFields.urgencyLevel,
   customerNotes: Joi.string().max(1000).allow(''),
@@ -206,8 +215,10 @@ export const updateServiceTicketSchema = Joi.object<UpdateServiceTicketInput>({
   scheduledDate: baseServiceTicketFields.scheduledDate,
   serviceReport: baseServiceTicketFields.serviceReport,
   customerSignature: baseServiceTicketFields.customerSignature,
+  serviceCharge: baseServiceTicketFields.serviceCharge,
   serviceType: baseServiceTicketFields.serviceType,
   urgencyLevel: baseServiceTicketFields.urgencyLevel,
+  serialNumber: baseServiceTicketFields.serialNumber,
   resolution: Joi.string().max(2000),
   workDuration: Joi.number().min(0), // in hours
   customerFeedback: Joi.object({
@@ -359,4 +370,9 @@ export const bulkServiceImportSchema = Joi.array().items(
     scheduledDate: baseServiceTicketFields.scheduledDate,
     assignedTechnician: Joi.string() // Will be looked up by name
   })
-).min(1).max(500); 
+).min(1).max(500);
+
+// Update service status schema
+export const updateServiceStatusSchema = Joi.object<UpdateServiceStatusInput>({
+  status: Joi.string().valid('open', 'in_progress', 'resolved', 'closed', 'cancelled').required()
+}); 

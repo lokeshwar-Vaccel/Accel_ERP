@@ -35,27 +35,27 @@ router.use(checkModuleAccess('inventory'));
 
 // @route   GET /api/v1/inventory/import-template
 // @desc    Download inventory import template
-// @access  Private (Admin, Manager)
+// @access  Private (Admin, Manager, Field Operator)
 router.get('/import-template',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER, UserRole.FIELD_OPERATOR),
   checkPermission('write'),
   downloadInventoryTemplate
 );
 
 // @route   GET /api/v1/inventory/export-excel
 // @desc    Export inventory as Excel in import format
-// @access  Private (Admin, Manager)
+// @access  Private (Admin, Manager, Field Operator)
 router.get('/export-excel',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER, UserRole.FIELD_OPERATOR),
   checkPermission('write'),
   exportInventoryExcel
 );
 
 // @route   POST /api/v1/inventory/preview-import
 // @desc    Preview inventory import before processing
-// @access  Private (Admin, Manager)
+// @access  Private (Admin, Manager, Field Operator)
 router.post('/preview-import',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER, UserRole.FIELD_OPERATOR),
   checkPermission('write'),
   upload.single('file'),
   previewInventoryImport
@@ -63,9 +63,9 @@ router.post('/preview-import',
 
 // @route   POST /api/v1/inventory/import
 // @desc    Import inventory from Excel/CSV
-// @access  Private (Admin, Manager)
+// @access  Private (Admin, Manager, Field Operator)
 router.post('/import',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER, UserRole.FIELD_OPERATOR),
   checkPermission('write'),
   upload.single('file'),
   importInventory

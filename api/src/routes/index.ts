@@ -20,6 +20,7 @@ import notificationRoutes from './notifications';
 import generalSettingsRoutes from './generalSettings';
 import quotationsRouter from './quotations';
 import inventoryRoutes from './inventory';
+import digitalServiceReportRoutes from './digitalServiceReports';
 
 
 const router = Router();
@@ -75,5 +76,6 @@ router.use('/generalSettings', generalSettingsRoutes);
 router.use('/payment-links', paymentLinkRoutes);
 router.use('/quotations', quotationsRouter);
 router.use('/inventory', inventoryRoutes);
+router.use('/digital-service-reports', digitalServiceReportRoutes);
 
 export default router;

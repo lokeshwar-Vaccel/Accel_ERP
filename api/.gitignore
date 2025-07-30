@@ -140,6 +140,7 @@ Thumbs.db
 # File uploads directory (ERP specific)
 api/uploads/
 frontend/uploads/
+src/assets/uploads/
 
 # Database dumps
 *.sql
