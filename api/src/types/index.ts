@@ -21,7 +21,11 @@ export enum UserStatus {
 // Customer Types
 export enum CustomerType {
   RETAIL = 'retail',
-  TELECOM = 'telecom'
+  TELECOM = 'telecom',
+  EV = 'ev',
+  DG = 'dg',
+  JENARAL = 'jenaral',
+  JE = 'je'
 }
 
 // Customer Main Type (customer or supplier)

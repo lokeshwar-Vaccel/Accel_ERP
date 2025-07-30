@@ -129,7 +129,8 @@ const menuItems = [
 ];
 
 function getActiveKeyFromPath(pathname: string): string {
-  const activeItem = menuItems.find(item => item.path === pathname);
+  // Find the menu item whose path is a prefix of the current pathname
+  const activeItem = menuItems.find(item => pathname.startsWith(item.path));
   return activeItem?.key || 'dashboard';
 }
 

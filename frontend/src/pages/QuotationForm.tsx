@@ -548,6 +548,13 @@ const QuotationFormPage: React.FC = () => {
         const matchingProducts = getFilteredProducts(searchTerm);
         const currentHighlighted = highlightedProductIndex[rowIndex] ?? -1;
 
+        // Ctrl+Delete or Command+Delete: Remove current row
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+            e.preventDefault();
+            removeQuotationItem(rowIndex);
+            return;
+        }
+
         if (e.key === 'Tab') {
             e.preventDefault();
 
@@ -606,11 +613,10 @@ const QuotationFormPage: React.FC = () => {
                     }
                 }, 100);
             } else {
-                // If no search term, just move to next row
-                const nextRowIndex = rowIndex + 1;
+                // If no search term, move to Notes field
                 setTimeout(() => {
-                    const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
-                    if (nextInput) nextInput.focus();
+                    const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                    if (notesInput) notesInput.focus();
                 }, 100);
             }
 
@@ -662,16 +668,27 @@ const QuotationFormPage: React.FC = () => {
         const currentItem = formData.items?.[rowIndex];
         const currentQuantity = currentItem?.quantity || 1;
 
+        // Ctrl+Delete or Command+Delete: Remove current row
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+            e.preventDefault();
+            removeQuotationItem(rowIndex);
+            return;
+        }
+
         if (e.key === 'ArrowUp') {
             e.preventDefault();
             let newQuantity = currentQuantity + 1;
             
-            // 🚨 PREVENT INCREASING QUANTITY FOR OUT-OF-STOCK PRODUCTS
+            // 🚨 ALLOW INCREASING QUANTITY UP TO AVAILABLE STOCK
             if (currentItem?.product && formData.location && productStockCache[currentItem.product]) {
                 const stockInfo = productStockCache[currentItem.product];
                 if (stockInfo.available === 0) {
                     newQuantity = 0; // Keep at 0 for out-of-stock products
                     toast.error('Cannot increase quantity - product is out of stock', { duration: 2000 });
+                } else if (newQuantity > stockInfo.available) {
+                    // Allow increasing up to available stock, but show warning if exceeding
+                    newQuantity = stockInfo.available;
+                    toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
                 }
             }
             
@@ -721,16 +738,10 @@ const QuotationFormPage: React.FC = () => {
         } else if (e.key === 'Enter') {
             e.preventDefault();
 
-            // 🚀 AUTO-ROW FEATURE: Add new row when Enter is pressed on last row's quantity field
-            if (rowIndex === (formData.items || []).length - 1) {
-                addQuotationItem();
-            }
-
-            // Move to next row's product field
-            const nextRowIndex = rowIndex + 1;
+            // Move to Notes field when Enter is pressed
             setTimeout(() => {
-                const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
-                if (nextInput) nextInput.focus();
+                const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                if (notesInput) notesInput.focus();
             }, 100);
         }
     };
@@ -739,6 +750,13 @@ const QuotationFormPage: React.FC = () => {
     const handleCellKeyDown = (e: React.KeyboardEvent, rowIndex: number, field: string) => {
         const fields = ['product', 'description', 'hsnNumber', 'taxRate', 'quantity', 'uom', 'unitPrice', 'discount'];
         const currentFieldIndex = fields.indexOf(field);
+
+        // Ctrl+Delete or Command+Delete: Remove current row
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+            e.preventDefault();
+            removeQuotationItem(rowIndex);
+            return;
+        }
 
         if (e.key === 'Tab') {
             e.preventDefault();
@@ -798,20 +816,11 @@ const QuotationFormPage: React.FC = () => {
         } else if (e.key === 'Enter') {
             e.preventDefault();
 
-            // Enter: Move to same field in next row, or Notes if last row
-            if (rowIndex === (formData.items || []).length - 1) {
-                // Last row - move to Notes
-                setTimeout(() => {
-                    const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
-                    if (notesInput) notesInput.focus();
-                }, 100);
-            } else {
-                const nextRowIndex = rowIndex + 1;
-                setTimeout(() => {
-                    const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="${field}"]`) as HTMLInputElement;
-                    if (nextInput) nextInput.focus();
-                }, 100);
-            }
+            // Enter: Always move to Notes field
+            setTimeout(() => {
+                const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                if (notesInput) notesInput.focus();
+            }, 100);
 
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
@@ -1243,10 +1252,34 @@ const QuotationFormPage: React.FC = () => {
     };
 
     const removeQuotationItem = (index: number) => {
-        setFormData(prev => ({
-            ...prev,
-            items: (prev.items || []).filter((_, i) => i !== index)
-        }));
+        setFormData(prev => {
+            const currentItems = prev.items || [];
+            const newItems = currentItems.filter((_, i) => i !== index);
+            
+            // If we're removing the last item, add a new empty row
+            if (newItems.length === 0) {
+                newItems.push({
+                    product: '',
+                    description: '',
+                    quantity: 1,
+                    unitPrice: 0,
+                    taxRate: 0,
+                    discount: 0,
+                    partNo: '',
+                    hsnCode: '',
+                    hsnNumber: '',
+                    uom: 'nos',
+                    discountedAmount: 0,
+                    taxAmount: 0,
+                    totalPrice: 0
+                });
+            }
+            
+            return {
+                ...prev,
+                items: newItems
+            };
+        });
     };
 
     const updateQuotationItem = (index: number, field: keyof QuotationItem, value: any) => {
@@ -1420,13 +1453,13 @@ const QuotationFormPage: React.FC = () => {
                     <div>
                         <p className="font-medium mb-1">🎯 Complete Form Navigation:</p>
                         <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Tab/Enter</kbd> Move forward</p>
-                        <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Shift+Tab</kbd> Move backward</p>
+                        {/* <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Shift+Tab</kbd> Move backward</p> */}
                         <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">↑↓</kbd> Navigate dropdowns</p>
                     </div>
                     <div>
                         <p className="font-medium mb-1">🔥 Super Fast Flow:</p>
                         <p>Location → Customer → Address → Validity Period → Valid Until → Products</p>
-                        <p><strong>Products:</strong> Search → Select → Quantity → Auto Next Row</p>
+                        <p><strong>Products:</strong> Search → Select → Quantity → Tab (Next Row) → Enter (Notes)</p>
                     </div>
                 </div>
             </div>
@@ -1910,7 +1943,7 @@ const QuotationFormPage: React.FC = () => {
                             {/* Table Header */}
                             <div className="bg-gray-50 border-b border-gray-300">
                                 <div className="grid text-xs font-semibold text-gray-700 uppercase tracking-wide"
-                                    style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 60px' }}>
+                                    style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 80px' }}>
                                     <div className="p-3 border-r border-gray-300 text-center">S.No</div>
                                     <div className="p-3 border-r border-gray-300">Product Code</div>
                                     <div className="p-3 border-r border-gray-300">Product Name</div>
@@ -1938,7 +1971,7 @@ const QuotationFormPage: React.FC = () => {
 
                                     return (
                                         <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${rowBg}`}
-                                            style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 60px' }}>
+                                            style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 80px' }}>
                                         {/* S.No */}
                                         <div className="p-2 border-r border-gray-200 text-center text-sm font-medium text-gray-600 flex items-center justify-center">
                                             {index + 1}
@@ -2215,6 +2248,10 @@ const QuotationFormPage: React.FC = () => {
                                                                 toast.error('This product is out of stock. Quantity set to 0.', { duration: 2000 });
                                                             }
                                                             newQuantity = 0;
+                                                        } else if (newQuantity > stockInfo.available) {
+                                                            // Allow increasing up to available stock, but show warning if exceeding
+                                                            newQuantity = stockInfo.available;
+                                                            toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
                                                         }
                                                     }
 
@@ -2335,19 +2372,13 @@ const QuotationFormPage: React.FC = () => {
                                             )} */}
                                         </div>
                                             <div className="p-1 relative">
-                                                {(formData.items || []).length > 1 ? (
-                                                    <button
-                                                        onClick={() => removeQuotationItem(index)}
-                                                        className="w-full h-full p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center group"
-                                                        title="Remove this item"
-                                                    >
-                                                        <X className="w-4 h-4" />
-                                                    </button>
-                                                ) : (
-                                                    <div className="w-full h-full p-2 text-gray-300 flex items-center justify-center" title="Cannot remove the last item">
-                                                        <X className="w-4 h-4" />
-                                                    </div>
-                                                )}
+                                                <button
+                                                    onClick={() => removeQuotationItem(index)}
+                                                    className="w-full h-full p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center group"
+                                                    title="Remove this item"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
                                             </div>
                                         </div>
                                     );
@@ -2357,15 +2388,26 @@ const QuotationFormPage: React.FC = () => {
                             {/* Navigation Hints */}
                             <div className="bg-gray-50 border-t border-gray-200 p-3 text-center">
                                 <div className="text-sm text-gray-600 mb-1">
-                                    <strong>🚀 Excel-Like Quotation Items:</strong> Search → Select → Set Quantity → Tab/Enter → Auto Next Row
+                                    <strong>🚀 Excel-Like Quotation Items:</strong> Search → Select → Set Quantity → Tab → Next Row | Enter → Notes
                                 </div>
                                 <div className="text-xs text-gray-500 mb-1">
                                     <kbd className="px-1 py-0.5 bg-gray-200 rounded">Type</kbd> Search Product →
                                     <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">↑↓</kbd> Navigate List →
                                     <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Enter</kbd> Select →
                                     <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Set</kbd> Quantity →
-                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Tab/Enter</kbd> Auto Add Row
+                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Tab</kbd> Next Row →
+                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Enter</kbd> Go to Notes
                                 </div>
+                                {/* <div className="text-xs text-gray-500 mb-1">
+                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded">Ctrl+Delete</kbd> or <kbd className="px-1 py-0.5 bg-gray-200 rounded">⌘+Delete</kbd> Remove Current Row •
+                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">X Button</kbd> Remove Row
+                                </div> */}
+                                {/* <div className="text-xs text-gray-500 mb-1">
+                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded">Shift+Tab</kbd> Reverse Navigation:
+                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Notes</kbd> → 
+                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Last Quantity</kbd> → 
+                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Previous Fields</kbd>
+                                </div> */}
                                 <div className="text-xs text-gray-400">
                                     ⚡ <strong>Complete Excel-like quotation form navigation!</strong> • Stock validation enabled for accurate quotations
                                 </div>
@@ -2380,26 +2422,24 @@ const QuotationFormPage: React.FC = () => {
                             <textarea
                                 value={formData.notes || ''}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                // onKeyDown={(e) => {
-                                //     if (e.key === 'Tab' && !e.shiftKey) {
-                                //         e.preventDefault();
-                                //         // Move to Terms field
-                                //         setTimeout(() => {
-                                //             const termsInput = document.querySelector('[data-field="terms"]') as HTMLTextAreaElement;
-                                //             if (termsInput) termsInput.focus();
-                                //         }, 50);
-                                //     } else if (e.key === 'Tab' && e.shiftKey) {
-                                //         e.preventDefault();
-                                //         // Move back to last product field or appropriate previous field
-                                //         const lastRowIndex = (formData.items || []).length - 1;
-                                //         setTimeout(() => {
-                                //             const lastDiscountInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="discount"]`) as HTMLInputElement;
-                                //             if (lastDiscountInput) {
-                                //                 lastDiscountInput.focus();
-                                //             }
-                                //         }, 50);
-                                //     }
-                                // }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Tab' && e.shiftKey) {
+                                        e.preventDefault();
+                                        // Move back to last product's quantity field
+                                        const lastRowIndex = (formData.items || []).length - 1;
+                                        setTimeout(() => {
+                                            const lastQuantityInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
+                                            if (lastQuantityInput) lastQuantityInput.focus();
+                                        }, 50);
+                                    } else if (e.key === 'Tab' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        // Move to Terms field
+                                        setTimeout(() => {
+                                            const termsInput = document.querySelector('[data-field="terms"]') as HTMLTextAreaElement;
+                                            if (termsInput) termsInput.focus();
+                                        }, 50);
+                                    }
+                                }}
                                 rows={3}
                                 data-field="notes"
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
@@ -2413,19 +2453,20 @@ const QuotationFormPage: React.FC = () => {
                                 value={formData.terms || ''}
                                 onChange={(e) => setFormData({ ...formData, terms: e.target.value })}
                                 // onKeyDown={(e) => {
-                                //     if (e.key === 'Tab' && !e.shiftKey) {
-                                //         e.preventDefault();
-                                //         // Move to Save button or form end
-                                //         setTimeout(() => {
-                                //             const saveButton = document.querySelector('[data-action="save"]') as HTMLButtonElement;
-                                //             if (saveButton) saveButton.focus();
-                                //         }, 50);
-                                //     } else if (e.key === 'Tab' && e.shiftKey) {
+                                //     if (e.key === 'Tab' && e.shiftKey) {
                                 //         e.preventDefault();
                                 //         // Move back to Notes field
                                 //         setTimeout(() => {
                                 //             const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
                                 //             if (notesInput) notesInput.focus();
+                                //         }, 50);
+                                //     } else if (e.key === 'Tab' && !e.shiftKey) {
+                                //         e.preventDefault();
+                                //         // Move to Create Quotation button
+                                //         setTimeout(() => {
+                                //             // Find the enabled Create/Update Quotation button
+                                //             const createBtn = document.querySelector('button.px-6.py-2.bg-blue-600:not([disabled])') as HTMLButtonElement;
+                                //             if (createBtn) createBtn.focus();
                                 //         }, 50);
                                 //     }
                                 // }}

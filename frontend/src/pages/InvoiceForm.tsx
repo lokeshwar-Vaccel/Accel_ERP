@@ -504,29 +504,57 @@ const InvoiceFormPage: React.FC = () => {
   };
 
   const removeInvoiceItem = (index: number) => {
+    // setFormData(prev => {
+    //   const currentItems = prev.items || [];
+
+    //   // Don't allow removing the last item - always keep at least one
+    //   if (currentItems.length <= 1) {
+    //     toast.error('Cannot remove the last item. At least one item is required.', { duration: 3000 });
+    //     return prev;
+    //   }
+
+    //   // Remove the item at the specified index
+    //   const filteredItems = currentItems.filter((_, i) => i !== index);
+
+    //   // Recalculate totals with the remaining items
+    //   const calculationResult = calculateQuotationTotals(filteredItems);
+
+    //   return {
+    //     ...prev,
+    //     items: calculationResult.items,
+    //     subtotal: calculationResult.subtotal,
+    //     totalDiscount: calculationResult.totalDiscount,
+    //     totalTax: calculationResult.totalTax,
+    //     grandTotal: calculationResult.grandTotal,
+    //     roundOff: calculationResult.roundOff
+    //   };
+    // });
     setFormData(prev => {
       const currentItems = prev.items || [];
+      const newItems = currentItems.filter((_, i) => i !== index);
 
-      // Don't allow removing the last item - always keep at least one
-      if (currentItems.length <= 1) {
-        toast.error('Cannot remove the last item. At least one item is required.', { duration: 3000 });
-        return prev;
+      // If we're removing the last item, add a new empty row
+      if (newItems.length === 0) {
+        newItems.push({
+          product: '',
+          description: '',
+          quantity: 1,
+          unitPrice: 0,
+          taxRate: 0,
+          discount: 0,
+          partNo: '',
+          hsnCode: '',
+          hsnNumber: '',
+          uom: 'nos',
+          discountedAmount: 0,
+          taxAmount: 0,
+          totalPrice: 0
+        });
       }
-
-      // Remove the item at the specified index
-      const filteredItems = currentItems.filter((_, i) => i !== index);
-
-      // Recalculate totals with the remaining items
-      const calculationResult = calculateQuotationTotals(filteredItems);
 
       return {
         ...prev,
-        items: calculationResult.items,
-        subtotal: calculationResult.subtotal,
-        totalDiscount: calculationResult.totalDiscount,
-        totalTax: calculationResult.totalTax,
-        grandTotal: calculationResult.grandTotal,
-        roundOff: calculationResult.roundOff
+        items: newItems
       };
     });
 
@@ -1114,6 +1142,13 @@ const InvoiceFormPage: React.FC = () => {
     const matchingProducts = getFilteredProducts(searchTerm);
     const currentHighlighted = highlightedProductIndex[rowIndex] ?? -1;
 
+    // Ctrl+Delete or Command+Delete: Remove current row
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+      e.preventDefault();
+      removeInvoiceItem(rowIndex);
+      return;
+    }
+
     if (e.key === 'Tab') {
       e.preventDefault();
 
@@ -1127,8 +1162,10 @@ const InvoiceFormPage: React.FC = () => {
           }
         } else {
           // If first row, move to due date field
-          const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
-          if (dueDateInput) dueDateInput.focus();
+          setTimeout(() => {
+            const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
+            if (dueDateInput) dueDateInput.focus();
+          }, 50);
         }
         return;
       }
@@ -1178,8 +1215,10 @@ const InvoiceFormPage: React.FC = () => {
         // If no search term, just move to next row
         const nextRowIndex = rowIndex + 1;
         setTimeout(() => {
-          const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
-          if (nextInput) nextInput.focus();
+          // const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
+          // if (nextInput) nextInput.focus();
+          const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+          if (notesInput) notesInput.focus();
         }, 100);
       }
 
@@ -1245,6 +1284,10 @@ const InvoiceFormPage: React.FC = () => {
           } else if (reduceStock) {
             toast.error('Cannot increase quantity - product is out of stock', { duration: 2000 });
           }
+        } else if (newQuantity > stockInfo.available) {
+          // Allow increasing up to available stock, but show warning if exceeding
+          newQuantity = stockInfo.available;
+          toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
         }
       }
 
@@ -1295,15 +1338,17 @@ const InvoiceFormPage: React.FC = () => {
       e.preventDefault();
 
       // 🚀 AUTO-ROW FEATURE: Add new row when Enter is pressed on last row's quantity field
-      if (rowIndex === (formData.items || []).length - 1) {
-        addInvoiceItem();
-      }
+      // if (rowIndex === (formData.items || []).length - 1) {
+      //   addInvoiceItem();
+      // }
 
-      // Move to next row's product field
-      const nextRowIndex = rowIndex + 1;
+      // // Move to next row's product field
+      // const nextRowIndex = rowIndex + 1;
       setTimeout(() => {
-        const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
-        if (nextInput) nextInput.focus();
+        // const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
+        // if (nextInput) nextInput.focus();
+        const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+        if (notesInput) notesInput.focus();
       }, 100);
     }
   };
@@ -1312,6 +1357,13 @@ const InvoiceFormPage: React.FC = () => {
   const handleCellKeyDown = (e: React.KeyboardEvent, rowIndex: number, field: string) => {
     const fields = ['product', 'description', 'hsnNumber', 'taxRate', 'quantity', 'uom', 'unitPrice', 'discount'];
     const currentFieldIndex = fields.indexOf(field);
+
+    // Ctrl+Delete or Command+Delete: Remove current row
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+      e.preventDefault();
+      removeInvoiceItem(rowIndex);
+      return;
+    }
 
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -1372,19 +1424,23 @@ const InvoiceFormPage: React.FC = () => {
       e.preventDefault();
 
       // Enter: Move to same field in next row, or Notes if last row
-      if (rowIndex === (formData.items || []).length - 1) {
-        // Last row - move to Notes
-        setTimeout(() => {
-          const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
-          if (notesInput) notesInput.focus();
-        }, 100);
-      } else {
-        const nextRowIndex = rowIndex + 1;
-        setTimeout(() => {
-          const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="${field}"]`) as HTMLInputElement;
-          if (nextInput) nextInput.focus();
-        }, 100);
-      }
+      // if (rowIndex === (formData.items || []).length - 1) {
+      //   // Last row - move to Notes
+      //   setTimeout(() => {
+      //     const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+      //     if (notesInput) notesInput.focus();
+      //   }, 100);
+      // } else {
+      //   const nextRowIndex = rowIndex + 1;
+      //   setTimeout(() => {
+      //     const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="${field}"]`) as HTMLInputElement;
+      //     if (nextInput) nextInput.focus();
+      //   }, 100);
+      // }
+      setTimeout(() => {
+        const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+        if (notesInput) notesInput.focus();
+      }, 100);
 
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -1447,41 +1503,41 @@ const InvoiceFormPage: React.FC = () => {
 
       {/* 🚀 EXCEL-LIKE NAVIGATION GUIDE */}
       <div className={`bg-gradient-to-r border rounded-lg p-4 ${isDeliveryChallan ? 'from-orange-50 to-amber-50 border-orange-200' :
-          isQuotation ? 'from-blue-50 to-indigo-50 border-blue-200' :
-            isSalesInvoice ? 'from-green-50 to-emerald-50 border-green-200' :
-              'from-purple-50 to-violet-50 border-purple-200'
+        isQuotation ? 'from-blue-50 to-indigo-50 border-blue-200' :
+          isSalesInvoice ? 'from-green-50 to-emerald-50 border-green-200' :
+            'from-purple-50 to-violet-50 border-purple-200'
         }`}>
         <div className="flex items-center mb-2">
           <span className="text-lg">⚡</span>
           <h3 className={`text-sm font-semibold ml-2 ${isDeliveryChallan ? 'text-orange-900' :
-              isQuotation ? 'text-blue-900' :
-                isSalesInvoice ? 'text-green-900' :
-                  'text-purple-900'
+            isQuotation ? 'text-blue-900' :
+              isSalesInvoice ? 'text-green-900' :
+                'text-purple-900'
             }`}>
             Excel-Like {getInvoiceTypeTitle()} Form Enabled!
           </h3>
         </div>
         <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 text-xs ${isDeliveryChallan ? 'text-orange-800' :
-            isQuotation ? 'text-blue-800' :
-              isSalesInvoice ? 'text-green-800' :
-                'text-purple-800'
+          isQuotation ? 'text-blue-800' :
+            isSalesInvoice ? 'text-green-800' :
+              'text-purple-800'
           }`}>
           <div>
             <p className="font-medium mb-1">🎯 Complete Form Navigation:</p>
             <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
-                isQuotation ? 'bg-blue-200' :
-                  isSalesInvoice ? 'bg-green-200' :
-                    'bg-purple-200'
+              isQuotation ? 'bg-blue-200' :
+                isSalesInvoice ? 'bg-green-200' :
+                  'bg-purple-200'
               }`}>Tab/Enter</kbd> Move forward</p>
-            <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
+            {/* <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
                 isQuotation ? 'bg-blue-200' :
                   isSalesInvoice ? 'bg-green-200' :
                     'bg-purple-200'
-              }`}>Shift+Tab</kbd> Move backward</p>
+              }`}>Shift+Tab</kbd> Move backward</p> */}
             <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
-                isQuotation ? 'bg-blue-200' :
-                  isSalesInvoice ? 'bg-green-200' :
-                    'bg-purple-200'
+              isQuotation ? 'bg-blue-200' :
+                isSalesInvoice ? 'bg-green-200' :
+                  'bg-purple-200'
               }`}>↑↓</kbd> Navigate dropdowns</p>
           </div>
           <div>
@@ -1823,8 +1879,8 @@ const InvoiceFormPage: React.FC = () => {
           {/* Stock Reduction Option - Conditional based on invoice type */}
           {!isDeliveryChallan && (
             <div className={`border rounded-lg p-4 ${isQuotation ? 'bg-blue-50 border-blue-200' :
-                isSalesInvoice ? 'bg-green-50 border-green-200' :
-                  'bg-purple-50 border-purple-200'
+              isSalesInvoice ? 'bg-green-50 border-green-200' :
+                'bg-purple-50 border-purple-200'
               }`}>
               <label className="flex items-center space-x-3">
                 <input
@@ -1832,20 +1888,20 @@ const InvoiceFormPage: React.FC = () => {
                   checked={reduceStock}
                   onChange={(e) => setReduceStock(e.target.checked)}
                   className={`w-4 h-4 border-gray-300 rounded focus:ring-2 ${isQuotation ? 'text-blue-600 focus:ring-blue-500' :
-                      isSalesInvoice ? 'text-green-600 focus:ring-green-500' :
-                        'text-purple-600 focus:ring-purple-500'
+                    isSalesInvoice ? 'text-green-600 focus:ring-green-500' :
+                      'text-purple-600 focus:ring-purple-500'
                     }`}
                 />
                 <div>
                   <div className={`text-sm font-medium ${isQuotation ? 'text-blue-900' :
-                      isSalesInvoice ? 'text-green-900' :
-                        'text-purple-900'
+                    isSalesInvoice ? 'text-green-900' :
+                      'text-purple-900'
                     }`}>
                     {isQuotation ? 'Reduce inventory stock' : 'Reduce inventory stock'}
                   </div>
                   <div className={`text-xs ${isQuotation ? 'text-blue-700' :
-                      isSalesInvoice ? 'text-green-700' :
-                        'text-purple-700'
+                    isSalesInvoice ? 'text-green-700' :
+                      'text-purple-700'
                     }`}>
                     {isQuotation
                       ? 'Automatically reduce stock quantities when quotation is converted to invoice'
@@ -1904,9 +1960,9 @@ const InvoiceFormPage: React.FC = () => {
                 onClick={addInvoiceItem}
                 type="button"
                 className={`text-white px-4 py-2 rounded-lg transition-colors text-sm flex items-center space-x-2 ${isDeliveryChallan ? 'bg-orange-600 hover:bg-orange-700' :
-                    isQuotation ? 'bg-blue-600 hover:bg-blue-700' :
-                      isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
-                        'bg-purple-600 hover:bg-purple-700'
+                  isQuotation ? 'bg-blue-600 hover:bg-blue-700' :
+                    isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
+                      'bg-purple-600 hover:bg-purple-700'
                   }`}
               >
                 <Plus className="w-4 h-4" />
@@ -1919,7 +1975,7 @@ const InvoiceFormPage: React.FC = () => {
               {/* Table Header */}
               <div className="bg-gray-50 border-b border-gray-300">
                 <div className="grid text-xs font-semibold text-gray-700 uppercase tracking-wide"
-                  style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 60px' }}>
+                  style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 80px' }}>
                   <div className="p-3 border-r border-gray-300 text-center">S.No</div>
                   <div className="p-3 border-r border-gray-300">Product Code</div>
                   <div className="p-3 border-r border-gray-300">Product Name</div>
@@ -1947,7 +2003,7 @@ const InvoiceFormPage: React.FC = () => {
 
                   return (
                     <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${rowBg}`}
-                      style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 60px' }}>
+                      style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 80px' }}>
                       {/* S.No */}
                       <div className="p-2 border-r border-gray-200 text-center text-sm font-medium text-gray-600 flex items-center justify-center">
                         {index + 1}
@@ -2107,6 +2163,7 @@ const InvoiceFormPage: React.FC = () => {
                             type="text"
                             value={item.description || ''}
                             onChange={(e) => updateInvoiceItem(index, 'description', e.target.value)}
+                            onKeyDown={(e) => handleCellKeyDown(e, index, 'description')}
                             data-row={index}
                             data-field="description"
                             className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50"
@@ -2136,6 +2193,7 @@ const InvoiceFormPage: React.FC = () => {
                           type="text"
                           value={item.hsnNumber || ''}
                           onChange={(e) => updateInvoiceItem(index, 'hsnNumber', e.target.value)}
+                          onKeyDown={(e) => handleCellKeyDown(e, index, 'hsnNumber')}
                           data-row={index}
                           data-field="hsnNumber"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50"
@@ -2153,6 +2211,7 @@ const InvoiceFormPage: React.FC = () => {
                           step="0.01"
                           value={item.taxRate || 0}
                           onChange={(e) => updateInvoiceItem(index, 'taxRate', parseFloat(e.target.value) || 0)}
+                          onKeyDown={(e) => handleCellKeyDown(e, index, 'taxRate')}
                           data-row={index}
                           data-field="taxRate"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 text-right"
@@ -2168,13 +2227,13 @@ const InvoiceFormPage: React.FC = () => {
                           min="0"
                           step="1"
                           value={item.quantity}
-                                                    onChange={(e) => {
+                          onChange={(e) => {
                             let newQuantity = parseFloat(e.target.value) || 0;
-                          
+
                             if (item.product && productStockCache[item.product]) {
                               const stockInfo = productStockCache[item.product];
                               const available = stockInfo.available;
-                          
+
                               // Out of stock → quantity forced to 0
                               if (available === 0) {
                                 if (newQuantity > 0) {
@@ -2185,7 +2244,11 @@ const InvoiceFormPage: React.FC = () => {
                                   }
                                 }
                                 newQuantity = 0;
-                              } 
+                              } else if (newQuantity > stockInfo.available) {
+                                // Allow increasing up to available stock, but show warning if exceeding
+                                newQuantity = stockInfo.available;
+                                toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
+                            }
                               // In stock → prevent quantity = 0 (only for stock-reducing invoices)
                               else if (reduceStock && newQuantity === 0) {
                                 toast.error('Quantity cannot be zero for in-stock products.', { duration: 2000 });
@@ -2209,7 +2272,7 @@ const InvoiceFormPage: React.FC = () => {
                           placeholder="1.00"
                           title={
                             item.product && productStockCache[item.product]?.available === 0
-                              ? isDeliveryChallan 
+                              ? isDeliveryChallan
                                 ? "Product is out of stock - quantity locked at 0 for delivery challan"
                                 : "Product is out of stock - quantity locked at 0"
                               : "Tab/Enter adds new row | ↑↓ arrows: adjust quantity | Shift+Tab: back to product"
@@ -2240,6 +2303,7 @@ const InvoiceFormPage: React.FC = () => {
                             ...showUomDropdowns,
                             [index]: !showUomDropdowns[index]
                           })}
+                          onKeyDown={(e) => handleCellKeyDown(e, index, 'uom')}
                           data-row={index}
                           data-field="uom"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 cursor-pointer"
@@ -2271,6 +2335,7 @@ const InvoiceFormPage: React.FC = () => {
                           step="0.01"
                           value={item.unitPrice.toFixed(2)}
                           onChange={(e) => updateInvoiceItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          onKeyDown={(e) => handleCellKeyDown(e, index, 'unitPrice')}
                           data-row={index}
                           data-field="unitPrice"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 text-right"
@@ -2286,7 +2351,7 @@ const InvoiceFormPage: React.FC = () => {
                           step="1"
                           value={item.discount === 0 ? '' : item.discount}
                           onChange={(e) => updateInvoiceItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                          onKeyDown={(e) => handleCellKeyDown(e, index, 'discount')}
+                          // onKeyDown={(e) => handleCellKeyDown(e, index, 'discount')}
                           data-row={index}
                           data-field="discount"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 text-right"
@@ -2302,7 +2367,7 @@ const InvoiceFormPage: React.FC = () => {
                       </div>
 
                       <div className="p-1 relative">
-                        {(formData.items || []).length > 1 ? (
+                        {/* {(formData.items || []).length > 1 ? (
                           <button
                             onClick={() => removeInvoiceItem(index)}
                             className="w-full h-full p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center group"
@@ -2314,7 +2379,14 @@ const InvoiceFormPage: React.FC = () => {
                           <div className="w-full h-full p-2 text-gray-300 flex items-center justify-center" title="Cannot remove the last item">
                             <X className="w-4 h-4" />
                           </div>
-                        )}
+                        )} */}
+                        <button
+                          onClick={() => removeInvoiceItem(index)}
+                          className="w-full h-full p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center group"
+                          title="Remove this item"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   );
@@ -2348,6 +2420,23 @@ const InvoiceFormPage: React.FC = () => {
             <textarea
               value={formData.notes || ''}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Tab' && e.shiftKey) {
+                  e.preventDefault();
+                  const lastRowIndex = (formData.items || []).length - 1;
+                  setTimeout(() => {
+                    const lastQuantityInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
+                    if (lastQuantityInput) lastQuantityInput.focus();
+                  }, 50);
+                } else if (e.key === 'Tab' && !e.shiftKey) {
+                  e.preventDefault();
+                  setTimeout(() => {
+                    const createButton = document.querySelector('[data-action="create"]') as HTMLButtonElement;
+                    if (createButton) createButton.focus();
+                  }, 50);
+                }
+              }}
+
               rows={3}
               data-field="notes"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
@@ -2403,10 +2492,11 @@ const InvoiceFormPage: React.FC = () => {
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
+                data-action="create"
                 className={`px-6 py-2 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center space-x-2 ${isDeliveryChallan ? 'bg-orange-600 hover:bg-orange-700' :
-                    isQuotation ? 'bg-blue-600 hover:bg-blue-700' :
-                      isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
-                        'bg-purple-600 hover:bg-purple-700'
+                  isQuotation ? 'bg-blue-600 hover:bg-blue-700' :
+                    isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
+                      'bg-purple-600 hover:bg-purple-700'
                   }`}
               >
                 {submitting ? (
