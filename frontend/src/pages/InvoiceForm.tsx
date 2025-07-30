@@ -1971,27 +1971,27 @@ const InvoiceFormPage: React.FC = () => {
             </div>
 
             {/* Excel-style Table */}
-            <div className="border border-gray-300 rounded-lg bg-white shadow-sm">
-              {/* Table Header */}
-              <div className="bg-gray-50 border-b border-gray-300">
-                <div className="grid text-xs font-semibold text-gray-700 uppercase tracking-wide"
-                  style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 80px' }}>
-                  <div className="p-3 border-r border-gray-300 text-center">S.No</div>
-                  <div className="p-3 border-r border-gray-300">Product Code</div>
-                  <div className="p-3 border-r border-gray-300">Product Name</div>
-                  <div className="p-3 border-r border-gray-300">HSC/SAC</div>
-                  <div className="p-3 border-r border-gray-300">GST(%)</div>
-                  <div className="p-3 border-r border-gray-300">Quantity</div>
-                  <div className="p-3 border-r border-gray-300">UOM</div>
-                  <div className="p-3 border-r border-gray-300">Unit Price</div>
-                  <div className="p-3 border-r border-gray-300">Discount(%)</div>
-                  <div className="p-3 border-r border-gray-300">Total</div>
-                  <div className="p-3 text-center">Remove</div>
-                </div>
+            <div className="hidden lg:block border border-gray-300 rounded-lg bg-white shadow-sm overflow-x-auto">
+            {/* Table Header */}
+              <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
+                                <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                                    style={{ gridTemplateColumns: '60px 150px 1fr 90px 80px 100px 60px 120px 100px 80px 60px' }}>
+                                    <div className="p-3 border-r border-gray-300 text-center bg-gray-200">S.No</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Product Code</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Product Name</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSC/SAC</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">GST(%)</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">UOM</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Discount</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Total</div>
+                                    <div className="p-3 text-center bg-gray-200 font-medium"></div>
+                                </div>
               </div>
 
               {/* Table Body */}
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-gray-200 min-w-[1200px]">
                 {(formData.items || []).map((item, index) => {
                   const stockInfo = stockValidation[index];
                   let rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
@@ -2003,8 +2003,8 @@ const InvoiceFormPage: React.FC = () => {
 
                   return (
                     <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${rowBg}`}
-                      style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 80px' }}>
-                      {/* S.No */}
+                                            style={{ gridTemplateColumns: '60px 150px 1fr 90px 80px 100px 60px 120px 100px 80px 60px' }}>
+                                        {/* S.No */}
                       <div className="p-2 border-r border-gray-200 text-center text-sm font-medium text-gray-600 flex items-center justify-center">
                         {index + 1}
                       </div>
@@ -2063,7 +2063,7 @@ const InvoiceFormPage: React.FC = () => {
                           <div
                             className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-[400px] overflow-hidden"
                             data-dropdown={index}
-                            style={{ width: '500px', minWidth: '500px' }}
+                            style={{ width: '450px', minWidth: '450px' }}
                           >
                             <div className="p-2 border-b border-gray-200 bg-gray-50">
                               <div className="text-xs text-gray-600">
@@ -2366,36 +2366,23 @@ const InvoiceFormPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="p-1 relative">
-                        {/* {(formData.items || []).length > 1 ? (
-                          <button
-                            onClick={() => removeInvoiceItem(index)}
-                            className="w-full h-full p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center group"
-                            title="Remove this item"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        ) : (
-                          <div className="w-full h-full p-2 text-gray-300 flex items-center justify-center" title="Cannot remove the last item">
-                            <X className="w-4 h-4" />
-                          </div>
-                        )} */}
-                        <button
-                          onClick={() => removeInvoiceItem(index)}
-                          className="w-full h-full p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center group"
-                          title="Remove this item"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
+                      <div className="p-0 h-full">
+                                                <button
+                                                    onClick={() => removeInvoiceItem(index)}
+                                                    className="w-full h-full text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors flex items-center justify-center border-0 hover:bg-red-100 bg-transparent"
+                                                    title="Remove this item"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
                     </div>
                   );
                 })}
               </div>
 
               {/* Navigation Hints */}
-              <div className="bg-gray-50 border-t border-gray-200 p-3 text-center">
-                <div className="text-sm text-gray-600 mb-1">
+              <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1200px]">
+                                <div className="text-sm text-gray-600 mb-1 mt-16">
                   <strong>🚀 Excel-Like {getInvoiceTypeTitle()} Items:</strong> Search → Select → Set Quantity → Tab/Enter → Auto Next Row
                 </div>
                 <div className="text-xs text-gray-500 mb-1">
@@ -2405,7 +2392,7 @@ const InvoiceFormPage: React.FC = () => {
                   <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Set</kbd> Quantity →
                   <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Tab/Enter</kbd> Auto Add Row
                 </div>
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-gray-400 mb-5">
                   ⚡ <strong>Complete Excel-like {getInvoiceTypeTitle().toLowerCase()} form navigation!</strong>
                   {!isDeliveryChallan && ' • Stock validation enabled for accurate invoicing'}
                   {isDeliveryChallan && ' • Delivery tracking mode - no stock reduction'}

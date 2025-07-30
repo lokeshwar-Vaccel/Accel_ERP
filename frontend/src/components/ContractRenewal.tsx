@@ -28,9 +28,9 @@ interface RenewalData {
   newContractValue: number;
   newScheduledVisits: number;
   priceAdjustment?: {
-    type: 'percentage' | 'fixed';
-    value: number;
-    reason: string;
+    type?: 'percentage' | 'fixed';
+    value?: number;
+    reason?: string;
   };
   updatedTerms?: string;
   addProducts?: string[];
@@ -116,7 +116,9 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
   };
 
   const calculateNewValue = () => {
-    if (!amcData || !renewalData.priceAdjustment) return renewalData.newContractValue;
+    if (!amcData || !renewalData.priceAdjustment || !renewalData.priceAdjustment.type || renewalData.priceAdjustment.value === undefined) {
+      return renewalData.newContractValue;
+    }
 
     const baseValue = amcData.contractValue;
     if (renewalData.priceAdjustment.type === 'percentage') {
@@ -323,8 +325,9 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
                         onChange={(e) => setRenewalData({
                           ...renewalData,
                           priceAdjustment: {
-                            ...renewalData.priceAdjustment,
-                            type: e.target.value as 'percentage' | 'fixed'
+                            type: e.target.value as 'percentage' | 'fixed',
+                            value: renewalData.priceAdjustment?.value || 0,
+                            reason: renewalData.priceAdjustment?.reason || ''
                           }
                         })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -342,8 +345,9 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
                         onChange={(e) => setRenewalData({
                           ...renewalData,
                           priceAdjustment: {
-                            ...renewalData.priceAdjustment,
-                            value: Number(e.target.value)
+                            type: renewalData.priceAdjustment?.type || 'percentage',
+                            value: Number(e.target.value),
+                            reason: renewalData.priceAdjustment?.reason || ''
                           }
                         })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -358,7 +362,8 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
                         onChange={(e) => setRenewalData({
                           ...renewalData,
                           priceAdjustment: {
-                            ...renewalData.priceAdjustment,
+                            type: renewalData.priceAdjustment?.type || 'percentage',
+                            value: renewalData.priceAdjustment?.value || 0,
                             reason: e.target.value
                           }
                         })}
