@@ -621,6 +621,36 @@ const ServiceManagement: React.FC = () => {
       scheduledDate: ticket.scheduledDate ? ticket.scheduledDate.split('T')[0] : '',
       serviceCharge: ticket.serviceCharge || 0
     });
+    
+    // Initialize dropdown states for edit mode
+    setCustomerDropdown({
+      isOpen: false,
+      searchTerm: typeof ticket.customer === 'string' ? customers.find(c => c._id === ticket.customer)?.name || '' : ticket.customer?.name || '',
+      selectedIndex: 0,
+      filteredOptions: customers
+    });
+    
+    setProductDropdown({
+      isOpen: false,
+      searchTerm: typeof ticket.product === 'string' ? products.find(p => p._id === ticket.product)?.name || '' : ticket.product?.name || '',
+      selectedIndex: 0,
+      filteredOptions: products
+    });
+    
+    setPriorityDropdown({
+      isOpen: false,
+      searchTerm: formPriorityOptions.find(p => p.value === ticket.priority)?.label || '',
+      selectedIndex: 0,
+      filteredOptions: formPriorityOptions
+    });
+    
+    setAssigneeDropdown({
+      isOpen: false,
+      searchTerm: typeof ticket.assignedTo === 'string' ? users.find(u => u._id === ticket.assignedTo)?.fullName || '' : ticket.assignedTo?.fullName || '',
+      selectedIndex: 0,
+      filteredOptions: users
+    });
+    
     setFormErrors({});
     setShowEditModal(true);
   };
@@ -2331,78 +2361,273 @@ const ServiceManagement: React.FC = () => {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div>
+                {/* Enhanced Customer Dropdown */}
+                <div className="relative dropdown-container" ref={customerDropdownRef} id="customer-dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Customer *
                   </label>
-                  <select
-                    value={ticketFormData.customer}
-                    onChange={(e) => setTicketFormData({ ...ticketFormData, customer: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.customer ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                  >
-                    <option value="">Select Customer</option>
-                    {customers.map(customer => (
-                      <option key={customer._id} value={customer._id}>
-                        {customer.name}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={customerDropdown.searchTerm || (ticketFormData.customer ? customers.find(c => c._id === ticketFormData.customer)?.name || '' : '')}
+                      onChange={(e) => {
+                        setCustomerDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                        handleDropdownSearch('customer', e.target.value);
+                        // Clear error when user starts typing
+                        if (formErrors.customer) {
+                          setFormErrors(prev => ({ ...prev, customer: '' }));
+                        }
+                      }}
+                      onKeyDown={(e) => handleDropdownKeyDown('customer', e, customerDropdown.filteredOptions, (value) => handleDropdownSelect('customer', value))}
+                      onFocus={() => handleDropdownFocus('customer')}
+                      onBlur={() => {
+                        // Delay closing to allow for clicks on dropdown items
+                        setTimeout(() => {
+                          setCustomerDropdown(prev => ({ ...prev, isOpen: false }));
+                        }, 200);
+                      }}
+                      placeholder="Search customer..."
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.customer ? 'border-red-500' : 'border-gray-300'
+                        } ${customerDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                    />
+                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  </div>
+
+                  {customerDropdown.isOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                      {customerDropdown.filteredOptions.length > 0 ? (
+                        customerDropdown.filteredOptions.map((customer, index) => (
+                          <button
+                            key={customer._id}
+                            id={`customer-item-${index}`}
+                            type="button"
+                            onClick={() => handleDropdownSelect('customer', customer._id)}
+                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === customerDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                              }`}
+                          >
+                            <div className="font-medium">{customer.name}</div>
+                            {customer.email && (
+                              <div className="text-xs text-gray-500">{customer.email}</div>
+                            )}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">No customers found</div>
+                      )}
+                    </div>
+                  )}
                   {formErrors.customer && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.customer}</p>
                   )}
                 </div>
-                <div>
+
+                {/* Enhanced Product Dropdown - Spans 2 columns on large screens */}
+                <div className="relative dropdown-container lg:col-span-2" ref={productDropdownRef} id="product-dropdown-container" style={{ zIndex: 1000 }}>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Product
                   </label>
-                  <select
-                    value={ticketFormData.product}
-                    onChange={(e) => setTicketFormData({ ...ticketFormData, product: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select Product</option>
-                    {products.map(product => (
-                      <option key={product._id} value={product._id}>
-                        {product.name} ({product.category})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={productDropdown.searchTerm || (ticketFormData.product ? products.find(p => p._id === ticketFormData.product)?.name || '' : '')}
+                      onChange={(e) => {
+                        setProductDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                        handleDropdownSearch('product', e.target.value);
+                        // Clear error when user starts typing
+                        if (formErrors.product) {
+                          setFormErrors(prev => ({ ...prev, product: '' }));
+                        }
+                      }}
+                      onKeyDown={(e) => handleDropdownKeyDown('product', e, productDropdown.filteredOptions, (value) => handleDropdownSelect('product', value))}
+                      onFocus={() => handleDropdownFocus('product')}
+                      onBlur={() => {
+                        // Delay closing to allow for clicks on dropdown items
+                        setTimeout(() => {
+                          setProductDropdown(prev => ({ ...prev, isOpen: false }));
+                        }, 200);
+                      }}
+                      placeholder="Search product..."
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.product ? 'border-red-500' : 'border-gray-300'
+                        } ${productDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                    />
+                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  </div>
+
+                  {productDropdown.isOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[1001] max-h-60 overflow-y-auto min-w-full" style={{ minWidth: '100%', maxWidth: 'none' }}>
+                      {productDropdown.filteredOptions.length > 0 ? (
+                        productDropdown.filteredOptions.map((product, index) => {
+                          const isInStock = (product.stockQuantity || 0) > 0;
+                          const stockQuantity = product.stockQuantity || 0;
+                          
+                          return (
+                            <button
+                              key={product._id}
+                              id={`product-item-${index}`}
+                              type="button"
+                              onClick={() => !isInStock ? null : handleDropdownSelect('product', product._id)}
+                              disabled={!isInStock}
+                              className={`w-full px-3 py-2 text-left transition-colors ${
+                                !isInStock 
+                                  ? 'text-gray-400 cursor-not-allowed bg-gray-50' 
+                                  : index === productDropdown.selectedIndex 
+                                    ? 'bg-blue-100 text-blue-900 hover:bg-blue-50' 
+                                    : 'text-gray-700 hover:bg-blue-50'
+                              }`}
+                            >
+                              <div className="flex justify-between items-start gap-2">
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium truncate">{product.name}</div>
+                                  <div className="text-xs text-gray-500 truncate">{product.category}</div>
+                                  {product.brand && (
+                                    <div className="text-xs text-gray-400 truncate">Brand: {product.brand}</div>
+                                  )}
+                                </div>
+                                <div className="flex flex-col items-end space-y-1 flex-shrink-0">
+                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
+                                    isInStock 
+                                      ? 'bg-green-100 text-green-700 border border-green-200' 
+                                      : 'bg-red-100 text-red-700 border border-red-200'
+                                  }`}>
+                                    {isInStock ? `${stockQuantity} in stock` : 'Out of stock'}
+                                  </span>
+                                  {product.price && (
+                                    <span className="text-xs text-gray-600 font-medium whitespace-nowrap">
+                                      ₹{product.price}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">No products found</div>
+                      )}
+                    </div>
+                  )}
+                  {formErrors.product && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.product}</p>
+                  )}
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {/* Enhanced Priority Dropdown */}
+                <div className="relative dropdown-container" ref={priorityDropdownRef} id="priority-dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Priority *
                   </label>
-                  <select
-                    value={ticketFormData.priority}
-                    onChange={(e) => setTicketFormData({ ...ticketFormData, priority: e.target.value as TicketPriority })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={priorityDropdown.searchTerm || (ticketFormData.priority ? formPriorityOptions.find(p => p.value === ticketFormData.priority)?.label || '' : '')}
+                      onChange={(e) => {
+                        setPriorityDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                        handleDropdownSearch('priority', e.target.value);
+                        // Clear error when user starts typing
+                        if (formErrors.priority) {
+                          setFormErrors(prev => ({ ...prev, priority: '' }));
+                        }
+                      }}
+                      onKeyDown={(e) => handleDropdownKeyDown('priority', e, priorityDropdown.filteredOptions, (value) => handleDropdownSelect('priority', value))}
+                      onFocus={() => handleDropdownFocus('priority')}
+                      onBlur={() => {
+                        // Delay closing to allow for clicks on dropdown items
+                        setTimeout(() => {
+                          setPriorityDropdown(prev => ({ ...prev, isOpen: false }));
+                        }, 200);
+                      }}
+                      placeholder="Select priority..."
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.priority ? 'border-red-500' : 'border-gray-300'
+                        } ${priorityDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                    />
+                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  </div>
+
+                  {priorityDropdown.isOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                      {priorityDropdown.filteredOptions.length > 0 ? (
+                        priorityDropdown.filteredOptions.map((priority, index) => (
+                          <button
+                            key={priority.value}
+                            id={`priority-item-${index}`}
+                            type="button"
+                            onClick={() => handleDropdownSelect('priority', priority.value)}
+                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === priorityDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                              }`}
+                          >
+                            <div className="font-medium">{priority.label}</div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">No priorities found</div>
+                      )}
+                    </div>
+                  )}
+                  {formErrors.priority && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.priority}</p>
+                  )}
                 </div>
-                <div>
+
+                {/* Enhanced Assignee Dropdown */}
+                <div className="relative dropdown-container" ref={assigneeDropdownRef} id="assignee-dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Assign To
+                    Assign To *
                   </label>
-                  <select
-                    value={ticketFormData.assignedTo}
-                    onChange={(e) => setTicketFormData({ ...ticketFormData, assignedTo: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="">Select Technician</option>
-                    {users.map(user => (
-                      <option key={user._id} value={user._id}>
-                        {getUserName(user)}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={assigneeDropdown.searchTerm || (ticketFormData.assignedTo ? users.find(u => u._id === ticketFormData.assignedTo)?.fullName || '' : '')}
+                      onChange={(e) => {
+                        setAssigneeDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                        handleDropdownSearch('assignee', e.target.value);
+                        // Clear error when user starts typing
+                        if (formErrors.assignedTo) {
+                          setFormErrors(prev => ({ ...prev, assignedTo: '' }));
+                        }
+                      }}
+                      onKeyDown={(e) => handleDropdownKeyDown('assignee', e, assigneeDropdown.filteredOptions, (value) => handleDropdownSelect('assignee', value))}
+                      onFocus={() => handleDropdownFocus('assignee')}
+                      onBlur={() => {
+                        // Delay closing to allow for clicks on dropdown items
+                        setTimeout(() => {
+                          setAssigneeDropdown(prev => ({ ...prev, isOpen: false }));
+                        }, 200);
+                      }}
+                      placeholder="Search technician..."
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.assignedTo ? 'border-red-500' : 'border-gray-300'
+                        } ${assigneeDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                    />
+                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  </div>
+
+                  {assigneeDropdown.isOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                      {assigneeDropdown.filteredOptions.length > 0 ? (
+                        assigneeDropdown.filteredOptions.map((user, index) => (
+                          <button
+                            key={user._id}
+                            id={`assignee-item-${index}`}
+                            type="button"
+                            onClick={() => handleDropdownSelect('assignee', user._id)}
+                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === assigneeDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                              }`}
+                          >
+                            <div className="font-medium">{getUserName(user)}</div>
+                            {user.email && (
+                              <div className="text-xs text-gray-500">{user.email}</div>
+                            )}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">No technicians found</div>
+                      )}
+                    </div>
+                  )}
+                  {formErrors.assignedTo && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.assignedTo}</p>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">

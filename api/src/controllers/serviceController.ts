@@ -394,6 +394,18 @@ export const updateServiceTicket = async (
     }
     console.log("req.body==>",req.body);
 
+    // Check if priority is being updated and update SLA deadline accordingly
+    if (req.body.priority && req.body.priority !== ticket.priority) {
+      const hoursToAdd = req.body.priority === TicketPriority.CRITICAL ? 4 :
+                        req.body.priority === TicketPriority.HIGH ? 24 :
+                        req.body.priority === TicketPriority.MEDIUM ? 72 : 120;
+      
+      // Only update SLA deadline if the ticket is not already resolved or closed
+      if (ticket.status !== TicketStatus.RESOLVED && ticket.status !== TicketStatus.CLOSED) {
+        req.body.slaDeadline = new Date(Date.now() + hoursToAdd * 60 * 60 * 1000);
+      }
+    }
+
     const updatedTicket = await ServiceTicket.findByIdAndUpdate(
       req.params.id,
       req.body,
