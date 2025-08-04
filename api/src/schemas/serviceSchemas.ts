@@ -352,7 +352,7 @@ export const serviceTicketQuerySchema = Joi.object<ServiceTicketQueryInput>({
   search: Joi.string().allow(''),
   status: Joi.string().valid(...Object.values(TicketStatus)),
   priority: Joi.string().valid(...Object.values(TicketPriority)),
-  assignedTo: Joi.string().hex().length(24),
+  assignedTo: Joi.string().optional().allow(''),
   customer: Joi.string().hex().length(24),
   product: Joi.string().hex().length(24),
   serviceType: Joi.string(),

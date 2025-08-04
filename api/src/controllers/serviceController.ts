@@ -60,8 +60,11 @@ export const getServiceTickets = async (
       query.priority = priority;
     }
     
-    if (assignedTo) {
-      query.assignedTo = assignedTo;
+    if (assignedTo && assignedTo.trim() !== '') {
+      query.$or = [
+        { assignedTo: assignedTo },
+        { serviceRequestEngineer: assignedTo }
+      ];
     }
     
     if (customer) {
@@ -139,6 +142,14 @@ export const getServiceTickets = async (
         {
           $lookup: {
             from: 'users',
+            localField: 'serviceRequestEngineer',
+            foreignField: '_id',
+            as: 'serviceRequestEngineer'
+          }
+        },
+        {
+          $lookup: {
+            from: 'users',
             localField: 'createdBy',
             foreignField: '_id',
             as: 'createdBy'
@@ -149,6 +160,7 @@ export const getServiceTickets = async (
             customer: { $arrayElemAt: ['$customer', 0] },
             product: { $arrayElemAt: ['$product', 0] },
             assignedTo: { $arrayElemAt: ['$assignedTo', 0] },
+            serviceRequestEngineer: { $arrayElemAt: ['$serviceRequestEngineer', 0] },
             createdBy: { $arrayElemAt: ['$createdBy', 0] }
           }
         }
@@ -208,8 +220,15 @@ export const getServiceTickets = async (
         pipeline.push({ $match: { priority } });
       }
 
-      if (assignedTo) {
-        pipeline.push({ $match: { assignedTo: assignedTo } });
+      if (assignedTo && assignedTo.trim() !== '') {
+        pipeline.push({ 
+          $match: { 
+            $or: [
+              { assignedTo: assignedTo },
+              { serviceRequestEngineer: assignedTo }
+            ]
+          } 
+        });
       }
 
       if (customer) {
@@ -246,6 +265,7 @@ export const getServiceTickets = async (
         .populate('customer', 'name email phone customerType addresses')
         .populate('product', 'name category brand modelNumber')
         .populate('assignedTo', 'firstName lastName email')
+        .populate('serviceRequestEngineer', 'firstName lastName email')
         .populate('createdBy', 'firstName lastName email')
         .populate('partsUsed.product', 'name category price')
         .sort(sort as string)

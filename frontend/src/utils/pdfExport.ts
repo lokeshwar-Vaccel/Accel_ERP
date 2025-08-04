@@ -137,7 +137,7 @@ export const exportServiceTicketToPDF = async (ticket: ServiceTicketPDFData) => 
     ['Created Date', new Date(ticket.createdAt).toLocaleDateString()],
     ['Scheduled Date', ticket.scheduledDate ? new Date(ticket.scheduledDate).toLocaleDateString() : 'Not scheduled'],
     ['Service Engineer', ticket.assignedTo || 'Unassigned'],
-    ['Problem Description', ticket.description]
+    ['Problem Description', ticket.description],
   ];
   
   yPosition = createTable(['Field', 'Value'], ticketData, yPosition, [50, 120]);
