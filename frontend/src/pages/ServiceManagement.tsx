@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
+import * as XLSX from 'xlsx';
+import toast from 'react-hot-toast';
 import {
   Plus,
   Search,
@@ -19,7 +21,7 @@ import {
   Signature,
   MapPin,
   Phone,
-  Mail,
+
   Timer,
   TrendingUp,
   Activity,
@@ -43,7 +45,7 @@ import DigitalServiceReport from '../components/DigitalServiceReport';
 // Types matching backend structure
 type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'cancelled';
 type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
-type SLAStatus = 'on_track' | 'breached' | 'met' | 'no_sla';
+
 
 interface User {
   _id: string;
@@ -94,6 +96,25 @@ interface PartUsed {
 
 interface ServiceTicket {
   _id: string;
+  // Standardized fields
+  serviceRequestNumber: string;
+  serviceRequestType: string;
+  requestSubmissionDate: string;
+  serviceRequiredDate: string;
+  engineSerialNumber?: string;
+  customerName: string;
+  magiecSystemCode?: string;
+  magiecCode?: string;
+  serviceRequestEngineer: string | User;
+  serviceRequestStatus: TicketStatus;
+  complaintDescription: string;
+  businessVertical?: string;
+  invoiceRaised: boolean;
+  siteIdentifier?: string;
+  stateName?: string;
+  siteLocation?: string;
+
+  // Legacy fields for backward compatibility
   ticketNumber: string;
   customer: string | Customer;
   product?: string | Product;
@@ -107,20 +128,35 @@ interface ServiceTicket {
   partsUsed: PartUsed[];
   serviceReport?: string;
   customerSignature?: string;
-  slaDeadline?: string;
+
   serviceCharge?: number;
   createdBy: string | User;
   createdAt: string;
   updatedAt: string;
   // Virtual fields
   turnaroundTime?: number;
-  slaStatus?: SLAStatus;
+
 }
 
 interface TicketFormData {
+  // Standardized fields
+  serviceRequestType: string;
+  serviceRequiredDate: string;
+  engineSerialNumber: string;
+  customerName: string;
+  magiecSystemCode: string;
+  magiecCode: string;
+  serviceRequestEngineer: string;
+  complaintDescription: string;
+  businessVertical: string;
+  invoiceRaised: boolean;
+  siteIdentifier: string;
+  stateName: string;
+  siteLocation: string;
+
+      // Legacy fields for backward compatibility
   customer: string;
   product?: string;
-  serialNumber: string;
   description: string;
   priority: TicketPriority;
   assignedTo: string;
@@ -152,7 +188,6 @@ const ServiceManagement: React.FC = () => {
   const [tickets, setTickets] = useState<ServiceTicket[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  console.log("products=>",products);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -162,25 +197,56 @@ const ServiceManagement: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('all');
   const [priorityFilter, setPriorityFilter] = useState<TicketPriority | 'all'>('all');
   const [assigneeFilter, setAssigneeFilter] = useState('all');
-  const [slaFilter, setSlaFilter] = useState<SLAStatus | 'all'>('all');
+
 
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showExcelUploadModal, setShowExcelUploadModal] = useState(false);
 
   const [showDigitalReportModal, setShowDigitalReportModal] = useState(false);
   const [showPartsModal, setShowPartsModal] = useState(false);
+
+  // Excel upload states
+  const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [uploadingExcel, setUploadingExcel] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadResults, setUploadResults] = useState<{
+    importedCount: number;
+    errorCount: number;
+    errors: Array<{ row: number; error: string; data: any }>;
+  } | null>(null);
+  const [previewData, setPreviewData] = useState<any[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
 
   // Selected data
   const [selectedTicket, setSelectedTicket] = useState<ServiceTicket | null>(null);
   const [editingTicket, setEditingTicket] = useState<ServiceTicket | null>(null);
 
+  // Current user for ticket creation
+  const [currentUserId, setCurrentUserId] = useState<string>('');
+
   // Form data
   const [ticketFormData, setTicketFormData] = useState<TicketFormData>({
+    // Standardized fields
+    serviceRequestType: 'repair',
+    serviceRequiredDate: new Date().toISOString().slice(0, 16),
+    engineSerialNumber: '',
+    customerName: '',
+    magiecSystemCode: '',
+    magiecCode: '',
+    serviceRequestEngineer: '',
+    complaintDescription: '',
+    businessVertical: '',
+    invoiceRaised: false,
+    siteIdentifier: '',
+    stateName: '',
+    siteLocation: '',
+
+    // Legacy fields for backward compatibility
     customer: '',
     product: '',
-    serialNumber: '',
     description: '',
     priority: 'medium',
     assignedTo: '',
@@ -197,7 +263,7 @@ const ServiceManagement: React.FC = () => {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
-  const [showSlaDropdown, setShowSlaDropdown] = useState(false);
+
 
   // Enhanced dropdown states for cascading dropdowns
   const [customerDropdown, setCustomerDropdown] = useState<DropdownState>({
@@ -247,6 +313,17 @@ const ServiceManagement: React.FC = () => {
 
   useEffect(() => {
     fetchAllData();
+    // Get current user ID from localStorage or auth context
+    const user = localStorage.getItem('user');
+    if (user) {
+      try {
+        const userData = JSON.parse(user);
+        setCurrentUserId(userData._id || 'system');
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        setCurrentUserId('system');
+      }
+    }
   }, []);
 
   // Refetch tickets when any filter or pagination changes (like CustomerManagement)
@@ -254,7 +331,7 @@ const ServiceManagement: React.FC = () => {
     if (!loading) {
       fetchTickets();
     }
-  }, [currentPage, limit, searchTerm, statusFilter, priorityFilter, assigneeFilter, slaFilter]);
+  }, [currentPage, limit, searchTerm, statusFilter, priorityFilter, assigneeFilter]);
 
   // Check for URL parameters to auto-open create modal
   useEffect(() => {
@@ -387,7 +464,7 @@ const ServiceManagement: React.FC = () => {
 
   const fetchTickets = async () => {
     // Reset to page 1 when filters change (but not when page changes)
-    const hasFilterChanged = searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' || assigneeFilter !== 'all' || slaFilter !== 'all';
+    const hasFilterChanged = searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' || assigneeFilter !== 'all';
     if (hasFilterChanged && currentPage !== 1) {
       setCurrentPage(1);
       return; // Don't fetch yet, let the page change trigger the fetch
@@ -419,9 +496,7 @@ const ServiceManagement: React.FC = () => {
         params.assignedTo = assigneeFilter;
       }
 
-      if (slaFilter !== 'all') {
-        params.slaStatus = slaFilter;
-      }
+
 
       const response = await apiClient.services.getAll(params);
 
@@ -578,7 +653,11 @@ const ServiceManagement: React.FC = () => {
   // Helper functions
   const getUserName = (user: string | User | undefined): string => {
     if (!user) return '';
-    if (typeof user === 'string') return user;
+    if (typeof user === 'string') {
+      // If it's a string (user ID), try to find the user in the users array
+      const foundUser = users.find(u => u._id === user);
+      return foundUser ? (foundUser.fullName || `${foundUser.firstName} ${foundUser.lastName}` || foundUser.email) : user;
+    }
     return user.fullName || `${user.firstName} ${user.lastName}` || user.email || '';
   };
 
@@ -596,9 +675,24 @@ const ServiceManagement: React.FC = () => {
 
   const handleCreateTicket = () => {
     setTicketFormData({
+      // Standardized fields
+      serviceRequestType: 'repair',
+      serviceRequiredDate: new Date().toISOString().split('T')[0],
+      engineSerialNumber: '',
+      customerName: '',
+      magiecSystemCode: '',
+      magiecCode: '',
+      serviceRequestEngineer: '',
+      complaintDescription: '',
+      businessVertical: '',
+      invoiceRaised: false,
+      siteIdentifier: '',
+      stateName: '',
+      siteLocation: '',
+
+      // Legacy fields for backward compatibility
       customer: '',
       product: '',
-      serialNumber: '',
       description: '',
       priority: 'medium',
       assignedTo: '',
@@ -612,9 +706,24 @@ const ServiceManagement: React.FC = () => {
   const handleEditTicket = (ticket: ServiceTicket) => {
     setEditingTicket(ticket);
     setTicketFormData({
+      // Standardized fields
+      serviceRequestType: ticket.serviceRequestType || 'repair',
+      serviceRequiredDate: ticket.serviceRequiredDate ? ticket.serviceRequiredDate.slice(0, 16) : new Date().toISOString().slice(0, 16),
+      engineSerialNumber: ticket.engineSerialNumber || '',
+      customerName: ticket.customerName || '',
+      magiecSystemCode: ticket.magiecSystemCode || '',
+      magiecCode: ticket.magiecCode || '',
+      serviceRequestEngineer: typeof ticket.serviceRequestEngineer === 'string' ? ticket.serviceRequestEngineer : ticket.serviceRequestEngineer?._id || '',
+      complaintDescription: ticket.complaintDescription || '',
+      businessVertical: ticket.businessVertical || '',
+      invoiceRaised: ticket.invoiceRaised || false,
+      siteIdentifier: ticket.siteIdentifier || '',
+      stateName: ticket.stateName || '',
+      siteLocation: ticket.siteLocation || '',
+
+      // Legacy fields for backward compatibility
       customer: typeof ticket.customer === 'string' ? ticket.customer : ticket.customer._id,
       product: typeof ticket.product === 'string' ? ticket.product || '' : ticket.product?._id || '',
-      serialNumber: ticket.serialNumber || '',
       description: ticket.description,
       priority: ticket.priority,
       assignedTo: typeof ticket.assignedTo === 'string' ? ticket.assignedTo || '' : ticket.assignedTo?._id || '',
@@ -699,13 +808,29 @@ const ServiceManagement: React.FC = () => {
 
       // Format payload according to backend schema
       const payload: any = {
+        // Legacy fields for backward compatibility
         customer: ticketFormData.customer,
         product: ticketFormData.product || undefined,
-        serialNumber: ticketFormData.serialNumber || undefined,
         description: ticketFormData.description,
         priority: ticketFormData.priority,
         serviceCharge: ticketFormData.serviceCharge || 0,
-        scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined
+        scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined,
+        
+        // Standardized fields
+        serviceRequestType: ticketFormData.serviceRequestType,
+        requestSubmissionDate: new Date().toISOString(), // Set current date as submission date
+        serviceRequiredDate: ticketFormData.serviceRequiredDate ? new Date(ticketFormData.serviceRequiredDate).toISOString() : undefined,
+        engineSerialNumber: ticketFormData.engineSerialNumber || undefined,
+        customerName: customers.find(c => c._id === ticketFormData.customer)?.name || '',
+        magiecSystemCode: ticketFormData.magiecSystemCode || undefined,
+        magiecCode: ticketFormData.magiecCode || undefined,
+        serviceRequestEngineer: ticketFormData.assignedTo || undefined,
+        complaintDescription: ticketFormData.description,
+        businessVertical: ticketFormData.businessVertical || undefined,
+        invoiceRaised: ticketFormData.invoiceRaised,
+        siteIdentifier: ticketFormData.siteIdentifier || undefined,
+        stateName: ticketFormData.stateName || undefined,
+        siteLocation: ticketFormData.siteLocation || undefined
       };
 
       // Only include assignedTo if it's not empty
@@ -746,13 +871,29 @@ const ServiceManagement: React.FC = () => {
 
       // Format payload according to backend schema
       const payload: any = {
+        // Legacy fields for backward compatibility
         customer: ticketFormData.customer,
         product: ticketFormData.product || undefined,
-        serialNumber: ticketFormData.serialNumber || undefined,
         description: ticketFormData.description,
         priority: ticketFormData.priority,
         serviceCharge: ticketFormData.serviceCharge || 0,
-        scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined
+        scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined,
+        
+        // Standardized fields
+        serviceRequestType: ticketFormData.serviceRequestType,
+        requestSubmissionDate: editingTicket?.requestSubmissionDate || new Date().toISOString(), // Preserve original submission date
+        serviceRequiredDate: ticketFormData.serviceRequiredDate ? new Date(ticketFormData.serviceRequiredDate).toISOString() : undefined,
+        engineSerialNumber: ticketFormData.engineSerialNumber || undefined,
+        customerName: customers.find(c => c._id === ticketFormData.customer)?.name || '',
+        magiecSystemCode: ticketFormData.magiecSystemCode || undefined,
+        magiecCode: ticketFormData.magiecCode || undefined,
+        serviceRequestEngineer: ticketFormData.assignedTo || undefined,
+        complaintDescription: ticketFormData.description,
+        businessVertical: ticketFormData.businessVertical || undefined,
+        invoiceRaised: ticketFormData.invoiceRaised,
+        siteIdentifier: ticketFormData.siteIdentifier || undefined,
+        stateName: ticketFormData.stateName || undefined,
+        siteLocation: ticketFormData.siteLocation || undefined
       };
 
       // Only include assignedTo if it's not empty
@@ -786,9 +927,24 @@ const ServiceManagement: React.FC = () => {
 
   const resetTicketForm = () => {
     setTicketFormData({
+      // Standardized fields
+      serviceRequestType: 'repair',
+      serviceRequiredDate: new Date().toISOString().slice(0, 16),
+      engineSerialNumber: '',
+      customerName: '',
+      magiecSystemCode: '',
+      magiecCode: '',
+      serviceRequestEngineer: '',
+      complaintDescription: '',
+      businessVertical: '',
+      invoiceRaised: false,
+      siteIdentifier: '',
+      stateName: '',
+      siteLocation: '',
+
+      // Legacy fields for backward compatibility
       customer: '',
       product: '',
-      serialNumber: '',
       description: '',
       priority: 'medium',
       assignedTo: '',
@@ -838,20 +994,7 @@ const ServiceManagement: React.FC = () => {
     }
   };
 
-  const getSLAColor = (slaStatus: SLAStatus | undefined) => {
-    switch (slaStatus) {
-      case 'on_track':
-        return 'bg-green-100 text-green-800';
-      case 'breached':
-        return 'bg-red-100 text-red-800';
-      case 'met':
-        return 'bg-blue-100 text-blue-800';
-      case 'no_sla':
-        return 'bg-gray-100 text-gray-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-IN');
@@ -896,10 +1039,10 @@ const ServiceManagement: React.FC = () => {
       color: 'yellow'
     },
     {
-      title: 'SLA Breached',
-      value: tickets.filter(t => t.slaStatus === 'breached').length.toString(),
-      icon: <Timer className="w-6 h-6" />,
-      color: 'red'
+      title: 'Resolved Tickets',
+      value: tickets.filter(t => t.status === 'resolved').length.toString(),
+      icon: <CheckCircle className="w-6 h-6" />,
+      color: 'green'
     }
   ];
 
@@ -922,13 +1065,7 @@ const ServiceManagement: React.FC = () => {
     { value: 'low', label: 'Low' }
   ];
 
-  // SLA options with labels
-  const slaOptions = [
-    { value: 'all', label: 'All SLA' },
-    { value: 'on_track', label: 'On Track' },
-    { value: 'breached', label: 'Breached' },
-    { value: 'met', label: 'Met' }
-  ];
+
 
   const getStatusLabel = (value: string) => {
     const option = statusOptions.find(opt => opt.value === value);
@@ -940,10 +1077,7 @@ const ServiceManagement: React.FC = () => {
     return option ? option.label : 'All Priority';
   };
 
-  const getSlaLabel = (value: string) => {
-    const option = slaOptions.find(opt => opt.value === value);
-    return option ? option.label : 'All SLA';
-  };
+
 
   const getAssigneeLabel = (value: string) => {
     if (value === 'all') return 'All Assignees';
@@ -956,6 +1090,8 @@ const ServiceManagement: React.FC = () => {
     setCurrentPage(page);
   };
 
+
+
   const handleStatusUpdate = async (ticketId: string, newStatus: TicketStatus) => {
     try {
       console.log('Updating ticket status:', { ticketId, newStatus });
@@ -966,69 +1102,10 @@ const ServiceManagement: React.FC = () => {
         throw new Error('Ticket not found');
       }
 
-      // If status is being changed to 'resolved' and ticket has a product, show confirmation
-      if (newStatus === 'resolved' && ticket.product) {
-        const productName = typeof ticket.product === 'string' 
-          ? products.find(p => p._id === ticket.product)?.name || 'Unknown Product'
-          : ticket.product.name;
-        
-        const confirmMessage = `This ticket has a product (${productName}) associated with it. Resolving this ticket will decrease the inventory by 1 unit. Do you want to continue?`;
-        
-        if (!confirm(confirmMessage)) {
-          return; // User cancelled the operation
-        }
-      }
-
-      // Update the ticket status first
+      // Update the ticket status
       const response = await apiClient.services.updateStatus(ticketId, newStatus);
 
       if (response.success) {
-        // If status is being changed to 'resolved' and ticket has a product, decrease inventory
-        console.log("response:", response);
-        if (newStatus === 'resolved' && ticket.product) {
-          try {
-            const productId = typeof ticket.product === 'string' ? ticket.product : ticket.product._id;
-            
-            // First, get the stock information for this product
-            // We need to find the stock record for this product
-            const stockResponse = await apiClient.stock.getStock({ product: productId });
-            
-            if (stockResponse.success && stockResponse.data.stockLevels.length > 0) {
-              // Use the first stock record found for this product
-              const stockRecord = stockResponse.data.stockLevels[0];
-              
-              // Decrease inventory by 1 for the product
-              const inventoryAdjustment = {
-                stockId: stockRecord._id,
-                product: productId,
-                location: stockRecord.location._id,
-                adjustmentType: 'subtract',
-                quantity: 1,
-                reason: `Service ticket ${ticket.ticketNumber} resolved`,
-                notes: `Inventory decreased due to service ticket resolution`
-              };
-
-              console.log('Adjusting inventory for resolved ticket:', inventoryAdjustment);
-              const inventoryResponse = await apiClient.stock.adjustStock(inventoryAdjustment);
-
-              if (inventoryResponse.success) {
-                console.log('Inventory adjusted successfully');
-                
-                // Refresh products data to reflect updated stock levels
-                await fetchProducts();
-              } else {
-                console.warn('Failed to adjust inventory, but ticket status was updated');
-              }
-            } else {
-              console.warn('No stock record found for product, but ticket status was updated');
-            }
-          } catch (inventoryError) {
-            console.error('Error adjusting inventory:', inventoryError);
-            // Don't fail the entire operation if inventory adjustment fails
-            // The ticket status was already updated successfully
-          }
-        }
-
         // Update the ticket in the local state
         setTickets(tickets.map(ticket =>
           ticket._id === ticketId
@@ -1040,18 +1117,13 @@ const ServiceManagement: React.FC = () => {
         if (selectedTicket && selectedTicket._id === ticketId) {
           setSelectedTicket({ ...selectedTicket, status: newStatus });
         }
-
-        // Show success message
-        const message = newStatus === 'resolved' && ticket.product 
-          ? 'Ticket status updated successfully! Inventory has been decreased for the product.'
-          : 'Ticket status updated successfully!';
         
         console.log('Status updated successfully');
-        alert(message);
+        toast.success('Ticket status updated successfully!');
       }
     } catch (error) {
       console.error('Error updating ticket status:', error);
-      alert('Failed to update ticket status. Please try again.');
+      toast.error('Failed to update ticket status. Please try again.');
     }
   };
 
@@ -1097,8 +1169,6 @@ const ServiceManagement: React.FC = () => {
           quantity: part.quantity,
           serialNumbers: part.serialNumbers,
         })),
-        slaDeadline: ticket.slaDeadline,
-        slaStatus: ticket.slaStatus,
       };
 
       await exportServiceTicketToPDF(pdfData);
@@ -1154,8 +1224,6 @@ const ServiceManagement: React.FC = () => {
           quantity: part.quantity,
           serialNumbers: part.serialNumbers,
         })),
-        slaDeadline: ticket.slaDeadline,
-        slaStatus: ticket.slaStatus,
       }));
 
       // Export all tickets in a single PDF
@@ -1166,6 +1234,471 @@ const ServiceManagement: React.FC = () => {
       alert('Failed to export PDF. Please try again.');
     }
   };
+
+  // Excel upload functions
+  const handleExcelUpload = () => {
+    setShowExcelUploadModal(true);
+    setExcelFile(null);
+    setUploadResults(null);
+  };
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        file.type === 'application/vnd.ms-excel' ||
+        file.name.endsWith('.xlsx') ||
+        file.name.endsWith('.xls')) {
+        setExcelFile(file);
+        setShowPreview(false);
+        setPreviewData([]);
+        setUploadResults(null);
+
+        // Read and preview the file
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, { type: 'array' });
+
+            // Get the first sheet
+            const sheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[sheetName];
+
+            // Convert to JSON with header row
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+            if (jsonData.length < 2) {
+              alert('Excel file must have at least a header row and one data row');
+              return;
+            }
+
+            // Get headers from first row
+            const headers = jsonData[0] as string[];
+
+            // Convert data rows to objects
+            const processedData = jsonData.slice(1).map((row: any) => {
+              const rowData: any = {};
+              headers.forEach((header, index) => {
+                if (header && row[index] !== undefined) {
+                  rowData[header] = row[index];
+                }
+              });
+              return rowData;
+            }).filter(row => Object.keys(row).length > 0); // Remove empty rows
+
+            if (processedData.length === 0) {
+              alert('No valid data found in Excel file');
+              return;
+            }
+
+            setPreviewData(processedData);
+            setShowPreview(true);
+
+          } catch (error) {
+            console.error('Error reading Excel file:', error);
+            alert('Error reading Excel file. Please ensure it\'s a valid Excel file.');
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        alert('Please select a valid Excel file (.xlsx or .xls)');
+      }
+    }
+  };
+
+  const handleExcelImport = async () => {
+    if (!excelFile || previewData.length === 0) {
+      alert('Please select a valid Excel file with data');
+      return;
+    }
+
+    try {
+      setUploadingExcel(true);
+      setUploadProgress(0);
+
+      // Process the preview data for import
+      const processedData = previewData.map((row, index) => {
+        // Helper function to find field value with multiple possible header names
+        const getFieldValue = (possibleHeaders: string[], defaultValue: any = '') => {
+          for (const header of possibleHeaders) {
+            if (row[header] !== undefined && row[header] !== null && row[header] !== '') {
+              return row[header];
+            }
+          }
+          return defaultValue;
+        };
+
+        // Debug helper to check what headers are available for a specific field
+        const debugFieldHeaders = (fieldName: string, possibleHeaders: string[]) => {
+          console.log(`Debugging ${fieldName} field:`);
+          console.log('  Looking for headers:', possibleHeaders);
+          console.log('  Available headers:', Object.keys(row));
+          for (const header of possibleHeaders) {
+            console.log(`  Checking header "${header}":`, row[header]);
+          }
+        };
+
+        // Helper function to convert Excel date to date only (for requestSubmissionDate)
+        const convertExcelDateOnly = (dateValue: any) => {
+          if (!dateValue) return new Date().toISOString().split('T')[0] + 'T00:00:00.000Z';
+
+          console.log('Converting Excel date (date only):', dateValue, 'Type:', typeof dateValue);
+
+          // If it's already a string in ISO format, extract date only
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateValue)) {
+            console.log('ISO format, extracting date only');
+            return dateValue.split('T')[0] + 'T00:00:00.000Z';
+          }
+
+          // If it's a string in YYYY-MM-DD format, add time
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+            console.log('YYYY-MM-DD format, adding time');
+            return dateValue + 'T00:00:00.000Z';
+          }
+
+          // Handle Excel date numbers (Excel stores dates as numbers)
+          if (typeof dateValue === 'number') {
+            console.log('Excel date number detected, converting to date only...');
+            // Excel dates are days since 1900-01-01
+            const excelEpoch = new Date(1900, 0, 1);
+            const date = new Date(excelEpoch.getTime() + (dateValue - 2) * 24 * 60 * 60 * 1000);
+            return date.toISOString().split('T')[0] + 'T00:00:00.000Z';
+          }
+
+          // If it's a Date object or other date string, convert it
+          try {
+            const date = new Date(dateValue);
+            if (!isNaN(date.getTime())) {
+              console.log('Valid date object, converting to date only');
+              return date.toISOString().split('T')[0] + 'T00:00:00.000Z';
+            }
+          } catch (error) {
+            console.warn('Invalid date value:', dateValue, 'Error:', error);
+          }
+
+          console.log('Using current date as fallback (date only)');
+          return new Date().toISOString().split('T')[0] + 'T00:00:00.000Z';
+        };
+
+        // Helper function to convert Excel date to proper format with time (for serviceRequiredDate)
+        const convertExcelDateTime = (dateValue: any) => {
+          if (!dateValue) return new Date().toISOString();
+
+          console.log('Converting Excel date value (with time):', dateValue, 'Type:', typeof dateValue);
+
+          // If it's already a string in ISO format, return as is
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateValue)) {
+            console.log('Already ISO format, returning as is');
+            return dateValue;
+          }
+
+          // If it's a string in YYYY-MM-DD format, add time
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+            console.log('YYYY-MM-DD format, adding time');
+            return dateValue + 'T00:00:00.000Z';
+          }
+
+          // Handle Excel date numbers (Excel stores dates as numbers)
+          if (typeof dateValue === 'number') {
+            console.log('Excel date number detected, converting...');
+            // Excel dates are days since 1900-01-01
+            const excelEpoch = new Date(1900, 0, 1);
+            const date = new Date(excelEpoch.getTime() + (dateValue - 2) * 24 * 60 * 60 * 1000);
+            return date.toISOString();
+          }
+
+          // If it's a Date object or other date string, convert it
+          try {
+            const date = new Date(dateValue);
+            if (!isNaN(date.getTime())) {
+              console.log('Valid date object, converting to ISO');
+              return date.toISOString();
+            }
+          } catch (error) {
+            console.warn('Invalid date value:', dateValue, 'Error:', error);
+          }
+
+          console.log('Using current date as fallback');
+          return new Date().toISOString();
+        };
+
+        // Map the Excel headers to our standardized fields with flexible header matching
+        const mappedData = {
+          serviceRequestNumber: getFieldValue(['Service Request Number', 'SR Number', 'Service Request Number'], ''),
+          serviceRequestType: getFieldValue(['Service Request Type', 'SR Type', 'Service Type'], 'repair'),
+          requestSubmissionDate: convertExcelDateOnly(getFieldValue(['Request Submission Date', 'Requested Date', 'Submission Date', 'Created Date', 'Request Date', 'Date Requested', 'Request Date', 'Submission Date', 'Created Date', 'Date Created'])),
+          serviceRequiredDate: convertExcelDateTime(getFieldValue(['Service Required Date', 'Service Required On Date', 'Required Date'])),
+          engineSerialNumber: getFieldValue(['Engine Serial Number', 'Engine Sr No', 'Serial Number'], ''),
+          customerName: getFieldValue(['Customer Name', 'Customer'], ''),
+          magiecSystemCode: getFieldValue(['MAGIEC (System Code or Identifier)', 'MAGIEC', 'System Code'], ''),
+          magiecCode: getFieldValue(['MAGIEC Code', 'MAGIEC Code'], ''),
+          serviceRequestEngineer: getFieldValue(['Service Request Engineer', 'SR Engineer', 'Engineer', 'Technician', 'Field Operator'], ''),
+          complaintDescription: getFieldValue(['Complaint Description', 'Complaint', 'Description', 'Issue'], ''),
+          businessVertical: getFieldValue(['Business Vertical', 'Vertical', 'Industry'], ''),
+          invoiceRaised: getFieldValue(['Invoice Raised (Yes/No)', 'Invoice Raised', 'Invoice'], 'No') === 'Yes',
+          siteIdentifier: getFieldValue(['Site Identifier', 'Site ID', 'Site'], ''),
+          stateName: getFieldValue(['State Name', 'State'], ''),
+          siteLocation: getFieldValue(['SiteLocation', 'Location', 'Site', 'Site Location', 'Location Address', 'Address'], ''),
+          // Legacy fields
+          description: getFieldValue(['Complaint Description', 'Complaint', 'Description', 'Issue'], ''),
+          priority: 'medium',
+          status: (() => {
+            const statusHeaders = ['Service Request Status', 'SR Status', 'Status', 'Ticket Status', 'State', 'Current Status', 'Status'];
+            const excelStatusValue = getFieldValue(statusHeaders, 'open');
+
+            // Map Excel status to application status
+            let mappedStatus = 'open';
+            if (excelStatusValue) {
+              const statusMapping: { [key: string]: string } = {
+                'new': 'open',
+                'New': 'open',
+                'NEW': 'open',
+                'resolved': 'resolved',
+                'Resolved': 'resolved',
+                'RESOLVED': 'resolved',
+                'in progress': 'in_progress',
+                'In Progress': 'in_progress',
+                'IN PROGRESS': 'in_progress',
+                'closed': 'closed',
+                'Closed': 'closed',
+                'CLOSED': 'closed',
+                'cancelled': 'cancelled',
+                'Cancelled': 'cancelled',
+                'CANCELLED': 'cancelled'
+              };
+              mappedStatus = statusMapping[excelStatusValue] || 'open';
+            }
+
+            return mappedStatus;
+          })(),
+          serviceCharge: 0,
+          // Ensure dates are in proper format
+          scheduledDate: convertExcelDateTime(getFieldValue(['Service Required Date', 'Service Required On Date', 'Required Date']))
+        };
+
+        return mappedData;
+      });
+
+      console.log('Processed data:', processedData);
+      setUploadProgress(20);
+
+      // Validate field operators (service engineers) against database
+      const errors: Array<{ row: number; error: string; data: any }> = [];
+      const validData: any[] = [];
+
+      for (let i = 0; i < processedData.length; i++) {
+        const row = processedData[i];
+        const rowNumber = i + 2; // Excel row number (1-based + header row)
+
+        // Check if service engineer exists in our database
+        const engineerName = row.serviceRequestEngineer;
+        if (!engineerName) {
+          errors.push({
+            row: rowNumber,
+            error: 'Service Request Engineer is required. Please check if your Excel file has a column with one of these headers: "Service Request Engineer", "SR Engineer", "Engineer", "Technician", "Field Operator"',
+            data: row
+          });
+          continue;
+        }
+
+        // Find engineer in our users list (all users are field operators)
+        const engineer = users.find(user =>
+          (user.firstName + ' ' + user.lastName).toLowerCase().includes(engineerName.toLowerCase()) ||
+          user.email.toLowerCase().includes(engineerName.toLowerCase()) ||
+          user.fullName?.toLowerCase().includes(engineerName.toLowerCase())
+        );
+
+        if (!engineer) {
+          errors.push({
+            row: rowNumber,
+            error: `Field operator "${engineerName}" not found in the application`,
+            data: row
+          });
+          continue;
+        }
+
+        // Check if customer exists or create validation
+        const customerName = row.customerName;
+        if (!customerName) {
+          errors.push({
+            row: rowNumber,
+            error: 'Customer Name is required',
+            data: row
+          });
+          continue;
+        }
+
+        // Find customer in our customers list
+        const customer = customers.find(cust =>
+          cust.name.toLowerCase().includes(customerName.toLowerCase())
+        );
+
+        if (!customer) {
+          errors.push({
+            row: rowNumber,
+            error: `Customer "${customerName}" not found in the application`,
+            data: row
+          });
+          continue;
+        }
+
+        // If all validations pass, add to valid data
+        validData.push({
+          ...row,
+          serviceRequestEngineer: engineer._id,
+          customer: customer._id
+        });
+      }
+
+      setUploadProgress(50);
+
+      // Create tickets using bulk import
+      let successCount = 0;
+      const creationErrors: Array<{ row: number; error: string; data: any }> = [];
+
+      // Create tickets using bulk import
+
+      try {
+        const response = await apiClient.services.bulkImport(validData);
+
+        if (response.success) {
+          successCount = response.data.importedCount || validData.length;
+          if (response.data.errors && response.data.errors.length > 0) {
+            creationErrors.push(...response.data.errors);
+          }
+        } else {
+          creationErrors.push({
+            row: 0,
+            error: 'Bulk import failed',
+            data: validData
+          });
+        }
+      } catch (error: any) {
+        creationErrors.push({
+          row: 0,
+          error: error.message || 'Bulk import failed',
+          data: validData
+        });
+      }
+
+      setUploadProgress(100);
+
+      // Combine validation errors and creation errors
+      const allErrors = [...errors, ...creationErrors];
+
+      setUploadResults({
+        importedCount: successCount,
+        errorCount: allErrors.length,
+        errors: allErrors
+      });
+
+      if (successCount > 0) {
+        // Refresh the tickets list
+        await fetchTickets();
+        // Show success toast message
+        toast.success(`Successfully imported ${successCount} tickets!`);
+        // Close the dialog box
+        setShowExcelUploadModal(false);
+        setExcelFile(null);
+        setPreviewData([]);
+        setUploadResults(null);
+      }
+
+    } catch (error: any) {
+      console.error('Excel import error:', error);
+      alert('Failed to import Excel file');
+    } finally {
+      setUploadingExcel(false);
+      setUploadProgress(0);
+    }
+  };
+
+  const handleExportToExcel = async () => {
+    try {
+      setSubmitting(true);
+
+      // Get current filters
+      const params: any = {};
+      if (searchTerm) params.search = searchTerm;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (priorityFilter !== 'all') params.priority = priorityFilter;
+      if (assigneeFilter !== 'all') params.assignedTo = assigneeFilter;
+
+      // Fetch data from API
+      const response = await apiClient.services.export(params);
+
+      if (response.success && response.data.tickets) {
+        // Import xlsx library dynamically
+        const XLSX = await import('xlsx');
+
+        // Create workbook and worksheet
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.json_to_sheet(response.data.tickets);
+
+        // Add yellow background color to headers
+        const headerRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+        for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+          const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+          if (!worksheet[cellAddress]) {
+            worksheet[cellAddress] = { v: '', t: 's' };
+          }
+          worksheet[cellAddress].s = {
+            fill: {
+              fgColor: { rgb: "FFFF00" }, // Yellow background
+              patternType: "solid"
+            },
+            font: {
+              bold: true,
+              color: { rgb: "000000" } // Black text
+            }
+          };
+        }
+
+        // Auto-size columns
+        const columnWidths = [
+          { wch: 20 }, // Service Request Number
+          { wch: 20 }, // Service Request Type
+          { wch: 15 }, // Request Submission Date
+          { wch: 15 }, // Service Required Date
+          { wch: 20 }, // Engine Serial Number
+          { wch: 25 }, // Customer Name
+          { wch: 25 }, // MAGIEC (System Code or Identifier)
+          { wch: 15 }, // MAGIEC Code
+          { wch: 25 }, // Service Request Engineer
+          { wch: 15 }, // Service Request Status
+          { wch: 30 }, // Complaint Description
+          { wch: 20 }, // Business Vertical
+          { wch: 15 }, // Invoice Raised (Yes/No)
+          { wch: 15 }, // Site Identifier
+          { wch: 15 }, // State Name
+          { wch: 25 }, // Site Location
+        ];
+        worksheet['!cols'] = columnWidths;
+
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Service Tickets');
+
+        // Generate filename with current date
+        const date = new Date().toISOString().split('T')[0];
+        const filename = `service_tickets_${date}.xlsx`;
+
+        // Write file and trigger download
+        XLSX.writeFile(workbook, filename);
+
+        toast.success(`Successfully exported ${response.data.totalCount} tickets to Excel`);
+      } else {
+        toast.error('Failed to export data');
+      }
+    } catch (error) {
+      console.error('Excel export error:', error);
+      toast.error('Failed to export to Excel');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+
 
   // Enhanced dropdown handlers
   const scrollToSelectedItem = (dropdownType: 'customer' | 'product' | 'priority' | 'assignee') => {
@@ -1425,7 +1958,6 @@ const ServiceManagement: React.FC = () => {
         setShowStatusDropdown(false);
         setShowPriorityDropdown(false);
         setShowAssigneeDropdown(false);
-        setShowSlaDropdown(false);
 
         // Close enhanced dropdowns
         setCustomerDropdown(prev => ({ ...prev, isOpen: false }));
@@ -1445,15 +1977,22 @@ const ServiceManagement: React.FC = () => {
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader
         title="Service Management"
-        subtitle="Track tickets, manage service reports & monitor SLA"
+        subtitle="Track tickets, manage service reports & monitor service requests"
       >
         <div className="flex space-x-3">
           <button
-            onClick={handleBulkExportToPDF}
-            className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-gray-700 hover:to-gray-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            onClick={handleExcelUpload}
+            className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <Upload className="w-4 h-4" />
+            <span className="text-sm">Upload Excel</span>
+          </button>
+          <button
+            onClick={handleExportToExcel}
+            className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Download className="w-4 h-4" />
-            <span className="text-sm">Export All</span>
+            <span className="text-sm">Export Excel</span>
           </button>
           <button
             onClick={handleCreateTicket}
@@ -1503,7 +2042,6 @@ const ServiceManagement: React.FC = () => {
                 setShowStatusDropdown(!showStatusDropdown);
                 setShowPriorityDropdown(false);
                 setShowAssigneeDropdown(false);
-                setShowSlaDropdown(false);
               }}
               className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
             >
@@ -1536,7 +2074,6 @@ const ServiceManagement: React.FC = () => {
                 setShowPriorityDropdown(!showPriorityDropdown);
                 setShowStatusDropdown(false);
                 setShowAssigneeDropdown(false);
-                setShowSlaDropdown(false);
               }}
               className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
             >
@@ -1569,7 +2106,6 @@ const ServiceManagement: React.FC = () => {
                 setShowAssigneeDropdown(!showAssigneeDropdown);
                 setShowStatusDropdown(false);
                 setShowPriorityDropdown(false);
-                setShowSlaDropdown(false);
               }}
               className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
             >
@@ -1605,38 +2141,7 @@ const ServiceManagement: React.FC = () => {
             )}
           </div>
 
-          {/* SLA Custom Dropdown */}
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => {
-                setShowSlaDropdown(!showSlaDropdown);
-                setShowStatusDropdown(false);
-                setShowPriorityDropdown(false);
-                setShowAssigneeDropdown(false);
-              }}
-              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-            >
-              <span className="text-gray-700 truncate mr-1">{getSlaLabel(slaFilter)}</span>
-              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showSlaDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showSlaDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                {slaOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setSlaFilter(option.value as SLAStatus | 'all');
-                      setShowSlaDropdown(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${slaFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                      }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+
         </div>
 
         <div className="mt-4 flex items-center justify-between">
@@ -1656,7 +2161,7 @@ const ServiceManagement: React.FC = () => {
                   Ticket
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer & Product
+                  Customer & Service Type
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Priority & Status
@@ -1665,10 +2170,10 @@ const ServiceManagement: React.FC = () => {
                   Assigned To
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Service Charge
+                  Service Date
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  SLA & Schedule
+                  Site Info
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -1708,11 +2213,11 @@ const ServiceManagement: React.FC = () => {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div>
                         <div className="text-xs font-medium text-gray-900">{getCustomerName(ticket.customer)}</div>
-                        {ticket.product && (
-                          <div className="text-xs text-gray-600">{getProductName(ticket.product)}</div>
+                        {ticket.serviceRequestType && (
+                          <div className="text-xs text-gray-600 capitalize">{ticket.serviceRequestType}</div>
                         )}
-                        {ticket.serialNumber && (
-                          <div className="text-xs text-gray-500">S/N: {ticket.serialNumber}</div>
+                        {ticket.engineSerialNumber && (
+                          <div className="text-xs text-gray-500">Engine: {ticket.engineSerialNumber}</div>
                         )}
                       </div>
                     </td>
@@ -1734,48 +2239,52 @@ const ServiceManagement: React.FC = () => {
                             <option value="closed">Closed</option>
                             <option value="cancelled">Cancelled</option>
                           </select>
-                          {ticket.product && (
-                            <span 
-                              className="text-xs text-orange-600 cursor-help" 
-                              title="This ticket has a product. Resolving will decrease inventory by 1 unit."
-                            >
-                              📦
-                            </span>
-                          )}
+
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-xs text-gray-900">
-                        {getUserName(ticket.assignedTo) || (
+                        {(() => {
+                          const userName = getUserName(ticket.serviceRequestEngineer);
+                          console.log('Resolved userName:', userName);
+                          return userName || (
                           <span className="text-gray-400 italic">Unassigned</span>
-                        )}
+                          );
+                        })()}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-xs text-gray-900">
-                        {ticket.serviceCharge && ticket.serviceCharge > 0 ? (
-                          <span className="text-green-600 font-medium">₹{ticket.serviceCharge}</span>
-                        ) : (
+                      <div className="text-xs text-gray-900 space-y-1">
+                        {ticket.serviceRequiredDate && (
+                          <div>
+                            <span className="text-blue-600 font-medium">{formatDateTime(ticket.serviceRequiredDate)}</span>
+                          </div>
+                        )}
+                        {!ticket.requestSubmissionDate && !ticket.serviceRequiredDate && (
                           <span className="text-gray-400 italic">-</span>
                         )}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="space-y-1">
-                        {ticket.slaDeadline && (
-                          <div>
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getSLAColor(ticket.slaStatus)}`}>
-                              {ticket.slaStatus === 'on_track' && `${getTimeRemaining(ticket.slaDeadline)} left`}
-                              {ticket.slaStatus === 'breached' && 'SLA Breached'}
-                              {ticket.slaStatus === 'met' && 'SLA Met'}
-                            </span>
+                        {ticket.siteIdentifier && (
+                          <div className="text-xs text-gray-900">
+                            <span className="font-medium">Site ID:</span> {ticket.siteIdentifier}
                           </div>
                         )}
-                        {ticket.scheduledDate && (
+                        {ticket.siteLocation && (
                           <div className="text-xs text-gray-600">
-                            Scheduled: {formatDate(ticket.scheduledDate)}
+                            <span className="font-medium">Location:</span> {ticket.siteLocation}
                           </div>
+                        )}
+                        {ticket.stateName && (
+                          <div className="text-xs text-gray-600">
+                            <span className="font-medium">State:</span> {ticket.stateName}
+                          </div>
+                        )}
+                        {!ticket.siteIdentifier && !ticket.siteLocation && (
+                          <span className="text-gray-400 italic text-xs">-</span>
                         )}
                       </div>
                     </td>
@@ -1796,7 +2305,8 @@ const ServiceManagement: React.FC = () => {
               >
                 <FileText className="w-4 h-4" />
               </button>
-            )}
+                        )}
+                        
                         <button
                           onClick={() => handleEditTicket(ticket)}
                           className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
@@ -1983,8 +2493,7 @@ const ServiceManagement: React.FC = () => {
                               type="button"
                               onClick={() => !isInStock ? null : handleDropdownSelect('product', product._id)}
                               disabled={!isInStock}
-                              className={`w-full px-3 py-2 text-left transition-colors ${
-                                !isInStock 
+                              className={`w-full px-3 py-2 text-left transition-colors ${!isInStock
                                   ? 'text-gray-400 cursor-not-allowed bg-gray-50' 
                                   : index === productDropdown.selectedIndex 
                                     ? 'bg-blue-100 text-blue-900 hover:bg-blue-50' 
@@ -2000,8 +2509,7 @@ const ServiceManagement: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="flex flex-col items-end space-y-1 flex-shrink-0">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
-                                    isInStock 
+                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${isInStock
                                       ? 'bg-green-100 text-green-700 border border-green-200' 
                                       : 'bg-red-100 text-red-700 border border-red-200'
                                   }`}>
@@ -2166,7 +2674,7 @@ const ServiceManagement: React.FC = () => {
                       if (e.key === 'Tab' && !e.shiftKey) {
                         e.preventDefault();
                         e.stopPropagation();
-                        serialNumberRef.current?.focus();
+                        descriptionRef.current?.focus();
                       }
                     }}
                     className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.scheduledDate ? 'border-red-500' : 'border-gray-300'
@@ -2178,26 +2686,7 @@ const ServiceManagement: React.FC = () => {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Serial Number
-                </label>
-                <input
-                  ref={serialNumberRef}
-                  type="text"
-                  value={ticketFormData.serialNumber}
-                  onChange={(e) => setTicketFormData({ ...ticketFormData, serialNumber: e.target.value })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Tab' && !e.shiftKey) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      descriptionRef.current?.focus();
-                    }
-                  }}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter product serial number"
-                />
-              </div>
+
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2217,10 +2706,10 @@ const ServiceManagement: React.FC = () => {
                     if (e.key === 'Tab' && !e.shiftKey) {
                       e.preventDefault();
                       e.stopPropagation();
-                      // Focus the service charge input
-                      const serviceChargeInput = document.querySelector('input[placeholder="Enter service charge"]') as HTMLInputElement;
-                      if (serviceChargeInput) {
-                        serviceChargeInput.focus();
+                      // Focus the service request type input
+                      const serviceRequestTypeInput = document.querySelector('input[placeholder="Enter service request type"]') as HTMLInputElement;
+                      if (serviceRequestTypeInput) {
+                        serviceRequestTypeInput.focus();
                       }
                     }
                   }}
@@ -2235,6 +2724,169 @@ const ServiceManagement: React.FC = () => {
                 <p className="text-xs text-gray-500 mt-1">
                   {ticketFormData.description.length}/2000 characters
                 </p>
+              </div>
+
+              {/* New Standardized Fields Section */}
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Service Request Details</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Service Request Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Service Request Type *
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.serviceRequestType}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequestType: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter service request type"
+                    />
+                  </div>
+
+                  {/* Service Required Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Service Required Date *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={ticketFormData.serviceRequiredDate ? ticketFormData.serviceRequiredDate.replace('Z', '') : ''}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequiredDate: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Engine Serial Number */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Engine Serial Number
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.engineSerialNumber}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, engineSerialNumber: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter engine serial number"
+                    />
+                  </div>
+
+                  {/* MAGIEC System Code */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      MAGIEC
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.magiecSystemCode}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, magiecSystemCode: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter MAGIEC"
+                    />
+                  </div>
+
+                  {/* MAGIEC Code */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      MAGIEC Code
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.magiecCode}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, magiecCode: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter MAGIEC code"
+                    />
+                  </div>
+
+                  {/* Business Vertical */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Vertical
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.businessVertical}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, businessVertical: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter vertical"
+                    />
+                  </div>
+
+                  {/* Site Identifier */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Site ID
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.siteIdentifier}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, siteIdentifier: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter site ID"
+                    />
+                  </div>
+
+                  {/* State Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      State Name
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.stateName}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, stateName: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter state name"
+                    />
+                  </div>
+
+                  {/* Site Location */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Site Location
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.siteLocation}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, siteLocation: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter site location"
+                    />
+                  </div>
+
+                  {/* Invoice Raised */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Invoice Raised
+                    </label>
+                    <div className="flex items-center space-x-4">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="invoiceRaised"
+                          value="true"
+                          checked={ticketFormData.invoiceRaised === true}
+                          onChange={(e) => setTicketFormData({ ...ticketFormData, invoiceRaised: e.target.value === 'true' })}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">Yes</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="invoiceRaised"
+                          value="false"
+                          checked={ticketFormData.invoiceRaised === false}
+                          onChange={(e) => setTicketFormData({ ...ticketFormData, invoiceRaised: e.target.value === 'true' })}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">No</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Service Charge Field */}
@@ -2467,8 +3119,7 @@ const ServiceManagement: React.FC = () => {
                               type="button"
                               onClick={() => !isInStock ? null : handleDropdownSelect('product', product._id)}
                               disabled={!isInStock}
-                              className={`w-full px-3 py-2 text-left transition-colors ${
-                                !isInStock 
+                              className={`w-full px-3 py-2 text-left transition-colors ${!isInStock
                                   ? 'text-gray-400 cursor-not-allowed bg-gray-50' 
                                   : index === productDropdown.selectedIndex 
                                     ? 'bg-blue-100 text-blue-900 hover:bg-blue-50' 
@@ -2484,8 +3135,7 @@ const ServiceManagement: React.FC = () => {
                                   )}
                                 </div>
                                 <div className="flex flex-col items-end space-y-1 flex-shrink-0">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${
-                                    isInStock 
+                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${isInStock
                                       ? 'bg-green-100 text-green-700 border border-green-200' 
                                       : 'bg-red-100 text-red-700 border border-red-200'
                                   }`}>
@@ -2642,17 +3292,169 @@ const ServiceManagement: React.FC = () => {
                 </div>
               </div>
 
+              {/* Standardized Fields Section */}
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Service Request Details</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Service Request Type */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Serial Number
+                      Service Request Type *
                 </label>
                 <input
                   type="text"
-                  value={ticketFormData.serialNumber}
-                  onChange={(e) => setTicketFormData({ ...ticketFormData, serialNumber: e.target.value })}
+                      value={ticketFormData.serviceRequestType}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequestType: e.target.value })}
                   className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter product serial number"
-                />
+                      placeholder="Enter service request type"
+                    />
+                  </div>
+
+                  {/* Service Required Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Service Required Date *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={ticketFormData.serviceRequiredDate ? ticketFormData.serviceRequiredDate.replace('Z', '') : ''}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequiredDate: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Engine Serial Number */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Engine Serial Number
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.engineSerialNumber}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, engineSerialNumber: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter engine serial number"
+                    />
+                  </div>
+
+                  {/* MAGIEC */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      MAGIEC
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.magiecSystemCode}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, magiecSystemCode: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter MAGIEC"
+                    />
+                  </div>
+
+                  {/* MAGIEC Code */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      MAGIEC Code
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.magiecCode}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, magiecCode: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter MAGIEC code"
+                    />
+                  </div>
+
+                  {/* Vertical */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Vertical
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.businessVertical}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, businessVertical: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter vertical"
+                    />
+                  </div>
+
+                  {/* Site ID */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Site ID
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.siteIdentifier}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, siteIdentifier: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter site ID"
+                    />
+                  </div>
+
+                  {/* State Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      State Name
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.stateName}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, stateName: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter state name"
+                    />
+                  </div>
+
+                  {/* Site Location */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Site Location
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.siteLocation}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, siteLocation: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter site location"
+                    />
+                  </div>
+
+                  {/* Invoice Raised */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Invoice Raised
+                    </label>
+                    <div className="flex space-x-4">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="invoiceRaised"
+                          value="true"
+                          checked={ticketFormData.invoiceRaised === true}
+                          onChange={(e) => setTicketFormData({ ...ticketFormData, invoiceRaised: e.target.value === 'true' })}
+                          className="mr-2"
+                        />
+                        Yes
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          name="invoiceRaised"
+                          value="false"
+                          checked={ticketFormData.invoiceRaised === false}
+                          onChange={(e) => setTicketFormData({ ...ticketFormData, invoiceRaised: e.target.value === 'true' })}
+                          className="mr-2"
+                        />
+                        No
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+
               </div>
 
               <div>
@@ -2816,16 +3618,7 @@ const ServiceManagement: React.FC = () => {
                         {selectedTicket.priority.charAt(0).toUpperCase() + selectedTicket.priority.slice(1)}
                       </span>
                     </div>
-                    {selectedTicket.slaDeadline && (
-                      <div>
-                        <p className="text-xs text-gray-600">SLA Status</p>
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getSLAColor(selectedTicket.slaStatus)}`}>
-                          {selectedTicket.slaStatus === 'on_track' && `${getTimeRemaining(selectedTicket.slaDeadline)} left`}
-                          {selectedTicket.slaStatus === 'breached' && 'SLA Breached'}
-                          {selectedTicket.slaStatus === 'met' && 'SLA Met'}
-                        </span>
-                      </div>
-                    )}
+
                     <div>
                       <p className="text-xs text-gray-600">Assigned To</p>
                       <p className="font-medium">{getUserName(selectedTicket.assignedTo) || 'Unassigned'}</p>
@@ -2953,14 +3746,7 @@ const ServiceManagement: React.FC = () => {
                       <option value="closed">Closed</option>
                       <option value="cancelled">Cancelled</option>
                     </select>
-                    {selectedTicket.product && (
-                      <span 
-                        className="text-sm text-orange-600 cursor-help" 
-                        title="This ticket has a product. Resolving will decrease inventory by 1 unit."
-                      >
-                        📦
-                      </span>
-                    )}
+
                   </div>
                 </div>
               </div>
@@ -2989,6 +3775,7 @@ const ServiceManagement: React.FC = () => {
                     <span>Digital Service Report</span>
                   </button>
                 )}
+
                 <button
                   onClick={() => handleExportToPDF(selectedTicket)}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
@@ -3018,6 +3805,214 @@ const ServiceManagement: React.FC = () => {
             setShowDigitalReportModal(false);
           }}
         />
+      )}
+
+      {/* Excel Upload Modal */}
+      {showExcelUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <Upload className="w-6 h-6 text-white" />
+                  <h2 className="text-xl font-semibold text-white">Upload Service Tickets</h2>
+                </div>
+                <button
+                  onClick={() => setShowExcelUploadModal(false)}
+                  className="text-white hover:text-gray-200 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6 max-h-[calc(90vh-120px)] overflow-y-auto">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Left Column - File Upload */}
+                <div className="space-y-6">
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                      <FileText className="w-5 h-5 mr-2 text-blue-600" />
+                      File Selection
+                    </h3>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Choose Excel File
+                        </label>
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-blue-400 transition-colors">
+                          <input
+                            type="file"
+                            accept=".xlsx,.xls"
+                            onChange={handleFileChange}
+                            className="hidden"
+                            id="excel-file-input"
+                          />
+                          <label htmlFor="excel-file-input" className="cursor-pointer">
+                            <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-600">
+                              <span className="font-medium text-blue-600">Click to upload</span> or drag and drop
+                            </p>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Excel files (.xlsx, .xls) only
+                            </p>
+                          </label>
+                        </div>
+                      </div>
+
+                      {excelFile && (
+                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                              <CheckCircle className="w-5 h-5 text-green-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-green-800">
+                                {excelFile.name}
+                              </p>
+                              <p className="text-xs text-green-600">
+                                {(excelFile.size / 1024 / 1024).toFixed(2)} MB
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {uploadingExcel && (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-gray-600">Processing file...</span>
+                            <span className="text-blue-600 font-medium">{uploadProgress}%</span>
+                          </div>
+                          <div className="w-full bg-gray-200 rounded-full h-2">
+                            <div
+                              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                              style={{ width: `${uploadProgress}%` }}
+                            ></div>
+                          </div>
+                        </div>
+                      )}
+
+                      {uploadResults && (
+                        <div className={`border rounded-lg p-4 ${uploadResults.errorCount > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
+                          }`}>
+                          <div className="flex items-center space-x-3">
+                            {uploadResults.errorCount > 0 ? (
+                              <AlertTriangle className="w-5 h-5 text-red-600" />
+                            ) : (
+                              <CheckCircle className="w-5 h-5 text-green-600" />
+                            )}
+                            <div>
+                              <p className={`text-sm font-medium ${uploadResults.errorCount > 0 ? 'text-red-800' : 'text-green-800'
+                                }`}>
+                                {uploadResults.importedCount} tickets imported successfully
+                                {uploadResults.errorCount > 0 && `, ${uploadResults.errorCount} errors`}
+                              </p>
+                            </div>
+                          </div>
+                          {uploadResults.errors && uploadResults.errors.length > 0 && (
+                            <div className="mt-3">
+                              <p className="text-xs font-medium text-red-700 mb-2">Errors:</p>
+                              <div className="max-h-32 overflow-y-auto space-y-1">
+                                {uploadResults.errors.map((error, index) => (
+                                  <div key={index} className="text-xs text-red-600 bg-red-100 p-2 rounded">
+                                    <span className="font-medium">Row {error.row}:</span> {error.error}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action Buttons */}
+                  <div className="flex space-x-3">
+                    <button
+                      onClick={() => setShowExcelUploadModal(false)}
+                      className="flex-1 px-4 py-3 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleExcelImport}
+                      disabled={!excelFile || uploadingExcel}
+                      className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors font-medium"
+                    >
+                      {uploadingExcel ? (
+                        <div className="flex items-center justify-center space-x-2">
+                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Processing...</span>
+                        </div>
+                      ) : (
+                        'Import Tickets'
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Right Column - Preview */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                    <Eye className="w-5 h-5 mr-2 text-blue-600" />
+                    Data Preview
+                  </h3>
+
+                  {showPreview && previewData.length > 0 ? (
+                    <div className="bg-white rounded-lg border overflow-hidden">
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              {Object.keys(previewData[0]).map((header, index) => (
+                                <th
+                                  key={index}
+                                  className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                                >
+                                  {header}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="bg-white divide-y divide-gray-200">
+                            {previewData.slice(0, 5).map((row, rowIndex) => (
+                              <tr key={rowIndex} className="hover:bg-gray-50">
+                                {Object.values(row).map((cell, cellIndex) => (
+                                  <td
+                                    key={cellIndex}
+                                    className="px-3 py-2 text-xs text-gray-900 max-w-32 truncate"
+                                    title={String(cell)}
+                                  >
+                                    {String(cell)}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {previewData.length > 5 && (
+                        <div className="bg-gray-50 px-3 py-2 text-xs text-gray-500 text-center">
+                          Showing first 5 rows of {previewData.length} total rows
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-white rounded-lg border p-8 text-center">
+                      <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                      <p className="text-gray-500 text-sm">
+                        Upload an Excel file to preview the data
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

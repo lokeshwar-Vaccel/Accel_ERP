@@ -75,6 +75,8 @@ const AppRoutes: React.FC = () => {
             {/* <Route path="/pay/:token" element={<PaymentPage />} />
             <Route path="/payment-success" element={<PaymentSuccess />} /> */}
 
+
+
             {/* 404 - Page not found */}
             <Route path="*" element={<NotFound />} />
         </Routes>

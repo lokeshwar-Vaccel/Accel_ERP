@@ -12,6 +12,7 @@ import { Navigate, Route, Routes } from 'react-router-dom';
 import { ResetPasswordForm } from 'components/features/auth/ResetPasswordForm';
 import PaymentPage from 'pages/PaymentPage';
 import PaymentSuccess from 'pages/PaymentSuccess';
+import CustomerFeedback from 'pages/CustomerFeedback';
 
 const App = () => {
   const dispatch = useDispatch<AppDispatch>();
@@ -36,6 +37,7 @@ const App = () => {
         {/* Public routes that don't require authentication */}
         <Route path="/pay/:token" element={<PaymentPage />} />
         <Route path="/payment-success" element={<PaymentSuccess />} />
+        <Route path="/feedback/:token" element={<CustomerFeedback />} />
         
         {/* Authentication routes */}
         <Route path="/login" element={<LoginForm />} />

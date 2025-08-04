@@ -7,7 +7,8 @@ import {
   serviceTicketQuerySchema,
   completeServiceSchema,
   assignServiceSchema,
-  updateServiceStatusSchema
+  updateServiceStatusSchema,
+  bulkServiceImportSchema
 } from '../schemas';
 import { UserRole } from '../types';
 import {
@@ -19,7 +20,9 @@ import {
   completeServiceTicket,
   addPartsUsed,
   getServiceStats,
-  updateServiceTicketStatus
+  updateServiceTicketStatus,
+  bulkImportServiceTickets,
+  exportServiceTickets
 } from '../controllers/serviceController';
 
 const router = Router();
@@ -43,6 +46,10 @@ const deleteServiceTicket = async (req: any, res: any) => {
 router.route('/')
   .get(validate(serviceTicketQuerySchema, 'query'), checkPermission('read'), getServiceTickets)
   .post(validate(createServiceTicketSchema), checkPermission('write'), createServiceTicket);
+
+// Bulk operations (must come before /:id routes)
+router.post('/bulk-import', validate(bulkServiceImportSchema), checkPermission('write'), bulkImportServiceTickets);
+router.get('/export', checkPermission('read'), exportServiceTickets);
 
 router.route('/:id')
   .get(checkPermission('read'), getServiceTicket)
