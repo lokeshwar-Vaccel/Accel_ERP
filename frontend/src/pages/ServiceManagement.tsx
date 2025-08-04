@@ -21,7 +21,7 @@ import {
   Signature,
   MapPin,
   Phone,
-
+  MessageSquare,
   Timer,
   TrendingUp,
   Activity,
@@ -219,6 +219,12 @@ const ServiceManagement: React.FC = () => {
   } | null>(null);
   const [previewData, setPreviewData] = useState<any[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+
+  // Feedback viewing states
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
+  const [selectedFeedback, setSelectedFeedback] = useState<any>(null);
+  const [loadingFeedback, setLoadingFeedback] = useState(false);
+  const [ticketsWithFeedback, setTicketsWithFeedback] = useState<Set<string>>(new Set());
 
   // Selected data
   const [selectedTicket, setSelectedTicket] = useState<ServiceTicket | null>(null);
@@ -764,9 +770,17 @@ const ServiceManagement: React.FC = () => {
     setShowEditModal(true);
   };
 
-  const openDetailsModal = (ticket: ServiceTicket) => {
+  const openDetailsModal = async (ticket: ServiceTicket) => {
     setSelectedTicket(ticket);
     setShowDetailsModal(true);
+    
+    // Check if feedback exists for this ticket
+    if (ticket.status === 'resolved') {
+      const hasFeedback = await checkFeedbackExists(ticket._id);
+      if (hasFeedback) {
+        setTicketsWithFeedback(prev => new Set([...prev, ticket._id]));
+      }
+    }
   };
 
 
@@ -1614,6 +1628,34 @@ const ServiceManagement: React.FC = () => {
     }
   };
 
+  const handleViewFeedback = async (ticketId: string) => {
+    try {
+      setLoadingFeedback(true);
+      const response = await apiClient.feedback.getByTicketId(ticketId);
+      
+      if (response.success && response.data) {
+        setSelectedFeedback(response.data);
+        setShowFeedbackModal(true);
+      } else {
+        toast.error('No feedback found for this ticket');
+      }
+    } catch (error: any) {
+      console.error('Error fetching feedback:', error);
+      toast.error(error.message || 'Failed to fetch feedback');
+    } finally {
+      setLoadingFeedback(false);
+    }
+  };
+
+  const checkFeedbackExists = async (ticketId: string): Promise<boolean> => {
+    try {
+      const response = await apiClient.feedback.getByTicketId(ticketId);
+      return response.success && response.data;
+    } catch (error) {
+      return false;
+    }
+  };
+
   const handleExportToExcel = async () => {
     try {
       setSubmitting(true);
@@ -2306,6 +2348,7 @@ const ServiceManagement: React.FC = () => {
                 <FileText className="w-4 h-4" />
               </button>
                         )}
+
                         
                         <button
                           onClick={() => handleEditTicket(ticket)}
@@ -3783,6 +3826,15 @@ const ServiceManagement: React.FC = () => {
                   <Download className="w-4 h-4" />
                   <span>Export PDF</span>
                 </button>
+                {selectedTicket.status === 'resolved' && ticketsWithFeedback.has(selectedTicket._id) && (
+                  <button
+                    onClick={() => handleViewFeedback(selectedTicket._id)}
+                    className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    <span>View Feedback</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -4010,6 +4062,211 @@ const ServiceManagement: React.FC = () => {
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Feedback Modal */}
+      {showFeedbackModal && selectedFeedback && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-orange-600 to-orange-700 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <MessageSquare className="w-6 h-6 text-white" />
+                  <h2 className="text-xl font-semibold text-white">Customer Feedback</h2>
+                </div>
+                <button
+                  onClick={() => setShowFeedbackModal(false)}
+                  className="text-white hover:text-gray-200 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              {loadingFeedback ? (
+                <div className="flex items-center justify-center py-8">
+                  <LoadingSpinner />
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Customer Information */}
+                  <div className="bg-blue-50 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-blue-900 mb-2">Customer Information</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-blue-700">Customer Name</label>
+                        <p className="text-blue-900">{selectedFeedback.customerName}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-blue-700">Email</label>
+                        <p className="text-blue-900">{selectedFeedback.customerEmail}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Overall Rating */}
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-3">Overall Rating</h3>
+                    <div className="flex items-center space-x-2">
+                      <div className="flex space-x-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <span
+                            key={star}
+                            className={`text-2xl ${
+                              star <= selectedFeedback.rating
+                                ? 'text-yellow-400'
+                                : 'text-gray-300'
+                            }`}
+                          >
+                            ★
+                          </span>
+                        ))}
+                      </div>
+                      <span className="text-lg font-medium text-gray-700">
+                        {selectedFeedback.rating}/5
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Detailed Ratings */}
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-3">Detailed Ratings</h3>
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-700">Technician Rating</span>
+                        <div className="flex items-center space-x-2">
+                          <div className="flex space-x-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <span
+                                key={star}
+                                className={`text-lg ${
+                                  star <= selectedFeedback.technicianRating
+                                    ? 'text-yellow-400'
+                                    : 'text-gray-300'
+                                }`}
+                              >
+                                ★
+                              </span>
+                            ))}
+                          </div>
+                          <span className="text-sm font-medium text-gray-600">
+                            {selectedFeedback.technicianRating}/5
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-700">Timeliness Rating</span>
+                        <div className="flex items-center space-x-2">
+                          <div className="flex space-x-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <span
+                                key={star}
+                                className={`text-lg ${
+                                  star <= selectedFeedback.timelinessRating
+                                    ? 'text-yellow-400'
+                                    : 'text-gray-300'
+                                }`}
+                              >
+                                ★
+                              </span>
+                            ))}
+                          </div>
+                          <span className="text-sm font-medium text-gray-600">
+                            {selectedFeedback.timelinessRating}/5
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-700">Quality Rating</span>
+                        <div className="flex items-center space-x-2">
+                          <div className="flex space-x-1">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <span
+                                key={star}
+                                className={`text-lg ${
+                                  star <= selectedFeedback.qualityRating
+                                    ? 'text-yellow-400'
+                                    : 'text-gray-300'
+                                }`}
+                              >
+                                ★
+                              </span>
+                            ))}
+                          </div>
+                          <span className="text-sm font-medium text-gray-600">
+                            {selectedFeedback.qualityRating}/5
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Service Quality */}
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Service Quality</h3>
+                    <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
+                      selectedFeedback.serviceQuality === 'excellent'
+                        ? 'bg-green-100 text-green-800'
+                        : selectedFeedback.serviceQuality === 'good'
+                        ? 'bg-blue-100 text-blue-800'
+                        : selectedFeedback.serviceQuality === 'average'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {selectedFeedback.serviceQuality.charAt(0).toUpperCase() + selectedFeedback.serviceQuality.slice(1)}
+                    </span>
+                  </div>
+
+                  {/* Would Recommend */}
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Would Recommend</h3>
+                    <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
+                      selectedFeedback.wouldRecommend
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {selectedFeedback.wouldRecommend ? 'Yes' : 'No'}
+                    </span>
+                  </div>
+
+                  {/* Comments */}
+                  {selectedFeedback.comments && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">Comments</h3>
+                      <p className="text-gray-700 whitespace-pre-wrap">{selectedFeedback.comments}</p>
+                    </div>
+                  )}
+
+                  {/* Improvement Suggestions */}
+                  {selectedFeedback.improvementSuggestions && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">Improvement Suggestions</h3>
+                      <p className="text-gray-700 whitespace-pre-wrap">{selectedFeedback.improvementSuggestions}</p>
+                    </div>
+                  )}
+
+                  {/* Feedback Date */}
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Feedback Date</h3>
+                    <p className="text-gray-700">
+                      {new Date(selectedFeedback.feedbackDate).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

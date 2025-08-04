@@ -3,7 +3,8 @@ import {
   sendFeedbackEmail,
   getFeedbackForm,
   submitFeedback,
-  getFeedbackStats
+  getFeedbackStats,
+  getFeedbackByTicketId
 } from '../controllers/customerFeedbackController';
 import { protect } from '../middleware/auth';
 
@@ -16,5 +17,6 @@ router.post('/:token', submitFeedback);
 // Protected routes (authentication required)
 router.post('/send-email', protect, sendFeedbackEmail);
 router.get('/stats', protect, getFeedbackStats);
+router.get('/ticket/:ticketId', protect, getFeedbackByTicketId);
 
 export default router; 

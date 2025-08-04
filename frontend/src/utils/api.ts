@@ -1142,6 +1142,9 @@ class ApiClient {
 
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/feedback/stats'),
+
+    getByTicketId: (ticketId: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/feedback/ticket/${ticketId}`),
   };
 }
 

@@ -280,3 +280,39 @@ export const getFeedbackStats = async (
     next(error);
   }
 }; 
+
+// @desc    Get feedback by ticket ID
+// @route   GET /api/v1/feedback/ticket/:ticketId
+// @access  Private
+export const getFeedbackByTicketId = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { ticketId } = req.params;
+
+    const feedback = await CustomerFeedback.findOne({ ticketId })
+      .populate('ticketId', 'ticketNumber customerName serviceRequestNumber');
+
+    if (!feedback) {
+      const response: APIResponse = {
+        success: false,
+        message: 'No feedback found for this ticket',
+        data: null
+      };
+      res.status(404).json(response);
+      return;
+    }
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Feedback retrieved successfully',
+      data: feedback
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+}; 
