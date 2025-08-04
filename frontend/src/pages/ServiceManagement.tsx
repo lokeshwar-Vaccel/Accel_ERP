@@ -154,7 +154,7 @@ interface TicketFormData {
   stateName: string;
   siteLocation: string;
 
-      // Legacy fields for backward compatibility
+  // Legacy fields for backward compatibility
   customer: string;
   product?: string;
   description: string;
@@ -531,14 +531,7 @@ const ServiceManagement: React.FC = () => {
       setTotalDatas(total);
       setTotalPages(pages);
 
-      console.log('Pagination data:', {
-        total,
-        pages,
-        currentPage,
-        limit,
-        ticketsCount: ticketsData.length,
-        params: params
-      });
+
     } catch (error) {
       console.error('Error fetching tickets:', error);
       setTickets([]);
@@ -580,7 +573,7 @@ const ServiceManagement: React.FC = () => {
       }
 
       // Filter out inactive products and products with zero stock
-      const availableProducts = productsData.filter(product => 
+      const availableProducts = productsData.filter(product =>
         product.isActive && (product.stockQuantity || 0) > 0
       );
 
@@ -736,7 +729,7 @@ const ServiceManagement: React.FC = () => {
       scheduledDate: ticket.scheduledDate ? ticket.scheduledDate.split('T')[0] : '',
       serviceCharge: ticket.serviceCharge || 0
     });
-    
+
     // Initialize dropdown states for edit mode
     setCustomerDropdown({
       isOpen: false,
@@ -744,28 +737,28 @@ const ServiceManagement: React.FC = () => {
       selectedIndex: 0,
       filteredOptions: customers
     });
-    
+
     setProductDropdown({
       isOpen: false,
       searchTerm: typeof ticket.product === 'string' ? products.find(p => p._id === ticket.product)?.name || '' : ticket.product?.name || '',
       selectedIndex: 0,
       filteredOptions: products
     });
-    
+
     setPriorityDropdown({
       isOpen: false,
       searchTerm: formPriorityOptions.find(p => p.value === ticket.priority)?.label || '',
       selectedIndex: 0,
       filteredOptions: formPriorityOptions
     });
-    
+
     setAssigneeDropdown({
       isOpen: false,
       searchTerm: typeof ticket.assignedTo === 'string' ? users.find(u => u._id === ticket.assignedTo)?.fullName || '' : ticket.assignedTo?.fullName || '',
       selectedIndex: 0,
       filteredOptions: users
     });
-    
+
     setFormErrors({});
     setShowEditModal(true);
   };
@@ -773,7 +766,7 @@ const ServiceManagement: React.FC = () => {
   const openDetailsModal = async (ticket: ServiceTicket) => {
     setSelectedTicket(ticket);
     setShowDetailsModal(true);
-    
+
     // Check if feedback exists for this ticket
     if (ticket.status === 'resolved') {
       const hasFeedback = await checkFeedbackExists(ticket._id);
@@ -829,7 +822,7 @@ const ServiceManagement: React.FC = () => {
         priority: ticketFormData.priority,
         serviceCharge: ticketFormData.serviceCharge || 0,
         scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined,
-        
+
         // Standardized fields
         serviceRequestType: ticketFormData.serviceRequestType,
         requestSubmissionDate: new Date().toISOString(), // Set current date as submission date
@@ -892,7 +885,7 @@ const ServiceManagement: React.FC = () => {
         priority: ticketFormData.priority,
         serviceCharge: ticketFormData.serviceCharge || 0,
         scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined,
-        
+
         // Standardized fields
         serviceRequestType: ticketFormData.serviceRequestType,
         requestSubmissionDate: editingTicket?.requestSubmissionDate || new Date().toISOString(), // Preserve original submission date
@@ -915,7 +908,7 @@ const ServiceManagement: React.FC = () => {
         payload.assignedTo = ticketFormData.assignedTo;
       }
 
-      console.log('Updating service ticket with payload:', payload);
+
       const response = await apiClient.services.update(editingTicket._id, payload);
 
       // Update the ticket in the list
@@ -1100,7 +1093,6 @@ const ServiceManagement: React.FC = () => {
   };
 
   const handlePageChange = (page: number) => {
-    console.log('Page change requested:', page);
     setCurrentPage(page);
   };
 
@@ -1108,8 +1100,6 @@ const ServiceManagement: React.FC = () => {
 
   const handleStatusUpdate = async (ticketId: string, newStatus: TicketStatus) => {
     try {
-      console.log('Updating ticket status:', { ticketId, newStatus });
-      
       // Find the ticket to check if it has a product
       const ticket = tickets.find(t => t._id === ticketId);
       if (!ticket) {
@@ -1131,8 +1121,7 @@ const ServiceManagement: React.FC = () => {
         if (selectedTicket && selectedTicket._id === ticketId) {
           setSelectedTicket({ ...selectedTicket, status: newStatus });
         }
-        
-        console.log('Status updated successfully');
+
         toast.success('Ticket status updated successfully!');
       }
     } catch (error) {
@@ -1143,7 +1132,6 @@ const ServiceManagement: React.FC = () => {
 
   const handleExportToPDF = async (ticket: ServiceTicket) => {
     try {
-      console.log("ticket-pdf", ticket);
       const pdfData: ServiceTicketPDFData = {
         ticketNumber: ticket.ticketNumber,
         customer: {
@@ -1186,7 +1174,6 @@ const ServiceManagement: React.FC = () => {
       };
 
       await exportServiceTicketToPDF(pdfData);
-      console.log('PDF exported successfully');
     } catch (error) {
       console.error('Error exporting PDF:', error);
       alert('Failed to export PDF. Please try again.');
@@ -1242,7 +1229,7 @@ const ServiceManagement: React.FC = () => {
 
       // Export all tickets in a single PDF
       await exportMultipleTicketsToPDF(pdfDataArray);
-      console.log('Bulk PDF export completed');
+
     } catch (error) {
       console.error('Error in bulk PDF export:', error);
       alert('Failed to export PDF. Please try again.');
@@ -1345,35 +1332,25 @@ const ServiceManagement: React.FC = () => {
 
         // Debug helper to check what headers are available for a specific field
         const debugFieldHeaders = (fieldName: string, possibleHeaders: string[]) => {
-          console.log(`Debugging ${fieldName} field:`);
-          console.log('  Looking for headers:', possibleHeaders);
-          console.log('  Available headers:', Object.keys(row));
-          for (const header of possibleHeaders) {
-            console.log(`  Checking header "${header}":`, row[header]);
-          }
+          // Debug function - removed console logs
         };
 
         // Helper function to convert Excel date to date only (for requestSubmissionDate)
         const convertExcelDateOnly = (dateValue: any) => {
           if (!dateValue) return new Date().toISOString().split('T')[0] + 'T00:00:00.000Z';
 
-          console.log('Converting Excel date (date only):', dateValue, 'Type:', typeof dateValue);
-
           // If it's already a string in ISO format, extract date only
           if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateValue)) {
-            console.log('ISO format, extracting date only');
             return dateValue.split('T')[0] + 'T00:00:00.000Z';
           }
 
           // If it's a string in YYYY-MM-DD format, add time
           if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
-            console.log('YYYY-MM-DD format, adding time');
             return dateValue + 'T00:00:00.000Z';
           }
 
           // Handle Excel date numbers (Excel stores dates as numbers)
           if (typeof dateValue === 'number') {
-            console.log('Excel date number detected, converting to date only...');
             // Excel dates are days since 1900-01-01
             const excelEpoch = new Date(1900, 0, 1);
             const date = new Date(excelEpoch.getTime() + (dateValue - 2) * 24 * 60 * 60 * 1000);
@@ -1384,14 +1361,11 @@ const ServiceManagement: React.FC = () => {
           try {
             const date = new Date(dateValue);
             if (!isNaN(date.getTime())) {
-              console.log('Valid date object, converting to date only');
               return date.toISOString().split('T')[0] + 'T00:00:00.000Z';
             }
           } catch (error) {
             console.warn('Invalid date value:', dateValue, 'Error:', error);
           }
-
-          console.log('Using current date as fallback (date only)');
           return new Date().toISOString().split('T')[0] + 'T00:00:00.000Z';
         };
 
@@ -1399,23 +1373,18 @@ const ServiceManagement: React.FC = () => {
         const convertExcelDateTime = (dateValue: any) => {
           if (!dateValue) return new Date().toISOString();
 
-          console.log('Converting Excel date value (with time):', dateValue, 'Type:', typeof dateValue);
-
           // If it's already a string in ISO format, return as is
           if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateValue)) {
-            console.log('Already ISO format, returning as is');
             return dateValue;
           }
 
           // If it's a string in YYYY-MM-DD format, add time
           if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
-            console.log('YYYY-MM-DD format, adding time');
             return dateValue + 'T00:00:00.000Z';
           }
 
           // Handle Excel date numbers (Excel stores dates as numbers)
           if (typeof dateValue === 'number') {
-            console.log('Excel date number detected, converting...');
             // Excel dates are days since 1900-01-01
             const excelEpoch = new Date(1900, 0, 1);
             const date = new Date(excelEpoch.getTime() + (dateValue - 2) * 24 * 60 * 60 * 1000);
@@ -1426,14 +1395,11 @@ const ServiceManagement: React.FC = () => {
           try {
             const date = new Date(dateValue);
             if (!isNaN(date.getTime())) {
-              console.log('Valid date object, converting to ISO');
               return date.toISOString();
             }
           } catch (error) {
             console.warn('Invalid date value:', dateValue, 'Error:', error);
           }
-
-          console.log('Using current date as fallback');
           return new Date().toISOString();
         };
 
@@ -1494,7 +1460,7 @@ const ServiceManagement: React.FC = () => {
         return mappedData;
       });
 
-      console.log('Processed data:', processedData);
+
       setUploadProgress(20);
 
       // Validate field operators (service engineers) against database
@@ -1632,7 +1598,7 @@ const ServiceManagement: React.FC = () => {
     try {
       setLoadingFeedback(true);
       const response = await apiClient.feedback.getByTicketId(ticketId);
-      
+
       if (response.success && response.data) {
         setSelectedFeedback(response.data);
         setShowFeedbackModal(true);
@@ -2288,10 +2254,9 @@ const ServiceManagement: React.FC = () => {
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-xs text-gray-900">
                         {(() => {
-                          const userName = getUserName(ticket.serviceRequestEngineer);
-                          console.log('Resolved userName:', userName);
+                          const userName = getUserName(ticket.assignedTo);
                           return userName || (
-                          <span className="text-gray-400 italic">Unassigned</span>
+                            <span className="text-gray-400 italic">Unassigned</span>
                           );
                         })()}
                       </div>
@@ -2339,17 +2304,17 @@ const ServiceManagement: React.FC = () => {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                                    {ticket.status === 'resolved' && (
-              <button
-                onClick={() => openDigitalServiceReport(ticket)}
-                className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
-                title="Digital Service Report"
-              >
-                <FileText className="w-4 h-4" />
-              </button>
+                        {ticket.status === 'resolved' && (
+                          <button
+                            onClick={() => openDigitalServiceReport(ticket)}
+                            className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
+                            title="Digital Service Report"
+                          >
+                            <FileText className="w-4 h-4" />
+                          </button>
                         )}
 
-                        
+
                         <button
                           onClick={() => handleEditTicket(ticket)}
                           className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
@@ -2528,7 +2493,7 @@ const ServiceManagement: React.FC = () => {
                         productDropdown.filteredOptions.map((product, index) => {
                           const isInStock = (product.stockQuantity || 0) > 0;
                           const stockQuantity = product.stockQuantity || 0;
-                          
+
                           return (
                             <button
                               key={product._id}
@@ -2537,11 +2502,11 @@ const ServiceManagement: React.FC = () => {
                               onClick={() => !isInStock ? null : handleDropdownSelect('product', product._id)}
                               disabled={!isInStock}
                               className={`w-full px-3 py-2 text-left transition-colors ${!isInStock
-                                  ? 'text-gray-400 cursor-not-allowed bg-gray-50' 
-                                  : index === productDropdown.selectedIndex 
-                                    ? 'bg-blue-100 text-blue-900 hover:bg-blue-50' 
-                                    : 'text-gray-700 hover:bg-blue-50'
-                              }`}
+                                ? 'text-gray-400 cursor-not-allowed bg-gray-50'
+                                : index === productDropdown.selectedIndex
+                                  ? 'bg-blue-100 text-blue-900 hover:bg-blue-50'
+                                  : 'text-gray-700 hover:bg-blue-50'
+                                }`}
                             >
                               <div className="flex justify-between items-start gap-2">
                                 <div className="flex-1 min-w-0">
@@ -2553,9 +2518,9 @@ const ServiceManagement: React.FC = () => {
                                 </div>
                                 <div className="flex flex-col items-end space-y-1 flex-shrink-0">
                                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${isInStock
-                                      ? 'bg-green-100 text-green-700 border border-green-200' 
-                                      : 'bg-red-100 text-red-700 border border-red-200'
-                                  }`}>
+                                    ? 'bg-green-100 text-green-700 border border-green-200'
+                                    : 'bg-red-100 text-red-700 border border-red-200'
+                                    }`}>
                                     {isInStock ? `${stockQuantity} in stock` : 'Out of stock'}
                                   </span>
                                   {product.price && (
@@ -2772,7 +2737,7 @@ const ServiceManagement: React.FC = () => {
               {/* New Standardized Fields Section */}
               <div className="border-t border-gray-200 pt-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Service Request Details</h3>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {/* Service Request Type */}
                   <div>
@@ -3154,7 +3119,7 @@ const ServiceManagement: React.FC = () => {
                         productDropdown.filteredOptions.map((product, index) => {
                           const isInStock = (product.stockQuantity || 0) > 0;
                           const stockQuantity = product.stockQuantity || 0;
-                          
+
                           return (
                             <button
                               key={product._id}
@@ -3163,11 +3128,11 @@ const ServiceManagement: React.FC = () => {
                               onClick={() => !isInStock ? null : handleDropdownSelect('product', product._id)}
                               disabled={!isInStock}
                               className={`w-full px-3 py-2 text-left transition-colors ${!isInStock
-                                  ? 'text-gray-400 cursor-not-allowed bg-gray-50' 
-                                  : index === productDropdown.selectedIndex 
-                                    ? 'bg-blue-100 text-blue-900 hover:bg-blue-50' 
-                                    : 'text-gray-700 hover:bg-blue-50'
-                              }`}
+                                ? 'text-gray-400 cursor-not-allowed bg-gray-50'
+                                : index === productDropdown.selectedIndex
+                                  ? 'bg-blue-100 text-blue-900 hover:bg-blue-50'
+                                  : 'text-gray-700 hover:bg-blue-50'
+                                }`}
                             >
                               <div className="flex justify-between items-start gap-2">
                                 <div className="flex-1 min-w-0">
@@ -3179,9 +3144,9 @@ const ServiceManagement: React.FC = () => {
                                 </div>
                                 <div className="flex flex-col items-end space-y-1 flex-shrink-0">
                                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${isInStock
-                                      ? 'bg-green-100 text-green-700 border border-green-200' 
-                                      : 'bg-red-100 text-red-700 border border-red-200'
-                                  }`}>
+                                    ? 'bg-green-100 text-green-700 border border-green-200'
+                                    : 'bg-red-100 text-red-700 border border-red-200'
+                                    }`}>
                                     {isInStock ? `${stockQuantity} in stock` : 'Out of stock'}
                                   </span>
                                   {product.price && (
@@ -3338,18 +3303,18 @@ const ServiceManagement: React.FC = () => {
               {/* Standardized Fields Section */}
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Service Request Details</h3>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {/* Service Request Type */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       Service Request Type *
-                </label>
-                <input
-                  type="text"
+                    </label>
+                    <input
+                      type="text"
                       value={ticketFormData.serviceRequestType}
                       onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequestType: e.target.value })}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter service request type"
                     />
                   </div>
@@ -3849,11 +3814,9 @@ const ServiceManagement: React.FC = () => {
           ticketId={selectedTicket._id}
           onClose={() => setShowDigitalReportModal(false)}
           onReportCreated={(report) => {
-            console.log('Digital service report created:', report);
             setShowDigitalReportModal(false);
           }}
           onReportUpdated={(report) => {
-            console.log('Digital service report updated:', report);
             setShowDigitalReportModal(false);
           }}
         />
@@ -4117,11 +4080,10 @@ const ServiceManagement: React.FC = () => {
                         {[1, 2, 3, 4, 5].map((star) => (
                           <span
                             key={star}
-                            className={`text-2xl ${
-                              star <= selectedFeedback.rating
+                            className={`text-2xl ${star <= selectedFeedback.rating
                                 ? 'text-yellow-400'
                                 : 'text-gray-300'
-                            }`}
+                              }`}
                           >
                             ★
                           </span>
@@ -4144,11 +4106,10 @@ const ServiceManagement: React.FC = () => {
                             {[1, 2, 3, 4, 5].map((star) => (
                               <span
                                 key={star}
-                                className={`text-lg ${
-                                  star <= selectedFeedback.technicianRating
+                                className={`text-lg ${star <= selectedFeedback.technicianRating
                                     ? 'text-yellow-400'
                                     : 'text-gray-300'
-                                }`}
+                                  }`}
                               >
                                 ★
                               </span>
@@ -4167,11 +4128,10 @@ const ServiceManagement: React.FC = () => {
                             {[1, 2, 3, 4, 5].map((star) => (
                               <span
                                 key={star}
-                                className={`text-lg ${
-                                  star <= selectedFeedback.timelinessRating
+                                className={`text-lg ${star <= selectedFeedback.timelinessRating
                                     ? 'text-yellow-400'
                                     : 'text-gray-300'
-                                }`}
+                                  }`}
                               >
                                 ★
                               </span>
@@ -4190,11 +4150,10 @@ const ServiceManagement: React.FC = () => {
                             {[1, 2, 3, 4, 5].map((star) => (
                               <span
                                 key={star}
-                                className={`text-lg ${
-                                  star <= selectedFeedback.qualityRating
+                                className={`text-lg ${star <= selectedFeedback.qualityRating
                                     ? 'text-yellow-400'
                                     : 'text-gray-300'
-                                }`}
+                                  }`}
                               >
                                 ★
                               </span>
@@ -4211,15 +4170,14 @@ const ServiceManagement: React.FC = () => {
                   {/* Service Quality */}
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h3 className="text-lg font-medium text-gray-900 mb-2">Service Quality</h3>
-                    <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
-                      selectedFeedback.serviceQuality === 'excellent'
+                    <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${selectedFeedback.serviceQuality === 'excellent'
                         ? 'bg-green-100 text-green-800'
                         : selectedFeedback.serviceQuality === 'good'
-                        ? 'bg-blue-100 text-blue-800'
-                        : selectedFeedback.serviceQuality === 'average'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
+                          ? 'bg-blue-100 text-blue-800'
+                          : selectedFeedback.serviceQuality === 'average'
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                      }`}>
                       {selectedFeedback.serviceQuality.charAt(0).toUpperCase() + selectedFeedback.serviceQuality.slice(1)}
                     </span>
                   </div>
@@ -4227,11 +4185,10 @@ const ServiceManagement: React.FC = () => {
                   {/* Would Recommend */}
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h3 className="text-lg font-medium text-gray-900 mb-2">Would Recommend</h3>
-                    <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${
-                      selectedFeedback.wouldRecommend
+                    <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${selectedFeedback.wouldRecommend
                         ? 'bg-green-100 text-green-800'
                         : 'bg-red-100 text-red-800'
-                    }`}>
+                      }`}>
                       {selectedFeedback.wouldRecommend ? 'Yes' : 'No'}
                     </span>
                   </div>
