@@ -16,6 +16,7 @@ export interface CreateCustomerInput {
   assignedTo?: string;
   status?: LeadStatus;
   notes?: string;
+  isDGSalesCustomer?: boolean;
 }
 
 export interface UpdateCustomerInput {
@@ -32,6 +33,7 @@ export interface UpdateCustomerInput {
   assignedTo?: string;
   status?: LeadStatus;
   notes?: string;
+  isDGSalesCustomer?: boolean;
 }
 
 export interface AddContactHistoryInput {
@@ -52,6 +54,7 @@ export interface CustomerQueryInput {
   page?: number;
   limit?: number;
   sort?: string;
+  isDGSalesCustomer?: boolean;
   search?: string;
   customerType?: CustomerType;
   status?: LeadStatus;
@@ -121,7 +124,8 @@ const baseCustomerFields = {
   leadSource: Joi.string().max(100).trim().allow(''),
   assignedTo: Joi.string().hex().length(24), // MongoDB ObjectId
   status: Joi.string().valid(...Object.values(LeadStatus)),
-  notes: Joi.string().max(2000).allow('')
+  notes: Joi.string().max(2000).allow(''),
+  isDGSalesCustomer: Joi.boolean().optional()
 };
 
 // Create customer schema
@@ -138,7 +142,8 @@ export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
   status: baseCustomerFields.status,
-  notes: baseCustomerFields.notes
+  notes: baseCustomerFields.notes,
+  isDGSalesCustomer: baseCustomerFields.isDGSalesCustomer
 });
 
 // Update customer schema
@@ -155,7 +160,8 @@ export const updateCustomerSchema = Joi.object<UpdateCustomerInput>({
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
   status: baseCustomerFields.status,
-  notes: baseCustomerFields.notes
+  notes: baseCustomerFields.notes,
+  isDGSalesCustomer: baseCustomerFields.isDGSalesCustomer
 });
 
 // Contact history schema
@@ -182,6 +188,7 @@ export const customerQuerySchema = Joi.object<CustomerQueryInput>({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   sort: Joi.string().default('-createdAt'),
+  isDGSalesCustomer: Joi.boolean(),
   search: Joi.string().allow(''),
   customerType: Joi.string().valid(...Object.values(CustomerType)),
   status: Joi.string().valid(...Object.values(LeadStatus)),

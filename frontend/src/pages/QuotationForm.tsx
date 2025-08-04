@@ -22,6 +22,7 @@ import {
     calculateQuotationTotals,
     sanitizeQuotationData,
     getDefaultQuotationData,
+    getFieldErrorMessage,
     type QuotationData,
     type QuotationItem,
     type ValidationError,
@@ -87,6 +88,7 @@ const QuotationFormPage: React.FC = () => {
     const [addresses, setAddresses] = useState<any[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [locations, setLocations] = useState<StockLocationData[]>([]);
+    const [fieldOperators, setFieldOperators] = useState<any[]>([]);
     const [generalSettings, setGeneralSettings] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -94,8 +96,10 @@ const QuotationFormPage: React.FC = () => {
     // Custom dropdown states
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [customerSearchTerm, setCustomerSearchTerm] = useState('');
-    const [showAddressDropdown, setShowAddressDropdown] = useState(false);
+    const [showBillToAddressDropdown, setShowBillToAddressDropdown] = useState(false);
+    const [showShipToAddressDropdown, setShowShipToAddressDropdown] = useState(false);
     const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+    const [showEngineerDropdown, setShowEngineerDropdown] = useState(false);
     const [showProductDropdowns, setShowProductDropdowns] = useState<Record<number, boolean>>({});
     const [showUomDropdowns, setShowUomDropdowns] = useState<Record<number, boolean>>({});
 
@@ -115,8 +119,11 @@ const QuotationFormPage: React.FC = () => {
     // Excel-like navigation states for dropdown fields
     const [highlightedLocationIndex, setHighlightedLocationIndex] = useState(-1);
     const [highlightedCustomerIndex, setHighlightedCustomerIndex] = useState(-1);
-    const [highlightedAddressIndex, setHighlightedAddressIndex] = useState(-1);
+    const [highlightedBillToAddressIndex, setHighlightedBillToAddressIndex] = useState(-1);
+    const [highlightedShipToAddressIndex, setHighlightedShipToAddressIndex] = useState(-1);
+    const [highlightedEngineerIndex, setHighlightedEngineerIndex] = useState(-1);
     const [locationSearchTerm, setLocationSearchTerm] = useState('');
+    const [engineerSearchTerm, setEngineerSearchTerm] = useState('');
 
     // UOM options
     const UOM_OPTIONS = [
@@ -150,6 +157,9 @@ const QuotationFormPage: React.FC = () => {
                 setShowLocationDropdown(false);
                 setShowProductDropdowns({});
                 setShowUomDropdowns({});
+                setShowBillToAddressDropdown(false);
+                setShowShipToAddressDropdown(false);
+                setShowEngineerDropdown(false);
             }
         };
 
@@ -157,7 +167,7 @@ const QuotationFormPage: React.FC = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    console.log("formData.location:",formData.location);
+    console.log("formData.location:", formData.location);
     
 
     // Auto-focus location field when form loads (Excel-like behavior)
@@ -209,7 +219,8 @@ const QuotationFormPage: React.FC = () => {
                 fetchCustomers(),
                 fetchProducts(),
                 fetchLocations(),
-                fetchGeneralSettings()
+                fetchGeneralSettings(),
+                fetchFieldOperators()
             ]);
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -236,19 +247,33 @@ const QuotationFormPage: React.FC = () => {
                 setAddresses(customerAddresses);
             }
 
-            // Find matching address ID for the quotation's customer address
-            let matchingAddressId = quotation.customerAddress?.addressId;
+            // Find matching address ID for the quotation's addresses
+            let matchingBillToAddressId = quotation.billToAddress?.addressId;
+            let matchingShipToAddressId = quotation.shipToAddress?.addressId;
 
-            if (!matchingAddressId && quotation.customerAddress && customerAddresses.length > 0) {
+            if (!matchingBillToAddressId && quotation.billToAddress && customerAddresses.length > 0) {
                 // Try to find matching address by comparing address details
                 const matchingAddress = customerAddresses.find((addr: any) =>
-                    addr.address === quotation.customerAddress.address &&
-                    addr.district === quotation.customerAddress.district &&
-                    addr.pincode === quotation.customerAddress.pincode
+                    addr.address === quotation.billToAddress.address &&
+                    addr.district === quotation.billToAddress.district &&
+                    addr.pincode === quotation.billToAddress.pincode
                 );
 
                 if (matchingAddress) {
-                    matchingAddressId = matchingAddress.id;
+                    matchingBillToAddressId = matchingAddress.id;
+                }
+            }
+
+            if (!matchingShipToAddressId && quotation.shipToAddress && customerAddresses.length > 0) {
+                // Try to find matching address by comparing address details
+                const matchingAddress = customerAddresses.find((addr: any) =>
+                    addr.address === quotation.shipToAddress.address &&
+                    addr.district === quotation.shipToAddress.district &&
+                    addr.pincode === quotation.shipToAddress.pincode
+                );
+
+                if (matchingAddress) {
+                    matchingShipToAddressId = matchingAddress.id;
                 }
             }
 
@@ -289,12 +314,24 @@ const QuotationFormPage: React.FC = () => {
                 })),
                 notes: quotation.notes || '',
                 terms: quotation.terms || '',
-                customerAddress: quotation.customerAddress ? {
-                    address: quotation.customerAddress.address || '',
-                    state: quotation.customerAddress.state || '',
-                    district: quotation.customerAddress.district || '',
-                    pincode: quotation.customerAddress.pincode || '',
-                    ...(matchingAddressId && { addressId: matchingAddressId })
+                billToAddress: quotation.billToAddress ? {
+                    address: quotation.billToAddress.address || '',
+                    state: quotation.billToAddress.state || '',
+                    district: quotation.billToAddress.district || '',
+                    pincode: quotation.billToAddress.pincode || '',
+                    ...(matchingBillToAddressId && { addressId: matchingBillToAddressId })
+                } : {
+                    address: '',
+                    state: '',
+                    district: '',
+                    pincode: ''
+                },
+                shipToAddress: quotation.shipToAddress ? {
+                    address: quotation.shipToAddress.address || '',
+                    state: quotation.shipToAddress.state || '',
+                    district: quotation.shipToAddress.district || '',
+                    pincode: quotation.shipToAddress.pincode || '',
+                    ...(matchingShipToAddressId && { addressId: matchingShipToAddressId })
                 } : {
                     address: '',
                     state: '',
@@ -315,7 +352,7 @@ const QuotationFormPage: React.FC = () => {
 
     const fetchCustomers = async () => {
         try {
-            const response = await apiClient.customers.getAll({limit: 100, page: 1});
+            const response = await apiClient.customers.getAll({ limit: 100, page: 1 });
             const responseData = response.data as any;
             const customersData = responseData.customers || responseData || [];
             setCustomers(customersData);
@@ -430,6 +467,17 @@ const QuotationFormPage: React.FC = () => {
         }
     };
 
+    const fetchFieldOperators = async () => {
+        try {
+            const response = await apiClient.users.getFieldOperators();
+            if (response.success) {
+                setFieldOperators(response.data.fieldOperators);
+            }
+        } catch (error) {
+            console.error('Error fetching field operators:', error);
+        }
+    };
+
     // Enhanced getFilteredProducts function with deduplication
     const getFilteredProducts = (searchTerm: string = '') => {
         if (!searchTerm || searchTerm.trim() === '') return products;
@@ -540,6 +588,11 @@ const QuotationFormPage: React.FC = () => {
         if (!productId) return '';
         const product = products.find(p => p._id === productId);
         return product?.partNo || '';
+    };
+
+    const getEngineerLabel = (value: string) => {
+        const engineer = fieldOperators.find(e => e._id === value);
+        return engineer ? engineer.name : '';
     };
 
     // Enhanced Excel-like keyboard navigation
@@ -1060,35 +1113,35 @@ const QuotationFormPage: React.FC = () => {
         }
     };
 
-    // Address dropdown keyboard navigation
-    const handleAddressKeyDown = (e: React.KeyboardEvent) => {
+    // Bill To Address dropdown keyboard navigation
+    const handleBillToAddressKeyDown = (e: React.KeyboardEvent) => {
         if (!formData.customer?._id) return;
 
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            if (!showAddressDropdown) {
-                setShowAddressDropdown(true);
-                setHighlightedAddressIndex(0);
+            if (!showBillToAddressDropdown) {
+                setShowBillToAddressDropdown(true);
+                setHighlightedBillToAddressIndex(0);
             } else {
-                const newIndex = highlightedAddressIndex < addresses.length - 1 ? highlightedAddressIndex + 1 : 0;
-                setHighlightedAddressIndex(newIndex);
+                const newIndex = highlightedBillToAddressIndex < addresses.length - 1 ? highlightedBillToAddressIndex + 1 : 0;
+                setHighlightedBillToAddressIndex(newIndex);
             }
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            if (!showAddressDropdown) {
-                setShowAddressDropdown(true);
-                setHighlightedAddressIndex(addresses.length - 1);
+            if (!showBillToAddressDropdown) {
+                setShowBillToAddressDropdown(true);
+                setHighlightedBillToAddressIndex(addresses.length - 1);
             } else {
-                const newIndex = highlightedAddressIndex > 0 ? highlightedAddressIndex - 1 : addresses.length - 1;
-                setHighlightedAddressIndex(newIndex);
+                const newIndex = highlightedBillToAddressIndex > 0 ? highlightedBillToAddressIndex - 1 : addresses.length - 1;
+                setHighlightedBillToAddressIndex(newIndex);
             }
         } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
             e.preventDefault();
-            if (showAddressDropdown && highlightedAddressIndex >= 0 && addresses[highlightedAddressIndex]) {
-                const selectedAddress = addresses[highlightedAddressIndex];
+            if (showBillToAddressDropdown && highlightedBillToAddressIndex >= 0 && addresses[highlightedBillToAddressIndex]) {
+                const selectedAddress = addresses[highlightedBillToAddressIndex];
                 setFormData({
                     ...formData,
-                    customerAddress: {
+                    billToAddress: {
                         address: selectedAddress.address,
                         state: selectedAddress.state,
                         district: selectedAddress.district,
@@ -1096,19 +1149,19 @@ const QuotationFormPage: React.FC = () => {
                         ...(selectedAddress.id && { addressId: selectedAddress.id })
                     } as any
                 });
-                setShowAddressDropdown(false);
-                setHighlightedAddressIndex(-1);
+                setShowBillToAddressDropdown(false);
+                setHighlightedBillToAddressIndex(-1);
 
-                // Move to next field (validity period)
+                // Move to next field (ship to address)
                 setTimeout(() => {
-                    const validityInput = document.querySelector('[data-field="validity-period"]') as HTMLInputElement;
-                    if (validityInput) validityInput.focus();
+                    const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
+                    if (shipToAddressInput) shipToAddressInput.focus();
                 }, 50);
-            } else if (!showAddressDropdown) {
+            } else if (!showBillToAddressDropdown) {
                 // If no dropdown open, just move to next field
                 setTimeout(() => {
-                    const validityInput = document.querySelector('[data-field="validity-period"]') as HTMLInputElement;
-                    if (validityInput) validityInput.focus();
+                    const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
+                    if (shipToAddressInput) shipToAddressInput.focus();
                 }, 50);
             }
         } else if (e.key === 'Tab' && e.shiftKey) {
@@ -1119,8 +1172,72 @@ const QuotationFormPage: React.FC = () => {
                 if (customerInput) customerInput.focus();
             }, 50);
         } else if (e.key === 'Escape') {
-            setShowAddressDropdown(false);
-            setHighlightedAddressIndex(-1);
+            setShowBillToAddressDropdown(false);
+            setHighlightedBillToAddressIndex(-1);
+        }
+    };
+
+    // Ship To Address dropdown keyboard navigation
+    const handleShipToAddressKeyDown = (e: React.KeyboardEvent) => {
+        if (!formData.customer?._id) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!showShipToAddressDropdown) {
+                setShowShipToAddressDropdown(true);
+                setHighlightedShipToAddressIndex(0);
+            } else {
+                const newIndex = highlightedShipToAddressIndex < addresses.length - 1 ? highlightedShipToAddressIndex + 1 : 0;
+                setHighlightedShipToAddressIndex(newIndex);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!showShipToAddressDropdown) {
+                setShowShipToAddressDropdown(true);
+                setHighlightedShipToAddressIndex(addresses.length - 1);
+            } else {
+                const newIndex = highlightedShipToAddressIndex > 0 ? highlightedShipToAddressIndex - 1 : addresses.length - 1;
+                setHighlightedShipToAddressIndex(newIndex);
+            }
+        } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+            e.preventDefault();
+            if (showShipToAddressDropdown && highlightedShipToAddressIndex >= 0 && addresses[highlightedShipToAddressIndex]) {
+                const selectedAddress = addresses[highlightedShipToAddressIndex];
+                setFormData({
+                    ...formData,
+                    shipToAddress: {
+                        address: selectedAddress.address,
+                        state: selectedAddress.state,
+                        district: selectedAddress.district,
+                        pincode: selectedAddress.pincode,
+                        ...(selectedAddress.id && { addressId: selectedAddress.id })
+                    } as any
+                });
+                setShowShipToAddressDropdown(false);
+                setHighlightedShipToAddressIndex(-1);
+
+                // Move to next field (validity period)
+                setTimeout(() => {
+                    const validityInput = document.querySelector('[data-field="validity-period"]') as HTMLInputElement;
+                    if (validityInput) validityInput.focus();
+                }, 50);
+            } else if (!showShipToAddressDropdown) {
+                // If no dropdown open, just move to next field
+                setTimeout(() => {
+                    const validityInput = document.querySelector('[data-field="validity-period"]') as HTMLInputElement;
+                    if (validityInput) validityInput.focus();
+                }, 50);
+            }
+        } else if (e.key === 'Tab' && e.shiftKey) {
+            e.preventDefault();
+            // Move back to bill to address field
+            setTimeout(() => {
+                const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
+                if (billToAddressInput) billToAddressInput.focus();
+            }, 50);
+        } else if (e.key === 'Escape') {
+            setShowShipToAddressDropdown(false);
+            setHighlightedShipToAddressIndex(-1);
         }
     };
 
@@ -1317,13 +1434,14 @@ const QuotationFormPage: React.FC = () => {
             }
 
             // Recalculate totals
-            const calculationResult = calculateQuotationTotals(updatedItems);
+            const calculationResult = calculateQuotationTotals(updatedItems, prev.overallDiscount || 0);
 
             return {
                 ...prev,
                 items: calculationResult.items,
                 subtotal: calculationResult.subtotal,
                 totalDiscount: calculationResult.totalDiscount,
+                overallDiscount: calculationResult.overallDiscount,
                 totalTax: calculationResult.totalTax,
                 grandTotal: calculationResult.grandTotal,
                 roundOff: calculationResult.roundOff
@@ -1480,7 +1598,7 @@ const QuotationFormPage: React.FC = () => {
                     )}
 
                     {/* Customer and Basic Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 From Location *
@@ -1662,7 +1780,8 @@ const QuotationFormPage: React.FC = () => {
                                                             setFormData({
                                                                 ...formData,
                                                                 customer: { _id: '', name: '', email: '', phone: '', pan: '' },
-                                                                customerAddress: { address: '', state: '', district: '', pincode: '' }
+                                                                billToAddress: { address: '', state: '', district: '', pincode: '' },
+                                                                shipToAddress: { address: '', state: '', district: '', pincode: '' }
                                                             });
                                                             setShowCustomerDropdown(false);
                                                             setCustomerSearchTerm('');
@@ -1686,7 +1805,9 @@ const QuotationFormPage: React.FC = () => {
                                                                         email: customer.email,
                                                                         phone: customer.phone,
                                                                         pan: ''
-                                                                    }
+                                                                    },
+                                                                    billToAddress: { address: '', state: '', district: '', pincode: '' },
+                                                                    shipToAddress: { address: '', state: '', district: '', pincode: '' }
                                                                 });
                                                                 setShowCustomerDropdown(false);
                                                                 setCustomerSearchTerm('');
@@ -1716,36 +1837,39 @@ const QuotationFormPage: React.FC = () => {
                                     </div>
                                 )}
                             </div>
+                            </div>
                         </div>
 
+                    {/* Bill To and Ship To Addresses */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Customer Address *
+                                Bill To Address *
                             </label>
                             <div className="relative dropdown-container">
                                 <input
                                     type="text"
-                                    value={getAddressLabel((formData.customerAddress as any)?.addressId?.toString())}
+                                    value={getAddressLabel((formData.billToAddress as any)?.addressId?.toString())}
                                     readOnly
                                     disabled={!formData.customer?._id}
                                     onFocus={() => {
                                         if (formData.customer?._id) {
-                                            setShowAddressDropdown(true);
-                                            setHighlightedAddressIndex(-1);
+                                            setShowBillToAddressDropdown(true);
+                                            setHighlightedBillToAddressIndex(-1);
                                         }
                                     }}
-                                    onKeyDown={handleAddressKeyDown}
+                                    onKeyDown={handleBillToAddressKeyDown}
                                     placeholder={!formData.customer?._id ? "Select customer first" : "Press ↓ to open address list"}
-                                    data-field="customer-address"
+                                    data-field="bill-to-address"
                                     className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
                                             ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                             : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                                         }`}
                                 />
                                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAddressDropdown ? 'rotate-180' : ''}`} />
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showBillToAddressDropdown ? 'rotate-180' : ''}`} />
                                 </div>
-                                {showAddressDropdown && formData.customer?._id && (
+                                {showBillToAddressDropdown && formData.customer?._id && (
                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
                                         <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
                                             <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
@@ -1757,13 +1881,13 @@ const QuotationFormPage: React.FC = () => {
                                             onClick={() => {
                                                 setFormData({
                                                     ...formData,
-                                                    customerAddress: { address: '', state: '', district: '', pincode: '' }
+                                                    billToAddress: { address: '', state: '', district: '', pincode: '' }
                                                 });
-                                                setShowAddressDropdown(false);
+                                                setShowBillToAddressDropdown(false);
                                             }}
-                                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.customerAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.billToAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                                         >
-                                            Select address
+                                            Select bill to address
                                         </button>
 
                                         {addresses.map((address, index) => (
@@ -1773,7 +1897,7 @@ const QuotationFormPage: React.FC = () => {
                                                 onClick={() => {
                                                     setFormData({
                                                         ...formData,
-                                                        customerAddress: {
+                                                        billToAddress: {
                                                             address: address.address,
                                                             state: address.state,
                                                             district: address.district,
@@ -1781,11 +1905,11 @@ const QuotationFormPage: React.FC = () => {
                                                             ...(address.id && { addressId: address.id })
                                                         } as any
                                                     });
-                                                    setShowAddressDropdown(false);
-                                                    setHighlightedAddressIndex(-1);
+                                                    setShowBillToAddressDropdown(false);
+                                                    setHighlightedBillToAddressIndex(-1);
                                                 }}
-                                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.customerAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
-                                                        highlightedAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.billToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
+                                                    highlightedBillToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
                                                             'text-gray-700 hover:bg-gray-50'
                                                     }`}
                                             >
@@ -1809,6 +1933,99 @@ const QuotationFormPage: React.FC = () => {
                             </div>
                         </div>
 
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Ship To Address *
+                            </label>
+                            <div className="relative dropdown-container">
+                                <input
+                                    type="text"
+                                    value={getAddressLabel((formData.shipToAddress as any)?.addressId?.toString())}
+                                    readOnly
+                                    disabled={!formData.customer?._id}
+                                    onFocus={() => {
+                                        if (formData.customer?._id) {
+                                            setShowShipToAddressDropdown(true);
+                                            setHighlightedShipToAddressIndex(-1);
+                                        }
+                                    }}
+                                    onKeyDown={handleShipToAddressKeyDown}
+                                    placeholder={!formData.customer?._id ? "Select customer first" : "Press ↓ to open address list"}
+                                    data-field="ship-to-address"
+                                    className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
+                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                        : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                                        }`}
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showShipToAddressDropdown ? 'rotate-180' : ''}`} />
+                                </div>
+                                {showShipToAddressDropdown && formData.customer?._id && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                        <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                        </div>
+
+                                        <button
+                                            onClick={() => {
+                                                setFormData({
+                                                    ...formData,
+                                                    shipToAddress: { address: '', state: '', district: '', pincode: '' }
+                                                });
+                                                setShowShipToAddressDropdown(false);
+                                            }}
+                                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.shipToAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                        >
+                                            Select ship to address
+                                        </button>
+
+                                        {addresses.map((address, index) => (
+                                            <button
+                                                key={address.id}
+                                                data-address-index={index}
+                                                onClick={() => {
+                                                    setFormData({
+                                                        ...formData,
+                                                        shipToAddress: {
+                                                            address: address.address,
+                                                            state: address.state,
+                                                            district: address.district,
+                                                            pincode: address.pincode,
+                                                            ...(address.id && { addressId: address.id })
+                                                        } as any
+                                                    });
+                                                    setShowShipToAddressDropdown(false);
+                                                    setHighlightedShipToAddressIndex(-1);
+                                                }}
+                                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.shipToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
+                                                    highlightedShipToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                        'text-gray-700 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                <div>
+                                                    <div className="font-medium">{address.address}</div>
+                                                    <div className="text-xs text-gray-500">{address.district}, {address.pincode}</div>
+                                                    {address.isPrimary && (
+                                                        <div className="text-xs text-blue-600 font-medium">Primary</div>
+                                                    )}
+                                                </div>
+                                            </button>
+                                        ))}
+
+                                        {addresses.length === 0 && (
+                                            <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                                No addresses found for this customer
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Validity Period (Days)
@@ -1883,7 +2100,9 @@ const QuotationFormPage: React.FC = () => {
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                         </div>
+                        </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Valid Until
@@ -1901,10 +2120,10 @@ const QuotationFormPage: React.FC = () => {
                                 onKeyDown={(e) => {
                                     if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
                                         e.preventDefault();
-                                        // Move to first product field in the list
+                                    // Move to engineer field
                                         setTimeout(() => {
-                                            const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
-                                            if (firstProductInput) firstProductInput.focus();
+                                        const engineerInput = document.querySelector('[data-field="engineer"]') as HTMLInputElement;
+                                        if (engineerInput) engineerInput.focus();
                                         }, 50);
                                     } else if (e.key === 'Tab' && e.shiftKey) {
                                         e.preventDefault();
@@ -1917,10 +2136,155 @@ const QuotationFormPage: React.FC = () => {
                                 }}
                                 data-field="valid-until"
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                title="Tab/Enter: Move to products list | Shift+Tab: Back to validity period"
+                            title="Tab/Enter: Move to engineer field | Shift+Tab: Back to validity period"
                             />
                         </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Assign to Engineer
+                        </label>
+                        <div className="relative dropdown-container">
+                            <input
+                                type="text"
+                                value={engineerSearchTerm || getEngineerLabel(formData.assignedEngineer || '')}
+                                onChange={(e) => {
+                                    setEngineerSearchTerm(e.target.value);
+                                    if (!showEngineerDropdown) setShowEngineerDropdown(true);
+                                    setHighlightedEngineerIndex(-1);
+                                }}
+                                onFocus={() => {
+                                    setShowEngineerDropdown(true);
+                                    setHighlightedEngineerIndex(-1);
+                                    if (!engineerSearchTerm && formData.assignedEngineer) {
+                                        setEngineerSearchTerm('');
+                                    }
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        setShowEngineerDropdown(true);
+                                        setHighlightedEngineerIndex(prev => 
+                                            prev < fieldOperators.length - 1 ? prev + 1 : 0
+                                        );
+                                    } else if (e.key === 'ArrowUp') {
+                                        e.preventDefault();
+                                        setShowEngineerDropdown(true);
+                                        setHighlightedEngineerIndex(prev => 
+                                            prev > 0 ? prev - 1 : fieldOperators.length - 1
+                                        );
+                                    } else if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (showEngineerDropdown && highlightedEngineerIndex >= 0) {
+                                            const selectedEngineer = fieldOperators[highlightedEngineerIndex];
+                                            setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
+                                            setShowEngineerDropdown(false);
+                                            setEngineerSearchTerm('');
+                                            setHighlightedEngineerIndex(-1);
+                                        } else if (showEngineerDropdown && fieldOperators.length === 1) {
+                                            const selectedEngineer = fieldOperators[0];
+                                            setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
+                                            setShowEngineerDropdown(false);
+                                            setEngineerSearchTerm('');
+                                            setHighlightedEngineerIndex(-1);
+                                        }
+                                    } else if (e.key === 'Escape') {
+                                        setShowEngineerDropdown(false);
+                                        setHighlightedEngineerIndex(-1);
+                                    } else if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
+                                        e.preventDefault();
+                                        // Move to first product field in the list
+                                        setTimeout(() => {
+                                            const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
+                                            if (firstProductInput) firstProductInput.focus();
+                                        }, 50);
+                                    } else if (e.key === 'Tab' && e.shiftKey) {
+                                        e.preventDefault();
+                                        // Move back to Valid Until field
+                                        setTimeout(() => {
+                                            const validUntilInput = document.querySelector('[data-field="valid-until"]') as HTMLInputElement;
+                                            if (validUntilInput) validUntilInput.focus();
+                                        }, 50);
+                                    }
+                                }}
+                                autoComplete="off"
+                                placeholder="Search engineer or press ↓ to open"
+                                data-field="engineer"
+                                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                            />
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEngineerDropdown ? 'rotate-180' : ''}`} />
                     </div>
+                            {showEngineerDropdown && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                    {(() => {
+                                        const filteredEngineers = fieldOperators.filter(engineer =>
+                                            engineer.name.toLowerCase().includes(engineerSearchTerm.toLowerCase()) ||
+                                            (engineer.firstName && engineer.firstName.toLowerCase().includes(engineerSearchTerm.toLowerCase())) ||
+                                            (engineer.lastName && engineer.lastName.toLowerCase().includes(engineerSearchTerm.toLowerCase())) ||
+                                            (engineer.email && engineer.email.toLowerCase().includes(engineerSearchTerm.toLowerCase()))
+                                        );
+
+                                        return (
+                                            <>
+                                                <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                                </div>
+
+                                                <button
+                                                    onClick={() => {
+                                                        setFormData({ ...formData, assignedEngineer: '' });
+                                                        setShowEngineerDropdown(false);
+                                                        setEngineerSearchTerm('');
+                                                    }}
+                                                    className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.assignedEngineer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                                >
+                                                    Select engineer
+                                                </button>
+
+                                                {filteredEngineers.map((engineer, index) => (
+                                                    <button
+                                                        key={engineer._id}
+                                                        onClick={() => {
+                                                            setFormData({ ...formData, assignedEngineer: engineer._id });
+                                                            setShowEngineerDropdown(false);
+                                                            setEngineerSearchTerm('');
+                                                            setHighlightedEngineerIndex(-1);
+                                                        }}
+                                                        className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.assignedEngineer === engineer._id ? 'bg-blue-100 text-blue-800' :
+                                                                highlightedEngineerIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                                    'text-gray-700 hover:bg-gray-50'
+                                                            }`}
+                                                    >
+                                                        <div>
+                                                            <div className="font-medium">{engineer.name}</div>
+                                                            <div className="text-xs text-gray-500">{engineer.email}</div>
+                                                            {engineer.phone && (
+                                                                <div className="text-xs text-gray-500">{engineer.phone}</div>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                ))}
+
+                                                {filteredEngineers.length === 0 && (
+                                                    <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                                        No engineers found
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+                        </div>
+                        {/* {getFieldErrorMessage('assignedEngineer') && (
+                            <p className="mt-1 text-sm text-red-600">{getFieldErrorMessage('assignedEngineer')}</p>
+                        )} */}
+                    </div>
+                    </div>
+                </div>
 
 
 
@@ -2100,8 +2464,7 @@ const QuotationFormPage: React.FC = () => {
                                                                                             return (
                                                                                                 <div className="mt-1 flex items-center">
                                                                                                     <span className="font-medium text-gray-700">Stock Available:</span>
-                                                                                                    <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${
-                                                                                                        stockInfo.available === 0 
+                                                                                                    <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${stockInfo.available === 0
                                                                                                             ? 'bg-red-100 text-red-800 border border-red-300' 
                                                                                                             : stockInfo.available <= 5
                                                                                                                 ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
@@ -2166,8 +2529,7 @@ const QuotationFormPage: React.FC = () => {
                                                 {/* Stock Badge in Product Name Field */}
                                                 {formData.location && item.product && productStockCache[item.product] && (
                                                     <div className="flex-shrink-0">
-                                                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                                            productStockCache[item.product].available === 0
+                                                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${productStockCache[item.product].available === 0
                                                                 ? 'bg-red-100 text-red-800'
                                                                 : productStockCache[item.product].available <= 5
                                                                     ? 'bg-yellow-100 text-yellow-800'
@@ -2423,8 +2785,7 @@ const QuotationFormPage: React.FC = () => {
                                                     #{index + 1}
                                                 </span>
                                                 {formData.location && item.product && productStockCache[item.product] && (
-                                                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                                        productStockCache[item.product].available === 0
+                                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${productStockCache[item.product].available === 0
                                                             ? 'bg-red-100 text-red-800'
                                                             : productStockCache[item.product].available <= 5
                                                                 ? 'bg-yellow-100 text-yellow-800'
@@ -2492,8 +2853,7 @@ const QuotationFormPage: React.FC = () => {
                                                                         updateProductSearchTerm(index, '');
                                                                         setHighlightedProductIndex({ ...highlightedProductIndex, [index]: -1 });
                                                                     }}
-                                                                    className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${
-                                                                        item.product === product._id ? 'bg-blue-100 text-blue-800' : 'text-gray-700'
+                                                                className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.product === product._id ? 'bg-blue-100 text-blue-800' : 'text-gray-700'
                                                                     }`}
                                                                 >
                                                                     <div className="font-medium">{product.name}</div>
@@ -2532,8 +2892,7 @@ const QuotationFormPage: React.FC = () => {
                                                             }
                                                             updateQuotationItem(index, 'quantity', newQuantity);
                                                         }}
-                                                        className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                                                            item.product && formData.location && productStockCache[item.product]?.available === 0 
+                                                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${item.product && formData.location && productStockCache[item.product]?.available === 0
                                                                 ? 'bg-red-50 text-red-600' : ''
                                                         }`}
                                                         placeholder="1"
@@ -2644,6 +3003,45 @@ const QuotationFormPage: React.FC = () => {
                         </div>
                     </div>
 
+                {/* Overall Discount */}
+                <div className="border-t border-gray-200 pt-4">
+                    <div className="flex justify-end">
+                        <div className="w-80">
+                            <div className="flex items-center justify-between">
+                                <label className="block text-sm font-medium text-gray-700">Overall Discount (%):</label>
+                                <input
+                                    type="number"
+                                    value={formData.overallDiscount || 0}
+                                    onChange={(e) => {
+                                        const value = parseFloat(e.target.value) || 0;
+                                        console.log('QuotationForm: Overall discount changed to:', value);
+                                        setFormData(prev => {
+                                            const calculationResult = calculateQuotationTotals(prev.items || [], value);
+                                            console.log('QuotationForm: Calculation result:', calculationResult);
+                                            const updatedData = {
+                                                ...prev,
+                                                overallDiscount: value,
+                                                overallDiscountAmount: calculationResult.overallDiscountAmount,
+                                                totalDiscount: calculationResult.totalDiscount,
+                                                totalTax: calculationResult.totalTax,
+                                                grandTotal: calculationResult.grandTotal,
+                                                roundOff: calculationResult.roundOff
+                                            };
+                                            console.log('QuotationForm: Updated form data:', updatedData);
+                                            return updatedData;
+                                        });
+                                    }}
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </div>
+                        </div>
+                    </div>
+
                     {/* Totals */}
                     <div className="border-t border-gray-200 pt-4">
                         <div className="flex justify-end">
@@ -2659,6 +3057,10 @@ const QuotationFormPage: React.FC = () => {
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-600">Total Discount:</span>
                                     <span className="font-medium text-green-600">-₹{formData.totalDiscount?.toFixed(2) || '0.00'}</span>
+                                </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Overall Discount:</span>
+                                <span className="font-medium text-green-600">-{formData.overallDiscount || 0}% (-₹{formData.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
                                 </div>
                                 <div className="flex justify-between font-bold text-lg border-t pt-3">
                                     <span>Grand Total:</span>
@@ -2707,7 +3109,6 @@ const QuotationFormPage: React.FC = () => {
                                 </>
                             )}
                         </button>
-                    </div>
                 </div>
             </div>
         </div>

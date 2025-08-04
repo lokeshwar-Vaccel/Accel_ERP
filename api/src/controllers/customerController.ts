@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { Customer } from '../models/Customer';
+import { DGCustomer } from '../models/DGCustomer';
 import { AuthenticatedRequest, APIResponse, LeadStatus, CustomerType, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { createAssignmentNotification, createStatusChangeNotification, createFollowUpNotification } from './notificationController';
@@ -571,6 +572,112 @@ export const scheduleFollowUp = async (
     };
 
     res.status(201).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all DG customers
+// @route   GET /api/v1/customers/dg-sales
+// @access  Private
+export const getDGCustomers = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      sort = 'name', 
+      search, 
+      customerType, 
+      status, 
+      assignedTo,
+      leadSource,
+      segment,
+      kva
+    } = req.query as any;
+
+    // Build query for DG customers
+    const query: any = { isDGSalesCustomer: true };
+    
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { corporateName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { customerId: { $regex: search, $options: 'i' } },
+      ];
+    }
+    
+    if (customerType) {
+      query.customerType = customerType;
+    }
+    
+    if (status) {
+      query.status = status;
+    }
+    
+    if (assignedTo) {
+      query.assignedTo = assignedTo;
+    }
+    
+    if (leadSource) {
+      query.leadSource = leadSource;
+    }
+
+    if (segment) {
+      query['dgRequirements.segment'] = segment;
+    }
+
+    if (kva) {
+      query['dgRequirements.kva'] = { $regex: kva, $options: 'i' };
+    }
+
+    // Calculate pagination
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build sort object
+    const sortObj: any = {};
+    if (sort === 'name') sortObj.name = 1;
+    else if (sort === '-name') sortObj.name = -1;
+    else if (sort === 'createdAt') sortObj.createdAt = 1;
+    else if (sort === '-createdAt') sortObj.createdAt = -1;
+    else if (sort === 'status') sortObj.status = 1;
+    else if (sort === '-status') sortObj.status = -1;
+    else sortObj.createdAt = -1; // Default sort
+
+    // Execute query
+    const [customers, total] = await Promise.all([
+      DGCustomer.find(query)
+        .populate('assignedTo', 'name email')
+        .populate('createdBy', 'name email')
+        .sort(sortObj)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      DGCustomer.countDocuments(query)
+    ]);
+
+    const totalPages = Math.ceil(total / limitNum);
+
+    const response: APIResponse = {
+      success: true,
+      message: 'DG customers retrieved successfully',
+      data: customers,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: totalPages
+      }
+    };
+
+    res.status(200).json(response);
   } catch (error) {
     next(error);
   }

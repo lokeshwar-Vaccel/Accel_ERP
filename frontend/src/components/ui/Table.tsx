@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChevronUp, ChevronDown, MoreVertical, Edit, Trash2, Eye } from 'lucide-react';
 import { TableColumn, PaginationInfo } from '../../types';
+import { Pagination } from './Pagination';
 
 interface TableProps {
   columns: TableColumn[];
@@ -26,13 +27,15 @@ export const Table: React.FC<TableProps> = ({
   onEdit,
   onDelete,
   onView,
-  actions = true,
+  actions = false,
   className = ''
 }) => {
   const [sortColumn, setSortColumn] = useState<string>('');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
 
+  console.log("pagination:", pagination);
+  
   const handleSort = (column: string) => {
     const direction = sortColumn === column && sortDirection === 'asc' ? 'desc' : 'asc';
     setSortColumn(column);
@@ -176,45 +179,15 @@ export const Table: React.FC<TableProps> = ({
       </div>
 
       {pagination && (
-        <div className="px-6 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-          <div className="text-sm text-gray-500">
-            Showing {((pagination.page - 1) * pagination.limit) + 1} to{' '}
-            {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} results
-          </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => onPageChange?.(pagination.page - 1)}
-              disabled={pagination.page <= 1}
-              className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-            >
-              Previous
-            </button>
-            {Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
-              const pageNum = pagination.page - 2 + i;
-              if (pageNum < 1 || pageNum > pagination.pages) return null;
-              return (
-                <button
-                  key={pageNum}
-                  onClick={() => onPageChange?.(pageNum)}
-                  className={`px-3 py-1 border rounded text-sm ${
-                    pageNum === pagination.page
-                      ? 'bg-blue-600 text-white border-blue-600'
-                      : 'border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              );
-            })}
-            <button
-              onClick={() => onPageChange?.(pagination.page + 1)}
-              disabled={pagination.page >= pagination.pages}
-              className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <div className="px-6 py-6 bg-gray-50 border-t border-gray-200">
+        <Pagination
+          currentPage={pagination.page}
+          totalPages={pagination.pages}
+          onPageChange={onPageChange || (() => {})}
+          totalItems={pagination.total}
+          itemsPerPage={pagination.limit}
+        />
+         </div>
       )}
     </div>
   );

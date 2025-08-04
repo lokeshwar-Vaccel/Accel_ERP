@@ -2556,9 +2556,9 @@ const InventoryManagement: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Stock Levels</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Location</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">CPCB No</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">MRP</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Unit Price</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">UOM</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Pricing</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Pricing</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">Status & Department</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Technical Info</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Actions</th>
@@ -2648,10 +2648,10 @@ const InventoryManagement: React.FC = () => {
                           {/* <div className="text-sm font-medium text-gray-900">
                           MRP: ₹{(item.product?.price || 0).toFixed(2)}
                           </div> */}
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-600">
                             GST: {item.product?.gst}%
                           </div>
-                          <div className="text-xs text-gray-500">
+                          <div className="text-xs text-gray-700 font-bold">
                             GNDP: ₹{(item.product?.gndp || 0).toFixed(2)}
                           </div>
                         </div>
@@ -4955,6 +4955,7 @@ const InventoryManagement: React.FC = () => {
                         <td className="px-4 py-3 text-xs">
                           <div className="font-medium text-gray-900">{ledger.product?.name || 'Unknown Product'}</div>
                           <div className="text-gray-500">{ledger.product?.category}</div>
+                          <div className="text-gray-500 font-bold">Part No:{ledger.product?.partNo}</div>
                         </td>
                         <td className="px-4 py-3 text-xs">
                           <div className="font-medium text-gray-900">{ledger.location?.name || 'Unknown Location'}</div>
@@ -5302,7 +5303,7 @@ const InventoryManagement: React.FC = () => {
                           <th className="px-3 py-2 text-left font-medium">Description</th>
                           <th className="px-3 py-2 text-left font-medium">Department</th>
                           <th className="px-3 py-2 text-left font-medium">Quantity</th>
-                          <th className="px-3 py-2 text-left font-medium">MRP</th>
+                          <th className="px-3 py-2 text-left font-medium">Unit Price</th>
                           <th className="px-3 py-2 text-left font-medium">Status</th>
                         </tr>
                       </thead>

@@ -22,6 +22,7 @@ import {
   deleteContactHistory,
   convertLead,
   scheduleFollowUp,
+  getDGCustomers,
 } from '../controllers/customerController';
 import multer from 'multer';
 import { previewCustomerImport, importCustomers } from '../controllers/customerImportController';
@@ -39,6 +40,9 @@ const upload = multer();
 // Customer Excel import routes
 router.post('/preview-import', upload.single('file'), checkPermission('write'), previewCustomerImport);
 router.post('/import', upload.single('file'), checkPermission('write'), importCustomers);
+
+// DG Customers route
+router.get('/dg-customers', checkPermission('read'), getDGCustomers);
 
 // Customer routes
 router.route('/')

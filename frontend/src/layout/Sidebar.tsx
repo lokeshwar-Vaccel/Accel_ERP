@@ -14,7 +14,8 @@ import {
   MessageSquare,
   Calendar,
   Cog,
-  ChevronLeft
+  ChevronLeft,
+  Zap
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -33,6 +34,15 @@ interface SidebarProps {
     permission: 'read' | 'write' | 'admin';
   }[];
 }
+
+// const dgSalesSubmodules = [
+//   { name: 'Enquiries', path: '/dg-sales/enquiries', key: 'dg_sales_enquiries' },
+//   { name: 'Prospective Customer', path: '/dg-sales/prospective-customer', key: 'dg_sales_prospective_customer' },
+//   { name: 'Quotation', path: '/dg-sales/quotation', key: 'dg_sales_quotation' },
+//   { name: 'PO from Customer', path: '/dg-sales/po-from-customer', key: 'dg_sales_po_from_customer' },
+//   { name: 'Proforma', path: '/dg-sales/proforma', key: 'dg_sales_proforma' },
+//   { name: 'Invoice', path: '/dg-sales/invoice', key: 'dg_sales_invoice' },
+// ];
 
 const menuItems = [
   {
@@ -125,6 +135,14 @@ const menuItems = [
     icon: <Cog className="w-4 h-4" />,
     path: '/admin-settings',
     key: 'admin_settings',
+  },
+  {
+    id: 15,
+    name: 'DG Sales',
+    icon: <Zap className="w-4 h-4" />,
+    path: '/dg-sales',
+    key: 'dg_sales',
+    // submodules: dgSalesSubmodules,
   },
 ];
 
@@ -245,6 +263,46 @@ export default function Sidebar({
           <ul className="space-y-1">
             {accessibleMenuItems.map((item, index) => {
               const isActive = activeKey === item.key || location.pathname === item.path;
+              // if (item.submodules) {
+              //   // DG Sales with submodules
+              //   const isParentActive = item.submodules.some(sub => location.pathname.startsWith(sub.path));
+              //   return (
+              //     <li key={item.id} className="animate-fade-in-up">
+              //       <div
+              //         className={`group relative w-full flex items-center ${isCollapsed ? 'justify-center px-1.5' : 'space-x-2 px-2'} py-1.5 rounded-lg transition-all duration-300
+              //           ${isParentActive ? 'bg-gradient-to-r from-orange-500 to-red-600 shadow-lg text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+              //         title={isCollapsed ? item.name : undefined}
+              //       >
+              //         <div className={`relative p-1 rounded-md transition-all duration-300
+              //           ${isParentActive ? 'bg-orange-600/30 shadow-inner' : 'bg-gray-600/20 group-hover:bg-gray-600/40'}`}>{item.icon}</div>
+              //         {!isCollapsed && <span className="font-medium text-xs tracking-wide flex-1 text-left">{item.name}</span>}
+              //       </div>
+              //       {/* Submodules */}
+              //       {!isCollapsed && (
+              //         <ul className="ml-8 mt-1 space-y-1">
+              //           {item.submodules.map(sub => {
+              //             const isSubActive = location.pathname === sub.path;
+              //             return (
+              //               <li key={sub.key}>
+              //                 <button
+              //                   onClick={() => {
+              //                     onPanelChange(sub.key);
+              //                     navigate(sub.path);
+              //                     if (window.innerWidth < 1024) onToggle();
+              //                   }}
+              //                   className={`w-full flex items-center px-2 py-1.5 rounded-lg transition-all duration-300 text-xs
+              //                     ${isSubActive ? 'bg-orange-500 text-white' : 'text-gray-300 hover:bg-gray-700 hover:text-white'}`}
+              //                 >
+              //                   {sub.name}
+              //                 </button>
+              //               </li>
+              //             );
+              //           })}
+              //         </ul>
+              //       )}
+              //     </li>
+              //   );
+              // }
               return (
                 <li
                   key={item.id}
@@ -254,7 +312,7 @@ export default function Sidebar({
                   <button
                     onClick={() => {
                       onPanelChange(item.key);
-                      navigate(item.path,);
+                      navigate(item.path || '/');
                       if (window.innerWidth < 1024) onToggle();
                     }}
                     className={`

@@ -35,6 +35,7 @@ interface IPurchaseOrderSchema extends Document {
   invoiceDate?: Date;
   documentNumber?: string;
   documentDate?: Date;
+  department?: string; // Department for this purchase order
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -158,6 +159,11 @@ const purchaseOrderSchema = new Schema({
   },
   documentDate: {
     type: Date
+  },
+  department: {
+    type: String,
+    maxlength: [100, 'Department cannot exceed 100 characters'],
+    trim: true
   },
   createdBy: {
     type: Schema.Types.ObjectId,

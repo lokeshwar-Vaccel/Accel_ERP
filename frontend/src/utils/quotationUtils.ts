@@ -45,22 +45,40 @@ export interface QuotationData {
   validUntil?: Date;
   validityPeriod?: number;
   customer: QuotationCustomer;
+  customerAddress?: {
+    address: string;
+    state?: string;
+    district?: string;
+    pincode?: string;
+    addressId?: number;
+  };
   company?: QuotationCompany;
   location?: string;
   items: QuotationItem[];
   subtotal: number;
   totalDiscount: number;
+  overallDiscount?: number; // Overall discount percentage
+  overallDiscountAmount?: number; // Calculated overall discount amount
   totalTax: number;
   grandTotal: number;
   roundOff: number;
   notes?: string;
   terms?: string;
-  customerAddress?: {
+  billToAddress?: {
     address: string;
     state: string;
     district: string;
     pincode: string;
+    addressId?: number;
   };
+  shipToAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    addressId?: number;
+  };
+  assignedEngineer?: string; // Add assigned engineer field
 }
 
 export interface ValidationError {
@@ -76,6 +94,8 @@ export interface ValidationResult {
 export interface CalculationResult {
   subtotal: number;
   totalDiscount: number;
+  overallDiscount: number; // Overall discount percentage
+  overallDiscountAmount: number; // Calculated overall discount amount
   totalTax: number;
   grandTotal: number;
   roundOff: number;
@@ -95,26 +115,26 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
     }
     // Remove address validation from customer
   }
-  console.log("data.customerAddress:", data);
+  console.log("data.billToAddress:", data.billToAddress);
+  console.log("data.shipToAddress:", data.shipToAddress);
 
   // Location validation
   if (!data.location || (typeof data.location === 'string' && !data.location.trim())) {
     errors.push({ field: 'location', message: 'From location is required' });
   }
 
-  // Validate customerAddress
-  if (!data.customerAddress || !data.customerAddress.address || (typeof data.customerAddress.address === 'string' && !data.customerAddress.address.trim())) {
-    errors.push({ field: 'customerAddress.address', message: 'Customer address is required' });
+  // Validate billToAddress
+  if (!data.billToAddress || !data.billToAddress.address || (typeof data.billToAddress.address === 'string' && !data.billToAddress.address.trim())) {
+    errors.push({ field: 'billToAddress.address', message: 'Bill to address is required' });
   }
-  // if (!data.customerAddress || !data.customerAddress.state?.trim()) {
-  //   errors.push({ field: 'customerAddress.state', message: 'Customer state is required' });
-  // }
-  // if (!data.customerAddress || !data.customerAddress.district?.trim()) {
-  //   errors.push({ field: 'customerAddress.district', message: 'Customer district is required' });
-  // }
-  // if (!data.customerAddress || !data.customerAddress.pincode?.trim()) {
-  //   errors.push({ field: 'customerAddress.pincode', message: 'Customer pincode is required' });
-  // }
+
+  // Validate shipToAddress
+  if (!data.shipToAddress || !data.shipToAddress.address || (typeof data.shipToAddress.address === 'string' && !data.shipToAddress.address.trim())) {
+    errors.push({ field: 'shipToAddress.address', message: 'Ship to address is required' });
+  }
+
+  // Validate assigned engineer (optional)
+  // No validation needed - field is optional
 
   // Company validation
   // if (!data.company) {
@@ -177,7 +197,7 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
 };
 
 // Calculation Functions
-export const calculateQuotationTotals = (items: QuotationItem[]): CalculationResult => {
+export const calculateQuotationTotals = (items: QuotationItem[], overallDiscount: number = 0): CalculationResult => {
   let subtotal = 0;
   let totalDiscount = 0;
   let totalTax = 0;
@@ -209,13 +229,21 @@ export const calculateQuotationTotals = (items: QuotationItem[]): CalculationRes
     };
   });
 
-  const grandTotalBeforeRound = subtotal - totalDiscount + totalTax;
-  const grandTotal = grandTotalBeforeRound;
-  const roundOff = grandTotal - grandTotalBeforeRound;
+  // Calculate grand total before overall discount
+  const grandTotalBeforeOverallDiscount = subtotal - totalDiscount + totalTax;
+  
+  // Calculate overall discount amount as percentage of grand total
+  const overallDiscountAmount = (overallDiscount / 100) * grandTotalBeforeOverallDiscount;
+  
+  // Apply overall discount to grand total
+  const grandTotal = grandTotalBeforeOverallDiscount - overallDiscountAmount;
+  const roundOff = 0; // No rounding for now
 
   return {
     subtotal: subtotal,
     totalDiscount: totalDiscount,
+    overallDiscount: overallDiscount, // Keep the percentage
+    overallDiscountAmount: overallDiscountAmount, // Add the calculated amount
     totalTax: totalTax,
     grandTotal,
     roundOff,
@@ -231,7 +259,7 @@ export const transformQuotationData = (data: any): QuotationData => {
   validUntil.setDate(validUntil.getDate() + validityPeriod);
 
   // Calculate totals
-  const calculationResult = calculateQuotationTotals(data.items || []);
+  const calculationResult = calculateQuotationTotals(data.items || [], data.overallDiscount || 0);
 
   return {
     quotationNumber: data.quotationNumber,
@@ -244,6 +272,7 @@ export const transformQuotationData = (data: any): QuotationData => {
       phone: data.customer?.phone || '',
       pan: data.customer?.pan || ''
     },
+    customerAddress: data.customerAddress,
     company: {
       name: data.company?.name || '',
       address: data.company?.address || '',
@@ -255,12 +284,15 @@ export const transformQuotationData = (data: any): QuotationData => {
     items: calculationResult.items,
     subtotal: calculationResult.subtotal,
     totalDiscount: calculationResult.totalDiscount,
+    overallDiscount: calculationResult.overallDiscount,
+    overallDiscountAmount: calculationResult.overallDiscountAmount,
     totalTax: calculationResult.totalTax,
     grandTotal: calculationResult.grandTotal,
     roundOff: calculationResult.roundOff,
     notes: data.notes || '',
     terms: data.terms || '',
-    customerAddress: data.customerAddress
+    billToAddress: data.billToAddress,
+    shipToAddress: data.shipToAddress
   };
 };
 
@@ -289,7 +321,9 @@ export const getFieldErrorMessage = (field: string): string => {
     'customer.name': 'Customer name is required',
     'customer.email': 'Please enter a valid email address',
     'customer.phone': 'Please enter a valid phone number',
-    'customerAddress.address': 'Customer address is required',
+    'billToAddress.address': 'Bill to address is required',
+    'shipToAddress.address': 'Ship to address is required',
+    'assignedEngineer': 'Please select a valid engineer',
     // 'customerAddress.state': 'Customer state is required',
     // 'customerAddress.district': 'Customer district is required',
     // 'customerAddress.pincode': 'Customer pincode is required',
@@ -320,6 +354,7 @@ export const sanitizeQuotationData = (data: any): any => {
       phone: String(data.customer.phone || '').trim(),
       pan: String(data.customer.pan || '').trim()
     } : undefined,
+    customerAddress: data.customerAddress,
     company: data.company ? {
       name: String(data.company.name || '').trim(),
       address: String(data.company.address || '').trim(),
@@ -341,7 +376,9 @@ export const sanitizeQuotationData = (data: any): any => {
       taxRate: Number(item.taxRate) || 0
     })) : [],
     notes: String(data.notes || '').trim(),
-    terms: String(data.terms || '').trim()
+    terms: String(data.terms || '').trim(),
+    billToAddress: data.billToAddress,
+    shipToAddress: data.shipToAddress
   };
 };
 
@@ -353,6 +390,12 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
     email: '',
     phone: '',
     pan: ''
+  },
+  customerAddress: {
+    address: '',
+    state: '',
+    district: '',
+    pincode: ''
   },
   company: {
     name: '',
@@ -380,17 +423,26 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
   }],
   subtotal: 0,
   totalDiscount: 0,
+  overallDiscount: 0,
+  overallDiscountAmount: 0,
   totalTax: 0,
   grandTotal: 0,
   roundOff: 0,
   notes: '',
   terms: '',
-  customerAddress: {
+  billToAddress: {
     address: '',
     state: '',
     district: '',
     pincode: ''
-  }
+  },
+  shipToAddress: {
+    address: '',
+    state: '',
+    district: '',
+    pincode: ''
+  },
+  assignedEngineer: ''
 });
 
 // Export all functions

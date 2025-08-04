@@ -81,10 +81,6 @@ const productSchema = new Schema({
     type: String,
     maxlength: [50, 'HSN number cannot exceed 50 characters'],
   },
-  dept: {
-    type: String,
-    maxlength: [100, 'Department cannot exceed 100 characters'],
-  },
   productType1: {
     type: String,
     maxlength: [100, 'Product Type 1 cannot exceed 100 characters'],

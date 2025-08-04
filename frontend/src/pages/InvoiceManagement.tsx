@@ -822,6 +822,8 @@ const InvoiceManagement: React.FC = () => {
       });
 
       const responseData = response.data as any;
+      console.log("responseData:",responseData);
+      
 
       let quotationsData = [];
       if (responseData.pagination) {
@@ -1004,11 +1006,18 @@ const InvoiceManagement: React.FC = () => {
   const handleCreateQuotation = () => {
     navigate('/billing/quotation/create');
   };
-
-  const handleViewQuotation = (quotation: any) => {
-    setSelectedQuotation(quotation);
-    setShowQuotationViewModal(true);
+  // Quotation handlers
+  const handleCreatePurchaseOrder = () => {
+    navigate('/purchase-order-management/create');
   };
+
+      const handleViewQuotation = (quotation: any) => {
+      console.log("quotation123:", quotation);
+      console.log("assignedEngineer:", quotation.assignedEngineer);
+      
+      setSelectedQuotation(quotation);
+      setShowQuotationViewModal(true);
+    };
 
   const handleEditQuotation = (quotation: any) => {
     console.log('Editing quotation:', quotation);
@@ -1039,6 +1048,60 @@ const InvoiceManagement: React.FC = () => {
         toast.error('Failed to delete quotation');
       }
     }
+  };
+
+  const handleCreateInvoiceFromQuotation = (quotation: any) => {
+    console.log('Creating invoice from quotation:', quotation);
+    
+    // Close the quotation view modal
+    setShowQuotationViewModal(false);
+    
+    // Prepare quotation data with proper structure
+    const quotationData = {
+      customer: quotation.customer,
+      billToAddress: quotation.billToAddress ? {
+        address: quotation.billToAddress.address || '',
+        state: quotation.billToAddress.state || '',
+        district: quotation.billToAddress.district || '',
+        pincode: quotation.billToAddress.pincode || '',
+        addressId: quotation.billToAddress.addressId || quotation.billToAddress.id
+      } : null,
+      shipToAddress: quotation.shipToAddress ? {
+        address: quotation.shipToAddress.address || '',
+        state: quotation.shipToAddress.state || '',
+        district: quotation.shipToAddress.district || '',
+        pincode: quotation.shipToAddress.pincode || '',
+        addressId: quotation.shipToAddress.addressId || quotation.shipToAddress.id
+      } : null,
+      assignedEngineer: quotation.assignedEngineer?._id || quotation.assignedEngineer,
+      items: quotation.items?.map((item: any) => ({
+        product: item.product?._id || item.product,
+        description: item.description || '',
+        quantity: item.quantity || 0,
+        unitPrice: item.unitPrice || 0,
+        taxRate: item.taxRate || 0,
+        hsnSac: item.hsnCode || item.hsnSac || '',
+        partNo: item.partNo || '',
+        uom: item.uom || 'nos',
+        discount: item.discount || 0
+      })) || [],
+      overallDiscount: quotation.overallDiscount || 0,
+      overallDiscountAmount: quotation.overallDiscountAmount || 0,
+      notes: quotation.notes || '',
+      terms: quotation.terms || '',
+      location: quotation.location?._id || quotation.location,
+      dueDate: quotation.validUntil ? new Date(quotation.validUntil).toISOString().split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    };
+    
+    console.log('Prepared quotation data:', quotationData);
+    
+    // Navigate to create invoice page with quotation data
+    navigate('/billing/create', {
+      state: {
+        invoiceType: 'sale',
+        quotationData: quotationData
+      }
+    });
   };
 
   // Status management functions
@@ -1335,7 +1398,7 @@ const InvoiceManagement: React.FC = () => {
     // });
 
     // Only show payment-related actions for sales invoices
-    if (invoice.invoiceType === 'sale') {
+    if (invoice.invoiceType === 'sale' || invoice.invoiceType === 'purchase') {
 
       // Edit Status - Available for all invoices except cancelled
       if (invoice.status !== 'cancelled') {
@@ -1348,7 +1411,7 @@ const InvoiceManagement: React.FC = () => {
       }
 
       // Payment Management - Available for invoices that can have payments
-      if (invoice.status !== 'cancelled' && invoice.status !== 'draft') {
+      if (invoice.status !== 'cancelled' && invoice.status !== 'draft' || invoice.invoiceType === 'purchase') {
         actions.push({
           icon: <IndianRupee className="w-4 h-4" />,
           label: 'Update Payment',
@@ -1358,7 +1421,7 @@ const InvoiceManagement: React.FC = () => {
       }
 
       // Email actions
-      if (invoice.status === 'draft') {
+      if (invoice.status === 'draft' && invoice.invoiceType === 'sale') {
         actions.push({
           icon: <Send className="w-4 h-4" />,
           label: 'Send Email',
@@ -1376,7 +1439,7 @@ const InvoiceManagement: React.FC = () => {
         });
       }
 
-      if (invoice.status === 'sent' && invoice.paymentStatus === 'pending') {
+      if (invoice.status === 'sent' && invoice.paymentStatus === 'pending' || invoice.invoiceType === 'purchase') {
         actions.push({
           icon: <CheckCircle className="w-4 h-4" />,
           label: 'Quick Paid',
@@ -1632,7 +1695,7 @@ const InvoiceManagement: React.FC = () => {
     // Validate invoice status
     if (selectedInvoice.status === 'cancelled') {
       errors.general = 'Cannot process payment for cancelled invoice';
-    } else if (selectedInvoice.status === 'draft') {
+    } else if (selectedInvoice.status === 'draft' && invoiceType === 'sale') {
       errors.general = 'Cannot process payment for draft invoice. Please send the invoice first.';
     }
 
@@ -2198,106 +2261,216 @@ const InvoiceManagement: React.FC = () => {
       <head>
         <title>Invoice ${selectedInvoice.invoiceNumber}</title>
         <style>
-          body { font-family: Arial, sans-serif; margin: 20px; }
-          .header { text-align: center; margin-bottom: 30px; }
-          .invoice-details, .buyer-details { width: 100%; margin-bottom: 10px; }
-          .invoice-details td, .buyer-details td { padding: 2px 6px; font-size: 12px; }
-          table.items { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
-          table.items th, table.items td { border: 1px solid #333; padding: 4px; font-size: 11px; }
-          table.items th { background: #eee; }
-          .summary-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 30px;
-            margin-bottom: 10px;
-          }
-          .summary-table td {
-            padding: 6px 8px;
-            font-size: 12px;
-            border-bottom: 1px solid #dee2e6;
-          }
-          .summary-table td:first-child {
-            font-weight: bold;
-            color: #495057;
-          }
-          .footer { margin-top: 30px; font-size: 12px; }
+          @page { size: A4; margin: 0.5in; }
+          body { font-family: Arial, sans-serif; margin: 0; padding: 0; line-height: 1.4; color: #000; font-size: 12px; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
+          .header h1 { margin: 0 0 8px 0; font-size: 22px; font-weight: bold; color: #000; }
+          .header div { margin: 3px 0; font-size: 11px; }
+          .invoice-details { margin-bottom: 15px; }
+          .invoice-details h2 { margin: 0 0 10px 0; text-align: center; font-size: 20px; font-weight: bold; border: 2px solid #000; padding: 8px; display: inline-block; width: 200px; margin-left: calc(50% - 100px); }
+          .details-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+          .details-table td { padding: 6px 10px; font-size: 11px; border: 1px solid #000; }
+          .details-table td:first-child { font-weight: bold; background-color: #f5f5f5; width: 20%; }
+          .engineer-date-section { display: flex; gap: 15px; margin-bottom: 15px; }
+          .engineer-box, .date-box { flex: 1; border: 1px solid #000; padding: 8px; background-color: #f9f9f9; }
+          .engineer-box h4, .date-box h4 { margin: 0 0 5px 0; font-size: 12px; font-weight: bold; }
+          .from-to-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 15px; }
+          .from-to-box { flex: 1; min-width: 200px; padding: 10px; border: 1px solid #000; }
+          .from-to-box h3 { margin: 0 0 8px 0; font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; }
+          .from-to-box div { font-size: 10px; line-height: 1.3; }
+          .from-to-box strong { color: #000; }
+          table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10px; }
+          table.items th, table.items td { border: 1px solid #000; padding: 5px 4px; text-align: center; vertical-align: middle; }
+          table.items th { background: #f0f0f0; font-weight: bold; font-size: 9px; }
+          table.items .description-col { text-align: left; max-width: 150px; }
+          .summary-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 20px; }
+          .notes-box { flex: 1; padding: 10px; border: 1px solid #000; min-height: 120px; }
+          .notes-box h4 { margin: 0 0 8px 0; font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; }
+          .notes-box div { font-size: 10px; line-height: 1.3; }
+          .summary-box { flex: 1; padding: 10px; border: 1px solid #000; min-height: 120px; }
+          .summary-table { width: 100%; border-collapse: collapse; }
+          .summary-table td { padding: 5px 8px; font-size: 11px; border-bottom: 1px solid #ccc; }
+          .summary-table td:first-child { font-weight: bold; }
+          .summary-table .total-row { font-weight: bold; background-color: #f0f0f0; border-top: 2px solid #000; font-size: 12px; }
+          .summary-table .amount-words { border-top: 1px solid #000; font-size: 9px; line-height: 1.2; word-wrap: break-word; max-width: 180px; }
+          .footer { margin-top: 30px; text-align: center; font-size: 11px; }
+          .footer div { margin: 8px 0; }
+          @media print { body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none; } .invoice-details { border: none !important; background: none !important; } }
         </style>
       </head>
       <body>
         <div class="header">
-          <h2>${generalSettings?.companyName || 'Sun Power Services'}</h2>
-          ${generalSettings?.companyAddress ? `<div>${generalSettings?.companyAddress || ''}</div>` : ''}
-          ${generalSettings?.companyGSTIN ? `<div>GSTIN: ${generalSettings?.companyGSTIN || ''}</div>` : ''}
-          ${generalSettings?.companyPhone ? `<div>Contact: ${generalSettings?.companyPhone || ''}  Email: ${generalSettings?.companyEmail || ''}</div>` : ''}
+          <h1>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</h1>
+          ${selectedInvoice.company?.address || generalSettings?.companyAddress ? `<div>${selectedInvoice.company?.address || generalSettings?.companyAddress || ''}</div>` : ''}
+          ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `<div>Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone || ''} | Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail || ''}</div>` : ''}
+          ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `<div>PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN || ''} | GSTIN: ${selectedInvoice.company?.gstin || generalSettings?.companyGSTIN || ''}</div>` : ''}
         </div>
-        <table class="invoice-details">
-          ${selectedInvoice.invoiceNumber ? `<tr><td>Invoice No:</td><td>${selectedInvoice.invoiceNumber || ''}</td><td>Dated:</td><td>${new Date(selectedInvoice.issueDate).toLocaleDateString()}</td></tr>` : ''}
-          ${selectedInvoice.termsOfDelivery ? `<tr><td>Mode/Terms of Payment:</td><td>${selectedInvoice.termsOfDelivery || ''}</td><td>Reference No. & Date:</td><td>${selectedInvoice.referenceNo || ''} ${selectedInvoice.referenceDate || ''}</td></tr>` : ''}
-          ${selectedInvoice.buyersOrderNo ? `<tr><td>Buyer's Order No:</td><td>${selectedInvoice.buyersOrderNo || ''}</td><td>Dispatch Doc No:</td><td>${selectedInvoice.dispatchDocNo || ''}</td></tr>` : ''}
-          ${selectedInvoice.deliveryNoteDate ? `<tr><td>Delivery Note Date:</td><td>${selectedInvoice.deliveryNoteDate || ''}</td><td>Dispatched Through:</td><td>${selectedInvoice.dispatchedThrough || ''}</td></tr>` : ''}
-          ${selectedInvoice.destination ? `<tr><td>Destination:</td><td>${selectedInvoice.destination || ''}</td></tr>` : ''}
-        </table>
-       <table class="buyer-details">
-          ${selectedInvoice.customer?.name ? `Buyer: ${selectedInvoice.customer?.name}<br>` : ''}
-          ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
-          ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
-          ${selectedInvoice.customer?.gstNumber ? `GSTIN: ${selectedInvoice.customer?.gstNumber}<br>` : ''}
-          ${selectedInvoice.customer?.state ? `State Name: ${selectedInvoice.customer?.state}, Code: ${selectedInvoice.customer?.stateCode}<br>` : ''}
-        </table>
-                <div class="from-to-section" style="display: flex; justify-content: space-between; margin-bottom: 25px; gap: 20px;">
+        <div class="invoice-details">
+          <h2>INVOICE</h2>
+          <table class="details-table">
+            <tr>
+              <td>Invoice No:</td>
+              <td>${selectedInvoice.invoiceNumber}</td>
+              <td><strong>Issue Date:</strong></td>
+              <td>${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : ''}</td>
+            </tr>
+            <tr>
+              <td><strong>Due Date:</strong></td>
+              <td>${selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : ''}</td>
+              <td>Status:</td>
+              <td>${selectedInvoice.status ? selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1) : ''}</td>
+            </tr>
+            ${selectedInvoice.poNumber ? `
+            <tr>
+              <td>PO Number:</td>
+              <td>${selectedInvoice.poNumber}</td>
+              <td>Payment Status:</td>
+              <td>${selectedInvoice.paymentStatus ? selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1) : ''}</td>
+            </tr>
+            ` : ''}
+          </table>
+        </div>
+        <div class="engineer-date-section">
+          <div class="engineer-box">
+            <h4>Assigned Engineer:</h4>
+            <div>
+              <strong>Name:</strong> ${selectedInvoice.assignedEngineer ? `${selectedInvoice.assignedEngineer.firstName || ''} ${selectedInvoice.assignedEngineer.lastName || ''}`.trim() : 'Not Assigned'}<br>
+              ${selectedInvoice.assignedEngineer?.phone ? `<strong>Phone:</strong> ${selectedInvoice.assignedEngineer.phone}<br>` : ''}
+              ${selectedInvoice.assignedEngineer?.email ? `<strong>Email:</strong> ${selectedInvoice.assignedEngineer.email}` : ''}
+            </div>
+          </div>
+          <div class="date-box">
+            <h4>Important Dates:</h4>
+            <div>
+              <strong>Issue Date:</strong> ${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : 'Not Set'}<br>
+              <strong>Due Date:</strong> ${selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : 'Not Set'}<br>
+              <strong>Status:</strong> ${selectedInvoice.status ? selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1) : 'Draft'}
+            </div>
+          </div>
+        </div>
+        <div class="from-to-section">
           <div class="from-to-box">
             <h3>From:</h3>
             <div>
-              <strong>${selectedInvoice.company?.name || 'Sun Power Services'}</strong><br>
-              ${selectedInvoice.company?.phone ? `Phone: ${selectedInvoice.company?.phone}<br>` : ''}
-              ${selectedInvoice.company?.email ? `Email: ${selectedInvoice.company?.email}<br>` : ''}
-              ${selectedInvoice.company?.pan ? `PAN: ${selectedInvoice.company?.pan}<br>` : ''}
+              <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
+              ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
+              ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
+              ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
               ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
             </div>
           </div>
           <div class="from-to-box">
-            <h3>To:</h3>
+            <h3>Bill To:</h3>
             <div>
               <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
               ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
               ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
-              ${selectedInvoice.customerAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.customerAddress.address || 'N/A'}<br>${selectedInvoice.customerAddress.district && selectedInvoice.customerAddress.pincode ? `${selectedInvoice.customerAddress.district}, ${selectedInvoice.customerAddress.pincode}<br>` : ''}${selectedInvoice.customerAddress.state || 'N/A'}` : ''}
+              ${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}` : ''}
+            </div>
+          </div>
+          <div class="from-to-box">
+            <h3>Ship To:</h3>
+            <div>
+              <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
+              ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.state || 'N/A'}` : ''}
             </div>
           </div>
         </div>
         <table class="items">
           <thead>
             <tr>
-              <th>S.No</th><th>Description</th><th>HSN/SAC</th><th>GST Rate</th><th>Part No.</th><th>Quantity</th><th>UOM</th><th>Rate</th><th>Disc. %</th><th>Amount</th>
+              <th style="width: 30px;">S.No</th>
+              <th class="description-col">Description</th>
+              <th style="width: 80px;">HSN Code</th>
+              <th style="width: 40px;">Qty</th>
+              <th style="width: 40px;">UOM</th>
+              <th style="width: 80px;">Part No</th>
+              <th style="width: 70px;">Unit Price</th>
+              <th style="width: 50px;">Discount</th>
+              <th style="width: 50px;">Tax Rate</th>
+              <th style="width: 80px;">Total</th>
             </tr>
           </thead>
           <tbody>
-            ${(selectedInvoice.items as any[]).map((item: any, idx: number) => `
+            ${(selectedInvoice.items || []).map((item: any, idx: number) => `
               <tr>
                 <td>${idx + 1}</td>
-                <td>${item.description || ''}</td>
-                <td>${item?.product?.hsnNumber || ''}</td>
+                <td class="description-col">${item.description || ''}</td>
+                <td>${item.hsnSac || item?.product?.hsnNumber || 'N/A'}</td>
+                <td>${item.quantity || 0}</td>
+                <td>${item.uom || 'nos'}</td>
+                <td>${item.partNo || item?.product?.partNo || 'N/A'}</td>
+                <td>₹${item.unitPrice?.toLocaleString() || '0'}</td>
+                <td>${item.discount || 0}%</td>
                 <td>${item.taxRate || 0}%</td>
-                <td>${item?.product?.partNo || ''}</td>
-                <td>${item.quantity?.toFixed(2) || ''}</td>
-                <td>${item.uom || ''}</td>
-                <td>${item.unitPrice?.toFixed(2) || ''}</td>
-                <td>${item.discount || 0}</td>
-                <td>${(item.quantity * item.unitPrice - ((item.discount || 0) * item.quantity * item.unitPrice / 100) + ((item.quantity * item.unitPrice - ((item.discount || 0) * item.quantity * item.unitPrice / 100)) * (item.taxRate || 0) / 100)).toFixed(2)}</td>
+                <td>₹${(item.unitPrice * item.quantity * (1 - (item.discount || 0) / 100) * (1 + (item.taxRate || 0) / 100)).toFixed(2)}</td>
               </tr>
             `).join('')}
           </tbody>
         </table>
-        
-        <div style="margin-top: 30px;"><strong>Amount Chargeable (in words):</strong> ${numberToWords(Math.round(grandTotal(selectedInvoice)))} </div>
-        <table class="summary-table">
-          <tr><td>Taxable Value</td><td>Integrated Tax Rate</td><td>Integrated Tax Amount</td><td>Total</td></tr>
-          <tr><td>${subtotal(selectedInvoice).toFixed(2)}</td><td>${selectedInvoice.items[0]?.taxRate || 0}%</td><td>${totalTax(selectedInvoice).toFixed(2)}</td><td>${(subtotal(selectedInvoice) + totalTax(selectedInvoice)).toFixed(2)}</td></tr>
-        </table>
+        <div class="summary-section">
+          ${(selectedInvoice.notes || selectedInvoice.terms) ? `
+          <div class="notes-box">
+            ${selectedInvoice.notes ? `
+              <h4>Notes:</h4>
+              <div>${selectedInvoice.notes}</div>
+            ` : ''}
+            ${selectedInvoice.terms ? `
+              <h4 ${selectedInvoice.notes ? 'style="margin-top: 15px;"' : ''}>Terms & Conditions:</h4>
+              <div>${selectedInvoice.terms}</div>
+            ` : ''}
+          </div>
+          ` : `
+          <div class="notes-box">
+            <h4>Standard Terms & Conditions:</h4>
+            <div>
+              • Payment: 100% advance payment along with P.O.<br>
+              • Ordering: In Favour of Sun Power Services<br>
+              • Delivery: Within One Month after your P.O.<br>
+              • Prices are subject to change without prior notice<br>
+              • All disputes subject to Chennai jurisdiction
+            </div>
+          </div>
+          `}
+          <div class="summary-box">
+            <table class="summary-table">
+              <tr>
+                <td>Subtotal:</td>
+                <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Total Tax:</td>
+                <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Total Discount:</td>
+                <td>-₹${(selectedInvoice.discountAmount || 0).toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Overall Discount:</td>
+                <td>-${selectedInvoice.overallDiscount || 0}% (-₹${selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</td>
+              </tr>
+              <tr class="total-row">
+                <td>Grand Total:</td>
+                <td><strong>₹${selectedInvoice.totalAmount?.toFixed(2) || '0'}</strong></td>
+              </tr>
+              <tr>
+                <td>Amount in Words:</td>
+                <td class="amount-words">
+                  ${selectedInvoice.totalAmount ? numberToWords(selectedInvoice.totalAmount) : 'Zero Rupees Only'}
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
         <div class="footer">
-          ${selectedInvoice.declaration ? `<div>Declaration: ${selectedInvoice.declaration || ''}</div>` : ''}
-          <div style="margin-top: 30px;">For ${generalSettings?.companyName || 'Sun Power Services'}</div>
-          <div style="margin-top: 30px;">Authorised Signatory</div>
+          <div><strong>For ${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong></div>
+          <br><br>
+          <div><strong>Authorized Signatory</strong></div>
+          <div style="margin-top: 20px; font-size: 9px; border-top: 1px solid #000; padding-top: 10px;">
+            <strong>Address:</strong> Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116<br>
+            <strong>Mobile:</strong> +91 9176660123 | <strong>GSTIN:</strong> 33BLFPS9951M1ZC | <strong>Email:</strong> 24x7powerolservice@gmail.com
+          </div>
         </div>
       </body>
     </html>
@@ -2306,7 +2479,11 @@ const InvoiceManagement: React.FC = () => {
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      printWindow.print();
+      printWindow.onload = function() {
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
+      };
     }
   };
 
@@ -2331,173 +2508,41 @@ const InvoiceManagement: React.FC = () => {
       <head>
         <title>Quotation ${quotation.quotationNumber}</title>
         <style>
-          body { 
-            font-family: Arial, sans-serif; 
-            margin: 20px; 
-            line-height: 1.6;
-            color: #333;
-          }
-          .header { 
-            text-align: center; 
-            margin-bottom: 30px; 
-            border-bottom: 2px solid #333;
-            padding-bottom: 20px;
-          }
-          .header h1 {
-            margin: 0 0 10px 0;
-            font-size: 24px;
-            font-weight: bold;
-          }
-          .header div {
-            margin: 2px 0;
-            font-size: 12px;
-          }
-          .quotation-details {
-            margin-bottom: 20px;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 8px;
-            border: 1px solid #dee2e6;
-          }
-          .quotation-details h2 {
-            margin: 0 0 15px 0;
-            text-align: center;
-            font-size: 18px;
-            font-weight: bold;
-          }
-          .quotation-details table {
-            width: 100%;
-            border-collapse: collapse;
-          }
-          .quotation-details td {
-            padding: 8px 12px;
-            font-size: 12px;
-            border: 1px solid #dee2e6;
-          }
-          .quotation-details td:first-child {
-            font-weight: bold;
-            background-color: #f8f9fa;
-            width: 25%;
-          }
-          .from-to-section {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 25px;
-            gap: 20px;
-          }
-          .from-to-box {
-            flex: 1;
-            padding: 15px;
-            border-radius: 8px;
-            background-color: #f8f9fa;
-          }
-          .from-to-box h3 {
-            margin: 0 0 10px 0;
-            font-size: 14px;
-            font-weight: bold;
-            color: #495057;
-            border-bottom: 1px solid #dee2e6;
-            padding-bottom: 5px;
-          }
-          .from-to-box div {
-            font-size: 12px;
-            line-height: 1.4;
-          }
-          .from-to-box strong {
-            color: #212529;
-          }
-          table.items { 
-            width: 100%; 
-            border-collapse: collapse; 
-            margin-bottom: 25px; 
-            font-size: 11px;
-          }
-          table.items th, table.items td { 
-            border: 1px solid #dee2e6; 
-            padding: 8px 6px; 
-            text-align: left;
-            vertical-align: top;
-          }
-          table.items th { 
-            background: #e9ecef; 
-            font-weight: bold;
-            color: #495057;
-          }
-          table.items td {
-            background: #fff;
-          }
-          .summary-section {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 25px;
-            gap: 20px;
-          }
-          .notes-box {
-            flex: 1;
-            padding: 15px;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            background-color: #f8f9fa;
-            min-height: 150px;
-          }
-          .notes-box h4 {
-            margin: 0 0 10px 0;
-            font-size: 14px;
-            font-weight: bold;
-            color: #495057;
-            border-bottom: 1px solid #dee2e6;
-            padding-bottom: 5px;
-          }
-          .notes-box div {
-            font-size: 12px;
-            line-height: 1.4;
-          }
-          .summary-box {
-            flex: 1;
-            padding: 15px;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
-            background-color: #f8f9fa;
-            min-height: 150px;
-          }
-          .summary-table {
-            width: 100%;
-            border-collapse: collapse;
-          }
-          .summary-table td {
-            padding: 6px 8px;
-            font-size: 12px;
-            border-bottom: 1px solid #dee2e6;
-          }
-          .summary-table td:first-child {
-            font-weight: bold;
-            color: #495057;
-          }
-          .summary-table .total-row {
-            font-weight: bold;
-            background-color: #e9ecef;
-            border-top: 1px solid #495057;
-          }
-          .summary-table .amount-words {
-            border-top: 1px solid #495057;
-            font-size: 11px;
-            line-height: 1.3;
-            word-wrap: break-word;
-            max-width: 200px;
-          }
-          .footer {
-            margin-top: 40px;
-            text-align: center;
-            font-size: 12px;
-            color: #6c757d;
-          }
-          .footer div {
-            margin: 5px 0;
-          }
-          @media print {
-            body { margin: 0; }
-            .no-print { display: none; }
-          }
+          @page { size: A4; margin: 0.5in; }
+          body { font-family: Arial, sans-serif; margin: 0; padding: 0; line-height: 1.4; color: #000; font-size: 12px; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
+          .header h1 { margin: 0 0 8px 0; font-size: 22px; font-weight: bold; color: #000; }
+          .header div { margin: 3px 0; font-size: 11px; }
+          .quotation-details { margin-bottom: 15px; }
+          .quotation-details h2 { margin: 0 0 10px 0; text-align: center; font-size: 20px; font-weight: bold; border: 2px solid #000; padding: 8px; display: inline-block; width: 200px; margin-left: calc(50% - 100px); }
+          .details-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+          .details-table td { padding: 6px 10px; font-size: 11px; border: 1px solid #000; }
+          .details-table td:first-child { font-weight: bold; background-color: #f5f5f5; width: 20%; }
+          .engineer-date-section { display: flex; gap: 15px; margin-bottom: 15px; }
+          .engineer-box, .date-box { flex: 1; border: 1px solid #000; padding: 8px; background-color: #f9f9f9; }
+          .engineer-box h4, .date-box h4 { margin: 0 0 5px 0; font-size: 12px; font-weight: bold; }
+          .from-to-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 15px; }
+          .from-to-box { flex: 1; min-width: 200px; padding: 10px; border: 1px solid #000; }
+          .from-to-box h3 { margin: 0 0 8px 0; font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; }
+          .from-to-box div { font-size: 10px; line-height: 1.3; }
+          .from-to-box strong { color: #000; }
+          table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10px; }
+          table.items th, table.items td { border: 1px solid #000; padding: 5px 4px; text-align: center; vertical-align: middle; }
+          table.items th { background: #f0f0f0; font-weight: bold; font-size: 9px; }
+          table.items .description-col { text-align: left; max-width: 150px; }
+          .summary-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 20px; }
+          .notes-box { flex: 1; padding: 10px; border: 1px solid #000; min-height: 120px; }
+          .notes-box h4 { margin: 0 0 8px 0; font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; }
+          .notes-box div { font-size: 10px; line-height: 1.3; }
+          .summary-box { flex: 1; padding: 10px; border: 1px solid #000; min-height: 120px; }
+          .summary-table { width: 100%; border-collapse: collapse; }
+          .summary-table td { padding: 5px 8px; font-size: 11px; border-bottom: 1px solid #ccc; }
+          .summary-table td:first-child { font-weight: bold; }
+          .summary-table .total-row { font-weight: bold; background-color: #f0f0f0; border-top: 2px solid #000; font-size: 12px; }
+          .summary-table .amount-words { border-top: 1px solid #000; font-size: 9px; line-height: 1.2; word-wrap: break-word; max-width: 180px; }
+          .footer { margin-top: 30px; text-align: center; font-size: 11px; }
+          .footer div { margin: 8px 0; }
+          @media print { body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none; } .quotation-details { border: none !important; background: none !important; } }
         </style>
       </head>
       <body>
@@ -2505,12 +2550,11 @@ const InvoiceManagement: React.FC = () => {
           <h1>${quotation.company?.name || 'Sun Power Services'}</h1>
           ${quotation.company?.address ? `<div>${quotation.company?.address || ''}</div>` : ''}
           ${quotation.company?.phone ? `<div>Phone: ${quotation.company?.phone || ''} | Email: ${quotation.company?.email || ''}</div>` : ''}
-          ${quotation.company?.pan ? `<div>PAN: ${quotation.company?.pan || ''}</div>` : ''}
+          ${quotation.company?.pan ? `<div>PAN: ${quotation.company?.pan || ''} | GSTIN: ${quotation.company?.gstin || ''}</div>` : ''}
         </div>
-
         <div class="quotation-details">
           <h2>QUOTATION</h2>
-          <table>
+          <table class="details-table">
             <tr>
               <td>Quotation No:</td>
               <td>${quotation.quotationNumber}</td>
@@ -2525,7 +2569,24 @@ const InvoiceManagement: React.FC = () => {
             </tr>
           </table>
         </div>
-
+        <div class="engineer-date-section">
+          <div class="engineer-box">
+            <h4>Assigned Engineer:</h4>
+            <div>
+              <strong>Name:</strong> ${quotation.assignedEngineer ? `${quotation.assignedEngineer.firstName || ''} ${quotation.assignedEngineer.lastName || ''}`.trim() : 'Not Assigned'}<br>
+              ${quotation.assignedEngineer?.phone ? `<strong>Phone:</strong> ${quotation.assignedEngineer.phone}<br>` : ''}
+              ${quotation.assignedEngineer?.email ? `<strong>Email:</strong> ${quotation.assignedEngineer.email}` : ''}
+            </div>
+          </div>
+          <div class="date-box">
+            <h4>Important Dates:</h4>
+            <div>
+              <strong>Issue Date:</strong> ${quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : 'Not Set'}<br>
+              <strong>Valid Until:</strong> ${quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString() : 'Not Set'}<br>
+              <strong>Validity:</strong> ${quotation.validityPeriod || 30} days
+            </div>
+          </div>
+        </div>
         <div class="from-to-section">
           <div class="from-to-box">
             <h3>From:</h3>
@@ -2538,36 +2599,42 @@ const InvoiceManagement: React.FC = () => {
             </div>
           </div>
           <div class="from-to-box">
-            <h3>To:</h3>
+            <h3>Bill To:</h3>
             <div>
               <strong>${quotation.customer?.name || 'N/A'}</strong><br>
               ${quotation.customer?.email ? `Email: ${quotation.customer?.email}<br>` : ''}
               ${quotation.customer?.phone ? `Phone: ${quotation.customer?.phone}<br>` : ''}
-              ${quotation.customerAddress ? `<br><strong>Address:</strong><br>${quotation.customerAddress.address || 'N/A'}<br>${quotation.customerAddress.district && quotation.customerAddress.pincode ? `${quotation.customerAddress.district}, ${quotation.customerAddress.pincode}<br>` : ''}${quotation.customerAddress.state || 'N/A'}` : ''}
+              ${quotation.billToAddress ? `<br><strong>Address:</strong><br>${quotation.billToAddress.address || 'N/A'}<br>${quotation.billToAddress.district && quotation.billToAddress.pincode ? `${quotation.billToAddress.district}, ${quotation.billToAddress.pincode}<br>` : ''}${quotation.billToAddress.state || 'N/A'}` : ''}
+            </div>
+          </div>
+          <div class="from-to-box">
+            <h3>Ship To:</h3>
+            <div>
+              <strong>${quotation.customer?.name || 'N/A'}</strong><br>
+              ${quotation.shipToAddress ? `<br><strong>Address:</strong><br>${quotation.shipToAddress.address || 'N/A'}<br>${quotation.shipToAddress.district && quotation.shipToAddress.pincode ? `${quotation.shipToAddress.district}, ${quotation.shipToAddress.pincode}<br>` : ''}${quotation.shipToAddress.state || 'N/A'}` : ''}
             </div>
           </div>
         </div>
-
         <table class="items">
           <thead>
             <tr>
-              <th>S.No</th>
-              <th>Description</th>
-              <th>HSN Code</th>
-              <th>Qty</th>
-              <th>UOM</th>
-              <th>Part No</th>
-              <th>Unit Price</th>
-              <th>Discount</th>
-              <th>Tax Rate</th>
-              <th>Total</th>
+              <th style="width: 30px;">S.No</th>
+              <th class="description-col">Description</th>
+              <th style="width: 80px;">HSN Code</th>
+              <th style="width: 40px;">Qty</th>
+              <th style="width: 40px;">UOM</th>
+              <th style="width: 80px;">Part No</th>
+              <th style="width: 70px;">Unit Price</th>
+              <th style="width: 50px;">Discount</th>
+              <th style="width: 50px;">Tax Rate</th>
+              <th style="width: 80px;">Total</th>
             </tr>
           </thead>
           <tbody>
             ${(quotation.items || []).map((item: any, idx: number) => `
               <tr>
                 <td>${idx + 1}</td>
-                <td>${item.description || ''}</td>
+                <td class="description-col">${item.description || ''}</td>
                 <td>${item.hsnCode || 'N/A'}</td>
                 <td>${item.quantity || 0}</td>
                 <td>${item.uom || 'nos'}</td>
@@ -2580,26 +2647,30 @@ const InvoiceManagement: React.FC = () => {
             `).join('')}
           </tbody>
         </table>
-
         <div class="summary-section">
-        <div class="notes-box">
-        ${(quotation.notes || quotation.terms)
-        ? `
-            ${quotation.notes
-          ? `
-            <h4>Notes:</h4>
-            <div>${quotation.notes}</div>
-            `
-          : ''
-        }
-            ${quotation.terms
-          ? `
-            <h4 style="margin-top: 20px;">Terms & Conditions:</h4>
-            <div>${quotation.terms}</div>
-            `
-          : ''
-        }
+          ${(quotation.notes || quotation.terms) ? `
+          <div class="notes-box">
+            ${quotation.notes ? `
+              <h4>Notes:</h4>
+              <div>${quotation.notes}</div>
+            ` : ''}
+            ${quotation.terms ? `
+              <h4 ${quotation.notes ? 'style="margin-top: 15px;"' : ''}>Terms & Conditions:</h4>
+              <div>${quotation.terms}</div>
+            ` : ''}
           </div>
+          ` : `
+          <div class="notes-box">
+            <h4>Standard Terms & Conditions:</h4>
+            <div>
+              • Payment: 100% advance payment along with P.O.<br>
+              • Ordering: In Favour of Sun Power Services<br>
+              • Delivery: Within One Month after your P.O.<br>
+              • Prices are subject to change without prior notice<br>
+              • All disputes subject to Chennai jurisdiction
+            </div>
+          </div>
+          `}
           <div class="summary-box">
             <table class="summary-table">
               <tr>
@@ -2614,37 +2685,9 @@ const InvoiceManagement: React.FC = () => {
                 <td>Total Discount:</td>
                 <td>-₹${quotation.totalDiscount?.toFixed(2) || '0'}</td>
               </tr>
-              <tr class="total-row">
-                <td>Grand Total:</td>
-                <td><strong>₹${quotation.grandTotal?.toFixed(2) || '0'}</strong></td>
-              </tr>
               <tr>
-                <td>Amount in Words:</td>
-                <td class="amount-words">
-                  ${quotation.grandTotal ? numberToWords(quotation.grandTotal) : 'Zero Rupees Only'}
-                </td>
-              </tr>
-            </table>
-          </div>
-        </div>
-        `
-        : `
-        <div class="summary-section">
-        <div class="notes-box" style="border: none;">
-        </div>
-          <div class="summary-box">
-            <table class="summary-table">
-              <tr>
-                <td>Subtotal:</td>
-                <td>₹${quotation.subtotal?.toLocaleString() || '0'}</td>
-              </tr>
-              <tr>
-                <td>Total Tax:</td>
-                <td>₹${quotation.totalTax?.toFixed(2) || '0'}</td>
-              </tr>
-              <tr>
-                <td>Total Discount:</td>
-                <td>-₹${quotation.totalDiscount?.toFixed(2) || '0'}</td>
+                <td>Overall Discount:</td>
+                <td>-${quotation.overallDiscount || 0}% (-₹${quotation.overallDiscountAmount?.toFixed(2) || '0.00'})</td>
               </tr>
               <tr class="total-row">
                 <td>Grand Total:</td>
@@ -2659,22 +2702,27 @@ const InvoiceManagement: React.FC = () => {
             </table>
           </div>
         </div>
-        `
-      }
-
         <div class="footer">
-          <div>For ${quotation.company?.name || 'Sun Power Services'}</div>
-          <div>Authorised Signatory</div>
+          <div><strong>For ${quotation.company?.name || 'Sun Power Services'}</strong></div>
+          <br><br>
+          <div><strong>Authorized Signatory</strong></div>
+          <div style="margin-top: 20px; font-size: 9px; border-top: 1px solid #000; padding-top: 10px;">
+            <strong>Address:</strong> Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116<br>
+            <strong>Mobile:</strong> +91 9176660123 | <strong>GSTIN:</strong> 33BLFPS9951M1ZC | <strong>Email:</strong> 24x7powerolservice@gmail.com
+          </div>
         </div>
       </body>
     </html>
     `;
-
     const printWindow = window.open('', '_blank');
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      printWindow.print();
+      printWindow.onload = function() {
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
+      };
     }
   };
 
@@ -2703,6 +2751,15 @@ const InvoiceManagement: React.FC = () => {
           >
             <Plus className="w-4 h-4" />
             <span>Create Quotation</span>
+          </Button>
+        )}
+        {invoiceType === 'purchase' && (
+          <Button
+            onClick={handleCreatePurchaseOrder}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Purchase Order</span>
           </Button>
         )}
       </PageHeader>
@@ -2887,10 +2944,10 @@ const InvoiceManagement: React.FC = () => {
                   {invoiceType === 'purchase' ? 'Supplier' : 'Customer'}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                {invoiceType === 'sale' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>}
-                {invoiceType === 'sale' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>}
-                {<th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>}
-                {invoiceType === 'sale' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>}
+                {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>}
+                {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>}
+                {(invoiceType === 'sale' || invoiceType === 'quotation') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>}
+                {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -2991,29 +3048,30 @@ const InvoiceManagement: React.FC = () => {
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       ₹{(invoice.totalAmount || 0).toFixed(2)}
                     </td>
-                    {invoiceType === 'sale' && <td className="px-4 py-3 text-sm font-medium text-green-600">
+                    {(invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3 text-sm font-medium text-green-600">
                       ₹{(invoice.paidAmount || 0).toLocaleString()}
                     </td>}
-                    {invoiceType === 'sale' && <td className="px-4 py-3 text-sm font-medium text-red-600">
+                    {(invoiceType === 'sale' || invoiceType === 'purchase')  && <td className="px-4 py-3 text-sm font-medium text-red-600">
                                               ₹{((invoice.remainingAmount || 0).toFixed(2) || (invoice.totalAmount || 0) - (invoice.paidAmount || 0)).toLocaleString()}
                     </td>}
-                    {invoice.invoiceType === 'sale' ? <td className="px-4 py-3">
+                    {(invoice.invoiceType === 'sale') && <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
                         {getStatusIcon(invoice.status)}
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
                           {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                         </span>
                       </div>
-                    </td> : <td className="px-4 py-3">
-                      <div className="flex items-center space-x-2">
-                        {getStatusIcon(invoice.status)}
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${((invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2))
-                          ? "bg-green-100 text-green-800" : (invoice.externalInvoiceTotal || 0) === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                          {(invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2) ? "Not Mismatch" : (invoice.externalInvoiceTotal || 0) === 0 ? "Not Mismatch" : "Amount Mismatch"}
-                        </span>
-                      </div>
-                    </td>}
-                    {invoiceType === 'sale' && <td className="px-4 py-3">
+                    </td> }
+                    {/* // : <td className="px-4 py-3">
+                    //   <div className="flex items-center space-x-2">
+                    //     {getStatusIcon(invoice.status)}
+                    //     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${((invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2))
+                    //       ? "bg-green-100 text-green-800" : (invoice.externalInvoiceTotal || 0) === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                    //       {(invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2) ? "Not Mismatch" : (invoice.externalInvoiceTotal || 0) === 0 ? "Not Mismatch" : "Amount Mismatch"}
+                    //     </span>
+                    //   </div>
+                    // </td>} */}
+                    {(invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(invoice.paymentStatus)}`}>
                         {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
                       </span>
@@ -3098,8 +3156,7 @@ const InvoiceManagement: React.FC = () => {
               </div>
             </div>
 
-            <div className="p-8 space-y-6">
-              {/* Rest of your existing modal content remains the same */}
+            <div className="p-6 space-y-6">
               {/* Invoice Header */}
               <div className="border-b border-gray-200 pb-4">
                 <div className="flex justify-between items-start">
@@ -3113,8 +3170,8 @@ const InvoiceManagement: React.FC = () => {
                     <p className="text-sm text-gray-600">
                       Due Date: {selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : ''}
                     </p>
-                    {selectedInvoice.poNumber && <p className="text-sm text-black-600 mt-1 font-medium">
-                      PONumber: {selectedInvoice.poNumber ? selectedInvoice.poNumber : ''}
+                    {selectedInvoice.poNumber && <p className="text-sm text-gray-600 mt-1">
+                      PO Number: {selectedInvoice.poNumber}
                     </p>}
                   </div>
                   <div className="text-right">
@@ -3130,46 +3187,131 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Customer Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Company Information */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">From:</h4>
-                  <div className="text-sm text-gray-600">
-                    <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
-                    {selectedInvoice?.company?.phone && <p>Phone: {selectedInvoice?.company?.phone || 'N/A'}</p>}
-                    {selectedInvoice?.company?.email && <p>Email: {selectedInvoice?.company?.email || 'N/A'}</p>}
-                    {selectedInvoice?.company?.pan && <p>PAN: {selectedInvoice?.company?.pan || 'N/A'}</p>}
-                    {selectedInvoice?.location && (
-                      <>
-                        <p className="mt-2 font-medium text-gray-700">Address:</p>
-                        {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name || 'N/A'}</p>}
-                        {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address || 'N/A'}</p>}
-                        {/* <p className="text-xs text-gray-500 capitalize">{selectedInvoice?.location.type?.replace('_', ' ') || 'N/A'}</p> */}
-                      </>
-                    )}
-                  </div>
+                  {selectedInvoice?.invoiceType === 'purchase' ? (
+                    // For purchase invoices: Show supplier
+                    <div className="text-sm text-gray-600">
+                      <p className="font-medium">{selectedInvoice?.supplierName || 'N/A'}</p>
+                      {selectedInvoice?.supplierEmail && <p>Email: {selectedInvoice?.supplierEmail}</p>}
+                      {selectedInvoice?.supplierAddress && (
+                        <>
+                          <p className="mt-2 font-medium text-gray-700">Address:</p>
+                          {selectedInvoice?.supplierAddress?.address && <p>{selectedInvoice?.supplierAddress?.address}</p>}
+                          {selectedInvoice?.supplierAddress?.district && selectedInvoice?.supplierAddress?.pincode && (
+                            <p>{selectedInvoice?.supplierAddress?.district}, {selectedInvoice?.supplierAddress?.pincode}</p>
+                          )}
+                          {selectedInvoice?.supplierAddress?.state && <p>{selectedInvoice?.supplierAddress?.state}</p>}
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    // For regular invoices: Show company
+                    <div className="text-sm text-gray-600">
+                      <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
+                      {selectedInvoice?.company?.phone && <p>Phone: {selectedInvoice?.company?.phone}</p>}
+                      {selectedInvoice?.company?.email && <p>Email: {selectedInvoice?.company?.email}</p>}
+                      {selectedInvoice?.company?.pan && <p>PAN: {selectedInvoice?.company?.pan}</p>}
+                      {selectedInvoice?.location && (
+                        <>
+                          <p className="mt-2 font-medium text-gray-700">Address:</p>
+                          {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name}</p>}
+                          {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
+
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
-                  {selectedInvoice?.invoiceType !== 'purchase' ?
+                  {selectedInvoice?.invoiceType === 'purchase' ? (
+                    // For purchase invoices: Show company
                     <div className="text-sm text-gray-600">
-                      <p>{selectedInvoice?.customer ? selectedInvoice?.customer.name : ''}</p>
-                      <p>{selectedInvoice?.customer ? selectedInvoice?.customer.email : selectedInvoice?.supplierEmail ?? ''}</p>
-                      <p>{selectedInvoice?.customer ? selectedInvoice?.customer.phone : ''}</p>
-                      <p className="mt-2 font-medium text-gray-700">Address:</p>
-                      <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.address : selectedInvoice?.supplierAddress ?? ''}</p>
-                      <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.district : selectedInvoice?.supplierDistrict ?? ''}</p>
-                      <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.state : selectedInvoice?.supplierState ?? ''}</p>
-                      <p className="font-medium">{selectedInvoice?.customerAddress ? selectedInvoice?.customerAddress.pincode : selectedInvoice?.supplierPincode ?? ''}</p>
-                    </div> : <div className="text-sm text-gray-600">
-                      <p>{selectedInvoice?.supplierName ? selectedInvoice?.supplierName : selectedInvoice?.customerName ?? ''}</p>
-                      <p>{selectedInvoice?.supplierEmail ? selectedInvoice?.supplierEmail : selectedInvoice?.customerEmail ?? ''}</p>
-                      <p className="mt-2 font-medium text-gray-700">Address:</p>
-                      <p className="font-medium">{selectedInvoice?.supplierAddress ? selectedInvoice?.supplierAddress.address : selectedInvoice?.supplierAddress ?? ''}</p>
-                      <p className="font-medium">{selectedInvoice?.supplierAddress ? selectedInvoice?.supplierAddress.district : selectedInvoice?.supplierDistrict ?? ''}</p>
-                      <p className="font-medium">{selectedInvoice?.supplierAddress ? selectedInvoice?.supplierAddress.state : selectedInvoice?.supplierState ?? ''}</p>
-                      <p className="font-medium">{selectedInvoice?.supplierAddress ? selectedInvoice?.supplierAddress.pincode : selectedInvoice?.supplierPincode ?? ''}</p>
-                    </div>}
+                      <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
+                      {selectedInvoice?.company?.phone && <p>Phone: {selectedInvoice?.company?.phone}</p>}
+                      {selectedInvoice?.company?.email && <p>Email: {selectedInvoice?.company?.email}</p>}
+                      {selectedInvoice?.company?.pan && <p>PAN: {selectedInvoice?.company?.pan}</p>}
+                      {selectedInvoice?.location && (
+                        <>
+                          <p className="mt-2 font-medium text-gray-700">Address:</p>
+                          {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name}</p>}
+                          {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    // For regular invoices: Show customer
+                    <div className="text-sm text-gray-600">
+                      <p className="font-medium">{selectedInvoice?.customer?.name || 'N/A'}</p>
+                      {selectedInvoice?.customer?.email && <p>Email: {selectedInvoice?.customer?.email}</p>}
+                      {selectedInvoice?.customer?.phone && <p>Phone: {selectedInvoice?.customer?.phone}</p>}
+                      {selectedInvoice?.billToAddress && (
+                        <>
+                          <p className="mt-2 font-medium text-gray-700">Address:</p>
+                          {selectedInvoice?.billToAddress?.address && <p>{selectedInvoice?.billToAddress?.address}</p>}
+                          {selectedInvoice?.billToAddress?.district && selectedInvoice?.billToAddress?.pincode && (
+                            <p>{selectedInvoice?.billToAddress?.district}, {selectedInvoice?.billToAddress?.pincode}</p>
+                          )}
+                          {selectedInvoice?.billToAddress?.state && <p>{selectedInvoice?.billToAddress?.state}</p>}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">Ship To:</h4>
+                  {selectedInvoice?.invoiceType === 'purchase' ? (
+                    // For purchase invoices: Show company
+                    <div className="text-sm text-gray-600">
+                      <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
+                      {selectedInvoice?.location && (
+                        <>
+                          <p className="mt-2 font-medium text-gray-700">Address:</p>
+                          {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name}</p>}
+                          {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
+                        </>
+                      )}
+                    </div>
+                  ) : (
+                    // For regular invoices: Show customer
+                    <div className="text-sm text-gray-600">
+                      <p className="font-medium">{selectedInvoice?.customer?.name || 'N/A'}</p>
+                      {selectedInvoice?.shipToAddress && (
+                        <>
+                          <p className="mt-2 font-medium text-gray-700">Address:</p>
+                          {selectedInvoice?.shipToAddress?.address && <p>{selectedInvoice?.shipToAddress?.address}</p>}
+                          {selectedInvoice?.shipToAddress?.district && selectedInvoice?.shipToAddress?.pincode && (
+                            <p>{selectedInvoice?.shipToAddress?.district}, {selectedInvoice?.shipToAddress?.pincode}</p>
+                          )}
+                          {selectedInvoice?.shipToAddress?.state && <p>{selectedInvoice?.shipToAddress?.state}</p>}
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">Assigned Engineer:</h4>
+                  <div className="text-sm text-gray-600">
+                    {selectedInvoice?.assignedEngineer ? (
+                      <>
+                        <p className="font-medium">{selectedInvoice.assignedEngineer?.firstName} {selectedInvoice.assignedEngineer?.lastName}</p>
+                        {selectedInvoice.assignedEngineer?.email && <p>Email: {selectedInvoice.assignedEngineer?.email}</p>}
+                        {selectedInvoice.assignedEngineer?.phone && <p>Phone: {selectedInvoice.assignedEngineer?.phone}</p>}
+                        <div className="mt-1">
+                          <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                            Field Operator
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-gray-500 italic">No engineer assigned</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -3217,11 +3359,13 @@ const InvoiceManagement: React.FC = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN No</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN Code</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">UOM</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax (%)</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax Rate</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                         {editMode && hasAmountMismatch(selectedInvoice) && (
                           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -3232,9 +3376,10 @@ const InvoiceManagement: React.FC = () => {
                       {(selectedInvoice.items || []).map((item: any, index: number) => (
                         <tr key={index}>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item?.product?.hsnNumber}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item?.product?.partNo}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.hsnSac || item?.product?.hsnNumber || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.uom || 'N/A'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.partNo || item?.product?.partNo || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode && hasAmountMismatch(selectedInvoice) ? (
                               <input
@@ -3250,6 +3395,7 @@ const InvoiceManagement: React.FC = () => {
                               `₹${(item.unitPrice ?? 0).toFixed(2)}`
                             )}
                           </td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.discount || 0}%</td>
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode && hasAmountMismatch(selectedInvoice) ? (
                               <input
@@ -3267,13 +3413,11 @@ const InvoiceManagement: React.FC = () => {
                                 }}
                                 className="w-24 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                               />
-
-
                             ) : (
                               `${(item.taxRate || 0).toFixed(2)}%`
                             )}
                           </td>
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{((item.quantity ?? 0) * (item.unitPrice ?? 0) + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate || 0) / 100)).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{(item.unitPrice * item.quantity * (1 - (item.discount || 0) / 100) * (1 + (item.taxRate || 0) / 100)).toFixed(2)}</td>
                           {editMode && hasAmountMismatch(selectedInvoice) && item.quantity !== 0 && (
                             <td className="px-4 py-2 flex text-sm">
                               <button
@@ -3344,41 +3488,63 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* Invoice Total */}
+              {/* Notes and Terms */}
+              {(selectedInvoice.notes || selectedInvoice.terms) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {selectedInvoice.notes && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Notes:</h4>
+                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                        {selectedInvoice.notes}
+                      </p>
+                    </div>
+                  )}
+                  {selectedInvoice.terms && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Terms & Conditions:</h4>
+                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                        {selectedInvoice.terms}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Invoice Summary */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-end">
-                  <div className="w-64 space-y-2 text-right">
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <div className="flex justify-between">
-                        <span>Subtotal:</span>
-                        <span>₹{(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Total Tax:</span>
-                        <span>₹{(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Items Count:</span>
-                        <span>{(selectedInvoice.items || []).length}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Total Quantity:</span>
-                        <span>{(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + (item.quantity ?? 0), 0)}</span>
-                      </div>
+                  <div className="w-80 space-y-3 text-right">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="font-medium">₹{(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</span>
                     </div>
-                    <div className="border-t pt-2">
-                      <div className="flex justify-between text-lg font-bold">
-                        <span>Total Amount:</span>
-                        <span className={hasAmountMismatch(selectedInvoice) ? 'text-red-600' : 'text-gray-900'}>
-                          ₹{safeToFixed(selectedInvoice?.totalAmount)}
-                        </span>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Total Tax:</span>
+                      <span className="font-medium">₹{(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Total Discount:</span>
+                      <span className="font-medium text-green-600">-₹{(selectedInvoice.discountAmount || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Overall Discount:</span>
+                      <span className="font-medium text-green-600">-{selectedInvoice.overallDiscount || 0}% (-₹{selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-lg border-t pt-3">
+                      <span>Grand Total:</span>
+                      <span className={hasAmountMismatch(selectedInvoice) ? 'text-red-600' : 'text-blue-600'}>
+                        ₹{safeToFixed(selectedInvoice?.totalAmount)}
+                      </span>
+                    </div>
+                    {hasAmountMismatch(selectedInvoice) && (
+                      <div className="flex justify-between text-sm text-gray-600">
+                        <span>External Total:</span>
+                        <span>₹{safeToFixed(selectedInvoice?.externalInvoiceTotal)}</span>
                       </div>
-                      {hasAmountMismatch(selectedInvoice) && (
-                        <div className="flex justify-between text-sm text-gray-600 mt-1">
-                          <span>External Total:</span>
-                          <span>₹{safeToFixed(selectedInvoice?.externalInvoiceTotal)}</span>
-                        </div>
-                      )}
+                    )}
+                    <div className="flex justify-between text-xs pt-2 border-t">
+                      <span className="text-gray-600">Amount in Words:</span>
+                      <span className="font-medium text-gray-700 max-w-xs text-right">{selectedInvoice?.totalAmount ? numberToWords(selectedInvoice.totalAmount) : 'Zero Rupees Only'}</span>
                     </div>
                   </div>
                 </div>
@@ -3996,7 +4162,7 @@ const InvoiceManagement: React.FC = () => {
                   </button>
                   <button
                     onClick={submitPaymentUpdate}
-                    disabled={!isPaymentFormValid() || submitting}
+                    // disabled={!isPaymentFormValid() || submitting || invoiceType === 'purchase'}
                     className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg"
                   >
                     {submitting ? (
@@ -4068,11 +4234,17 @@ const InvoiceManagement: React.FC = () => {
                       Quotation
                     </span>
                   </div>
+                  <button
+                    onClick={() => handleCreateInvoiceFromQuotation(selectedQuotation)}
+                    className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  >
+                    Create Invoice
+                  </button>
                 </div>
               </div>
 
               {/* Company Information */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">From:</h4>
                   <div className="text-sm text-gray-600">
@@ -4091,20 +4263,57 @@ const InvoiceManagement: React.FC = () => {
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">To:</h4>
+                  <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
                   <div className="text-sm text-gray-600">
                     <p className="font-medium">{selectedQuotation.customer?.name || 'N/A'}</p>
                     {selectedQuotation.customer?.email && <p>Email: {selectedQuotation.customer?.email || 'N/A'}</p>}
                     {selectedQuotation.customer?.phone && <p>Phone: {selectedQuotation.customer?.phone || 'N/A'}</p>}
-                    {selectedQuotation.customerAddress && (
+                    {selectedQuotation.billToAddress && (
                       <>
                         <p className="mt-2 font-medium text-gray-700">Address:</p>
-                        {selectedQuotation.customerAddress?.address && <p>{selectedQuotation.customerAddress?.address}</p>}
-                        {selectedQuotation.customerAddress?.district && selectedQuotation.customerAddress?.pincode && (
-                          <p>{selectedQuotation.customerAddress?.district}, {selectedQuotation.customerAddress?.pincode}</p>
+                        {selectedQuotation.billToAddress?.address && <p>{selectedQuotation.billToAddress?.address}</p>}
+                        {selectedQuotation.billToAddress?.district && selectedQuotation.billToAddress?.pincode && (
+                          <p>{selectedQuotation.billToAddress?.district}, {selectedQuotation.billToAddress?.pincode}</p>
                         )}
-                        {selectedQuotation.customerAddress?.state && <p>{selectedQuotation.customerAddress?.state}</p>}
+                        {selectedQuotation.billToAddress?.state && <p>{selectedQuotation.billToAddress?.state}</p>}
                       </>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">Ship To:</h4>
+                  <div className="text-sm text-gray-600">
+                    <p className="font-medium">{selectedQuotation.customer?.name || 'N/A'}</p>
+                    {selectedQuotation.shipToAddress && (
+                      <>
+                        <p className="mt-2 font-medium text-gray-700">Address:</p>
+                        {selectedQuotation.shipToAddress?.address && <p>{selectedQuotation.shipToAddress?.address}</p>}
+                        {selectedQuotation.shipToAddress?.district && selectedQuotation.shipToAddress?.pincode && (
+                          <p>{selectedQuotation.shipToAddress?.district}, {selectedQuotation.shipToAddress?.pincode}</p>
+                        )}
+                        {selectedQuotation.shipToAddress?.state && <p>{selectedQuotation.shipToAddress?.state}</p>}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">Assigned Engineer:</h4>
+                  <div className="text-sm text-gray-600">
+                    {selectedQuotation.assignedEngineer ? (
+                      <>
+                        <p className="font-medium">{selectedQuotation.assignedEngineer?.firstName} {selectedQuotation.assignedEngineer?.lastName}</p>
+                        {selectedQuotation.assignedEngineer?.email && <p>Email: {selectedQuotation.assignedEngineer?.email}</p>}
+                        {selectedQuotation.assignedEngineer?.phone && <p>Phone: {selectedQuotation.assignedEngineer?.phone}</p>}
+                        <div className="mt-1">
+                          <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
+                            Field Operator
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-gray-500 italic">No engineer assigned</p>
                     )}
                   </div>
                 </div>

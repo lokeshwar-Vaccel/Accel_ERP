@@ -24,6 +24,8 @@ export interface IInvoice extends mongoose.Document {
   subtotal: number;
   taxAmount: number;
   discountAmount: number;
+  overallDiscount?: number; // Overall discount percentage
+  overallDiscountAmount?: number; // Calculated overall discount amount
   totalAmount: number;
   paidAmount: number; // Amount paid so far
   remainingAmount: number; // Calculated: totalAmount - paidAmount
@@ -35,6 +37,7 @@ export interface IInvoice extends mongoose.Document {
   terms?: string;
   invoiceType: 'sale' | 'purchase' | 'challan' | 'quotation' ;
   referenceId?: string; // Service ticket, AMC contract, etc.
+  dgSalesEnquiry?: mongoose.Types.ObjectId; // Link to DG Sales Enquiry
   location: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -57,12 +60,25 @@ export interface IInvoice extends mongoose.Document {
     district: string;
     pincode: string;
   };
+  billToAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+  };
+  shipToAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+  };
   supplierAddress?: {
     address: string;
     state: string;
     district: string;
     pincode: string;
   };
+  assignedEngineer?: mongoose.Types.ObjectId; // Reference to User with Field Operator role
   referenceNo?: string;
   referenceDate?: string;
 }
@@ -165,6 +181,18 @@ const invoiceSchema = new Schema<IInvoice>({
     min: 0,
     default: 0
   },
+  overallDiscount: {
+    type: Number,
+    required: false,
+    min: 0,
+    default: 0
+  },
+  overallDiscountAmount: {
+    type: Number,
+    required: false,
+    min: 0,
+    default: 0
+  },
   totalAmount: {
     type: Number,
     required: true,
@@ -213,6 +241,11 @@ const invoiceSchema = new Schema<IInvoice>({
   referenceId: {
     type: String,
     trim: true
+  },
+  dgSalesEnquiry: {
+    type: Schema.Types.ObjectId,
+    ref: 'DGSalesEnquiry',
+    required: false
   },
   location: {
     type: Schema.Types.ObjectId,
@@ -286,6 +319,42 @@ const invoiceSchema = new Schema<IInvoice>({
       trim: true
     }
   },
+  billToAddress: {
+    address: {
+      type: String,
+      trim: true
+    },
+    state: {
+      type: String,
+      trim: true
+    },
+    district: {
+      type: String,
+      trim: true
+    },
+    pincode: {
+      type: String,
+      trim: true
+    }
+  },
+  shipToAddress: {
+    address: {
+      type: String,
+      trim: true
+    },
+    state: {
+      type: String,
+      trim: true
+    },
+    district: {
+      type: String,
+      trim: true
+    },
+    pincode: {
+      type: String,
+      trim: true
+    }
+  },
   supplierAddress: {
     address: {
       type: String,
@@ -311,6 +380,11 @@ const invoiceSchema = new Schema<IInvoice>({
   referenceDate: {
     type: String,
     trim: true
+  },
+  assignedEngineer: {
+    type: Schema.Types.ObjectId,
+    ref: 'User',
+    required: false
   }
 }, {
   timestamps: true
@@ -327,9 +401,16 @@ invoiceSchema.pre('save', function (this: IInvoice, next) {
 
   const discount = round2(this.discountAmount || 0);
 
-  // 2. Calculate totalAmount = subtotal + tax - discount
-  this.totalAmount = round2(this.subtotal + this.taxAmount - discount);
-    console.log("____step 2", this.totalAmount ,this.taxAmount);
+  // 2. Calculate totalAmount = subtotal + tax - discount - overallDiscountAmount
+  const grandTotalBeforeOverallDiscount = round2(this.subtotal + this.taxAmount - discount);
+  
+  // Only recalculate overallDiscountAmount if it's not already set (preserve frontend calculation)
+  if (this.overallDiscountAmount === undefined || this.overallDiscountAmount === null) {
+    this.overallDiscountAmount = round2((this.overallDiscount || 0) / 100 * grandTotalBeforeOverallDiscount);
+  }
+  
+  this.totalAmount = round2(grandTotalBeforeOverallDiscount - (this.overallDiscountAmount || 0));
+  console.log("____step 2", this.totalAmount, this.taxAmount, "overallDiscountAmount:", this.overallDiscountAmount);
 
   // 3. Ensure paidAmount doesn't exceed total
   if (this.paidAmount > this.totalAmount) {

@@ -44,18 +44,29 @@ export interface IQuotation extends Document {
   }>;
   subtotal: number;
   totalDiscount: number;
+  overallDiscount?: number; // Add overall discount field
   totalTax: number;
   grandTotal: number;
   roundOff: number;
   notes?: string;
   terms?: string;
   validityPeriod: number;
-  customerAddress?: {
+  billToAddress?: {
     address: string;
     state: string;
     district: string;
     pincode: string;
+    addressId?: number;
   };
+  shipToAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    addressId?: number;
+  };
+  dgEnquiry?: string; // Add reference to DGEnquiry
+  assignedEngineer?: string | Types.ObjectId; // Add reference to assigned engineer (Field Operator)
 }
 
 const QuotationSchema = new Schema<IQuotation>({
@@ -63,13 +74,8 @@ const QuotationSchema = new Schema<IQuotation>({
   invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
   issueDate: { type: Date, },
   validUntil: { type: Date, },
-  customer: {
-    _id: { type: String }, // Customer ID for reference
-    name: { type: String, },
-    email: { type: String, required: false },
-    phone: { type: String, required: false },
-    pan: { type: String, required: false },
-  },
+  customer: { type: Schema.Types.ObjectId, ref: 'Customer' },
+
   company: {
     name: { type: String, },
     logo: { type: String },
@@ -104,18 +110,29 @@ const QuotationSchema = new Schema<IQuotation>({
   ],
   subtotal: { type: Number, },
   totalDiscount: { type: Number, },
+  overallDiscount: { type: Number, required: false },
   totalTax: { type: Number, },
   grandTotal: { type: Number, },
   roundOff: { type: Number, },
   notes: { type: String },
   terms: { type: String },
   validityPeriod: { type: Number, },
-  customerAddress: {
+  billToAddress: {
     address: { type: String, trim: true },
     state: { type: String, trim: true },
     district: { type: String, trim: true },
-    pincode: { type: String, trim: true }
+    pincode: { type: String, trim: true },
+    addressId: { type: Number }
   },
+  shipToAddress: {
+    address: { type: String, trim: true },
+    state: { type: String, trim: true },
+    district: { type: String, trim: true },
+    pincode: { type: String, trim: true },
+    addressId: { type: Number }
+  },
+  dgEnquiry: { type: Schema.Types.ObjectId, ref: 'DGEnquiry', required: false },
+  assignedEngineer: { type: Schema.Types.ObjectId, ref: 'User', required: false },
 });
 
 export const Quotation = mongoose.model<IQuotation>('Quotation', QuotationSchema); 
