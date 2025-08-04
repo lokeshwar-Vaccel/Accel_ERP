@@ -22,7 +22,6 @@ export interface Product {
   room: string;
   rack: string;
   hsnNumber?: string;
-  dept?: string;
   productType1?: string;
   productType2?: string;
   productType3?: string;
@@ -74,7 +73,6 @@ const ProductManagement: React.FC = () => {
 
   // Form dropdown states
   const [showFormCategoryDropdown, setShowFormCategoryDropdown] = useState(false);
-  const [showFormDeptDropdown, setShowFormDeptDropdown] = useState(false);
   const [showFormUomDropdown, setShowFormUomDropdown] = useState(false);
 
   // Modal states
@@ -103,7 +101,6 @@ const ProductManagement: React.FC = () => {
     isActive: true,
 
     hsnNumber: '',
-    dept: '',
     productType1: '',
     productType2: '',
     productType3: '',
@@ -118,10 +115,6 @@ const ProductManagement: React.FC = () => {
   });
 
   // Removed location-related useEffect hooks since location is now optional
-
-  const departments = [
-    'RETAIL', 'INDUSTRIAL', 'IE', 'TELECOM', 'EV', 'RET/TEL'
-  ];
 
   const stockUnit = [
     'nos', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'
@@ -191,7 +184,6 @@ const ProductManagement: React.FC = () => {
       maxStockLevel: 0,
       isActive: true,
       hsnNumber: '',
-      dept: '',
       productType1: '',
       productType2: '',
       productType3: '',
@@ -224,7 +216,6 @@ const ProductManagement: React.FC = () => {
       isActive: product.isActive ?? true,
 
       hsnNumber: product.hsnNumber || '',
-      dept: product.dept || '',
       productType1: product.productType1 || '',
       productType2: product.productType2 || '',
       productType3: product.productType3 || '',
@@ -247,7 +238,6 @@ const ProductManagement: React.FC = () => {
     setSelectedProduct(null);
     // Close all form dropdowns
     setShowFormCategoryDropdown(false);
-    setShowFormDeptDropdown(false);
     setShowFormUomDropdown(false);
     setFormData({
       name: '',
@@ -261,7 +251,6 @@ const ProductManagement: React.FC = () => {
       maxStockLevel: 0,
       isActive: true,
       hsnNumber: '',
-      dept: '',
       productType1: '',
       productType2: '',
       productType3: '',
@@ -318,9 +307,7 @@ const ProductManagement: React.FC = () => {
       errors.category = 'Category is required';
     }
 
-    if (!formData.dept.trim()) {
-      errors.dept = 'Department is required';
-    }
+
 
     if (!formData.uom.trim()) {
       errors.uom = 'Unit of Measure (UOM) is required';
@@ -356,7 +343,7 @@ const ProductManagement: React.FC = () => {
     }
 
     if (!formData.price || formData.price <= 0) {
-      errors.price = 'MRP must be greater than 0';
+      errors.price = 'UnitPrice must be greater than 0';
     }
 
     if (!formData.gndp || formData.gndp <= 0) {
@@ -382,9 +369,8 @@ const ProductManagement: React.FC = () => {
           case 'name': return 'Product Name';
           case 'partNo': return 'Part Number';
           case 'category': return 'Category';
-          case 'dept': return 'Department';
-          case 'uom': return 'Unit of Measure';
-          case 'price': return 'MRP';
+              case 'uom': return 'Unit of Measure';
+          case 'price': return 'Unit Price';
           case 'gndp': return 'GNDP Price';
           case 'minStockLevel': return 'Min Stock Level';
           case 'maxStockLevel': return 'Max Stock Level';
@@ -505,11 +491,6 @@ const ProductManagement: React.FC = () => {
   const formCategoryOptions = category.map(cat => ({
     value: cat,
     label: cat.replace('_', ' ').toUpperCase()
-  }));
-
-  const formDepartmentOptions = departments.map(dept => ({
-    value: dept,
-    label: dept
   }));
 
   const formUomOptions = ["nos", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll"].sort().map(unit => ({
@@ -829,7 +810,7 @@ const ProductManagement: React.FC = () => {
                   <option value="all">Select Field</option>
                   <option value="name">Product Name</option>
                   <option value="partNo">Part Number</option>
-                  <option value="price">Price</option>
+                  <option value="price">Unit Price</option>
                 </select>
               </div>
 
@@ -988,7 +969,7 @@ const ProductManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part No</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Stock</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UOM</th>
@@ -1165,7 +1146,6 @@ const ProductManagement: React.FC = () => {
                               type="button"
                               onClick={() => {
                                 setShowFormCategoryDropdown(!showFormCategoryDropdown);
-                                setShowFormDeptDropdown(false);
                                 setShowFormUomDropdown(false);
                               }}
                               className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.category ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
@@ -1197,51 +1177,6 @@ const ProductManagement: React.FC = () => {
                             <p className="text-red-500 text-xs mt-1 flex items-center">
                               <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
                               {formErrors.category}
-                            </p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-xs font-medium text-gray-700 mb-1">
-                            Department *
-                          </label>
-                          <div className="relative">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setShowFormDeptDropdown(!showFormDeptDropdown);
-                                setShowFormCategoryDropdown(false);
-                                setShowFormUomDropdown(false);
-                              }}
-                              className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.dept ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
-                            >
-                              <span className={`text-gray-700 truncate mr-1 ${!formData.dept ? 'text-gray-500' : ''}`}>
-                                {formData.dept ? formDepartmentOptions.find(opt => opt.value === formData.dept)?.label : 'Select Department'}
-                              </span>
-                              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showFormDeptDropdown ? 'rotate-180' : ''}`} />
-                            </button>
-                            {showFormDeptDropdown && (
-                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                                {formDepartmentOptions.map((option) => (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={() => {
-                                      handleDropdownChange('dept', option.value);
-                                      setShowFormDeptDropdown(false);
-                                    }}
-                                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${formData.dept === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                                  >
-                                    {option.label}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                          {formErrors.dept && (
-                            <p className="text-red-500 text-xs mt-1 flex items-center">
-                              <span className="w-1 h-1 bg-red-500 rounded-full mr-2"></span>
-                              {formErrors.dept}
                             </p>
                           )}
                         </div>
@@ -1374,7 +1309,7 @@ const ProductManagement: React.FC = () => {
 
                       <div>
                         <label className="block text-xs font-medium text-gray-700 mb-1">
-                          MRP (₹) *
+                        Unit Price (₹) *
                         </label>
                         <input
                           type="number"
@@ -1403,7 +1338,6 @@ const ProductManagement: React.FC = () => {
                             onClick={() => {
                               setShowFormUomDropdown(!showFormUomDropdown);
                               setShowFormCategoryDropdown(false);
-                              setShowFormDeptDropdown(false);
                             }}
                             className={`flex items-center justify-between w-full px-2 py-1.5 text-left border rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm ${formErrors.uom ? 'border-red-500 bg-red-50' : 'border-gray-300 hover:border-gray-400'}`}
                           >

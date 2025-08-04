@@ -12,6 +12,8 @@ import QuotationFormPage from "../pages/QuotationForm";
 import ServiceManagement from "../pages/ServiceManagement";
 import AMCManagement from "../pages/AMCManagement";
 import PurchaseOrderManagement from "../pages/PurchaseOrderManagement";
+import CreatePurchaseOrder from "../pages/CreatePurchaseOrder";
+import DGPurchaseOrderManagement from "../pages/DGPurchaseOrderManagement";
 import ReportsManagement from "../pages/ReportsManagement";
 import FileManagement from "../pages/FileManagement";
 import CommunicationManagement from "../pages/CommunicationManagement";
@@ -21,6 +23,7 @@ import PaymentSuccess from "../pages/PaymentSuccess";
 import { ForgotPasswordForm } from "components/features/auth/ForgotPasswordForm";
 import { LoginForm } from "components/features/auth/LoginForm";
 import { ResetPasswordForm } from "components/features/auth/ResetPasswordForm";
+import DGSales from "pages/DGSales";
 
 const AppRoutes: React.FC = () => {
     return (
@@ -58,6 +61,10 @@ const AppRoutes: React.FC = () => {
 
             {/* Purchase Order Management */}
             <Route path="/purchase-order-management" element={<PurchaseOrderManagement />} />
+            <Route path="/purchase-order-management/create" element={<CreatePurchaseOrder />} />
+
+            {/* DG Purchase Order Management */}
+            <Route path="/dg-purchase-order-management" element={<DGPurchaseOrderManagement />} />
 
             {/* Reports & Analytics */}
             <Route path="/reports-management" element={<ReportsManagement />} />
@@ -75,7 +82,8 @@ const AppRoutes: React.FC = () => {
             {/* <Route path="/pay/:token" element={<PaymentPage />} />
             <Route path="/payment-success" element={<PaymentSuccess />} /> */}
 
-
+            {/* DG Sales */}
+            <Route path="/dg-sales" element={<DGSales />} />
 
             {/* 404 - Page not found */}
             <Route path="*" element={<NotFound />} />

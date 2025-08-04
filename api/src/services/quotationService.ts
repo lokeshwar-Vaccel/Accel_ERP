@@ -1,59 +1,10 @@
 import { Invoice } from '../models/Invoice';
+import { Quotation, IQuotation } from '../models/Quotation';
 import { generateReferenceId } from '../utils/generateReferenceId';
 import puppeteer from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import Handlebars from 'handlebars';
-
-export interface IQuotation {
-  quotationNumber: string;
-  invoiceId?: string;
-  issueDate: Date;
-  validUntil: Date;
-  customer: {
-    name: string;
-    email: string;
-    phone: string;
-    address: string;
-    pan?: string;
-  };
-  company: {
-    name?: string;
-    logo?: string;
-    address?: string;
-    phone?: string;
-    email?: string;
-    pan?: string;
-    bankDetails?: {
-      bankName?: string;
-      accountNo?: string;
-      ifsc?: string;
-      branch?: string;
-    };
-  };
-  location?: string; // Added location field
-  items: Array<{
-    product: string;
-    description: string;
-    hsnCode?: string;
-    quantity: number;
-    uom: string;
-    unitPrice: number;
-    discount: number;
-    discountedAmount: number;
-    taxRate: number;
-    taxAmount: number;
-    totalPrice: number;
-  }>;
-  subtotal: number;
-  totalDiscount: number;
-  totalTax: number;
-  grandTotal: number;
-  roundOff: number;
-  notes?: string;
-  terms?: string;
-  validityPeriod: number; // days
-}
 
 export interface ValidationError {
   field: string;
@@ -68,6 +19,7 @@ export interface ValidationResult {
 export interface CalculationResult {
   subtotal: number;
   totalDiscount: number;
+  overallDiscount: number;
   totalTax: number;
   grandTotal: number;
   roundOff: number;
@@ -90,15 +42,22 @@ export class QuotationService {
       if (!data.customer.name?.trim()) {
         errors.push({ field: 'customer.name', message: 'Customer name is required' });
       }
-      if (!data.customer.address?.trim()) {
-        errors.push({ field: 'customer.address', message: 'Customer address is required' });
-      }
       if (data.customer.email && !this.isValidEmail(data.customer.email)) {
         errors.push({ field: 'customer.email', message: 'Invalid email format' });
       }
       if (data.customer.phone && !this.isValidPhone(data.customer.phone)) {
         errors.push({ field: 'customer.phone', message: 'Invalid phone number format' });
       }
+    }
+
+    // Bill to address validation
+    if (!data.billToAddress || !data.billToAddress.address?.trim()) {
+      errors.push({ field: 'billToAddress.address', message: 'Bill to address is required' });
+    }
+
+    // Ship to address validation
+    if (!data.shipToAddress || !data.shipToAddress.address?.trim()) {
+      errors.push({ field: 'shipToAddress.address', message: 'Ship to address is required' });
     }
 
     // Company validation
@@ -122,7 +81,7 @@ export class QuotationService {
     // }
 
     // Location validation
-    if (!data.location?.trim()) {
+    if (!data.location) {
       errors.push({ field: 'location', message: 'From location is required' });
     }
 
@@ -169,10 +128,22 @@ export class QuotationService {
   /**
    * Calculate quotation totals with precision
    */
-  static calculateQuotationTotals(items: IQuotation['items']): CalculationResult {
+  static calculateQuotationTotals(items: IQuotation['items'] | undefined, overallDiscount: number = 0): CalculationResult {
     let subtotal = 0;
     let totalDiscount = 0;
     let totalTax = 0;
+
+    if (!items) {
+      return {
+        subtotal: 0,
+        totalDiscount: 0,
+        overallDiscount: 0,
+        totalTax: 0,
+        grandTotal: 0,
+        roundOff: 0,
+        items: []
+      };
+    }
 
     const calculatedItems = items.map(item => {
       // Ensure all values are numbers
@@ -201,17 +172,24 @@ export class QuotationService {
       };
     });
 
-    const grandTotalBeforeRound = subtotal - totalDiscount + totalTax;
-    const grandTotal = Math.round(grandTotalBeforeRound);
-    const roundOff = this.roundTo2Decimals(grandTotal - grandTotalBeforeRound);
+    // Calculate grand total before overall discount
+    const grandTotalBeforeOverallDiscount = subtotal - totalDiscount + totalTax;
+    
+    // Calculate overall discount amount as percentage of grand total
+    const overallDiscountAmount = (overallDiscount / 100) * grandTotalBeforeOverallDiscount;
+    
+    // Apply overall discount to grand total
+    const grandTotal = grandTotalBeforeOverallDiscount - overallDiscountAmount;
+    const roundOff = 0; // No rounding for now
 
     return {
       subtotal: this.roundTo2Decimals(subtotal),
       totalDiscount: this.roundTo2Decimals(totalDiscount),
+      overallDiscount: this.roundTo2Decimals(overallDiscountAmount),
       totalTax: this.roundTo2Decimals(totalTax),
-      grandTotal,
+      grandTotal: this.roundTo2Decimals(grandTotal),
       roundOff,
-      items: calculatedItems
+      items: calculatedItems || []
     };
   }
 
@@ -260,7 +238,7 @@ export class QuotationService {
     invoiceId: string,
     validityDays: number = 30,
     companyDetails?: Partial<IQuotation['company']>
-  ): Promise<IQuotation> {
+  ): Promise<Partial<IQuotation>> {
     // Fetch the invoice with all related data
     const invoice = await Invoice.findById(invoiceId)
       .populate('customer', 'name email phone address pan')
@@ -340,7 +318,7 @@ export class QuotationService {
       } : undefined
     };
 
-    const quotation: IQuotation = {
+    const quotation: Partial<IQuotation> = {
       quotationNumber,
       invoiceId: invoice._id.toString(),
       issueDate,
@@ -349,11 +327,20 @@ export class QuotationService {
         name: customerObj.name || '',
         email: customerObj.email || '',
         phone: customerObj.phone || '',
-        address: invoice.customerAddress ? 
-          `${invoice.customerAddress.address}, ${invoice.customerAddress.district}, ${invoice.customerAddress.state} - ${invoice.customerAddress.pincode}` :
-          customerObj.address || '',
         pan: customerObj.pan || ''
       },
+      billToAddress: invoice.customerAddress ? {
+        address: invoice.customerAddress.address || '',
+        state: invoice.customerAddress.state || '',
+        district: invoice.customerAddress.district || '',
+        pincode: invoice.customerAddress.pincode || ''
+      } : undefined,
+      shipToAddress: invoice.customerAddress ? {
+        address: invoice.customerAddress.address || '',
+        state: invoice.customerAddress.state || '',
+        district: invoice.customerAddress.district || '',
+        pincode: invoice.customerAddress.pincode || ''
+      } : undefined,
       company: { ...defaultCompany, ...companyDetails },
       items: processedItems,
       subtotal: this.roundTo2Decimals(subtotal),
@@ -366,16 +353,13 @@ export class QuotationService {
       validityPeriod: validityDays
     };
 
-    // Validate calculations
-    this.validateCalculations(quotation);
-
     return quotation;
   }
 
   /**
    * Generate quotation HTML
    */
-  static async generateQuotationHTML(this: typeof QuotationService, quotation: IQuotation): Promise<string> {
+  static async generateQuotationHTML(this: typeof QuotationService, quotation: Partial<IQuotation>): Promise<string> {
     const templatePath = path.join(__dirname, '../templates/quotation.hbs');
     
     // Load and compile template
@@ -392,11 +376,11 @@ export class QuotationService {
     // Format data for template
     const templateData = {
       ...quotation,
-      issueDate: this.formatDate(quotation.issueDate),
-      validUntil: this.formatDate(quotation.validUntil),
-      hasDiscount: quotation.totalDiscount > 0,
-      hasTax: quotation.totalTax > 0,
-      hasRoundOff: Math.abs(quotation.roundOff) > 0.01
+      issueDate: quotation.issueDate ? this.formatDate(quotation.issueDate) : '',
+      validUntil: quotation.validUntil ? this.formatDate(quotation.validUntil) : '',
+      hasDiscount: (quotation.totalDiscount || 0) > 0,
+      hasTax: (quotation.totalTax || 0) > 0,
+      hasRoundOff: Math.abs(quotation.roundOff || 0) > 0.01
     };
 
     return template(templateData);
@@ -407,7 +391,7 @@ export class QuotationService {
    */
   static async generateQuotationPDF(
     this: typeof QuotationService,
-    quotation: IQuotation,
+    quotation: Partial<IQuotation>,
     outputPath?: string
   ): Promise<Buffer> {
     const html = await this.generateQuotationHTML(quotation);
@@ -454,7 +438,7 @@ export class QuotationService {
   /**
    * Generate printable view
    */
-  static async generatePrintableView(this: typeof QuotationService, quotation: IQuotation): Promise<string> {
+  static async generatePrintableView(this: typeof QuotationService, quotation: Partial<IQuotation>): Promise<string> {
     const html = await this.generateQuotationHTML(quotation);
     
     return `
@@ -492,24 +476,28 @@ export class QuotationService {
   /**
    * Validate calculations
    */
-  private static validateCalculations(this: typeof QuotationService, quotation: IQuotation): void {
-    const calculatedTotals = this.calculateQuotationTotals(quotation.items);
+  private static validateCalculations(this: typeof QuotationService, quotation: Partial<IQuotation>): void {
+    if (!quotation.items) {
+      throw new Error('Quotation items are required for validation');
+    }
+    
+    const calculatedTotals = this.calculateQuotationTotals(quotation.items, quotation.overallDiscount || 0);
     
     const tolerance = 0.01; // Allow for small rounding differences
     
-    if (Math.abs(quotation.subtotal - calculatedTotals.subtotal) > tolerance) {
+    if (quotation.subtotal && Math.abs(quotation.subtotal - calculatedTotals.subtotal) > tolerance) {
       throw new Error(`Subtotal calculation mismatch: expected ${calculatedTotals.subtotal}, got ${quotation.subtotal}`);
     }
     
-    if (Math.abs(quotation.totalDiscount - calculatedTotals.totalDiscount) > tolerance) {
+    if (quotation.totalDiscount && Math.abs(quotation.totalDiscount - calculatedTotals.totalDiscount) > tolerance) {
       throw new Error(`Total discount calculation mismatch: expected ${calculatedTotals.totalDiscount}, got ${quotation.totalDiscount}`);
     }
     
-    if (Math.abs(quotation.totalTax - calculatedTotals.totalTax) > tolerance) {
+    if (quotation.totalTax && Math.abs(quotation.totalTax - calculatedTotals.totalTax) > tolerance) {
       throw new Error(`Total tax calculation mismatch: expected ${calculatedTotals.totalTax}, got ${quotation.totalTax}`);
     }
     
-    if (Math.abs(quotation.grandTotal - calculatedTotals.grandTotal) > tolerance) {
+    if (quotation.grandTotal && Math.abs(quotation.grandTotal - calculatedTotals.grandTotal) > tolerance) {
       throw new Error(`Grand total calculation mismatch: expected ${calculatedTotals.grandTotal}, got ${quotation.grandTotal}`);
     }
   }

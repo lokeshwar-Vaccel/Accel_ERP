@@ -22,13 +22,18 @@ export enum UserStatus {
 // Customer Types
 export enum CustomerType {
   RETAIL = 'retail',
-  TELECOM = 'telecom'
+  TELECOM = 'telecom',
+  EV = 'ev',
+  DG = 'dg',
+  JENARAL = 'jenaral',
+  JE = 'je'
 }
 
 // Customer Main Type (customer or supplier)
 export enum CustomerMainType {
   CUSTOMER = 'customer',
-  SUPPLIER = 'supplier'
+  SUPPLIER = 'supplier',
+  DG_SALES_CUSTOMER = 'dg_sales_customer'
 }
 
 // Lead Status
@@ -154,6 +159,18 @@ export interface Address {
   isPrimary: boolean;
   gstNumber?: string;
 }
+// DG Requirements Interface
+export interface DGRequirements {
+  kva?: string;
+  phase?: string;
+  quantity?: number;
+  segment?: string;
+  subSegment?: string;
+  currentPowerSource?: string;
+  backupHours?: number;
+  installationLocation?: string;
+}
+
 // Customer Interface
 export interface ICustomer extends Document {
   name: string;
@@ -170,6 +187,8 @@ export interface ICustomer extends Document {
   contactHistory: IContactHistory[];
   createdBy: string;
   customerId?: string;
+  isDGSalesCustomer?: boolean;
+  dgRequirements?: DGRequirements;
 }
 
 // Contact History Interface

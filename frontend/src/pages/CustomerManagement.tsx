@@ -44,7 +44,7 @@ import toast from 'react-hot-toast';
 
 
 // Customer types matching backend enums
-type CustomerType = 'retail' | 'telecom';
+type CustomerType = 'retail' | 'telecom' | 'ev' | 'dg' | 'jenaral' | 'je';
 type CustomerMainType = 'customer' | 'supplier';
 type LeadStatus = 'new' | 'qualified' | 'contacted' | 'converted' | 'lost';
 type ContactType = 'call' | 'meeting' | 'email' | 'whatsapp';
@@ -1135,6 +1135,10 @@ const CustomerManagement: React.FC = () => {
   const typeOptions = [
     { value: 'retail', label: 'Retail' },
     { value: 'telecom', label: 'Telecom' },
+    { value: 'ev', label: 'EV' },
+    { value: 'dg', label: 'DG' },
+    { value: 'jenaral', label: 'Jenaral' },
+    { value: 'je', label: 'JE' }
   ];
 
   const handlePageChange = (page: number) => {

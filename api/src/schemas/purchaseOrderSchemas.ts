@@ -35,6 +35,7 @@ export interface CreatePurchaseOrderInput {
   deliveryLocation?: string;
   paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
   shippingMethod?: 'standard' | 'express' | 'overnight' | 'pickup';
+  department?: string; // Department for this purchase order
   // New fields for shipping and documentation
   shipDate?: string;
   docketNumber?: string;
@@ -82,6 +83,7 @@ export interface UpdatePurchaseOrderInput {
   deliveryLocation?: string;
   paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
   shippingMethod?: 'standard' | 'express' | 'overnight' | 'pickup';
+  department?: string; // Department for this purchase order
   // New fields for shipping and documentation
   shipDate?: string;
   docketNumber?: string;
@@ -282,7 +284,8 @@ const basePOFields = {
   priority: Joi.string().valid('low', 'medium', 'high', 'urgent'),
   deliveryLocation: Joi.string().hex().length(24), // Stock location ID
   paymentTerms: Joi.string().valid('cod', 'net_30', 'net_60', 'advance', 'credit'),
-  shippingMethod: Joi.string().valid('standard', 'express', 'overnight', 'pickup')
+  shippingMethod: Joi.string().valid('standard', 'express', 'overnight', 'pickup'),
+  department: Joi.string().max(100).trim().allow('', null) // Department for this purchase order
 };
 
 // Purchase order item schema
@@ -321,6 +324,7 @@ export const createPurchaseOrderSchema = Joi.object<CreatePurchaseOrderInput>({
   deliveryLocation: basePOFields.deliveryLocation,
   paymentTerms: basePOFields.paymentTerms.default('net_30'),
   shippingMethod: basePOFields.shippingMethod.default('standard'),
+  department: basePOFields.department,
   // New fields for shipping and documentation
   shipDate: basePOFields.shipDate,
   docketNumber: basePOFields.docketNumber,
@@ -369,6 +373,7 @@ export const updatePurchaseOrderSchema = Joi.object<UpdatePurchaseOrderInput>({
   deliveryLocation: basePOFields.deliveryLocation,
   paymentTerms: basePOFields.paymentTerms,
   shippingMethod: basePOFields.shippingMethod,
+  department: basePOFields.department,
   // New fields for shipping and documentation
   shipDate: basePOFields.shipDate,
   docketNumber: basePOFields.docketNumber,

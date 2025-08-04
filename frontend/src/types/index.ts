@@ -226,6 +226,7 @@ export interface PurchaseOrder {
   actualDeliveryDate?: string;
   deliveryLocation: string | StockLocation;
   paymentTerms: string;
+  department?: string; // Department for this purchase order
   supplierContact: SupplierContact;
   createdBy: string;
   createdAt: string;

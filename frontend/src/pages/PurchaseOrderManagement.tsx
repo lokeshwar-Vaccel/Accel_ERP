@@ -105,6 +105,7 @@ interface PurchaseOrder {
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   sourceType?: 'manual' | 'amc' | 'service' | 'inventory';
   sourceId?: string;
+  department?: string; // Department for this purchase order
   notes?: string;
   attachments?: string[];
   approvedBy?: string;
@@ -170,6 +171,7 @@ interface POFormData {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   sourceType: 'manual' | 'amc' | 'service' | 'inventory';
   sourceId?: string;
+  department?: string; // Department for this purchase order
   notes?: string;
   items: Array<{
     product: string;
@@ -209,7 +211,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const [sort, setSort] = useState('-createdAt');
 
   // Modal states
-  const [showCreateModal, setShowCreateModal] = useState(false);
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
@@ -278,6 +280,7 @@ const PurchaseOrderManagement: React.FC = () => {
     priority: 'low',
     sourceType: 'manual',
     sourceId: '',
+    department: '',
     notes: '',
     items: [{ product: '', quantity: 1, unitPrice: 0, taxRate: 0 }]
   });
@@ -624,35 +627,7 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const handleCreatePO = async () => {
-    setFormData({
-      supplier: '',
-      supplierEmail: '',
-      supplierAddress: {
-        address: '',
-        state: '',
-        district: '',
-        pincode: ''
-      }, // now undefined or object
-      expectedDeliveryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      priority: 'low',
-      sourceType: 'manual',
-      sourceId: '',
-      notes: '',
-      items: [{ product: '', quantity: 1, unitPrice: 0, taxRate: 0 }]
-    });
-    setFormErrors({});
-
-    // Ensure products and suppliers are loaded when modal opens
-    if (products.length === 0) {
-      await fetchProducts();
-    }
-    if (suppliers.length === 0) {
-      console.log('No suppliers found, fetching...');
-      await fetchSuppliers();
-      console.log('Suppliers after fetch:', suppliers);
-    }
-
-    setShowCreateModal(true);
+    navigate('/purchase-order-management/create');
   };
 
   const handleEditPO = async (po: PurchaseOrder) => {
@@ -669,6 +644,7 @@ const PurchaseOrderManagement: React.FC = () => {
       priority: po.priority || 'low',
       sourceType: po.sourceType || 'manual',
       sourceId: po.sourceId || '',
+      department: po.department || '',
       notes: po.notes || '',
       items: po.items.map(item => ({
         product: typeof item.product === 'string' ? item.product : item.product._id,
@@ -801,46 +777,7 @@ const PurchaseOrderManagement: React.FC = () => {
     return Object.keys(errors).length === 0;
   };
 
-  const handleSubmitPO = async () => {
-    if (!validatePOForm()) return;
 
-    setSubmitting(true);
-    try {
-      setFormErrors({});
-
-      const totalAmount = formData.items.reduce(
-        (sum, item) =>
-          sum + (item.quantity * item.unitPrice * (1 + (item.taxRate || 0) / 100)),
-        0
-      );
-
-      const poData = {
-        ...formData,
-        totalAmount,
-        items: formData.items.map(item => ({
-          ...item,
-          totalPrice: item.quantity * item.unitPrice
-        }))
-      };
-
-      const response = await apiClient.purchaseOrders.create(poData);
-
-      setPurchaseOrders([response.data, ...purchaseOrders]);
-      setShowCreateModal(false);
-      resetPOForm();
-      toast.success('Purchase Order created successfully');
-    } catch (error: any) {
-      console.error('Error creating purchase order:', error);
-      if (error.response?.data?.errors) {
-        setFormErrors(error.response.data.errors);
-      } else {
-        setFormErrors({ general: 'Failed to create purchase order' });
-      }
-      toast.error('Failed to create purchase order');
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleUpdatePO = async () => {
     if (!validatePOForm() || !editingPO) return;
@@ -865,7 +802,6 @@ const PurchaseOrderManagement: React.FC = () => {
       setPurchaseOrders(purchaseOrders.map(po => po._id === editingPO._id ? response.data?.order : po));
       setShowEditModal(false);
       setEditingPO(null);
-      resetPOForm();
       toast.success('Purchase Order updated successfully');
     } catch (error: any) {
       console.error('Error updating purchase order:', error);
@@ -1159,30 +1095,7 @@ const PurchaseOrderManagement: React.FC = () => {
     setPreviewData(null);
   };
 
-  const resetPOForm = () => {
-    setFormData({
-      supplier: '',
-      supplierEmail: '',
-      supplierAddress: {
-        address: '',
-        state: '',
-        district: '',
-        pincode: ''
-      }, // now undefined or object
-      expectedDeliveryDate: '',
-      priority: 'low',
-      sourceType: 'manual',
-      sourceId: '',
-      notes: '',
-      items: [{ product: '', quantity: 1, unitPrice: 0, taxRate: 0 }]
-    });
-    setFormErrors({});
-    setShowSupplierDropdown(false);
-    setShowAddressDropdown(false);
-    setShowCreateSupplierDropdown(false);
-    setShowEditSupplierDropdown(false);
-    setSupplierSearchTerm('');
-  };
+
 
   const addItem = () => {
     setFormData({
@@ -1767,613 +1680,8 @@ const PurchaseOrderManagement: React.FC = () => {
         itemsPerPage={limit}
       />
 
-      {/* Create PO Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Create Purchase Order</h2>
-              <button
-                onClick={() => setShowCreateModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleSubmitPO(); }} className="p-4 space-y-3">
-              {formErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-red-600 text-sm">{formErrors.general}</p>
-                </div>
-              )}
-
-              {/* Basic Information */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Select Supplier *
-                  </label>
-                  <div className="relative dropdown-container">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (suppliers.length === 0) {
-                          fetchSuppliers();
-                        }
-                        setShowSupplierDropdown(!showSupplierDropdown);
-                      }}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.supplier ? 'border-red-500' : 'border-gray-300'}`}
-                    >
-                      <span className="text-gray-700 truncate mr-1">
-                        {formData.supplier ?
-                          suppliers.find(s => s._id === formData.supplier)?.name || 'Select Supplier' :
-                          'Select Supplier'
-                        }
-                      </span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSupplierDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showSupplierDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-60 overflow-y-auto">
-                        {/* Search Input */}
-                        {suppliers.filter(supplier => supplier.type === 'supplier').length > 0 && <div className="px-3 py-2 border-b border-gray-200">
-                          <input
-                            type="text"
-                            placeholder="Search suppliers..."
-                            value={supplierSearchTerm}
-                            onChange={(e) => setSupplierSearchTerm(e.target.value)}
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>}
-                        {/* Supplier List */}
-                        <div className="max-h-48 overflow-y-auto">
-                          {suppliers.filter(supplier => supplier.type === 'supplier').length <= 0 ? (
-                            <div className="px-3 py-2 text-sm text-gray-500">
-                              {!supplierSearchTerm ? 'No suppliers found' : 'Loading suppliers...'}
-                            </div>
-                          ) : (
-                            suppliers
-                              .filter(supplier =>
-                                supplier.type === 'supplier' && (
-                                  supplier.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
-                                  supplier.email?.toLowerCase().includes(supplierSearchTerm.toLowerCase())
-                                )
-                              )
-                              .map(supplier => (
-                                <button
-                                  key={supplier._id}
-                                  type="button"
-                                  onClick={() => handleSupplierSelect(supplier._id)}
-                                  className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${formData.supplier === supplier._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                    }`}
-                                >
-                                  <div className="font-medium text-gray-900">{supplier.name}</div>
-                                  {supplier.email && (
-                                    <div className="text-xs text-gray-500">{supplier.email}</div>
-                                  )}
-                                </button>
-                              ))
-                          )}
-
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {formErrors.supplier && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.supplier}</p>
-                  )}
-                </div>
-                {/* Supplier Address Field */}
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Delivery Address *
-                  </label>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      onClick={() => setShowAddressDropdown(!showAddressDropdown)}
-                      disabled={!formData.supplier}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${!formData.supplier ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300 hover:border-gray-400'}`}
-                    >
-                      <span className="text-gray-700 truncate mr-1">
-                        {formData.supplierAddress && formData.supplierAddress.address ?
-                          `${formData.supplierAddress.address}${formData.supplierAddress.district || formData.supplierAddress.pincode ? ` (${formData.supplierAddress.district || ''}${formData.supplierAddress.district && formData.supplierAddress.pincode ? ', ' : ''}${formData.supplierAddress.pincode || ''})` : ''}` :
-                          'Select address'}
-                      </span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAddressDropdown ? 'rotate-180' : ''
-                        }`} />
-                    </button>
-
-                    {showAddressDropdown && formData.supplier && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                        <button
-                          onClick={() => {
-                            setFormData(prev => ({
-                              ...prev,
-                              supplierAddress: undefined
-                            }));
-                            setShowAddressDropdown(false);
-                          }}
-                          className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.supplierAddress ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                        >
-                          Select address
-                        </button>
-                        {addresses.map((address, idx) => (
-                          <button
-                            key={address.id || idx}
-                            onClick={() => handleAddressSelect(address.id || idx.toString())}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${formData.supplierAddress?.id === address.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                          >
-                            <div>
-                              <div className="font-medium">{address.address}</div>
-                              <div className="text-xs text-gray-500">{address.district}, {address.pincode}</div>
-                              {address.isPrimary && (
-                                <div className="text-xs text-blue-600 font-medium">Primary</div>
-                              )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                  {formErrors.supplierAddress && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.supplierAddress}</p>
-                  )}
-                </div>
-                {/* <div className="md:col-span-1">
-                  {quickActions.map((action, index) => (
-                    <div
-                      key={index}
-                    // className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-2.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-                    >
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        {action.title}
-                      </label>
-                      <div
-                        onClick={() => {
-                          action.action(); // Run navigation only if form is valid
-                        }}
-                        className="bg-gradient-to-r from-blue-600 cursor-pointer to-blue-700 text-white px-3 py-2.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span className="text-sm">Create Supplier</span>
-                      </div>
-                    </div>
-                  ))}
-                </div> */}
-              </div>
-
-              {/* Advanced Options */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Expected Delivery Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.expectedDeliveryDate}
-                    onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
-                    min={new Date().toISOString().split('T')[0]}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.expectedDeliveryDate ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                  />
-                  {formErrors.expectedDeliveryDate && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.expectedDeliveryDate}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Priority
-                  </label>
-                  <select
-                    value={formData.priority}
-                    onChange={(e) => setFormData({ ...formData, priority: e.target.value as 'low' | 'medium' | 'high' | 'urgent' })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="low">Low Priority</option>
-                    <option value="medium">Medium Priority</option>
-                    <option value="high">High Priority</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Source Type
-                  </label>
-                  <select
-                    value={formData.sourceType}
-                    onChange={(e) => setFormData({ ...formData, sourceType: e.target.value as 'manual' | 'amc' | 'service' | 'inventory' })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="manual">Manual Purchase</option>
-                    <option value="amc">AMC Requirement</option>
-                    <option value="service">Service Request</option>
-                    <option value="inventory">Inventory Replenishment</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Reference ID
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.sourceId || ''}
-                    onChange={(e) => setFormData({ ...formData, sourceId: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder={
-                      formData.sourceType === 'amc' ? 'AMC Contract Number' :
-                        formData.sourceType === 'service' ? 'Service Ticket Number' :
-                          formData.sourceType === 'inventory' ? 'Stock Request ID' :
-                            'Reference ID (optional)'
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Notes
-                </label>
-                <textarea
-                  value={formData.notes || ''}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  rows={2}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  placeholder="Additional notes or specifications..."
-                />
-              </div>
-
-              {/* Items Section */}
-              <div className="bg-white">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="text-2xl font-bold text-gray-900">Items</h3>
-                  <div className="flex items-center space-x-4">
-                    {products.length === 0 && (
-                      <div className="flex items-center bg-amber-50 border border-amber-200 px-4 py-2 rounded-lg">
-                        <svg className="w-5 h-5 text-amber-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                        </svg>
-                        <span className="text-sm font-medium text-amber-800">No products loaded</span>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (products.length === 0) {
-                          fetchProducts();
-                        }
-                        addItem();
-                      }}
-                      className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg flex items-center space-x-2 transition-all duration-200 shadow-md hover:shadow-lg font-medium"
-                    >
-                      <Plus className="w-5 h-5" />
-                      <span>Add Item</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-6">
-                  {formData.items.map((item, index) => (
-                    <div key={index} className="bg-gray-50 border border-gray-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow duration-200">
-
-                      {/* First Row - Product Selection and Remove Button */}
-                      <div className="grid grid-cols-12 gap-6 items-start">
-                        <div className="col-span-10 mb-4">
-                          <label className="block text-sm font-bold text-gray-800 mb-1">
-                            Product <span className="text-red-500">*</span>
-                          </label>
-                          <div className="relative dropdown-container">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (products.length === 0) {
-                                  fetchProducts();
-                                }
-                                setProductDropdownOpen(prev => ({
-                                  ...prev,
-                                  [index]: !prev[index],
-                                }));
-                              }}
-                              className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'}`}
-                            >
-                              <span className="text-gray-700 truncate mr-1">
-                                {item.product
-                                  ? products.find(p => p._id === item.product)?.name || 'Select Product'
-                                  : 'Select Product'}
-                              </span>
-                              <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${productDropdownOpen[index] ? 'rotate-180' : ''}`} />
-                            </button>
-
-                            {productDropdownOpen[index] && (
-                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-60 overflow-y-auto">
-                                <div className="px-3 py-2 border-b border-gray-200">
-                                  <input
-                                    type="text"
-                                    placeholder="Search products..."
-                                    value={productSearchTerm[index] || ''}
-                                    onChange={(e) =>
-                                      setProductSearchTerm((prev) => ({
-                                        ...prev,
-                                        [index]: e.target.value,
-                                      }))
-                                    }
-                                    className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-                                    onClick={(e) => e.stopPropagation()}
-                                  />
-                                </div>
-                                <div className="max-h-48 overflow-y-auto">
-                                  {products.length === 0 ? (
-                                    <div className="px-3 py-2 text-sm text-gray-500">
-                                      {productSearchTerm[index] ? 'No products found' : 'Loading products...'}
-                                    </div>
-                                  ) : (() => {
-                                    const filteredProducts = products.filter(p =>
-                                      p.name.toLowerCase().includes((productSearchTerm[index] || '').toLowerCase()) ||
-                                      p.partNo?.toLowerCase().includes((productSearchTerm[index] || '').toLowerCase())
-                                    );
-
-                                    if (filteredProducts.length === 0) {
-                                      return (
-                                        <div className="px-3 py-2 text-sm text-gray-500">No products found</div>
-                                      );
-                                    }
-
-                                    return filteredProducts.map((product, productIndex) => (
-                                      <button
-                                        key={`${product._id}-${productIndex}`}
-                                        type="button"
-                                        onClick={() => {
-                                          const updates = {
-                                            product: product._id,
-                                            ...(product?.price && {
-                                              unitPrice: product.price
-                                            }),
-                                            ...(product?.gst !== undefined && {
-                                              taxRate: product.gst
-                                            }),
-                                          };
-                                          updateItem(index, updates);
-                                          setProductDropdownOpen(prev => ({ ...prev, [index]: false }));
-                                          setProductSearchTerm(prev => ({ ...prev, [index]: '' }));
-                                        }}
-                                        className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
-                                      >
-                                        <div className="font-medium text-gray-900">{product.name}</div>
-                                        <div className="text-xs text-gray-500">
-                                          {[product.partNo && `Part #: ${product.partNo}`, product.brand && `Brand: ${product.brand}`]
-                                            .filter(Boolean)
-                                            .join(' • ')}
-                                        </div>
-                                      </button>
-                                    ));
-                                  })()}
-                                </div>
-
-                              </div>
-                            )}
-                          </div>
-
-                          {formErrors[`items.${index}.product`] && (
-                            <div className="mt-2 min-h-[24px]">
-                              <p className="text-red-500 text-sm flex items-center font-medium">
-                                <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                </svg>
-                                {formErrors[`items.${index}.product`]}
-                              </p>
-                            </div>
-                          )}
-
-                          {products.length === 0 && (
-                            <button
-                              type="button"
-                              onClick={fetchProducts}
-                              className="text-blue-600 hover:text-blue-700 mb-2 flex items-center font-medium text-sm"
-                            >
-                              <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                              </svg>
-                              Refresh Products
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="col-span-2 flex justify-end items-start pt-6">
-                          {formData.items.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => removeItem(index)}
-                              className="flex items-center space-x-2 px-3 py-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-lg border border-red-200 hover:border-red-200 transition-all duration-200 text-sm font-medium"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              <span>Remove</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Second Row - Quantity, Unit Price, Tax, Total */}
-                      <div className="grid grid-cols-12 gap-4 items-start mb-5">
-                        {/* Quantity */}
-                        <div className="col-span-3">
-                          <label className="block text-sm font-bold text-gray-800 mb-1">
-                            Quantity <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="number"
-                            value={item.quantity}
-                            placeholder="0"
-                            onChange={(e) => {
-                              const quantity = parseInt(e.target.value);
-                              const updates = { quantity: quantity };
-                              updateItem(index, updates);
-                            }}
-                            className={`w-full px-4 py-3 border rounded-xl focus:ring-3 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 text-sm font-medium ${formErrors[`items.${index}.quantity`] ? 'border-red-400 bg-red-50' : 'border-gray-300 bg-white'
-                              }`}
-                            min="1"
-                          />
-                          {formErrors[`items.${index}.quantity`] && (
-                            <div className="mt-2 min-h-[24px]">
-                              <p className="text-red-500 text-sm flex items-center font-medium">
-                                <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                </svg>
-                                {formErrors[`items.${index}.quantity`]}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Unit Price */}
-                        <div className="col-span-3">
-                          <label className="block text-sm font-bold text-gray-800 mb-1">
-                            Unit Price (₹) <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="number"
-                            value={item.unitPrice}
-                            onChange={(e) => {
-                              const unitPrice = parseFloat(e.target.value);
-                              const updates = { unitPrice: unitPrice };
-                              updateItem(index, updates);
-                            }}
-                            disabled
-                            className={`w-full px-4 py-3 border rounded-xl bg-gray-100 cursor-not-allowed text-sm font-medium ${formErrors[`items.${index}.unitPrice`] ? 'border-red-400' : 'border-gray-300'
-                              }`}
-                            min="0"
-                            placeholder="0"
-                            step="0.01"
-                          />
-                          {formErrors[`items.${index}.unitPrice`] && (
-                            <div className="mt-2 min-h-[24px]">
-                              <p className="text-red-500 text-sm flex items-center font-medium">
-                                <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                </svg>
-                                {formErrors[`items.${index}.unitPrice`]}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Tax Rate */}
-                        <div className="col-span-3">
-                          <label className="block text-sm font-bold text-gray-800 mb-1">
-                            Tax (%) <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="number"
-                            value={item.taxRate}
-                            onChange={(e) => {
-                              const taxRate = parseFloat(e.target.value);
-                              const updates = { taxRate: taxRate };
-                              updateItem(index, updates);
-                            }}
-                            disabled
-                            className={`w-full px-4 py-3 border rounded-xl bg-gray-100 cursor-not-allowed text-sm font-medium ${formErrors[`items.${index}.taxRate`] ? 'border-red-400' : 'border-gray-300'
-                              }`}
-                            min="0"
-                            placeholder="0"
-                            step="0.01"
-                          />
-                          {formErrors[`items.${index}.taxRate`] && (
-                            <div className="mt-2 min-h-[24px]">
-                              <p className="text-red-500 text-sm flex items-center font-medium">
-                                <svg className="w-4 h-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
-                                  <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                                </svg>
-                                {formErrors[`items.${index}.taxRate`]}
-                              </p>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Total */}
-                        <div className="col-span-3">
-                          <label className="block text-sm font-bold text-gray-800 mb-1">Total</label>
-                          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-300 rounded-xl px-4 py-2 text-center">
-                            <div className="text-lg font-bold text-green-800">
-                              {formatCurrency((item.quantity * item.unitPrice || 0) * (1 + (item.taxRate || 0) / 100))}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Third Row - Item Notes */}
-                      <div className=" pt-2 border-t-2 border-gray-200">
-                        <label className="block text-sm font-bold text-gray-800 mb-3">
-                          Item Notes
-                        </label>
-                        <input
-                          type="text"
-                          value={item.notes || ''}
-                          onChange={(e) => {
-                            const notes = e.target.value;
-                            const updates = { notes: notes };
-                            updateItem(index, updates);
-                          }}
-                          className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-3 focus:ring-blue-200 focus:border-blue-500 transition-all duration-200 text-sm font-medium bg-white"
-                          placeholder="Enter specifications, additional details, or special instructions..."
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Enhanced Total Summary */}
-                <div className="mt-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6">
-                  <div className="flex flex-col md:flex-row md:justify-between md:items-center space-y-4 md:space-y-0">
-                    <div className="flex items-center space-x-6">
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600">{formData.items.length}</div>
-                        <div className="text-sm text-blue-700 font-medium">Items</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-2xl font-bold text-blue-600">
-                          {formData.items.reduce((sum, item) => sum + item.quantity, 0)}
-                        </div>
-                        <div className="text-sm text-blue-700 font-medium">Total Quantity</div>
-                      </div>
-                    </div>
-
-                    <div className="text-center md:text-right">
-                      <div className="text-sm text-blue-700 font-medium mb-1">Subtotal (Including Tax)</div>
-                      <div className="text-3xl font-bold text-blue-900">
-                        {formatCurrency(
-                          formData.items.reduce(
-                            (sum, item) =>
-                              sum + (item.quantity * item.unitPrice * (1 + (item.taxRate || 0) / 100)),
-                            0
-                          ) || 0
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting || formData.items.length === 0}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  {submitting ? 'Creating...' : 'Create Purchase Order'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+        
 
       {/* Edit PO Modal */}
       {showEditModal && editingPO && (
@@ -2817,6 +2125,9 @@ const PurchaseOrderManagement: React.FC = () => {
                         {selectedPO.status.charAt(0).toUpperCase() + selectedPO.status.slice(1)}
                       </span>
                     </p>
+                    {selectedPO.department && (
+                      <p><span className="text-xs text-gray-600">Department:</span> <span className="font-medium">{selectedPO.department}</span></p>
+                    )}
                   </div>
                 </div>
 

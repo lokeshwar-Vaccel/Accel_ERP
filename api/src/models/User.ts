@@ -26,7 +26,7 @@ const moduleAccessSchema = new Schema<any>({
   permission: {
     type: String,
     enum: ['read', 'write', 'admin'],
-    required: true
+    default: 'admin'
   }
 }, { _id: false });
 

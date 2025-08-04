@@ -75,11 +75,15 @@ export const login = async (
       return next(new AppError('Please provide email and password', 400));
     }
 
+    console.log("email:",email,password);
     // Check for user
     const user = await User.findOne({ email }).select('+password');
+    console.log("user12:",user);
     if (!user) {
       return next(new AppError('Invalid credentials', 401));
     }
+
+    
 
     // Check if user is active
     if (user.status !== 'active') {

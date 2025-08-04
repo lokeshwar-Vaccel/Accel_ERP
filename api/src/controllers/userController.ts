@@ -501,7 +501,7 @@ export const getFieldOperators = async (
       message: 'Field operators retrieved successfully',
       data: {
         fieldOperators: fieldOperators.map(operator => ({
-          id: operator._id,
+          _id: operator._id,
           name: `${operator.firstName} ${operator.lastName}`,
           firstName: operator.firstName,
           lastName: operator.lastName,

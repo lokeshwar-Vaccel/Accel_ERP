@@ -22,6 +22,7 @@ import {
     calculateQuotationTotals,
     sanitizeQuotationData,
     getDefaultQuotationData,
+    getFieldErrorMessage,
     type QuotationData,
     type QuotationItem,
     type ValidationError,
@@ -87,6 +88,7 @@ const QuotationFormPage: React.FC = () => {
     const [addresses, setAddresses] = useState<any[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [locations, setLocations] = useState<StockLocationData[]>([]);
+    const [fieldOperators, setFieldOperators] = useState<any[]>([]);
     const [generalSettings, setGeneralSettings] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
@@ -94,8 +96,10 @@ const QuotationFormPage: React.FC = () => {
     // Custom dropdown states
     const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
     const [customerSearchTerm, setCustomerSearchTerm] = useState('');
-    const [showAddressDropdown, setShowAddressDropdown] = useState(false);
+    const [showBillToAddressDropdown, setShowBillToAddressDropdown] = useState(false);
+    const [showShipToAddressDropdown, setShowShipToAddressDropdown] = useState(false);
     const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+    const [showEngineerDropdown, setShowEngineerDropdown] = useState(false);
     const [showProductDropdowns, setShowProductDropdowns] = useState<Record<number, boolean>>({});
     const [showUomDropdowns, setShowUomDropdowns] = useState<Record<number, boolean>>({});
 
@@ -115,8 +119,11 @@ const QuotationFormPage: React.FC = () => {
     // Excel-like navigation states for dropdown fields
     const [highlightedLocationIndex, setHighlightedLocationIndex] = useState(-1);
     const [highlightedCustomerIndex, setHighlightedCustomerIndex] = useState(-1);
-    const [highlightedAddressIndex, setHighlightedAddressIndex] = useState(-1);
+    const [highlightedBillToAddressIndex, setHighlightedBillToAddressIndex] = useState(-1);
+    const [highlightedShipToAddressIndex, setHighlightedShipToAddressIndex] = useState(-1);
+    const [highlightedEngineerIndex, setHighlightedEngineerIndex] = useState(-1);
     const [locationSearchTerm, setLocationSearchTerm] = useState('');
+    const [engineerSearchTerm, setEngineerSearchTerm] = useState('');
 
     // UOM options
     const UOM_OPTIONS = [
@@ -150,6 +157,9 @@ const QuotationFormPage: React.FC = () => {
                 setShowLocationDropdown(false);
                 setShowProductDropdowns({});
                 setShowUomDropdowns({});
+                setShowBillToAddressDropdown(false);
+                setShowShipToAddressDropdown(false);
+                setShowEngineerDropdown(false);
             }
         };
 
@@ -157,7 +167,7 @@ const QuotationFormPage: React.FC = () => {
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
 
-    console.log("formData.location:",formData.location);
+    console.log("formData.location:", formData.location);
     
 
     // Auto-focus location field when form loads (Excel-like behavior)
@@ -209,7 +219,8 @@ const QuotationFormPage: React.FC = () => {
                 fetchCustomers(),
                 fetchProducts(),
                 fetchLocations(),
-                fetchGeneralSettings()
+                fetchGeneralSettings(),
+                fetchFieldOperators()
             ]);
         } catch (error) {
             console.error('Error fetching data:', error);
@@ -236,19 +247,33 @@ const QuotationFormPage: React.FC = () => {
                 setAddresses(customerAddresses);
             }
 
-            // Find matching address ID for the quotation's customer address
-            let matchingAddressId = quotation.customerAddress?.addressId;
+            // Find matching address ID for the quotation's addresses
+            let matchingBillToAddressId = quotation.billToAddress?.addressId;
+            let matchingShipToAddressId = quotation.shipToAddress?.addressId;
 
-            if (!matchingAddressId && quotation.customerAddress && customerAddresses.length > 0) {
+            if (!matchingBillToAddressId && quotation.billToAddress && customerAddresses.length > 0) {
                 // Try to find matching address by comparing address details
                 const matchingAddress = customerAddresses.find((addr: any) =>
-                    addr.address === quotation.customerAddress.address &&
-                    addr.district === quotation.customerAddress.district &&
-                    addr.pincode === quotation.customerAddress.pincode
+                    addr.address === quotation.billToAddress.address &&
+                    addr.district === quotation.billToAddress.district &&
+                    addr.pincode === quotation.billToAddress.pincode
                 );
 
                 if (matchingAddress) {
-                    matchingAddressId = matchingAddress.id;
+                    matchingBillToAddressId = matchingAddress.id;
+                }
+            }
+
+            if (!matchingShipToAddressId && quotation.shipToAddress && customerAddresses.length > 0) {
+                // Try to find matching address by comparing address details
+                const matchingAddress = customerAddresses.find((addr: any) =>
+                    addr.address === quotation.shipToAddress.address &&
+                    addr.district === quotation.shipToAddress.district &&
+                    addr.pincode === quotation.shipToAddress.pincode
+                );
+
+                if (matchingAddress) {
+                    matchingShipToAddressId = matchingAddress.id;
                 }
             }
 
@@ -289,12 +314,24 @@ const QuotationFormPage: React.FC = () => {
                 })),
                 notes: quotation.notes || '',
                 terms: quotation.terms || '',
-                customerAddress: quotation.customerAddress ? {
-                    address: quotation.customerAddress.address || '',
-                    state: quotation.customerAddress.state || '',
-                    district: quotation.customerAddress.district || '',
-                    pincode: quotation.customerAddress.pincode || '',
-                    ...(matchingAddressId && { addressId: matchingAddressId })
+                billToAddress: quotation.billToAddress ? {
+                    address: quotation.billToAddress.address || '',
+                    state: quotation.billToAddress.state || '',
+                    district: quotation.billToAddress.district || '',
+                    pincode: quotation.billToAddress.pincode || '',
+                    ...(matchingBillToAddressId && { addressId: matchingBillToAddressId })
+                } : {
+                    address: '',
+                    state: '',
+                    district: '',
+                    pincode: ''
+                },
+                shipToAddress: quotation.shipToAddress ? {
+                    address: quotation.shipToAddress.address || '',
+                    state: quotation.shipToAddress.state || '',
+                    district: quotation.shipToAddress.district || '',
+                    pincode: quotation.shipToAddress.pincode || '',
+                    ...(matchingShipToAddressId && { addressId: matchingShipToAddressId })
                 } : {
                     address: '',
                     state: '',
@@ -315,7 +352,7 @@ const QuotationFormPage: React.FC = () => {
 
     const fetchCustomers = async () => {
         try {
-            const response = await apiClient.customers.getAll({});
+            const response = await apiClient.customers.getAll({ limit: 100, page: 1 });
             const responseData = response.data as any;
             const customersData = responseData.customers || responseData || [];
             setCustomers(customersData);
@@ -427,6 +464,17 @@ const QuotationFormPage: React.FC = () => {
             }
         } catch (error) {
             console.error('Error fetching general settings:', error);
+        }
+    };
+
+    const fetchFieldOperators = async () => {
+        try {
+            const response = await apiClient.users.getFieldOperators();
+            if (response.success) {
+                setFieldOperators(response.data.fieldOperators);
+            }
+        } catch (error) {
+            console.error('Error fetching field operators:', error);
         }
     };
 
@@ -542,11 +590,23 @@ const QuotationFormPage: React.FC = () => {
         return product?.partNo || '';
     };
 
+    const getEngineerLabel = (value: string) => {
+        const engineer = fieldOperators.find(e => e._id === value);
+        return engineer ? engineer.name : '';
+    };
+
     // Enhanced Excel-like keyboard navigation
     const handleProductKeyDown = (e: React.KeyboardEvent, rowIndex: number) => {
         const searchTerm = productSearchTerms[rowIndex] || '';
         const matchingProducts = getFilteredProducts(searchTerm);
         const currentHighlighted = highlightedProductIndex[rowIndex] ?? -1;
+
+        // Ctrl+Delete or Command+Delete: Remove current row
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+            e.preventDefault();
+            removeQuotationItem(rowIndex);
+            return;
+        }
 
         if (e.key === 'Tab') {
             e.preventDefault();
@@ -606,11 +666,10 @@ const QuotationFormPage: React.FC = () => {
                     }
                 }, 100);
             } else {
-                // If no search term, just move to next row
-                const nextRowIndex = rowIndex + 1;
+                // If no search term, move to Notes field
                 setTimeout(() => {
-                    const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
-                    if (nextInput) nextInput.focus();
+                    const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                    if (notesInput) notesInput.focus();
                 }, 100);
             }
 
@@ -662,16 +721,27 @@ const QuotationFormPage: React.FC = () => {
         const currentItem = formData.items?.[rowIndex];
         const currentQuantity = currentItem?.quantity || 1;
 
+        // Ctrl+Delete or Command+Delete: Remove current row
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+            e.preventDefault();
+            removeQuotationItem(rowIndex);
+            return;
+        }
+
         if (e.key === 'ArrowUp') {
             e.preventDefault();
             let newQuantity = currentQuantity + 1;
             
-            // 🚨 PREVENT INCREASING QUANTITY FOR OUT-OF-STOCK PRODUCTS
+            // 🚨 ALLOW INCREASING QUANTITY UP TO AVAILABLE STOCK
             if (currentItem?.product && formData.location && productStockCache[currentItem.product]) {
                 const stockInfo = productStockCache[currentItem.product];
                 if (stockInfo.available === 0) {
                     newQuantity = 0; // Keep at 0 for out-of-stock products
                     toast.error('Cannot increase quantity - product is out of stock', { duration: 2000 });
+                } else if (newQuantity > stockInfo.available) {
+                    // Allow increasing up to available stock, but show warning if exceeding
+                    newQuantity = stockInfo.available;
+                    toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
                 }
             }
             
@@ -721,16 +791,10 @@ const QuotationFormPage: React.FC = () => {
         } else if (e.key === 'Enter') {
             e.preventDefault();
 
-            // 🚀 AUTO-ROW FEATURE: Add new row when Enter is pressed on last row's quantity field
-            if (rowIndex === (formData.items || []).length - 1) {
-                addQuotationItem();
-            }
-
-            // Move to next row's product field
-            const nextRowIndex = rowIndex + 1;
+            // Move to Notes field when Enter is pressed
             setTimeout(() => {
-                const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
-                if (nextInput) nextInput.focus();
+                const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                if (notesInput) notesInput.focus();
             }, 100);
         }
     };
@@ -739,6 +803,13 @@ const QuotationFormPage: React.FC = () => {
     const handleCellKeyDown = (e: React.KeyboardEvent, rowIndex: number, field: string) => {
         const fields = ['product', 'description', 'hsnNumber', 'taxRate', 'quantity', 'uom', 'unitPrice', 'discount'];
         const currentFieldIndex = fields.indexOf(field);
+
+        // Ctrl+Delete or Command+Delete: Remove current row
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+            e.preventDefault();
+            removeQuotationItem(rowIndex);
+            return;
+        }
 
         if (e.key === 'Tab') {
             e.preventDefault();
@@ -798,20 +869,11 @@ const QuotationFormPage: React.FC = () => {
         } else if (e.key === 'Enter') {
             e.preventDefault();
 
-            // Enter: Move to same field in next row, or Notes if last row
-            if (rowIndex === (formData.items || []).length - 1) {
-                // Last row - move to Notes
-                setTimeout(() => {
-                    const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
-                    if (notesInput) notesInput.focus();
-                }, 100);
-            } else {
-                const nextRowIndex = rowIndex + 1;
-                setTimeout(() => {
-                    const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="${field}"]`) as HTMLInputElement;
-                    if (nextInput) nextInput.focus();
-                }, 100);
-            }
+            // Enter: Always move to Notes field
+            setTimeout(() => {
+                const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                if (notesInput) notesInput.focus();
+            }, 100);
 
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
@@ -1051,35 +1113,35 @@ const QuotationFormPage: React.FC = () => {
         }
     };
 
-    // Address dropdown keyboard navigation
-    const handleAddressKeyDown = (e: React.KeyboardEvent) => {
+    // Bill To Address dropdown keyboard navigation
+    const handleBillToAddressKeyDown = (e: React.KeyboardEvent) => {
         if (!formData.customer?._id) return;
 
         if (e.key === 'ArrowDown') {
             e.preventDefault();
-            if (!showAddressDropdown) {
-                setShowAddressDropdown(true);
-                setHighlightedAddressIndex(0);
+            if (!showBillToAddressDropdown) {
+                setShowBillToAddressDropdown(true);
+                setHighlightedBillToAddressIndex(0);
             } else {
-                const newIndex = highlightedAddressIndex < addresses.length - 1 ? highlightedAddressIndex + 1 : 0;
-                setHighlightedAddressIndex(newIndex);
+                const newIndex = highlightedBillToAddressIndex < addresses.length - 1 ? highlightedBillToAddressIndex + 1 : 0;
+                setHighlightedBillToAddressIndex(newIndex);
             }
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
-            if (!showAddressDropdown) {
-                setShowAddressDropdown(true);
-                setHighlightedAddressIndex(addresses.length - 1);
+            if (!showBillToAddressDropdown) {
+                setShowBillToAddressDropdown(true);
+                setHighlightedBillToAddressIndex(addresses.length - 1);
             } else {
-                const newIndex = highlightedAddressIndex > 0 ? highlightedAddressIndex - 1 : addresses.length - 1;
-                setHighlightedAddressIndex(newIndex);
+                const newIndex = highlightedBillToAddressIndex > 0 ? highlightedBillToAddressIndex - 1 : addresses.length - 1;
+                setHighlightedBillToAddressIndex(newIndex);
             }
         } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
             e.preventDefault();
-            if (showAddressDropdown && highlightedAddressIndex >= 0 && addresses[highlightedAddressIndex]) {
-                const selectedAddress = addresses[highlightedAddressIndex];
+            if (showBillToAddressDropdown && highlightedBillToAddressIndex >= 0 && addresses[highlightedBillToAddressIndex]) {
+                const selectedAddress = addresses[highlightedBillToAddressIndex];
                 setFormData({
                     ...formData,
-                    customerAddress: {
+                    billToAddress: {
                         address: selectedAddress.address,
                         state: selectedAddress.state,
                         district: selectedAddress.district,
@@ -1087,19 +1149,19 @@ const QuotationFormPage: React.FC = () => {
                         ...(selectedAddress.id && { addressId: selectedAddress.id })
                     } as any
                 });
-                setShowAddressDropdown(false);
-                setHighlightedAddressIndex(-1);
+                setShowBillToAddressDropdown(false);
+                setHighlightedBillToAddressIndex(-1);
 
-                // Move to next field (validity period)
+                // Move to next field (ship to address)
                 setTimeout(() => {
-                    const validityInput = document.querySelector('[data-field="validity-period"]') as HTMLInputElement;
-                    if (validityInput) validityInput.focus();
+                    const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
+                    if (shipToAddressInput) shipToAddressInput.focus();
                 }, 50);
-            } else if (!showAddressDropdown) {
+            } else if (!showBillToAddressDropdown) {
                 // If no dropdown open, just move to next field
                 setTimeout(() => {
-                    const validityInput = document.querySelector('[data-field="validity-period"]') as HTMLInputElement;
-                    if (validityInput) validityInput.focus();
+                    const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
+                    if (shipToAddressInput) shipToAddressInput.focus();
                 }, 50);
             }
         } else if (e.key === 'Tab' && e.shiftKey) {
@@ -1110,8 +1172,72 @@ const QuotationFormPage: React.FC = () => {
                 if (customerInput) customerInput.focus();
             }, 50);
         } else if (e.key === 'Escape') {
-            setShowAddressDropdown(false);
-            setHighlightedAddressIndex(-1);
+            setShowBillToAddressDropdown(false);
+            setHighlightedBillToAddressIndex(-1);
+        }
+    };
+
+    // Ship To Address dropdown keyboard navigation
+    const handleShipToAddressKeyDown = (e: React.KeyboardEvent) => {
+        if (!formData.customer?._id) return;
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (!showShipToAddressDropdown) {
+                setShowShipToAddressDropdown(true);
+                setHighlightedShipToAddressIndex(0);
+            } else {
+                const newIndex = highlightedShipToAddressIndex < addresses.length - 1 ? highlightedShipToAddressIndex + 1 : 0;
+                setHighlightedShipToAddressIndex(newIndex);
+            }
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (!showShipToAddressDropdown) {
+                setShowShipToAddressDropdown(true);
+                setHighlightedShipToAddressIndex(addresses.length - 1);
+            } else {
+                const newIndex = highlightedShipToAddressIndex > 0 ? highlightedShipToAddressIndex - 1 : addresses.length - 1;
+                setHighlightedShipToAddressIndex(newIndex);
+            }
+        } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+            e.preventDefault();
+            if (showShipToAddressDropdown && highlightedShipToAddressIndex >= 0 && addresses[highlightedShipToAddressIndex]) {
+                const selectedAddress = addresses[highlightedShipToAddressIndex];
+                setFormData({
+                    ...formData,
+                    shipToAddress: {
+                        address: selectedAddress.address,
+                        state: selectedAddress.state,
+                        district: selectedAddress.district,
+                        pincode: selectedAddress.pincode,
+                        ...(selectedAddress.id && { addressId: selectedAddress.id })
+                    } as any
+                });
+                setShowShipToAddressDropdown(false);
+                setHighlightedShipToAddressIndex(-1);
+
+                // Move to next field (validity period)
+                setTimeout(() => {
+                    const validityInput = document.querySelector('[data-field="validity-period"]') as HTMLInputElement;
+                    if (validityInput) validityInput.focus();
+                }, 50);
+            } else if (!showShipToAddressDropdown) {
+                // If no dropdown open, just move to next field
+                setTimeout(() => {
+                    const validityInput = document.querySelector('[data-field="validity-period"]') as HTMLInputElement;
+                    if (validityInput) validityInput.focus();
+                }, 50);
+            }
+        } else if (e.key === 'Tab' && e.shiftKey) {
+            e.preventDefault();
+            // Move back to bill to address field
+            setTimeout(() => {
+                const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
+                if (billToAddressInput) billToAddressInput.focus();
+            }, 50);
+        } else if (e.key === 'Escape') {
+            setShowShipToAddressDropdown(false);
+            setHighlightedShipToAddressIndex(-1);
         }
     };
 
@@ -1243,10 +1369,34 @@ const QuotationFormPage: React.FC = () => {
     };
 
     const removeQuotationItem = (index: number) => {
-        setFormData(prev => ({
-            ...prev,
-            items: (prev.items || []).filter((_, i) => i !== index)
-        }));
+        setFormData(prev => {
+            const currentItems = prev.items || [];
+            const newItems = currentItems.filter((_, i) => i !== index);
+            
+            // If we're removing the last item, add a new empty row
+            if (newItems.length === 0) {
+                newItems.push({
+                    product: '',
+                    description: '',
+                    quantity: 1,
+                    unitPrice: 0,
+                    taxRate: 0,
+                    discount: 0,
+                    partNo: '',
+                    hsnCode: '',
+                    hsnNumber: '',
+                    uom: 'nos',
+                    discountedAmount: 0,
+                    taxAmount: 0,
+                    totalPrice: 0
+                });
+            }
+            
+            return {
+                ...prev,
+                items: newItems
+            };
+        });
     };
 
     const updateQuotationItem = (index: number, field: keyof QuotationItem, value: any) => {
@@ -1284,13 +1434,14 @@ const QuotationFormPage: React.FC = () => {
             }
 
             // Recalculate totals
-            const calculationResult = calculateQuotationTotals(updatedItems);
+            const calculationResult = calculateQuotationTotals(updatedItems, prev.overallDiscount || 0);
 
             return {
                 ...prev,
                 items: calculationResult.items,
                 subtotal: calculationResult.subtotal,
                 totalDiscount: calculationResult.totalDiscount,
+                overallDiscount: calculationResult.overallDiscount,
                 totalTax: calculationResult.totalTax,
                 grandTotal: calculationResult.grandTotal,
                 roundOff: calculationResult.roundOff
@@ -1420,13 +1571,13 @@ const QuotationFormPage: React.FC = () => {
                     <div>
                         <p className="font-medium mb-1">🎯 Complete Form Navigation:</p>
                         <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Tab/Enter</kbd> Move forward</p>
-                        <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Shift+Tab</kbd> Move backward</p>
+                        {/* <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Shift+Tab</kbd> Move backward</p> */}
                         <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">↑↓</kbd> Navigate dropdowns</p>
                     </div>
                     <div>
                         <p className="font-medium mb-1">🔥 Super Fast Flow:</p>
                         <p>Location → Customer → Address → Validity Period → Valid Until → Products</p>
-                        <p><strong>Products:</strong> Search → Select → Quantity → Auto Next Row</p>
+                        <p><strong>Products:</strong> Search → Select → Quantity → Tab (Next Row) → Enter (Notes)</p>
                     </div>
                 </div>
             </div>
@@ -1447,7 +1598,7 @@ const QuotationFormPage: React.FC = () => {
                     )}
 
                     {/* Customer and Basic Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 From Location *
@@ -1629,7 +1780,8 @@ const QuotationFormPage: React.FC = () => {
                                                             setFormData({
                                                                 ...formData,
                                                                 customer: { _id: '', name: '', email: '', phone: '', pan: '' },
-                                                                customerAddress: { address: '', state: '', district: '', pincode: '' }
+                                                                billToAddress: { address: '', state: '', district: '', pincode: '' },
+                                                                shipToAddress: { address: '', state: '', district: '', pincode: '' }
                                                             });
                                                             setShowCustomerDropdown(false);
                                                             setCustomerSearchTerm('');
@@ -1653,7 +1805,9 @@ const QuotationFormPage: React.FC = () => {
                                                                         email: customer.email,
                                                                         phone: customer.phone,
                                                                         pan: ''
-                                                                    }
+                                                                    },
+                                                                    billToAddress: { address: '', state: '', district: '', pincode: '' },
+                                                                    shipToAddress: { address: '', state: '', district: '', pincode: '' }
                                                                 });
                                                                 setShowCustomerDropdown(false);
                                                                 setCustomerSearchTerm('');
@@ -1683,36 +1837,39 @@ const QuotationFormPage: React.FC = () => {
                                     </div>
                                 )}
                             </div>
+                            </div>
                         </div>
 
+                    {/* Bill To and Ship To Addresses */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Customer Address *
+                                Bill To Address *
                             </label>
                             <div className="relative dropdown-container">
                                 <input
                                     type="text"
-                                    value={getAddressLabel((formData.customerAddress as any)?.addressId?.toString())}
+                                    value={getAddressLabel((formData.billToAddress as any)?.addressId?.toString())}
                                     readOnly
                                     disabled={!formData.customer?._id}
                                     onFocus={() => {
                                         if (formData.customer?._id) {
-                                            setShowAddressDropdown(true);
-                                            setHighlightedAddressIndex(-1);
+                                            setShowBillToAddressDropdown(true);
+                                            setHighlightedBillToAddressIndex(-1);
                                         }
                                     }}
-                                    onKeyDown={handleAddressKeyDown}
+                                    onKeyDown={handleBillToAddressKeyDown}
                                     placeholder={!formData.customer?._id ? "Select customer first" : "Press ↓ to open address list"}
-                                    data-field="customer-address"
+                                    data-field="bill-to-address"
                                     className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
                                             ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                                             : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                                         }`}
                                 />
                                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAddressDropdown ? 'rotate-180' : ''}`} />
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showBillToAddressDropdown ? 'rotate-180' : ''}`} />
                                 </div>
-                                {showAddressDropdown && formData.customer?._id && (
+                                {showBillToAddressDropdown && formData.customer?._id && (
                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
                                         <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
                                             <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
@@ -1724,13 +1881,13 @@ const QuotationFormPage: React.FC = () => {
                                             onClick={() => {
                                                 setFormData({
                                                     ...formData,
-                                                    customerAddress: { address: '', state: '', district: '', pincode: '' }
+                                                    billToAddress: { address: '', state: '', district: '', pincode: '' }
                                                 });
-                                                setShowAddressDropdown(false);
+                                                setShowBillToAddressDropdown(false);
                                             }}
-                                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.customerAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.billToAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                                         >
-                                            Select address
+                                            Select bill to address
                                         </button>
 
                                         {addresses.map((address, index) => (
@@ -1740,7 +1897,7 @@ const QuotationFormPage: React.FC = () => {
                                                 onClick={() => {
                                                     setFormData({
                                                         ...formData,
-                                                        customerAddress: {
+                                                        billToAddress: {
                                                             address: address.address,
                                                             state: address.state,
                                                             district: address.district,
@@ -1748,11 +1905,11 @@ const QuotationFormPage: React.FC = () => {
                                                             ...(address.id && { addressId: address.id })
                                                         } as any
                                                     });
-                                                    setShowAddressDropdown(false);
-                                                    setHighlightedAddressIndex(-1);
+                                                    setShowBillToAddressDropdown(false);
+                                                    setHighlightedBillToAddressIndex(-1);
                                                 }}
-                                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.customerAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
-                                                        highlightedAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.billToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
+                                                    highlightedBillToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
                                                             'text-gray-700 hover:bg-gray-50'
                                                     }`}
                                             >
@@ -1776,6 +1933,99 @@ const QuotationFormPage: React.FC = () => {
                             </div>
                         </div>
 
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Ship To Address *
+                            </label>
+                            <div className="relative dropdown-container">
+                                <input
+                                    type="text"
+                                    value={getAddressLabel((formData.shipToAddress as any)?.addressId?.toString())}
+                                    readOnly
+                                    disabled={!formData.customer?._id}
+                                    onFocus={() => {
+                                        if (formData.customer?._id) {
+                                            setShowShipToAddressDropdown(true);
+                                            setHighlightedShipToAddressIndex(-1);
+                                        }
+                                    }}
+                                    onKeyDown={handleShipToAddressKeyDown}
+                                    placeholder={!formData.customer?._id ? "Select customer first" : "Press ↓ to open address list"}
+                                    data-field="ship-to-address"
+                                    className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
+                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                        : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                                        }`}
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showShipToAddressDropdown ? 'rotate-180' : ''}`} />
+                                </div>
+                                {showShipToAddressDropdown && formData.customer?._id && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                        <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                        </div>
+
+                                        <button
+                                            onClick={() => {
+                                                setFormData({
+                                                    ...formData,
+                                                    shipToAddress: { address: '', state: '', district: '', pincode: '' }
+                                                });
+                                                setShowShipToAddressDropdown(false);
+                                            }}
+                                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.shipToAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                        >
+                                            Select ship to address
+                                        </button>
+
+                                        {addresses.map((address, index) => (
+                                            <button
+                                                key={address.id}
+                                                data-address-index={index}
+                                                onClick={() => {
+                                                    setFormData({
+                                                        ...formData,
+                                                        shipToAddress: {
+                                                            address: address.address,
+                                                            state: address.state,
+                                                            district: address.district,
+                                                            pincode: address.pincode,
+                                                            ...(address.id && { addressId: address.id })
+                                                        } as any
+                                                    });
+                                                    setShowShipToAddressDropdown(false);
+                                                    setHighlightedShipToAddressIndex(-1);
+                                                }}
+                                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.shipToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
+                                                    highlightedShipToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                        'text-gray-700 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                <div>
+                                                    <div className="font-medium">{address.address}</div>
+                                                    <div className="text-xs text-gray-500">{address.district}, {address.pincode}</div>
+                                                    {address.isPrimary && (
+                                                        <div className="text-xs text-blue-600 font-medium">Primary</div>
+                                                    )}
+                                                </div>
+                                            </button>
+                                        ))}
+
+                                        {addresses.length === 0 && (
+                                            <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                                No addresses found for this customer
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Validity Period (Days)
@@ -1850,7 +2100,9 @@ const QuotationFormPage: React.FC = () => {
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                         </div>
+                        </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Valid Until
@@ -1868,10 +2120,10 @@ const QuotationFormPage: React.FC = () => {
                                 onKeyDown={(e) => {
                                     if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
                                         e.preventDefault();
-                                        // Move to first product field in the list
+                                    // Move to engineer field
                                         setTimeout(() => {
-                                            const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
-                                            if (firstProductInput) firstProductInput.focus();
+                                        const engineerInput = document.querySelector('[data-field="engineer"]') as HTMLInputElement;
+                                        if (engineerInput) engineerInput.focus();
                                         }, 50);
                                     } else if (e.key === 'Tab' && e.shiftKey) {
                                         e.preventDefault();
@@ -1884,10 +2136,155 @@ const QuotationFormPage: React.FC = () => {
                                 }}
                                 data-field="valid-until"
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                title="Tab/Enter: Move to products list | Shift+Tab: Back to validity period"
+                            title="Tab/Enter: Move to engineer field | Shift+Tab: Back to validity period"
                             />
                         </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Assign to Engineer
+                        </label>
+                        <div className="relative dropdown-container">
+                            <input
+                                type="text"
+                                value={engineerSearchTerm || getEngineerLabel(formData.assignedEngineer || '')}
+                                onChange={(e) => {
+                                    setEngineerSearchTerm(e.target.value);
+                                    if (!showEngineerDropdown) setShowEngineerDropdown(true);
+                                    setHighlightedEngineerIndex(-1);
+                                }}
+                                onFocus={() => {
+                                    setShowEngineerDropdown(true);
+                                    setHighlightedEngineerIndex(-1);
+                                    if (!engineerSearchTerm && formData.assignedEngineer) {
+                                        setEngineerSearchTerm('');
+                                    }
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'ArrowDown') {
+                                        e.preventDefault();
+                                        setShowEngineerDropdown(true);
+                                        setHighlightedEngineerIndex(prev => 
+                                            prev < fieldOperators.length - 1 ? prev + 1 : 0
+                                        );
+                                    } else if (e.key === 'ArrowUp') {
+                                        e.preventDefault();
+                                        setShowEngineerDropdown(true);
+                                        setHighlightedEngineerIndex(prev => 
+                                            prev > 0 ? prev - 1 : fieldOperators.length - 1
+                                        );
+                                    } else if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (showEngineerDropdown && highlightedEngineerIndex >= 0) {
+                                            const selectedEngineer = fieldOperators[highlightedEngineerIndex];
+                                            setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
+                                            setShowEngineerDropdown(false);
+                                            setEngineerSearchTerm('');
+                                            setHighlightedEngineerIndex(-1);
+                                        } else if (showEngineerDropdown && fieldOperators.length === 1) {
+                                            const selectedEngineer = fieldOperators[0];
+                                            setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
+                                            setShowEngineerDropdown(false);
+                                            setEngineerSearchTerm('');
+                                            setHighlightedEngineerIndex(-1);
+                                        }
+                                    } else if (e.key === 'Escape') {
+                                        setShowEngineerDropdown(false);
+                                        setHighlightedEngineerIndex(-1);
+                                    } else if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
+                                        e.preventDefault();
+                                        // Move to first product field in the list
+                                        setTimeout(() => {
+                                            const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
+                                            if (firstProductInput) firstProductInput.focus();
+                                        }, 50);
+                                    } else if (e.key === 'Tab' && e.shiftKey) {
+                                        e.preventDefault();
+                                        // Move back to Valid Until field
+                                        setTimeout(() => {
+                                            const validUntilInput = document.querySelector('[data-field="valid-until"]') as HTMLInputElement;
+                                            if (validUntilInput) validUntilInput.focus();
+                                        }, 50);
+                                    }
+                                }}
+                                autoComplete="off"
+                                placeholder="Search engineer or press ↓ to open"
+                                data-field="engineer"
+                                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                            />
+                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEngineerDropdown ? 'rotate-180' : ''}`} />
                     </div>
+                            {showEngineerDropdown && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                    {(() => {
+                                        const filteredEngineers = fieldOperators.filter(engineer =>
+                                            engineer.name.toLowerCase().includes(engineerSearchTerm.toLowerCase()) ||
+                                            (engineer.firstName && engineer.firstName.toLowerCase().includes(engineerSearchTerm.toLowerCase())) ||
+                                            (engineer.lastName && engineer.lastName.toLowerCase().includes(engineerSearchTerm.toLowerCase())) ||
+                                            (engineer.email && engineer.email.toLowerCase().includes(engineerSearchTerm.toLowerCase()))
+                                        );
+
+                                        return (
+                                            <>
+                                                <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                                </div>
+
+                                                <button
+                                                    onClick={() => {
+                                                        setFormData({ ...formData, assignedEngineer: '' });
+                                                        setShowEngineerDropdown(false);
+                                                        setEngineerSearchTerm('');
+                                                    }}
+                                                    className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.assignedEngineer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                                >
+                                                    Select engineer
+                                                </button>
+
+                                                {filteredEngineers.map((engineer, index) => (
+                                                    <button
+                                                        key={engineer._id}
+                                                        onClick={() => {
+                                                            setFormData({ ...formData, assignedEngineer: engineer._id });
+                                                            setShowEngineerDropdown(false);
+                                                            setEngineerSearchTerm('');
+                                                            setHighlightedEngineerIndex(-1);
+                                                        }}
+                                                        className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.assignedEngineer === engineer._id ? 'bg-blue-100 text-blue-800' :
+                                                                highlightedEngineerIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                                    'text-gray-700 hover:bg-gray-50'
+                                                            }`}
+                                                    >
+                                                        <div>
+                                                            <div className="font-medium">{engineer.name}</div>
+                                                            <div className="text-xs text-gray-500">{engineer.email}</div>
+                                                            {engineer.phone && (
+                                                                <div className="text-xs text-gray-500">{engineer.phone}</div>
+                                                            )}
+                                                        </div>
+                                                    </button>
+                                                ))}
+
+                                                {filteredEngineers.length === 0 && (
+                                                    <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                                        No engineers found
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
+                                </div>
+                            )}
+                        </div>
+                        {/* {getFieldErrorMessage('assignedEngineer') && (
+                            <p className="mt-1 text-sm text-red-600">{getFieldErrorMessage('assignedEngineer')}</p>
+                        )} */}
+                    </div>
+                    </div>
+                </div>
 
 
 
@@ -1905,28 +2302,28 @@ const QuotationFormPage: React.FC = () => {
                             </button>
                         </div>
 
-                        {/* Excel-style Table */}
-                        <div className="border border-gray-300 rounded-lg bg-white shadow-sm">
+                        {/* Desktop Table View */}
+                        <div className="hidden lg:block border border-gray-300 rounded-lg bg-white shadow-sm overflow-x-auto">
                             {/* Table Header */}
-                            <div className="bg-gray-50 border-b border-gray-300">
-                                <div className="grid text-xs font-semibold text-gray-700 uppercase tracking-wide"
-                                    style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 60px' }}>
-                                    <div className="p-3 border-r border-gray-300 text-center">S.No</div>
-                                    <div className="p-3 border-r border-gray-300">Product Code</div>
-                                    <div className="p-3 border-r border-gray-300">Product Name</div>
-                                    <div className="p-3 border-r border-gray-300">HSC/SAC</div>
-                                    <div className="p-3 border-r border-gray-300">GST(%)</div>
-                                    <div className="p-3 border-r border-gray-300">Quantity</div>
-                                    <div className="p-3 border-r border-gray-300">UOM</div>
-                                    <div className="p-3 border-r border-gray-300">Unit Price</div>
-                                    <div className="p-3 border-r border-gray-300">Discount(%)</div>
-                                    <div className="p-3 border-r border-gray-300">Total</div>
-                                    <div className="p-3 text-center">Remove</div>
+                            <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
+                                <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                                    style={{ gridTemplateColumns: '60px 150px 1fr 90px 80px 100px 60px 120px 100px 80px 60px' }}>
+                                    <div className="p-3 border-r border-gray-300 text-center bg-gray-200">S.No</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Product Code</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Product Name</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSC/SAC</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">GST(%)</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">UOM</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Discount</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Total</div>
+                                    <div className="p-3 text-center bg-gray-200 font-medium"></div>
                                 </div>
                             </div>
 
                             {/* Table Body */}
-                            <div className="divide-y divide-gray-200">
+                            <div className="divide-y divide-gray-200 min-w-[1200px]">
                                 {(formData.items || []).map((item, index) => {
                                     const stockInfo = stockValidation[index];
                                     let rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
@@ -1938,13 +2335,13 @@ const QuotationFormPage: React.FC = () => {
 
                                     return (
                                         <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${rowBg}`}
-                                            style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 60px' }}>
+                                            style={{ gridTemplateColumns: '60px 150px 1fr 90px 80px 100px 60px 120px 100px 80px 60px' }}>
                                         {/* S.No */}
                                         <div className="p-2 border-r border-gray-200 text-center text-sm font-medium text-gray-600 flex items-center justify-center">
                                             {index + 1}
                                         </div>
 
-                                        {/* Product - Enhanced with fixed dropdown */}
+                                        {/* Product Code - Enhanced with fixed dropdown */}
                                         <div className="p-1 border-r border-gray-200 relative">
                                             <input
                                                 type="text"
@@ -1986,7 +2383,7 @@ const QuotationFormPage: React.FC = () => {
                                                 onKeyDown={(e) => handleProductKeyDown(e, index)}
                                                 data-row={index}
                                                 data-field="product"
-                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50"
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
                                                 placeholder="Type to search..."
                                                 autoComplete="off"
                                             />
@@ -1994,7 +2391,7 @@ const QuotationFormPage: React.FC = () => {
                                                 <div
                                                     className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-[400px] overflow-hidden"
                                                     data-dropdown={index}
-                                                    style={{ width: '500px', minWidth: '500px' }}
+                                                    style={{ width: '450px', minWidth: '450px' }}
                                                 >
                                                     <div className="p-2 border-b border-gray-200 bg-gray-50">
                                                         <div className="text-xs text-gray-600">
@@ -2067,8 +2464,7 @@ const QuotationFormPage: React.FC = () => {
                                                                                             return (
                                                                                                 <div className="mt-1 flex items-center">
                                                                                                     <span className="font-medium text-gray-700">Stock Available:</span>
-                                                                                                    <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${
-                                                                                                        stockInfo.available === 0 
+                                                                                                    <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${stockInfo.available === 0
                                                                                                             ? 'bg-red-100 text-red-800 border border-red-300' 
                                                                                                             : stockInfo.available <= 5
                                                                                                                 ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
@@ -2115,26 +2511,25 @@ const QuotationFormPage: React.FC = () => {
                                             )}
                                         </div>
 
-                                        {/* Description */}
+                                        {/* Product Name */}
                                         <div className="p-1 border-r border-gray-200">
                                             <div className="flex items-center space-x-2">
                                                 <input
                                                     type="text"
-                                                    value={item.description || ''}
+                                                    value={item.product ? getProductName(item.product) : (item.description || '')}
                                                     onChange={(e) => updateQuotationItem(index, 'description', e.target.value)}
                                                     onKeyDown={(e) => handleCellKeyDown(e, index, 'description')}
                                                     data-row={index}
                                                     data-field="description"
-                                                    className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50"
-                                                    placeholder="Description"
+                                                    className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                                                    placeholder="Product Name"
                                                     disabled={true}
                                                 />
                                                 
-                                                {/* Stock Badge in Description Field */}
+                                                {/* Stock Badge in Product Name Field */}
                                                 {formData.location && item.product && productStockCache[item.product] && (
                                                     <div className="flex-shrink-0">
-                                                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                                            productStockCache[item.product].available === 0
+                                                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${productStockCache[item.product].available === 0
                                                                 ? 'bg-red-100 text-red-800'
                                                                 : productStockCache[item.product].available <= 5
                                                                     ? 'bg-yellow-100 text-yellow-800'
@@ -2158,7 +2553,7 @@ const QuotationFormPage: React.FC = () => {
                                                 onKeyDown={(e) => handleCellKeyDown(e, index, 'hsnNumber')}
                                                 data-row={index}
                                                 data-field="hsnNumber"
-                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50"
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
                                                 placeholder="HSN"
                                                 disabled={true}
                                             />
@@ -2176,7 +2571,7 @@ const QuotationFormPage: React.FC = () => {
                                                 onKeyDown={(e) => handleCellKeyDown(e, index, 'taxRate')}
                                                 data-row={index}
                                                 data-field="taxRate"
-                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 text-right"
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
                                                 placeholder="0.00"
                                                 disabled={true}
                                             />
@@ -2215,6 +2610,10 @@ const QuotationFormPage: React.FC = () => {
                                                                 toast.error('This product is out of stock. Quantity set to 0.', { duration: 2000 });
                                                             }
                                                             newQuantity = 0;
+                                                        } else if (newQuantity > stockInfo.available) {
+                                                            // Allow increasing up to available stock, but show warning if exceeding
+                                                            newQuantity = stockInfo.available;
+                                                            toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
                                                         }
                                                     }
 
@@ -2223,7 +2622,7 @@ const QuotationFormPage: React.FC = () => {
                                                 onKeyDown={(e) => handleQuantityKeyDown(e, index)}
                                                 data-row={index}
                                                 data-field="quantity"
-                                                className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 text-right ${item.product && formData.location && productStockCache[item.product] ? (
+                                                className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right ${item.product && formData.location && productStockCache[item.product] ? (
                                                     productStockCache[item.product].available === 0 
                                                         ? 'bg-red-50 text-red-600 font-bold cursor-not-allowed' 
                                                         : item.quantity > 0 && Number(item.quantity) > productStockCache[item.product].available 
@@ -2266,7 +2665,7 @@ const QuotationFormPage: React.FC = () => {
                                                 onKeyDown={(e) => handleCellKeyDown(e, index, 'uom')}
                                                 data-row={index}
                                                 data-field="uom"
-                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 cursor-pointer"
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 cursor-pointer"
                                                 disabled={true}
                                             />
                                             {showUomDropdowns[index] && (
@@ -2298,7 +2697,7 @@ const QuotationFormPage: React.FC = () => {
                                                 onKeyDown={(e) => handleCellKeyDown(e, index, 'unitPrice')}
                                                 data-row={index}
                                                 data-field="unitPrice"
-                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 text-right"
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
                                                 placeholder="0.00"
                                                 disabled={true}
                                             />
@@ -2315,7 +2714,7 @@ const QuotationFormPage: React.FC = () => {
                                                 onKeyDown={(e) => handleCellKeyDown(e, index, 'discount')}
                                                 data-row={index}
                                                 data-field="discount"
-                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 text-right"
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
                                                 placeholder="0.00"
                                             />
                                         </div>
@@ -2334,20 +2733,14 @@ const QuotationFormPage: React.FC = () => {
                                                 </button>
                                             )} */}
                                         </div>
-                                            <div className="p-1 relative">
-                                                {(formData.items || []).length > 1 ? (
-                                                    <button
-                                                        onClick={() => removeQuotationItem(index)}
-                                                        className="w-full h-full p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center group"
-                                                        title="Remove this item"
-                                                    >
-                                                        <X className="w-4 h-4" />
-                                                    </button>
-                                                ) : (
-                                                    <div className="w-full h-full p-2 text-gray-300 flex items-center justify-center" title="Cannot remove the last item">
-                                                        <X className="w-4 h-4" />
-                                                    </div>
-                                                )}
+                                            <div className="p-0 h-full">
+                                                <button
+                                                    onClick={() => removeQuotationItem(index)}
+                                                    className="w-full h-full text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors flex items-center justify-center border-0 hover:bg-red-100 bg-transparent"
+                                                    title="Remove this item"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
                                             </div>
                                         </div>
                                     );
@@ -2355,21 +2748,195 @@ const QuotationFormPage: React.FC = () => {
                             </div>
 
                             {/* Navigation Hints */}
-                            <div className="bg-gray-50 border-t border-gray-200 p-3 text-center">
-                                <div className="text-sm text-gray-600 mb-1">
-                                    <strong>🚀 Excel-Like Quotation Items:</strong> Search → Select → Set Quantity → Tab/Enter → Auto Next Row
+                            <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1200px]">
+                                <div className="text-sm text-gray-600 mb-1 mt-16">
+                                    <strong>🚀 Excel-Like Quotation Items:</strong> Search → Select → Set Quantity → Tab → Next Row | Enter → Notes
                                 </div>
                                 <div className="text-xs text-gray-500 mb-1">
                                     <kbd className="px-1 py-0.5 bg-gray-200 rounded">Type</kbd> Search Product →
                                     <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">↑↓</kbd> Navigate List →
                                     <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Enter</kbd> Select →
                                     <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Set</kbd> Quantity →
-                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Tab/Enter</kbd> Auto Add Row
+                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Tab</kbd> Next Row →
+                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Enter</kbd> Go to Notes
                                 </div>
-                                <div className="text-xs text-gray-400">
+                                <div className="text-xs text-gray-400 mb-5">
                                     ⚡ <strong>Complete Excel-like quotation form navigation!</strong> • Stock validation enabled for accurate quotations
                                 </div>
                             </div>
+                        </div>
+
+                        {/* Mobile Card View */}
+                        <div className="lg:hidden space-y-4">
+                            {(formData.items || []).map((item, index) => {
+                                const stockInfo = stockValidation[index];
+                                let cardBg = 'bg-white';
+                                if (stockInfo) {
+                                    if (stockInfo.available === 0) cardBg = 'bg-red-50';
+                                    else if (!stockInfo.isValid) cardBg = 'bg-yellow-50';
+                                    else if (stockInfo.available > 0) cardBg = 'bg-green-50';
+                                }
+
+                                return (
+                                    <div key={index} className={`${cardBg} border border-gray-200 rounded-lg p-4 shadow-sm`}>
+                                        <div className="flex justify-between items-start mb-3">
+                                            <div className="flex items-center space-x-2">
+                                                <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">
+                                                    #{index + 1}
+                                                </span>
+                                                {formData.location && item.product && productStockCache[item.product] && (
+                                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${productStockCache[item.product].available === 0
+                                                            ? 'bg-red-100 text-red-800'
+                                                            : productStockCache[item.product].available <= 5
+                                                                ? 'bg-yellow-100 text-yellow-800'
+                                                                : 'bg-green-100 text-green-800'
+                                                    }`}>
+                                                        {productStockCache[item.product].available === 0
+                                                            ? '❌ Out of Stock'
+                                                            : `📦 ${productStockCache[item.product].available} in stock`}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={() => removeQuotationItem(index)}
+                                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded"
+                                                title="Remove this item"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+
+                                        {/* Product Selection */}
+                                        <div className="space-y-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={productSearchTerms[index] || getProductPartNo(item.product)}
+                                                        onChange={(e) => {
+                                                            updateProductSearchTerm(index, e.target.value);
+                                                            setShowProductDropdowns({
+                                                                ...showProductDropdowns,
+                                                                [index]: true
+                                                            });
+                                                            setHighlightedProductIndex({
+                                                                ...highlightedProductIndex,
+                                                                [index]: -1
+                                                            });
+                                                        }}
+                                                        onFocus={() => {
+                                                            if (!productSearchTerms[index] && !item.product) {
+                                                                updateProductSearchTerm(index, '');
+                                                            }
+                                                            setShowProductDropdowns({
+                                                                ...showProductDropdowns,
+                                                                [index]: true
+                                                            });
+                                                            if (formData.location && Object.keys(productStockCache).length === 0) {
+                                                                loadAllStockForLocation();
+                                                            }
+                                                        }}
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                        placeholder="Search product..."
+                                                        autoComplete="off"
+                                                    />
+                                                    {showProductDropdowns[index] && (
+                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                                                            {getFilteredProducts(productSearchTerms[index] || '').map((product, productIndex) => (
+                                                                <button
+                                                                    key={product._id}
+                                                                    onMouseDown={(e) => {
+                                                                        e.preventDefault();
+                                                                        updateQuotationItem(index, 'product', product._id);
+                                                                        setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
+                                                                        updateProductSearchTerm(index, '');
+                                                                        setHighlightedProductIndex({ ...highlightedProductIndex, [index]: -1 });
+                                                                    }}
+                                                                className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.product === product._id ? 'bg-blue-100 text-blue-800' : 'text-gray-700'
+                                                                    }`}
+                                                                >
+                                                                    <div className="font-medium">{product.name}</div>
+                                                                    <div className="text-xs text-gray-500">
+                                                                        {product.partNo} • ₹{product.price?.toLocaleString()}
+                                                                    </div>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Quantity and Price Row */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="1"
+                                                        value={item.quantity}
+                                                        onChange={(e) => {
+                                                            let newQuantity = parseFloat(e.target.value) || 1;
+                                                            if (item.product && formData.location && productStockCache[item.product]) {
+                                                                const stockInfo = productStockCache[item.product];
+                                                                if (stockInfo.available === 0) {
+                                                                    if (newQuantity > 0) {
+                                                                        toast.error('This product is out of stock. Quantity set to 0.', { duration: 2000 });
+                                                                    }
+                                                                    newQuantity = 0;
+                                                                } else if (newQuantity > stockInfo.available) {
+                                                                    newQuantity = stockInfo.available;
+                                                                    toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
+                                                                }
+                                                            }
+                                                            updateQuotationItem(index, 'quantity', newQuantity);
+                                                        }}
+                                                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${item.product && formData.location && productStockCache[item.product]?.available === 0
+                                                                ? 'bg-red-50 text-red-600' : ''
+                                                        }`}
+                                                        placeholder="1"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Unit Price</label>
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        step="0.01"
+                                                        value={item.unitPrice.toFixed(2)}
+                                                        onChange={(e) => updateQuotationItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                        placeholder="0.00"
+                                                        disabled={true}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Discount Row */}
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Discount (%)</label>
+                                                <input
+                                                    type="number"
+                                                    step="1"
+                                                    value={item.discount === 0 ? '' : item.discount}
+                                                    onChange={(e) => updateQuotationItem(index, 'discount', parseFloat(e.target.value) || 0)}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                    placeholder="0"
+                                                />
+                                            </div>
+
+                                            {/* Total */}
+                                            <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                                                <span className="text-sm font-medium text-gray-700">Total:</span>
+                                                <span className="text-lg font-bold text-blue-600">
+                                                    ₹{item.totalPrice?.toFixed(2) || '0.00'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
 
@@ -2380,26 +2947,24 @@ const QuotationFormPage: React.FC = () => {
                             <textarea
                                 value={formData.notes || ''}
                                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                // onKeyDown={(e) => {
-                                //     if (e.key === 'Tab' && !e.shiftKey) {
-                                //         e.preventDefault();
-                                //         // Move to Terms field
-                                //         setTimeout(() => {
-                                //             const termsInput = document.querySelector('[data-field="terms"]') as HTMLTextAreaElement;
-                                //             if (termsInput) termsInput.focus();
-                                //         }, 50);
-                                //     } else if (e.key === 'Tab' && e.shiftKey) {
-                                //         e.preventDefault();
-                                //         // Move back to last product field or appropriate previous field
-                                //         const lastRowIndex = (formData.items || []).length - 1;
-                                //         setTimeout(() => {
-                                //             const lastDiscountInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="discount"]`) as HTMLInputElement;
-                                //             if (lastDiscountInput) {
-                                //                 lastDiscountInput.focus();
-                                //             }
-                                //         }, 50);
-                                //     }
-                                // }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Tab' && e.shiftKey) {
+                                        e.preventDefault();
+                                        // Move back to last product's quantity field
+                                        const lastRowIndex = (formData.items || []).length - 1;
+                                        setTimeout(() => {
+                                            const lastQuantityInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
+                                            if (lastQuantityInput) lastQuantityInput.focus();
+                                        }, 50);
+                                    } else if (e.key === 'Tab' && !e.shiftKey) {
+                                        e.preventDefault();
+                                        // Move to Terms field
+                                        setTimeout(() => {
+                                            const termsInput = document.querySelector('[data-field="terms"]') as HTMLTextAreaElement;
+                                            if (termsInput) termsInput.focus();
+                                        }, 50);
+                                    }
+                                }}
                                 rows={3}
                                 data-field="notes"
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
@@ -2413,19 +2978,20 @@ const QuotationFormPage: React.FC = () => {
                                 value={formData.terms || ''}
                                 onChange={(e) => setFormData({ ...formData, terms: e.target.value })}
                                 // onKeyDown={(e) => {
-                                //     if (e.key === 'Tab' && !e.shiftKey) {
-                                //         e.preventDefault();
-                                //         // Move to Save button or form end
-                                //         setTimeout(() => {
-                                //             const saveButton = document.querySelector('[data-action="save"]') as HTMLButtonElement;
-                                //             if (saveButton) saveButton.focus();
-                                //         }, 50);
-                                //     } else if (e.key === 'Tab' && e.shiftKey) {
+                                //     if (e.key === 'Tab' && e.shiftKey) {
                                 //         e.preventDefault();
                                 //         // Move back to Notes field
                                 //         setTimeout(() => {
                                 //             const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
                                 //             if (notesInput) notesInput.focus();
+                                //         }, 50);
+                                //     } else if (e.key === 'Tab' && !e.shiftKey) {
+                                //         e.preventDefault();
+                                //         // Move to Create Quotation button
+                                //         setTimeout(() => {
+                                //             // Find the enabled Create/Update Quotation button
+                                //             const createBtn = document.querySelector('button.px-6.py-2.bg-blue-600:not([disabled])') as HTMLButtonElement;
+                                //             if (createBtn) createBtn.focus();
                                 //         }, 50);
                                 //     }
                                 // }}
@@ -2434,6 +3000,45 @@ const QuotationFormPage: React.FC = () => {
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
                                 placeholder="Terms and conditions..."
                             />
+                        </div>
+                    </div>
+
+                {/* Overall Discount */}
+                <div className="border-t border-gray-200 pt-4">
+                    <div className="flex justify-end">
+                        <div className="w-80">
+                            <div className="flex items-center justify-between">
+                                <label className="block text-sm font-medium text-gray-700">Overall Discount (%):</label>
+                                <input
+                                    type="number"
+                                    value={formData.overallDiscount || 0}
+                                    onChange={(e) => {
+                                        const value = parseFloat(e.target.value) || 0;
+                                        console.log('QuotationForm: Overall discount changed to:', value);
+                                        setFormData(prev => {
+                                            const calculationResult = calculateQuotationTotals(prev.items || [], value);
+                                            console.log('QuotationForm: Calculation result:', calculationResult);
+                                            const updatedData = {
+                                                ...prev,
+                                                overallDiscount: value,
+                                                overallDiscountAmount: calculationResult.overallDiscountAmount,
+                                                totalDiscount: calculationResult.totalDiscount,
+                                                totalTax: calculationResult.totalTax,
+                                                grandTotal: calculationResult.grandTotal,
+                                                roundOff: calculationResult.roundOff
+                                            };
+                                            console.log('QuotationForm: Updated form data:', updatedData);
+                                            return updatedData;
+                                        });
+                                    }}
+                                    min="0"
+                                    max="100"
+                                    step="0.01"
+                                    className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
+                                    placeholder="0.00"
+                                />
+                            </div>
+                        </div>
                         </div>
                     </div>
 
@@ -2452,6 +3057,10 @@ const QuotationFormPage: React.FC = () => {
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-600">Total Discount:</span>
                                     <span className="font-medium text-green-600">-₹{formData.totalDiscount?.toFixed(2) || '0.00'}</span>
+                                </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Overall Discount:</span>
+                                <span className="font-medium text-green-600">-{formData.overallDiscount || 0}% (-₹{formData.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
                                 </div>
                                 <div className="flex justify-between font-bold text-lg border-t pt-3">
                                     <span>Grand Total:</span>
@@ -2500,7 +3109,6 @@ const QuotationFormPage: React.FC = () => {
                                 </>
                             )}
                         </button>
-                    </div>
                 </div>
             </div>
         </div>

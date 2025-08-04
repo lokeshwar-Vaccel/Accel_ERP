@@ -9,7 +9,9 @@ import {
   createQuotation,
   createQuotationFromImage,
   updateQuotation,
-  deleteQuotation
+  deleteQuotation,
+  createDGSalesQuotation,
+  listDGSalesQuotations
 } from '../controllers/quotationController';
 
 const router = Router();
@@ -20,6 +22,10 @@ router.use(checkModuleAccess('billing'));
 router.post('/generate/:invoiceId', checkPermission('read'), generateQuotation);
 router.get('/preview/:invoiceId', checkPermission('read'), getQuotationPreview);
 router.get('/download/:invoiceId', checkPermission('read'), downloadQuotationPDF);
+
+// DG Sales specific routes (must come before /:id routes)
+router.get('/dg-sales', checkPermission('read'), listDGSalesQuotations);
+router.post('/dg-sales', checkPermission('write'), createDGSalesQuotation);
 
 // CRUD routes for Quotation
 router.get('/', checkPermission('read'), getQuotations);

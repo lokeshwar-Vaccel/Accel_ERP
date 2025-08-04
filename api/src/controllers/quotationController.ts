@@ -5,6 +5,8 @@ import { QuotationService } from '../services/quotationService';
 import { Invoice } from '../models/Invoice';
 import { Quotation } from '../models/Quotation';
 import { generateReferenceId } from '../utils/generateReferenceId';
+import { Customer } from '../models/Customer';
+import { DGEnquiry } from '../models/DGEnquiry';
 
 // Helper function to create quotation data from image
 const createQuotationFromImageData = () => {
@@ -239,7 +241,8 @@ export const downloadQuotationPDF = async (
 export const getQuotationById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const quotation = await Quotation.findById(req.params.id)
-      .populate('location', 'name address type'); // Populate location details
+      .populate('location', 'name address type') // Populate location details
+      .populate('assignedEngineer', 'firstName lastName email phone'); // Populate assigned engineer details
     if (!quotation) {
       res.status(404).json({ message: 'Quotation not found' });
       return;
@@ -262,6 +265,8 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
     const [quotations, total] = await Promise.all([
       Quotation.find()
         .populate('location', 'name address type') // populate location details
+        .populate('customer', 'name email phone pan') // populate customer details
+        .populate('assignedEngineer', 'firstName lastName email phone') // populate assigned engineer details
         .skip(skip)
         .limit(limit)
         .sort({ issueDate: -1 }),
@@ -332,7 +337,7 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
     }
 
     // Step 5: Calculate financial details
-    const calculationResult = calculateQuotationTotals(sanitizedData.items);
+    const calculationResult = calculateQuotationTotals(sanitizedData.items, sanitizedData.overallDiscount || 0);
     
     // Step 6: Validate financial calculations
     if (calculationResult.grandTotal <= 0) {
@@ -348,6 +353,8 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
       ...sanitizedData,
       subtotal: calculationResult.subtotal,
       totalDiscount: calculationResult.totalDiscount,
+      overallDiscount: sanitizedData.overallDiscount || 0,
+      overallDiscountAmount: calculationResult.overallDiscount,
       totalTax: calculationResult.totalTax,
       grandTotal: calculationResult.grandTotal,
       roundOff: calculationResult.roundOff,
@@ -358,9 +365,10 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
     const quotation = new Quotation(quotationData);
     await quotation.save();
 
-    // Step 9: Populate location and return success response
+    // Step 9: Populate location and assigned engineer, then return success response
     const populatedQuotation = await Quotation.findById(quotation._id)
-      .populate('location', 'name address type');
+      .populate('location', 'name address type')
+      .populate('assignedEngineer', 'firstName lastName email phone');
 
     return res.status(201).json({
       success: true,
@@ -382,6 +390,86 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
   }
 };
 
+// @desc    Create a quotation for a DG Sales customer
+// @route   POST /api/v1/quotations/dg-sales
+// @access  Private
+export const createDGSalesQuotation = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { customerId, dgEnquiryId, ...quotationData } = req.body;
+    if (!customerId) {
+      return next(new AppError('Customer ID is required', 400));
+    }
+    // Find customer
+    const customer = await Customer.findById(customerId);
+    if (!customer) {
+      return next(new AppError('Customer not found', 404));
+    }
+    // Optionally find DGEnquiry
+    let dgEnquiry = null;
+    if (dgEnquiryId) {
+      dgEnquiry = await DGEnquiry.findById(dgEnquiryId);
+      if (!dgEnquiry) {
+        return next(new AppError('DG Enquiry not found', 404));
+      }
+    }
+    // Prepare quotation
+    const quotation = await Quotation.create({
+      ...quotationData,
+      customer: {
+        _id: customer._id,
+        name: customer.name,
+        email: customer.email,
+        phone: customer.phone,
+        pan: '', // No panNumber or pan field in Customer, so use empty string
+      },
+      dgEnquiry: dgEnquiry ? dgEnquiry._id : undefined,
+      createdBy: req.user?.id
+    });
+    res.status(201).json({ success: true, quotation });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    List all quotations for a DG Sales customer or DGEnquiry
+// @route   GET /api/v1/quotations/dg-sales
+// @access  Private
+export const listDGSalesQuotations = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { customerId, dgEnquiryId, page = 1, limit = 10 } = req.query;
+    const filter: any = {};
+    if (customerId) {
+      filter['customer._id'] = customerId;
+    }
+    if (dgEnquiryId) {
+      filter.dgEnquiry = dgEnquiryId;
+    }
+    const total = await Quotation.countDocuments(filter);
+    const quotations = await Quotation.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((Number(page) - 1) * Number(limit))
+      .limit(Number(limit));
+    res.json({
+      success: true,
+      data: quotations,
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      totalPages: Math.ceil(total / Number(limit)),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Helper functions for validation and calculation
 const sanitizeQuotationData = (data: any): any => {
   const sanitized = {
@@ -393,11 +481,19 @@ const sanitizeQuotationData = (data: any): any => {
       phone: String(data.customer.phone || '').trim(),
       pan: String(data.customer.pan || '').trim()
     } : undefined,
-    customerAddress: data.customerAddress ? {
-      address: String(data.customerAddress.address || '').trim(),
-      state: String(data.customerAddress.state || '').trim(),
-      district: String(data.customerAddress.district || '').trim(),
-      pincode: String(data.customerAddress.pincode || '').trim()
+    billToAddress: data.billToAddress ? {
+      address: String(data.billToAddress.address || '').trim(),
+      state: String(data.billToAddress.state || '').trim(),
+      district: String(data.billToAddress.district || '').trim(),
+      pincode: String(data.billToAddress.pincode || '').trim(),
+      addressId: data.billToAddress.addressId
+    } : undefined,
+    shipToAddress: data.shipToAddress ? {
+      address: String(data.shipToAddress.address || '').trim(),
+      state: String(data.shipToAddress.state || '').trim(),
+      district: String(data.shipToAddress.district || '').trim(),
+      pincode: String(data.shipToAddress.pincode || '').trim(),
+      addressId: data.shipToAddress.addressId
     } : undefined,
     company: data.company ? {
       name: String(data.company.name || '').trim(),
@@ -421,7 +517,9 @@ const sanitizeQuotationData = (data: any): any => {
       taxRate: Number(item.taxRate) || 0
     })) : [],
     notes: String(data.notes || '').trim(),
-    terms: String(data.terms || '').trim()
+    terms: String(data.terms || '').trim(),
+    assignedEngineer: data.assignedEngineer || undefined,
+    overallDiscount: Number(data.overallDiscount) || 0
   };
   
   return sanitized;
@@ -439,10 +537,18 @@ const validateQuotationData = (data: any): { isValid: boolean; errors: any[] } =
     }
   }
 
-  // Customer address validation
-  if (!data.customerAddress || !data.customerAddress.address || (typeof data.customerAddress.address === 'string' && !data.customerAddress.address.trim())) {
-    errors.push({ field: 'customerAddress.address', message: 'Customer address is required' });
+  // Bill to address validation
+  if (!data.billToAddress || !data.billToAddress.address || (typeof data.billToAddress.address === 'string' && !data.billToAddress.address.trim())) {
+    errors.push({ field: 'billToAddress.address', message: 'Bill to address is required' });
   }
+
+  // Ship to address validation
+  if (!data.shipToAddress || !data.shipToAddress.address || (typeof data.shipToAddress.address === 'string' && !data.shipToAddress.address.trim())) {
+    errors.push({ field: 'shipToAddress.address', message: 'Ship to address is required' });
+  }
+
+  // Assigned engineer validation (optional)
+  // No validation needed - field is optional
   // if (!data.customerAddress || !data.customerAddress.state?.trim()) {
   //   errors.push({ field: 'customerAddress.state', message: 'Customer state is required' });
   // }
@@ -512,7 +618,7 @@ const validateQuotationData = (data: any): { isValid: boolean; errors: any[] } =
   };
 };
 
-const calculateQuotationTotals = (items: any[]): any => {
+const calculateQuotationTotals = (items: any[], overallDiscount: number = 0): any => {
   let subtotal = 0;
   let totalDiscount = 0;
   let totalTax = 0;
@@ -544,15 +650,22 @@ const calculateQuotationTotals = (items: any[]): any => {
     };
   });
 
-  const grandTotalBeforeRound = subtotal - totalDiscount + totalTax;
-  const grandTotal = grandTotalBeforeRound;
-  const roundOff = roundTo2Decimals(grandTotal - grandTotalBeforeRound);
+  // Calculate grand total before overall discount
+  const grandTotalBeforeOverallDiscount = subtotal - totalDiscount + totalTax;
+  
+  // Calculate overall discount amount as percentage of grand total
+  const overallDiscountAmount = (overallDiscount / 100) * grandTotalBeforeOverallDiscount;
+  
+  // Apply overall discount to grand total
+  const grandTotal = grandTotalBeforeOverallDiscount - overallDiscountAmount;
+  const roundOff = 0; // No rounding for now
 
   return {
     subtotal: roundTo2Decimals(subtotal),
     totalDiscount: roundTo2Decimals(totalDiscount),
+    overallDiscount: roundTo2Decimals(overallDiscountAmount),
     totalTax: roundTo2Decimals(totalTax),
-    grandTotal,
+    grandTotal: roundTo2Decimals(grandTotal),
     roundOff,
     items: calculatedItems
   };
@@ -609,9 +722,11 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
 
     // Calculate totals if items are provided
     if (sanitizedData.items && sanitizedData.items.length > 0) {
-      const calculationResult = calculateQuotationTotals(sanitizedData.items);
+      const calculationResult = calculateQuotationTotals(sanitizedData.items, sanitizedData.overallDiscount || 0);
       sanitizedData.subtotal = calculationResult.subtotal;
       sanitizedData.totalDiscount = calculationResult.totalDiscount;
+      sanitizedData.overallDiscount = sanitizedData.overallDiscount || 0;
+      sanitizedData.overallDiscountAmount = calculationResult.overallDiscount;
       sanitizedData.totalTax = calculationResult.totalTax;
       sanitizedData.grandTotal = calculationResult.grandTotal;
       sanitizedData.roundOff = calculationResult.roundOff;
@@ -623,7 +738,8 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
       req.params.id,
       sanitizedData,
       { new: true, runValidators: true }
-    ).populate('location', 'name address type'); // Populate location details
+    ).populate('location', 'name address type') // Populate location details
+      .populate('assignedEngineer', 'firstName lastName email phone'); // Populate assigned engineer details
 
     if (!updatedQuotation) {
       return next(new AppError('Failed to update quotation', 500));

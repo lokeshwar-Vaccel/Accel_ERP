@@ -27,6 +27,7 @@ const moduleMap = {
   amc_management: 'AMC Management',
   purchase_orders: 'Purchase Orders',
   billing: 'Billing',
+  dg_sales: 'DG Sales',
   reports_analytics: 'Reports & Analytics',
   file_management: 'File Management',
   communications: 'Communications',
@@ -121,6 +122,7 @@ export const UserManagement: React.FC = () => {
     'amc_management',
     'purchase_orders',
     'billing',
+    'dg_sales',
     'reports_analytics',
     'file_management',
     'communications',
@@ -136,6 +138,7 @@ export const UserManagement: React.FC = () => {
       'inventory_management',
       'purchase_orders',
       'lead_management',
+      'dg_sales',
     ],
     manager: allModules.filter(m => m !== 'admin_settings'),
     field_operator: [

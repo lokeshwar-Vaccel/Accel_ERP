@@ -69,6 +69,7 @@ export const getInvoices = async (
       .populate('customer', 'name email phone address')
       .populate('location', 'name address')
       .populate('createdBy', 'firstName lastName')
+      .populate('assignedEngineer', 'firstName lastName email phone')
       .populate('items.product', 'name category brand partNo hsnNumber')
       .sort(sort as string)
       .skip(skip)
@@ -110,6 +111,7 @@ export const getInvoice = async (
       .populate('customer', 'name email phone address customerType')
       .populate('location', 'name address type')
       .populate('createdBy', 'firstName lastName email')
+      .populate('assignedEngineer', 'firstName lastName email phone')
       .populate('items.product', 'name category brand modelNumber');
 
     if (!invoice) {
@@ -158,6 +160,11 @@ export const createInvoice = async (
       bankBranch,
       // Customer address details
       customerAddress,
+      billToAddress,
+      shipToAddress,
+      assignedEngineer,
+      overallDiscount = 0,
+      overallDiscountAmount = 0,
       referenceNo,
       referenceDate,
     } = req.body;
@@ -204,7 +211,17 @@ export const createInvoice = async (
 
     // Create invoice with ALL required schema fields
     let ans = roundTo2(totalTax)
-    const totalAmount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discountAmount;
+    
+    // Calculate overall discount if provided
+    // Use the overallDiscountAmount sent from frontend directly
+    const finalOverallDiscountAmount = overallDiscountAmount || 0;
+    const grandTotalBeforeOverallDiscount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discountAmount;
+    const finalTotalAmount = Number((grandTotalBeforeOverallDiscount - finalOverallDiscountAmount).toFixed(2));
+    
+
+    
+
+    
     const invoice = new Invoice({
       invoiceNumber,
       customer,
@@ -214,9 +231,11 @@ export const createInvoice = async (
       subtotal,
       taxAmount: totalTax,
       discountAmount,
-      totalAmount,
+      overallDiscount: overallDiscount || 0,
+      overallDiscountAmount: finalOverallDiscountAmount,
+      totalAmount: finalTotalAmount,
       paidAmount: 0,
-      remainingAmount: totalAmount,
+      remainingAmount: finalTotalAmount,
       status: 'draft',
       paymentStatus: 'pending',
       notes,
@@ -235,11 +254,16 @@ export const createInvoice = async (
       bankBranch,
       // Customer address details
       customerAddress,
+      billToAddress,
+      shipToAddress,
+      ...(assignedEngineer && assignedEngineer.trim() !== '' && { assignedEngineer }),
       referenceNo,
       referenceDate,
     });
 
     await invoice.save();
+
+
 
     // Reduce stock if requested
     if (reduceStock) {
@@ -296,14 +320,47 @@ export const updateInvoice = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { status, paymentStatus, paymentMethod, paymentDate, paidAmount, notes, externalInvoiceNumber, externalInvoiceTotal } = req.body;
+    const { 
+      status, 
+      paymentStatus, 
+      paymentMethod, 
+      paymentDate, 
+      paidAmount, 
+      notes, 
+      externalInvoiceNumber, 
+      externalInvoiceTotal,
+      // New fields for comprehensive updates
+      customer,
+      items,
+      dueDate,
+      discountAmount,
+      terms,
+      invoiceType,
+      referenceId,
+      location,
+      // Bank details and PAN
+      pan,
+      bankName,
+      bankAccountNo,
+      bankIFSC,
+      bankBranch,
+      // Customer address details
+      customerAddress,
+      billToAddress,
+      shipToAddress,
+      assignedEngineer,
+      overallDiscount,
+      overallDiscountAmount,
+      referenceNo,
+      referenceDate,
+    } = req.body;
 
     const invoice = await Invoice.findById(req.params.id);
     if (!invoice) {
       return next(new AppError('Invoice not found', 404));
     }
 
-    // Update fields
+    // Update basic fields
     if (status) invoice.status = status;
     if (paymentStatus) invoice.paymentStatus = paymentStatus;
     if (paymentMethod) invoice.paymentMethod = paymentMethod;
@@ -322,12 +379,104 @@ export const updateInvoice = async (
     if (externalInvoiceNumber !== undefined) invoice.externalInvoiceNumber = externalInvoiceNumber;
     if (externalInvoiceTotal !== undefined) invoice.externalInvoiceTotal = externalInvoiceTotal;
 
+    // Update new fields
+    if (customer) invoice.customer = customer;
+    if (items) {
+      // Recalculate totals if items are updated
+      let calculatedItems = [];
+      let subtotal = 0;
+      let totalTax = 0;
+
+      for (const item of items) {
+        const product = await Product.findById(item.product);
+        if (!product) {
+          return next(new AppError(`Product not found: ${item.product}`, 404));
+        }
+
+        const itemTotal = item.quantity * item.unitPrice;
+        const itemDiscount = (item.discount || 0) * itemTotal / 100;
+        const discountedTotal = itemTotal - itemDiscount;
+        const taxAmount = (item.taxRate || 0) * discountedTotal / 100;
+
+        calculatedItems.push({
+          product: item.product,
+          description: item.description || product.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalPrice: discountedTotal,
+          taxRate: item.taxRate || 0,
+          taxAmount: taxAmount,
+          discount: item.discount || 0,
+          uom: item.uom || 'nos',
+          partNo: item.partNo || '',
+          hsnSac: item.hsnSac || ''
+        });
+
+        subtotal += discountedTotal;
+        totalTax += taxAmount;
+      }
+
+      invoice.items = calculatedItems;
+      invoice.subtotal = subtotal;
+      invoice.taxAmount = totalTax;
+
+      // Recalculate overall discount
+      const grandTotalBeforeOverallDiscount = subtotal + totalTax - (invoice.discountAmount || 0);
+      const calculatedOverallDiscountAmount = (invoice.overallDiscount || 0) > 0 ? 
+        ((invoice.overallDiscount || 0) / 100) * grandTotalBeforeOverallDiscount : 0;
+      const finalTotalAmount = Number((grandTotalBeforeOverallDiscount - calculatedOverallDiscountAmount).toFixed(2));
+
+      invoice.totalAmount = finalTotalAmount;
+      invoice.remainingAmount = finalTotalAmount - (invoice.paidAmount || 0);
+      invoice.overallDiscountAmount = calculatedOverallDiscountAmount;
+    }
+    if (dueDate) invoice.dueDate = new Date(dueDate);
+    if (discountAmount !== undefined) invoice.discountAmount = discountAmount;
+    if (terms) invoice.terms = terms;
+    if (invoiceType) invoice.invoiceType = invoiceType;
+    if (referenceId) invoice.referenceId = referenceId;
+    if (location) invoice.location = location;
+    if (pan) invoice.pan = pan;
+    if (bankName) invoice.bankName = bankName;
+    if (bankAccountNo) invoice.bankAccountNo = bankAccountNo;
+    if (bankIFSC) invoice.bankIFSC = bankIFSC;
+    if (bankBranch) invoice.bankBranch = bankBranch;
+    if (customerAddress) invoice.customerAddress = customerAddress;
+    if (billToAddress) invoice.billToAddress = billToAddress;
+    if (shipToAddress) invoice.shipToAddress = shipToAddress;
+    if (assignedEngineer) invoice.assignedEngineer = assignedEngineer;
+    if (overallDiscount !== undefined) {
+      invoice.overallDiscount = overallDiscount;
+      // Use the overallDiscountAmount sent from frontend directly
+      const finalOverallDiscountAmount = overallDiscountAmount || 0;
+      const grandTotalBeforeOverallDiscount = invoice.subtotal + invoice.taxAmount - (invoice.discountAmount || 0);
+      invoice.overallDiscountAmount = finalOverallDiscountAmount;
+      invoice.totalAmount = Number((grandTotalBeforeOverallDiscount - finalOverallDiscountAmount).toFixed(2));
+      invoice.remainingAmount = invoice.totalAmount - (invoice.paidAmount || 0);
+    } else if (overallDiscountAmount !== undefined) {
+      // If only overallDiscountAmount is provided, recalculate total
+      const grandTotalBeforeOverallDiscount = invoice.subtotal + invoice.taxAmount - (invoice.discountAmount || 0);
+      invoice.overallDiscountAmount = overallDiscountAmount;
+      invoice.totalAmount = Number((grandTotalBeforeOverallDiscount - overallDiscountAmount).toFixed(2));
+      invoice.remainingAmount = invoice.totalAmount - (invoice.paidAmount || 0);
+    }
+    if (referenceNo) invoice.referenceNo = referenceNo;
+    if (referenceDate) invoice.referenceDate = referenceDate;
+
     await invoice.save();
+
+    // Populate the updated invoice for response
+    const updatedInvoice = await Invoice.findById(req.params.id)
+      .populate('customer', 'name email phone address customerType')
+      .populate('location', 'name address type')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('assignedEngineer', 'firstName lastName email phone')
+      .populate('items.product', 'name category brand modelNumber');
 
     const response: APIResponse = {
       success: true,
       message: 'Invoice updated successfully',
-      data: { invoice }
+      data: { invoice: updatedInvoice }
     };
 
     res.status(200).json(response);

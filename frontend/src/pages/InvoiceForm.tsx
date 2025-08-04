@@ -106,6 +106,9 @@ const InvoiceFormPage: React.FC = () => {
   const isSalesInvoice = invoiceType === 'sale';
   const isPurchaseInvoice = invoiceType === 'purchase';
 
+  // 🎯 HANDLE QUOTATION DATA FROM LOCATION STATE
+  const quotationData = location.state?.quotationData;
+
   // 🎯 GET INVOICE TYPE TITLE FOR DISPLAY
   const getInvoiceTypeTitle = (): string => {
     switch (invoiceType) {
@@ -135,7 +138,10 @@ const InvoiceFormPage: React.FC = () => {
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
+  const [showBillToAddressDropdown, setShowBillToAddressDropdown] = useState(false);
+  const [showShipToAddressDropdown, setShowShipToAddressDropdown] = useState(false);
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
+  const [showEngineerDropdown, setShowEngineerDropdown] = useState(false);
   const [showProductDropdowns, setShowProductDropdowns] = useState<Record<number, boolean>>({});
   const [showUomDropdowns, setShowUomDropdowns] = useState<Record<number, boolean>>({});
 
@@ -148,15 +154,22 @@ const InvoiceFormPage: React.FC = () => {
     validityPeriod: 30,
     notes: '',
     terms: ''
+    // Note: Quotation data will be set in useEffect after loading
   });
   const [errors, setErrors] = useState<ValidationError[]>([]);
 
+  console.log("formData:",formData);
+  
   // Excel-like navigation states for dropdown fields
   const [highlightedLocationIndex, setHighlightedLocationIndex] = useState(-1);
   const [highlightedCustomerIndex, setHighlightedCustomerIndex] = useState(-1);
   const [highlightedAddressIndex, setHighlightedAddressIndex] = useState(-1);
+  const [highlightedBillToAddressIndex, setHighlightedBillToAddressIndex] = useState(-1);
+  const [highlightedShipToAddressIndex, setHighlightedShipToAddressIndex] = useState(-1);
+  const [highlightedEngineerIndex, setHighlightedEngineerIndex] = useState(-1);
   const [highlightedProductIndex, setHighlightedProductIndex] = useState<Record<number, number>>({});
   const [locationSearchTerm, setLocationSearchTerm] = useState('');
+  const [engineerSearchTerm, setEngineerSearchTerm] = useState('');
 
   // Search states
   const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
@@ -175,6 +188,9 @@ const InvoiceFormPage: React.FC = () => {
     isValid: boolean;
     message: string;
   }>>({});
+
+  // Field operators (engineers) for sales invoices
+  const [fieldOperators, setFieldOperators] = useState<any[]>([]);
 
   // Invoice specific state - Conditional based on invoice type
   const [reduceStock, setReduceStock] = useState(!isDeliveryChallan); // Don't reduce stock for delivery challan
@@ -222,6 +238,72 @@ const InvoiceFormPage: React.FC = () => {
     }
   }, [loading]);
 
+    // Handle quotation data initialization
+  useEffect(() => {
+    if (quotationData && !loading) {
+      console.log('InvoiceForm: Received quotation data:', quotationData);
+      
+      // Recalculate totals when quotation data is loaded
+      const recalculatedData = calculateQuotationTotals(quotationData.items || [], quotationData.overallDiscount || 0);
+      
+      setFormData(prev => {
+        const updatedData = {
+          ...prev,
+          customer: quotationData.customer ? (typeof quotationData.customer === 'string' ? { 
+            _id: quotationData.customer,
+            name: '',
+            email: '',
+            phone: ''
+          } : {
+            _id: quotationData.customer._id || quotationData.customer,
+            name: quotationData.customer.name || '',
+            email: quotationData.customer.email || '',
+            phone: quotationData.customer.phone || '',
+            pan: quotationData.customer.pan || ''
+          }) : undefined,
+          billToAddress: quotationData.billToAddress,
+          shipToAddress: quotationData.shipToAddress,
+          assignedEngineer: quotationData.assignedEngineer,
+          items: quotationData.items || [],
+          overallDiscount: quotationData.overallDiscount || 0,
+          overallDiscountAmount: quotationData.overallDiscountAmount || 0,
+          notes: quotationData.notes || '',
+          terms: quotationData.terms || '',
+          location: quotationData.location,
+          validUntil: quotationData.dueDate ? new Date(quotationData.dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          subtotal: recalculatedData.subtotal,
+          totalDiscount: recalculatedData.totalDiscount,
+          totalTax: recalculatedData.totalTax,
+          grandTotal: recalculatedData.grandTotal,
+          roundOff: recalculatedData.roundOff
+        };
+        
+        console.log('InvoiceForm: Updated form data:', updatedData);
+        return updatedData;
+      });
+
+      // Load customer addresses if customer is provided
+      if (quotationData.customer && customers.length > 0) {
+        const customerId = typeof quotationData.customer === 'string' ? quotationData.customer : quotationData.customer._id;
+        if (customerId) {
+          console.log('InvoiceForm: Loading addresses for customer:', customerId);
+          loadCustomerAddresses(customerId);
+        }
+      }
+    }
+  }, [quotationData, loading, customers]);
+
+  // Load addresses when customers are loaded and we have quotation data
+  useEffect(() => {
+    if (quotationData && customers.length > 0 && !loading) {
+      const customerId = typeof quotationData.customer === 'string' ? quotationData.customer : quotationData.customer?._id;
+      if (customerId) {
+        console.log('InvoiceForm: Loading addresses after customers loaded for customer:', customerId);
+        loadCustomerAddresses(customerId);
+      }
+    }
+  }, [customers, quotationData, loading]);
+
   // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -231,6 +313,9 @@ const InvoiceFormPage: React.FC = () => {
         setShowLocationDropdown(false);
         setShowProductDropdowns({});
         setShowUomDropdowns({});
+        setShowBillToAddressDropdown(false);
+        setShowShipToAddressDropdown(false);
+        setShowEngineerDropdown(false);
       }
     };
 
@@ -245,7 +330,8 @@ const InvoiceFormPage: React.FC = () => {
         fetchCustomers(),
         fetchProducts(),
         fetchLocations(),
-        fetchGeneralSettings()
+        fetchGeneralSettings(),
+        fetchFieldOperators()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -256,7 +342,7 @@ const InvoiceFormPage: React.FC = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll({});
+      const response = await apiClient.customers.getAll({ limit: 100, page: 1 });
       const responseData = response.data as any;
       const customersData = responseData.customers || responseData || [];
       setCustomers(customersData);
@@ -379,6 +465,28 @@ const InvoiceFormPage: React.FC = () => {
     }
   };
 
+  const fetchFieldOperators = async () => {
+    try {
+      const response = await apiClient.users.getFieldOperators();
+      setFieldOperators(response.data?.fieldOperators || response.data || []);
+    } catch (error) {
+      console.error('Error fetching field operators:', error);
+      setFieldOperators([]);
+    }
+  };
+
+  const loadCustomerAddresses = (customerId: string) => {
+    console.log('Loading addresses for customer ID:', customerId);
+    const customer = customers.find(c => c._id === customerId);
+    if (customer && customer.addresses) {
+      console.log('Found customer addresses:', customer.addresses);
+      setAddresses(customer.addresses);
+    } else {
+      console.log('No addresses found for customer:', customerId);
+      setAddresses([]);
+    }
+  };
+
   // Enhanced getFilteredProducts function with deduplication
   const getFilteredProducts = (searchTerm: string = '') => {
     if (!searchTerm || searchTerm.trim() === '') return products;
@@ -468,6 +576,9 @@ const InvoiceFormPage: React.FC = () => {
   };
 
   const getAddressLabel = (value: string | undefined) => {
+
+    console.log("value123:",value,addresses);
+    
     if (!value) return 'Select address';
     const address = addresses.find(a => a.id === parseInt(value));
     return address ? `${address.address} (${address.district}, ${address.pincode})` : 'Unknown address';
@@ -477,6 +588,12 @@ const InvoiceFormPage: React.FC = () => {
     if (!productId) return '';
     const product = products.find(p => p._id === productId);
     return product?.partNo || '';
+  };
+
+  const getEngineerLabel = (value: string) => {
+    if (!value) return '';
+    const engineer = fieldOperators.find(e => e._id === value);
+    return engineer ? `${engineer.firstName} ${engineer.lastName}` : '';
   };
 
   const addInvoiceItem = () => {
@@ -504,28 +621,65 @@ const InvoiceFormPage: React.FC = () => {
   };
 
   const removeInvoiceItem = (index: number) => {
+    // setFormData(prev => {
+    //   const currentItems = prev.items || [];
+
+    //   // Don't allow removing the last item - always keep at least one
+    //   if (currentItems.length <= 1) {
+    //     toast.error('Cannot remove the last item. At least one item is required.', { duration: 3000 });
+    //     return prev;
+    //   }
+
+    //   // Remove the item at the specified index
+    //   const filteredItems = currentItems.filter((_, i) => i !== index);
+
+    //   // Recalculate totals with the remaining items
+    //   const calculationResult = calculateQuotationTotals(filteredItems);
+
+    //   return {
+    //     ...prev,
+    //     items: calculationResult.items,
+    //     subtotal: calculationResult.subtotal,
+    //     totalDiscount: calculationResult.totalDiscount,
+    //     totalTax: calculationResult.totalTax,
+    //     grandTotal: calculationResult.grandTotal,
+    //     roundOff: calculationResult.roundOff
+    //   };
+    // });
     setFormData(prev => {
       const currentItems = prev.items || [];
+      const newItems = currentItems.filter((_, i) => i !== index);
 
-      // Don't allow removing the last item - always keep at least one
-      if (currentItems.length <= 1) {
-        toast.error('Cannot remove the last item. At least one item is required.', { duration: 3000 });
-        return prev;
+      // If we're removing the last item, add a new empty row
+      if (newItems.length === 0) {
+        newItems.push({
+          product: '',
+          description: '',
+          quantity: 1,
+          unitPrice: 0,
+          taxRate: 0,
+          discount: 0,
+          partNo: '',
+          hsnCode: '',
+          hsnNumber: '',
+          uom: 'nos',
+          discountedAmount: 0,
+          taxAmount: 0,
+          totalPrice: 0
+        });
       }
 
-      // Remove the item at the specified index
-      const filteredItems = currentItems.filter((_, i) => i !== index);
-
-      // Recalculate totals with the remaining items
-      const calculationResult = calculateQuotationTotals(filteredItems);
+      // Recalculate totals with current overall discount
+      const calculationResult = calculateQuotationTotals(newItems, prev.overallDiscount || 0);
 
       return {
         ...prev,
-        items: calculationResult.items,
+        items: newItems,
         subtotal: calculationResult.subtotal,
         totalDiscount: calculationResult.totalDiscount,
         totalTax: calculationResult.totalTax,
         grandTotal: calculationResult.grandTotal,
+        overallDiscountAmount: calculationResult.overallDiscountAmount,
         roundOff: calculationResult.roundOff
       };
     });
@@ -594,8 +748,8 @@ const InvoiceFormPage: React.FC = () => {
         validateStockForItem(index, updatedItems[index].product, value);
       }
 
-      // Recalculate totals
-      const calculationResult = calculateQuotationTotals(updatedItems);
+      // Recalculate totals with current overall discount
+      const calculationResult = calculateQuotationTotals(updatedItems, prev.overallDiscount || 0);
 
       return {
         ...prev,
@@ -604,6 +758,7 @@ const InvoiceFormPage: React.FC = () => {
         totalDiscount: calculationResult.totalDiscount,
         totalTax: calculationResult.totalTax,
         grandTotal: calculationResult.grandTotal,
+        overallDiscountAmount: calculationResult.overallDiscountAmount,
         roundOff: calculationResult.roundOff
       };
     });
@@ -878,9 +1033,16 @@ const InvoiceFormPage: React.FC = () => {
           partNo: item.partNo || '',
           hsnSac: item.hsnNumber || ''
         })),
-        customerAddress: sanitizedData.customerAddress,
+        billToAddress: sanitizedData.billToAddress,
+        shipToAddress: sanitizedData.shipToAddress,
+        ...(sanitizedData.assignedEngineer && sanitizedData.assignedEngineer.trim() !== '' && { assignedEngineer: sanitizedData.assignedEngineer }),
+        overallDiscount: sanitizedData.overallDiscount || 0,
+        overallDiscountAmount: sanitizedData.overallDiscountAmount || 0,
         reduceStock: reduceStock
       };
+
+      console.log('Submitting invoice data:', invoiceData);
+      console.log('Overall discount amount being sent:', invoiceData.overallDiscountAmount);
 
       if (isEditMode) {
         await apiClient.invoices.update(id!, invoiceData);
@@ -1026,13 +1188,13 @@ const InvoiceFormPage: React.FC = () => {
         setAddresses(selectedCustomer.addresses || []);
 
         setTimeout(() => {
-          const addressInput = document.querySelector('[data-field="customer-address"]') as HTMLInputElement;
-          if (addressInput) addressInput.focus();
+          const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
+          if (billToAddressInput) billToAddressInput.focus();
         }, 50);
       } else if (!showCustomerDropdown) {
         setTimeout(() => {
-          const addressInput = document.querySelector('[data-field="customer-address"]') as HTMLInputElement;
-          if (addressInput) addressInput.focus();
+          const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
+          if (billToAddressInput) billToAddressInput.focus();
         }, 50);
       }
     } else if (e.key === 'Tab' && e.shiftKey) {
@@ -1047,35 +1209,37 @@ const InvoiceFormPage: React.FC = () => {
     }
   };
 
-  // Address dropdown keyboard navigation
-  const handleAddressKeyDown = (e: React.KeyboardEvent) => {
+
+
+  // Bill To Address dropdown keyboard navigation
+  const handleBillToAddressKeyDown = (e: React.KeyboardEvent) => {
     if (!formData.customer?._id) return;
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (!showAddressDropdown) {
-        setShowAddressDropdown(true);
-        setHighlightedAddressIndex(0);
+      if (!showBillToAddressDropdown) {
+        setShowBillToAddressDropdown(true);
+        setHighlightedBillToAddressIndex(0);
       } else {
-        const newIndex = highlightedAddressIndex < addresses.length - 1 ? highlightedAddressIndex + 1 : 0;
-        setHighlightedAddressIndex(newIndex);
+        const newIndex = highlightedBillToAddressIndex < addresses.length - 1 ? highlightedBillToAddressIndex + 1 : 0;
+        setHighlightedBillToAddressIndex(newIndex);
       }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (!showAddressDropdown) {
-        setShowAddressDropdown(true);
-        setHighlightedAddressIndex(addresses.length - 1);
+      if (!showBillToAddressDropdown) {
+        setShowBillToAddressDropdown(true);
+        setHighlightedBillToAddressIndex(addresses.length - 1);
       } else {
-        const newIndex = highlightedAddressIndex > 0 ? highlightedAddressIndex - 1 : addresses.length - 1;
-        setHighlightedAddressIndex(newIndex);
+        const newIndex = highlightedBillToAddressIndex > 0 ? highlightedBillToAddressIndex - 1 : addresses.length - 1;
+        setHighlightedBillToAddressIndex(newIndex);
       }
     } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
       e.preventDefault();
-      if (showAddressDropdown && highlightedAddressIndex >= 0 && addresses[highlightedAddressIndex]) {
-        const selectedAddress = addresses[highlightedAddressIndex];
+      if (showBillToAddressDropdown && highlightedBillToAddressIndex >= 0 && addresses[highlightedBillToAddressIndex]) {
+        const selectedAddress = addresses[highlightedBillToAddressIndex];
         setFormData({
           ...formData,
-          customerAddress: {
+          billToAddress: {
             address: selectedAddress.address,
             state: selectedAddress.state,
             district: selectedAddress.district,
@@ -1083,17 +1247,17 @@ const InvoiceFormPage: React.FC = () => {
             ...(selectedAddress.id && { addressId: selectedAddress.id })
           } as any
         });
-        setShowAddressDropdown(false);
-        setHighlightedAddressIndex(-1);
+        setShowBillToAddressDropdown(false);
+        setHighlightedBillToAddressIndex(-1);
 
         setTimeout(() => {
-          const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
-          if (dueDateInput) dueDateInput.focus();
+          const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
+          if (shipToAddressInput) shipToAddressInput.focus();
         }, 50);
-      } else if (!showAddressDropdown) {
+      } else if (!showBillToAddressDropdown) {
         setTimeout(() => {
-          const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
-          if (dueDateInput) dueDateInput.focus();
+          const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
+          if (shipToAddressInput) shipToAddressInput.focus();
         }, 50);
       }
     } else if (e.key === 'Tab' && e.shiftKey) {
@@ -1103,8 +1267,69 @@ const InvoiceFormPage: React.FC = () => {
         if (customerInput) customerInput.focus();
       }, 50);
     } else if (e.key === 'Escape') {
-      setShowAddressDropdown(false);
-      setHighlightedAddressIndex(-1);
+      setShowBillToAddressDropdown(false);
+      setHighlightedBillToAddressIndex(-1);
+    }
+  };
+
+  // Ship To Address dropdown keyboard navigation
+  const handleShipToAddressKeyDown = (e: React.KeyboardEvent) => {
+    if (!formData.customer?._id) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!showShipToAddressDropdown) {
+        setShowShipToAddressDropdown(true);
+        setHighlightedShipToAddressIndex(0);
+      } else {
+        const newIndex = highlightedShipToAddressIndex < addresses.length - 1 ? highlightedShipToAddressIndex + 1 : 0;
+        setHighlightedShipToAddressIndex(newIndex);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (!showShipToAddressDropdown) {
+        setShowShipToAddressDropdown(true);
+        setHighlightedShipToAddressIndex(addresses.length - 1);
+      } else {
+        const newIndex = highlightedShipToAddressIndex > 0 ? highlightedShipToAddressIndex - 1 : addresses.length - 1;
+        setHighlightedShipToAddressIndex(newIndex);
+      }
+    } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+      e.preventDefault();
+      if (showShipToAddressDropdown && highlightedShipToAddressIndex >= 0 && addresses[highlightedShipToAddressIndex]) {
+        const selectedAddress = addresses[highlightedShipToAddressIndex];
+        setFormData({
+          ...formData,
+          shipToAddress: {
+            address: selectedAddress.address,
+            state: selectedAddress.state,
+            district: selectedAddress.district,
+            pincode: selectedAddress.pincode,
+            ...(selectedAddress.id && { addressId: selectedAddress.id })
+          } as any
+        });
+        setShowShipToAddressDropdown(false);
+        setHighlightedShipToAddressIndex(-1);
+
+        setTimeout(() => {
+          const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
+          if (firstProductInput) firstProductInput.focus();
+        }, 50);
+      } else if (!showShipToAddressDropdown) {
+        setTimeout(() => {
+          const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
+          if (firstProductInput) firstProductInput.focus();
+        }, 50);
+      }
+    } else if (e.key === 'Tab' && e.shiftKey) {
+      e.preventDefault();
+      setTimeout(() => {
+        const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
+        if (billToAddressInput) billToAddressInput.focus();
+      }, 50);
+    } else if (e.key === 'Escape') {
+      setShowShipToAddressDropdown(false);
+      setHighlightedShipToAddressIndex(-1);
     }
   };
 
@@ -1113,6 +1338,13 @@ const InvoiceFormPage: React.FC = () => {
     const searchTerm = productSearchTerms[rowIndex] || '';
     const matchingProducts = getFilteredProducts(searchTerm);
     const currentHighlighted = highlightedProductIndex[rowIndex] ?? -1;
+
+    // Ctrl+Delete or Command+Delete: Remove current row
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+      e.preventDefault();
+      removeInvoiceItem(rowIndex);
+      return;
+    }
 
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -1127,8 +1359,10 @@ const InvoiceFormPage: React.FC = () => {
           }
         } else {
           // If first row, move to due date field
-          const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
-          if (dueDateInput) dueDateInput.focus();
+          setTimeout(() => {
+            const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
+            if (dueDateInput) dueDateInput.focus();
+          }, 50);
         }
         return;
       }
@@ -1178,8 +1412,10 @@ const InvoiceFormPage: React.FC = () => {
         // If no search term, just move to next row
         const nextRowIndex = rowIndex + 1;
         setTimeout(() => {
-          const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
-          if (nextInput) nextInput.focus();
+          // const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
+          // if (nextInput) nextInput.focus();
+          const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+          if (notesInput) notesInput.focus();
         }, 100);
       }
 
@@ -1245,6 +1481,10 @@ const InvoiceFormPage: React.FC = () => {
           } else if (reduceStock) {
             toast.error('Cannot increase quantity - product is out of stock', { duration: 2000 });
           }
+        } else if (newQuantity > stockInfo.available) {
+          // Allow increasing up to available stock, but show warning if exceeding
+          newQuantity = stockInfo.available;
+          toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
         }
       }
 
@@ -1295,15 +1535,17 @@ const InvoiceFormPage: React.FC = () => {
       e.preventDefault();
 
       // 🚀 AUTO-ROW FEATURE: Add new row when Enter is pressed on last row's quantity field
-      if (rowIndex === (formData.items || []).length - 1) {
-        addInvoiceItem();
-      }
+      // if (rowIndex === (formData.items || []).length - 1) {
+      //   addInvoiceItem();
+      // }
 
-      // Move to next row's product field
-      const nextRowIndex = rowIndex + 1;
+      // // Move to next row's product field
+      // const nextRowIndex = rowIndex + 1;
       setTimeout(() => {
-        const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
-        if (nextInput) nextInput.focus();
+        // const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
+        // if (nextInput) nextInput.focus();
+        const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+        if (notesInput) notesInput.focus();
       }, 100);
     }
   };
@@ -1312,6 +1554,13 @@ const InvoiceFormPage: React.FC = () => {
   const handleCellKeyDown = (e: React.KeyboardEvent, rowIndex: number, field: string) => {
     const fields = ['product', 'description', 'hsnNumber', 'taxRate', 'quantity', 'uom', 'unitPrice', 'discount'];
     const currentFieldIndex = fields.indexOf(field);
+
+    // Ctrl+Delete or Command+Delete: Remove current row
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+      e.preventDefault();
+      removeInvoiceItem(rowIndex);
+      return;
+    }
 
     if (e.key === 'Tab') {
       e.preventDefault();
@@ -1372,19 +1621,23 @@ const InvoiceFormPage: React.FC = () => {
       e.preventDefault();
 
       // Enter: Move to same field in next row, or Notes if last row
-      if (rowIndex === (formData.items || []).length - 1) {
-        // Last row - move to Notes
-        setTimeout(() => {
-          const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
-          if (notesInput) notesInput.focus();
-        }, 100);
-      } else {
-        const nextRowIndex = rowIndex + 1;
-        setTimeout(() => {
-          const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="${field}"]`) as HTMLInputElement;
-          if (nextInput) nextInput.focus();
-        }, 100);
-      }
+      // if (rowIndex === (formData.items || []).length - 1) {
+      //   // Last row - move to Notes
+      //   setTimeout(() => {
+      //     const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+      //     if (notesInput) notesInput.focus();
+      //   }, 100);
+      // } else {
+      //   const nextRowIndex = rowIndex + 1;
+      //   setTimeout(() => {
+      //     const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="${field}"]`) as HTMLInputElement;
+      //     if (nextInput) nextInput.focus();
+      //   }, 100);
+      // }
+      setTimeout(() => {
+        const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+        if (notesInput) notesInput.focus();
+      }, 100);
 
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
@@ -1447,41 +1700,41 @@ const InvoiceFormPage: React.FC = () => {
 
       {/* 🚀 EXCEL-LIKE NAVIGATION GUIDE */}
       <div className={`bg-gradient-to-r border rounded-lg p-4 ${isDeliveryChallan ? 'from-orange-50 to-amber-50 border-orange-200' :
-          isQuotation ? 'from-blue-50 to-indigo-50 border-blue-200' :
-            isSalesInvoice ? 'from-green-50 to-emerald-50 border-green-200' :
-              'from-purple-50 to-violet-50 border-purple-200'
+        isQuotation ? 'from-blue-50 to-indigo-50 border-blue-200' :
+          isSalesInvoice ? 'from-green-50 to-emerald-50 border-green-200' :
+            'from-purple-50 to-violet-50 border-purple-200'
         }`}>
         <div className="flex items-center mb-2">
           <span className="text-lg">⚡</span>
           <h3 className={`text-sm font-semibold ml-2 ${isDeliveryChallan ? 'text-orange-900' :
-              isQuotation ? 'text-blue-900' :
-                isSalesInvoice ? 'text-green-900' :
-                  'text-purple-900'
+            isQuotation ? 'text-blue-900' :
+              isSalesInvoice ? 'text-green-900' :
+                'text-purple-900'
             }`}>
             Excel-Like {getInvoiceTypeTitle()} Form Enabled!
           </h3>
         </div>
         <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 text-xs ${isDeliveryChallan ? 'text-orange-800' :
-            isQuotation ? 'text-blue-800' :
-              isSalesInvoice ? 'text-green-800' :
-                'text-purple-800'
+          isQuotation ? 'text-blue-800' :
+            isSalesInvoice ? 'text-green-800' :
+              'text-purple-800'
           }`}>
           <div>
             <p className="font-medium mb-1">🎯 Complete Form Navigation:</p>
             <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
-                isQuotation ? 'bg-blue-200' :
-                  isSalesInvoice ? 'bg-green-200' :
-                    'bg-purple-200'
+              isQuotation ? 'bg-blue-200' :
+                isSalesInvoice ? 'bg-green-200' :
+                  'bg-purple-200'
               }`}>Tab/Enter</kbd> Move forward</p>
-            <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
+            {/* <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
                 isQuotation ? 'bg-blue-200' :
                   isSalesInvoice ? 'bg-green-200' :
                     'bg-purple-200'
-              }`}>Shift+Tab</kbd> Move backward</p>
+              }`}>Shift+Tab</kbd> Move backward</p> */}
             <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
-                isQuotation ? 'bg-blue-200' :
-                  isSalesInvoice ? 'bg-green-200' :
-                    'bg-purple-200'
+              isQuotation ? 'bg-blue-200' :
+                isSalesInvoice ? 'bg-green-200' :
+                  'bg-purple-200'
               }`}>↑↓</kbd> Navigate dropdowns</p>
           </div>
           <div>
@@ -1603,7 +1856,7 @@ const InvoiceFormPage: React.FC = () => {
               <div className="relative dropdown-container">
                 <input
                   type="text"
-                  value={customerSearchTerm || getCustomerLabel(formData.customer?._id || '')}
+                  value={customerSearchTerm || getCustomerLabel((formData.customer?._id || formData?.customer || '') as string)}
                   onChange={(e) => {
                     setCustomerSearchTerm(e.target.value);
                     if (!showCustomerDropdown) setShowCustomerDropdown(true);
@@ -1634,7 +1887,8 @@ const InvoiceFormPage: React.FC = () => {
                         setFormData({
                           ...formData,
                           customer: { _id: '', name: '', email: '', phone: '', pan: '' },
-                          customerAddress: { address: '', state: '', district: '', pincode: '' }
+                          billToAddress: { address: '', state: '', district: '', pincode: '' },
+                          shipToAddress: { address: '', state: '', district: '', pincode: '' }
                         });
                         setShowCustomerDropdown(false);
                         setCustomerSearchTerm('');
@@ -1687,81 +1941,188 @@ const InvoiceFormPage: React.FC = () => {
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Customer Address *
-              </label>
-              <div className="relative dropdown-container">
-                <input
-                  type="text"
-                  value={getAddressLabel((formData.customerAddress as any)?.addressId?.toString())}
-                  readOnly
-                  disabled={!formData.customer?._id}
-                  onFocus={() => {
-                    if (formData.customer?._id) {
-                      setShowAddressDropdown(true);
-                      setHighlightedAddressIndex(-1);
-                    }
-                  }}
-                  onKeyDown={handleAddressKeyDown}
-                  placeholder={!formData.customer?._id ? "Select customer first" : "Press ↓ to open address list"}
-                  data-field="customer-address"
-                  className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
-                    ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
-                    }`}
-                />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAddressDropdown ? 'rotate-180' : ''}`} />
-                </div>
-                {showAddressDropdown && formData.customer?._id && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                    <button
-                      onClick={() => {
-                        setFormData({
-                          ...formData,
-                          customerAddress: { address: '', state: '', district: '', pincode: '' }
-                        });
-                        setShowAddressDropdown(false);
-                      }}
-                      className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.customerAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                    >
-                      Select address
-                    </button>
+            {/* Bill To and Ship To Addresses */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Bill To Address *
+                </label>
+                <div className="relative dropdown-container">
+                  <input
+                    type="text"
+                    value={getAddressLabel((formData.billToAddress as any)?.addressId?.toString())}
+                    readOnly
+                    disabled={!formData.customer?._id || !formData?.customer}
+                    onFocus={() => {
+                      if (formData.customer?._id) {
+                        setShowBillToAddressDropdown(true);
+                        setHighlightedBillToAddressIndex(-1);
+                      }
+                    }}
+                    onKeyDown={handleBillToAddressKeyDown}
+                    placeholder={!formData.customer?._id ? "Select customer first" : "Press ↓ to open address list"}
+                    data-field="bill-to-address"
+                    className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                      }`}
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showBillToAddressDropdown ? 'rotate-180' : ''}`} />
+                  </div>
+                  {showBillToAddressDropdown && formData.customer?._id && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                      <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                      </div>
 
-                    {addresses.map((address, index) => (
                       <button
-                        key={address.id}
                         onClick={() => {
                           setFormData({
                             ...formData,
-                            customerAddress: {
-                              address: address.address,
-                              state: address.state,
-                              district: address.district,
-                              pincode: address.pincode,
-                              ...(address.id && { addressId: address.id })
-                            } as any
+                            billToAddress: { address: '', state: '', district: '', pincode: '' }
                           });
-                          setShowAddressDropdown(false);
-                          setHighlightedAddressIndex(-1);
+                          setShowBillToAddressDropdown(false);
                         }}
-                        className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.customerAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
-                          highlightedAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
-                            'text-gray-700 hover:bg-gray-50'
-                          }`}
+                        className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.billToAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                       >
-                        <div>
-                          <div className="font-medium">{address.address}</div>
-                          <div className="text-xs text-gray-500">{address.district}, {address.pincode}</div>
-                          {address.isPrimary && (
-                            <div className="text-xs text-blue-600 font-medium">Primary</div>
-                          )}
-                        </div>
+                        Select bill to address
                       </button>
-                    ))}
+
+                      {addresses.map((address, index) => (
+                        <button
+                          key={address.id}
+                          data-address-index={index}
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              billToAddress: {
+                                address: address.address,
+                                state: address.state,
+                                district: address.district,
+                                pincode: address.pincode,
+                                ...(address.id && { addressId: address.id })
+                              } as any
+                            });
+                            setShowBillToAddressDropdown(false);
+                            setHighlightedBillToAddressIndex(-1);
+                          }}
+                          className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.billToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
+                            highlightedBillToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                              'text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                          <div>
+                            <div className="font-medium">{address.address}</div>
+                            <div className="text-xs text-gray-500">{address.district}, {address.pincode}</div>
+                            {address.isPrimary && (
+                              <div className="text-xs text-blue-600 font-medium">Primary</div>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+
+                      {addresses.length === 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                          No addresses found for this customer
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Ship To Address *
+                </label>
+                <div className="relative dropdown-container">
+                  <input
+                    type="text"
+                    value={getAddressLabel((formData.shipToAddress as any)?.addressId?.toString())}
+                    readOnly
+                    disabled={!formData.customer?._id}
+                    onFocus={() => {
+                      if (formData.customer?._id) {
+                        setShowShipToAddressDropdown(true);
+                        setHighlightedShipToAddressIndex(-1);
+                      }
+                    }}
+                    onKeyDown={handleShipToAddressKeyDown}
+                    placeholder={!formData.customer?._id ? "Select customer first" : "Press ↓ to open address list"}
+                    data-field="ship-to-address"
+                    className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                      : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                      }`}
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showShipToAddressDropdown ? 'rotate-180' : ''}`} />
                   </div>
-                )}
+                  {showShipToAddressDropdown && formData.customer?._id && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                      <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                      </div>
+
+                      <button
+                        onClick={() => {
+                          setFormData({
+                            ...formData,
+                            shipToAddress: { address: '', state: '', district: '', pincode: '' }
+                          });
+                          setShowShipToAddressDropdown(false);
+                        }}
+                        className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.shipToAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                      >
+                        Select ship to address
+                      </button>
+
+                      {addresses.map((address, index) => (
+                        <button
+                          key={address.id}
+                          data-address-index={index}
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              shipToAddress: {
+                                address: address.address,
+                                state: address.state,
+                                district: address.district,
+                                pincode: address.pincode,
+                                ...(address.id && { addressId: address.id })
+                              } as any
+                            });
+                            setShowShipToAddressDropdown(false);
+                            setHighlightedShipToAddressIndex(-1);
+                          }}
+                          className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.shipToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
+                            highlightedShipToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                              'text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                          <div>
+                            <div className="font-medium">{address.address}</div>
+                            <div className="text-xs text-gray-500">{address.district}, {address.pincode}</div>
+                            {address.isPrimary && (
+                              <div className="text-xs text-blue-600 font-medium">Primary</div>
+                            )}
+                          </div>
+                        </button>
+                      ))}
+
+                      {addresses.length === 0 && (
+                        <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                          No addresses found for this customer
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1782,17 +2143,17 @@ const InvoiceFormPage: React.FC = () => {
                 onKeyDown={(e) => {
                   if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
                     e.preventDefault();
-                    // Move to first product field in the list
+                    // Move to engineer field
                     setTimeout(() => {
-                      const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
-                      if (firstProductInput) firstProductInput.focus();
+                      const engineerInput = document.querySelector('[data-field="engineer"]') as HTMLInputElement;
+                      if (engineerInput) engineerInput.focus();
                     }, 50);
                   } else if (e.key === 'Tab' && e.shiftKey) {
                     e.preventDefault();
-                    // Move back to address field
+                    // Move back to ship to address field
                     setTimeout(() => {
-                      const addressInput = document.querySelector('[data-field="customer-address"]') as HTMLInputElement;
-                      if (addressInput) addressInput.focus();
+                      const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
+                      if (shipToAddressInput) shipToAddressInput.focus();
                     }, 50);
                   }
                 }}
@@ -1800,6 +2161,146 @@ const InvoiceFormPage: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
+
+            {/* Assign to Engineer - Only for Sales Invoices */}
+            {isSalesInvoice && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Assign to Engineer
+                </label>
+                <div className="relative dropdown-container">
+                  <input
+                    type="text"
+                    value={engineerSearchTerm || getEngineerLabel(formData.assignedEngineer || '')}
+                    onChange={(e) => {
+                      setEngineerSearchTerm(e.target.value);
+                      if (!showEngineerDropdown) setShowEngineerDropdown(true);
+                      setHighlightedEngineerIndex(-1);
+                    }}
+                    onFocus={() => {
+                      setShowEngineerDropdown(true);
+                      setHighlightedEngineerIndex(-1);
+                      if (!engineerSearchTerm && formData.assignedEngineer) {
+                        setEngineerSearchTerm('');
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        setShowEngineerDropdown(true);
+                        setHighlightedEngineerIndex(prev =>
+                          prev < fieldOperators.length - 1 ? prev + 1 : 0
+                        );
+                      } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        setShowEngineerDropdown(true);
+                        setHighlightedEngineerIndex(prev =>
+                          prev > 0 ? prev - 1 : fieldOperators.length - 1
+                        );
+                      } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (showEngineerDropdown && highlightedEngineerIndex >= 0) {
+                          const selectedEngineer = fieldOperators[highlightedEngineerIndex];
+                          setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
+                          setShowEngineerDropdown(false);
+                          setEngineerSearchTerm('');
+                          setHighlightedEngineerIndex(-1);
+                        } else if (showEngineerDropdown && fieldOperators.length === 1) {
+                          const selectedEngineer = fieldOperators[0];
+                          setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
+                          setShowEngineerDropdown(false);
+                          setEngineerSearchTerm('');
+                          setHighlightedEngineerIndex(-1);
+                        }
+                      } else if (e.key === 'Escape') {
+                        setShowEngineerDropdown(false);
+                        setHighlightedEngineerIndex(-1);
+                      } else if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
+                        e.preventDefault();
+                        // Move to first product field in the list
+                        setTimeout(() => {
+                          const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
+                          if (firstProductInput) firstProductInput.focus();
+                        }, 50);
+                      } else if (e.key === 'Tab' && e.shiftKey) {
+                        e.preventDefault();
+                        // Move back to Due Date field
+                        setTimeout(() => {
+                          const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
+                          if (dueDateInput) dueDateInput.focus();
+                        }, 50);
+                      }
+                    }}
+                    autoComplete="off"
+                    placeholder="Search engineer or press ↓ to open"
+                    data-field="engineer"
+                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEngineerDropdown ? 'rotate-180' : ''}`} />
+                  </div>
+                  {showEngineerDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                      {(() => {
+                        const filteredEngineers = fieldOperators.filter(engineer =>
+                          `${engineer.firstName} ${engineer.lastName}`.toLowerCase().includes(engineerSearchTerm.toLowerCase()) ||
+                          engineer.email.toLowerCase().includes(engineerSearchTerm.toLowerCase())
+                        );
+
+                        return (
+                          <>
+                            <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                              <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                              <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                              <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                            </div>
+
+                            <button
+                              onClick={() => {
+                                setFormData({ ...formData, assignedEngineer: '' });
+                                setShowEngineerDropdown(false);
+                                setEngineerSearchTerm('');
+                              }}
+                              className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.assignedEngineer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                            >
+                              Select engineer
+                            </button>
+
+                            {filteredEngineers.map((engineer, index) => (
+                              <button
+                                key={engineer._id}
+                                onClick={() => {
+                                  setFormData({ ...formData, assignedEngineer: engineer._id });
+                                  setShowEngineerDropdown(false);
+                                  setEngineerSearchTerm('');
+                                  setHighlightedEngineerIndex(-1);
+                                }}
+                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.assignedEngineer === engineer._id ? 'bg-blue-100 text-blue-800' :
+                                  highlightedEngineerIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                    'text-gray-700 hover:bg-gray-50'
+                                  }`}
+                              >
+                                <div>
+                                  <div className="font-medium">{engineer.firstName} {engineer.lastName}</div>
+                                  <div className="text-xs text-gray-500">{engineer.email}</div>
+                                  <div className="text-xs text-gray-500">{engineer.phone}</div>
+                                </div>
+                              </button>
+                            ))}
+
+                            {filteredEngineers.length === 0 && engineerSearchTerm && (
+                              <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                No engineers found for "{engineerSearchTerm}"
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1823,8 +2324,8 @@ const InvoiceFormPage: React.FC = () => {
           {/* Stock Reduction Option - Conditional based on invoice type */}
           {!isDeliveryChallan && (
             <div className={`border rounded-lg p-4 ${isQuotation ? 'bg-blue-50 border-blue-200' :
-                isSalesInvoice ? 'bg-green-50 border-green-200' :
-                  'bg-purple-50 border-purple-200'
+              isSalesInvoice ? 'bg-green-50 border-green-200' :
+                'bg-purple-50 border-purple-200'
               }`}>
               <label className="flex items-center space-x-3">
                 <input
@@ -1832,20 +2333,20 @@ const InvoiceFormPage: React.FC = () => {
                   checked={reduceStock}
                   onChange={(e) => setReduceStock(e.target.checked)}
                   className={`w-4 h-4 border-gray-300 rounded focus:ring-2 ${isQuotation ? 'text-blue-600 focus:ring-blue-500' :
-                      isSalesInvoice ? 'text-green-600 focus:ring-green-500' :
-                        'text-purple-600 focus:ring-purple-500'
+                    isSalesInvoice ? 'text-green-600 focus:ring-green-500' :
+                      'text-purple-600 focus:ring-purple-500'
                     }`}
                 />
                 <div>
                   <div className={`text-sm font-medium ${isQuotation ? 'text-blue-900' :
-                      isSalesInvoice ? 'text-green-900' :
-                        'text-purple-900'
+                    isSalesInvoice ? 'text-green-900' :
+                      'text-purple-900'
                     }`}>
                     {isQuotation ? 'Reduce inventory stock' : 'Reduce inventory stock'}
                   </div>
                   <div className={`text-xs ${isQuotation ? 'text-blue-700' :
-                      isSalesInvoice ? 'text-green-700' :
-                        'text-purple-700'
+                    isSalesInvoice ? 'text-green-700' :
+                      'text-purple-700'
                     }`}>
                     {isQuotation
                       ? 'Automatically reduce stock quantities when quotation is converted to invoice'
@@ -1904,9 +2405,9 @@ const InvoiceFormPage: React.FC = () => {
                 onClick={addInvoiceItem}
                 type="button"
                 className={`text-white px-4 py-2 rounded-lg transition-colors text-sm flex items-center space-x-2 ${isDeliveryChallan ? 'bg-orange-600 hover:bg-orange-700' :
-                    isQuotation ? 'bg-blue-600 hover:bg-blue-700' :
-                      isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
-                        'bg-purple-600 hover:bg-purple-700'
+                  isQuotation ? 'bg-blue-600 hover:bg-blue-700' :
+                    isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
+                      'bg-purple-600 hover:bg-purple-700'
                   }`}
               >
                 <Plus className="w-4 h-4" />
@@ -1915,27 +2416,27 @@ const InvoiceFormPage: React.FC = () => {
             </div>
 
             {/* Excel-style Table */}
-            <div className="border border-gray-300 rounded-lg bg-white shadow-sm">
+            <div className="hidden lg:block border border-gray-300 rounded-lg bg-white shadow-sm overflow-x-auto">
               {/* Table Header */}
-              <div className="bg-gray-50 border-b border-gray-300">
-                <div className="grid text-xs font-semibold text-gray-700 uppercase tracking-wide"
-                  style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 60px' }}>
-                  <div className="p-3 border-r border-gray-300 text-center">S.No</div>
-                  <div className="p-3 border-r border-gray-300">Product Code</div>
-                  <div className="p-3 border-r border-gray-300">Product Name</div>
-                  <div className="p-3 border-r border-gray-300">HSC/SAC</div>
-                  <div className="p-3 border-r border-gray-300">GST(%)</div>
-                  <div className="p-3 border-r border-gray-300">Quantity</div>
-                  <div className="p-3 border-r border-gray-300">UOM</div>
-                  <div className="p-3 border-r border-gray-300">Unit Price</div>
-                  <div className="p-3 border-r border-gray-300">Discount(%)</div>
-                  <div className="p-3 border-r border-gray-300">Total</div>
-                  <div className="p-3 text-center">Remove</div>
+              <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
+                <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                  style={{ gridTemplateColumns: '60px 150px 1fr 90px 80px 100px 60px 120px 100px 80px 60px' }}>
+                  <div className="p-3 border-r border-gray-300 text-center bg-gray-200">S.No</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">Part No</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">Product Name</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">HSC/SAC</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">GST(%)</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">UOM</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">Discount</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">Total</div>
+                  <div className="p-3 text-center bg-gray-200 font-medium"></div>
                 </div>
               </div>
 
               {/* Table Body */}
-              <div className="divide-y divide-gray-200">
+              <div className="divide-y divide-gray-200 min-w-[1200px]">
                 {(formData.items || []).map((item, index) => {
                   const stockInfo = stockValidation[index];
                   let rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
@@ -1947,7 +2448,7 @@ const InvoiceFormPage: React.FC = () => {
 
                   return (
                     <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${rowBg}`}
-                      style={{ gridTemplateColumns: '60px 300px 1fr 100px 80px 100px 80px 120px 110px 120px 60px' }}>
+                      style={{ gridTemplateColumns: '60px 150px 1fr 90px 80px 100px 60px 120px 100px 80px 60px' }}>
                       {/* S.No */}
                       <div className="p-2 border-r border-gray-200 text-center text-sm font-medium text-gray-600 flex items-center justify-center">
                         {index + 1}
@@ -2007,7 +2508,7 @@ const InvoiceFormPage: React.FC = () => {
                           <div
                             className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-[400px] overflow-hidden"
                             data-dropdown={index}
-                            style={{ width: '500px', minWidth: '500px' }}
+                            style={{ width: '450px', minWidth: '450px' }}
                           >
                             <div className="p-2 border-b border-gray-200 bg-gray-50">
                               <div className="text-xs text-gray-600">
@@ -2107,6 +2608,7 @@ const InvoiceFormPage: React.FC = () => {
                             type="text"
                             value={item.description || ''}
                             onChange={(e) => updateInvoiceItem(index, 'description', e.target.value)}
+                            onKeyDown={(e) => handleCellKeyDown(e, index, 'description')}
                             data-row={index}
                             data-field="description"
                             className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50"
@@ -2136,6 +2638,7 @@ const InvoiceFormPage: React.FC = () => {
                           type="text"
                           value={item.hsnNumber || ''}
                           onChange={(e) => updateInvoiceItem(index, 'hsnNumber', e.target.value)}
+                          onKeyDown={(e) => handleCellKeyDown(e, index, 'hsnNumber')}
                           data-row={index}
                           data-field="hsnNumber"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50"
@@ -2153,6 +2656,7 @@ const InvoiceFormPage: React.FC = () => {
                           step="0.01"
                           value={item.taxRate || 0}
                           onChange={(e) => updateInvoiceItem(index, 'taxRate', parseFloat(e.target.value) || 0)}
+                          onKeyDown={(e) => handleCellKeyDown(e, index, 'taxRate')}
                           data-row={index}
                           data-field="taxRate"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 text-right"
@@ -2168,13 +2672,13 @@ const InvoiceFormPage: React.FC = () => {
                           min="0"
                           step="1"
                           value={item.quantity}
-                                                    onChange={(e) => {
+                          onChange={(e) => {
                             let newQuantity = parseFloat(e.target.value) || 0;
-                          
+
                             if (item.product && productStockCache[item.product]) {
                               const stockInfo = productStockCache[item.product];
                               const available = stockInfo.available;
-                          
+
                               // Out of stock → quantity forced to 0
                               if (available === 0) {
                                 if (newQuantity > 0) {
@@ -2185,7 +2689,11 @@ const InvoiceFormPage: React.FC = () => {
                                   }
                                 }
                                 newQuantity = 0;
-                              } 
+                              } else if (newQuantity > stockInfo.available) {
+                                // Allow increasing up to available stock, but show warning if exceeding
+                                newQuantity = stockInfo.available;
+                                toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
+                              }
                               // In stock → prevent quantity = 0 (only for stock-reducing invoices)
                               else if (reduceStock && newQuantity === 0) {
                                 toast.error('Quantity cannot be zero for in-stock products.', { duration: 2000 });
@@ -2209,7 +2717,7 @@ const InvoiceFormPage: React.FC = () => {
                           placeholder="1.00"
                           title={
                             item.product && productStockCache[item.product]?.available === 0
-                              ? isDeliveryChallan 
+                              ? isDeliveryChallan
                                 ? "Product is out of stock - quantity locked at 0 for delivery challan"
                                 : "Product is out of stock - quantity locked at 0"
                               : "Tab/Enter adds new row | ↑↓ arrows: adjust quantity | Shift+Tab: back to product"
@@ -2240,6 +2748,7 @@ const InvoiceFormPage: React.FC = () => {
                             ...showUomDropdowns,
                             [index]: !showUomDropdowns[index]
                           })}
+                          onKeyDown={(e) => handleCellKeyDown(e, index, 'uom')}
                           data-row={index}
                           data-field="uom"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 cursor-pointer"
@@ -2271,6 +2780,7 @@ const InvoiceFormPage: React.FC = () => {
                           step="0.01"
                           value={item.unitPrice.toFixed(2)}
                           onChange={(e) => updateInvoiceItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          onKeyDown={(e) => handleCellKeyDown(e, index, 'unitPrice')}
                           data-row={index}
                           data-field="unitPrice"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 text-right"
@@ -2286,7 +2796,7 @@ const InvoiceFormPage: React.FC = () => {
                           step="1"
                           value={item.discount === 0 ? '' : item.discount}
                           onChange={(e) => updateInvoiceItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                          onKeyDown={(e) => handleCellKeyDown(e, index, 'discount')}
+                          // onKeyDown={(e) => handleCellKeyDown(e, index, 'discount')}
                           data-row={index}
                           data-field="discount"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 text-right"
@@ -2301,20 +2811,14 @@ const InvoiceFormPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="p-1 relative">
-                        {(formData.items || []).length > 1 ? (
-                          <button
-                            onClick={() => removeInvoiceItem(index)}
-                            className="w-full h-full p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center group"
-                            title="Remove this item"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        ) : (
-                          <div className="w-full h-full p-2 text-gray-300 flex items-center justify-center" title="Cannot remove the last item">
-                            <X className="w-4 h-4" />
-                          </div>
-                        )}
+                      <div className="p-0 h-full">
+                        <button
+                          onClick={() => removeInvoiceItem(index)}
+                          className="w-full h-full text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors flex items-center justify-center border-0 hover:bg-red-100 bg-transparent"
+                          title="Remove this item"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
                   );
@@ -2322,8 +2826,8 @@ const InvoiceFormPage: React.FC = () => {
               </div>
 
               {/* Navigation Hints */}
-              <div className="bg-gray-50 border-t border-gray-200 p-3 text-center">
-                <div className="text-sm text-gray-600 mb-1">
+              <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1200px]">
+                <div className="text-sm text-gray-600 mb-1 mt-16">
                   <strong>🚀 Excel-Like {getInvoiceTypeTitle()} Items:</strong> Search → Select → Set Quantity → Tab/Enter → Auto Next Row
                 </div>
                 <div className="text-xs text-gray-500 mb-1">
@@ -2333,7 +2837,7 @@ const InvoiceFormPage: React.FC = () => {
                   <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Set</kbd> Quantity →
                   <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Tab/Enter</kbd> Auto Add Row
                 </div>
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-gray-400 mb-5">
                   ⚡ <strong>Complete Excel-like {getInvoiceTypeTitle().toLowerCase()} form navigation!</strong>
                   {!isDeliveryChallan && ' • Stock validation enabled for accurate invoicing'}
                   {isDeliveryChallan && ' • Delivery tracking mode - no stock reduction'}
@@ -2348,12 +2852,72 @@ const InvoiceFormPage: React.FC = () => {
             <textarea
               value={formData.notes || ''}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Tab' && e.shiftKey) {
+                  e.preventDefault();
+                  const lastRowIndex = (formData.items || []).length - 1;
+                  setTimeout(() => {
+                    const lastQuantityInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
+                    if (lastQuantityInput) lastQuantityInput.focus();
+                  }, 50);
+                } else if (e.key === 'Tab' && !e.shiftKey) {
+                  e.preventDefault();
+                  setTimeout(() => {
+                    const createButton = document.querySelector('[data-action="create"]') as HTMLButtonElement;
+                    if (createButton) createButton.focus();
+                  }, 50);
+                }
+              }}
+
               rows={3}
               data-field="notes"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
               placeholder="Additional notes..."
             />
           </div>
+
+          {/* Overall Discount - Only for Sales Invoices */}
+          {isSalesInvoice && (
+            <div className="border-t border-gray-200 pt-4">
+              <div className="flex justify-end">
+                <div className="w-80">
+                  <div className="flex items-center justify-between">
+                    <label className="block text-sm font-medium text-gray-700">Overall Discount (%):</label>
+                    <input
+                      type="number"
+                      value={formData.overallDiscount || 0}
+                      onChange={(e) => {
+                        const value = parseFloat(e.target.value) || 0;
+                        console.log('Overall discount changed to:', value);
+                        setFormData(prev => {
+                          // Calculate totals with the new overall discount
+                          const calculationResult = calculateQuotationTotals(prev.items || [], value);
+                          console.log('Calculation result:', calculationResult);
+                          const updatedData = {
+                            ...prev,
+                            overallDiscount: value,
+                            overallDiscountAmount: calculationResult.overallDiscountAmount,
+                            subtotal: calculationResult.subtotal,
+                            totalDiscount: calculationResult.totalDiscount,
+                            totalTax: calculationResult.totalTax,
+                            grandTotal: calculationResult.grandTotal,
+                            roundOff: calculationResult.roundOff
+                          };
+                          console.log('Updated form data:', updatedData);
+                          return updatedData;
+                        });
+                      }}
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
+                      placeholder="0.00"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Totals */}
           <div className="border-t border-gray-200 pt-4">
@@ -2371,6 +2935,12 @@ const InvoiceFormPage: React.FC = () => {
                   <span className="text-gray-600">Total Discount:</span>
                   <span className="font-medium text-green-600">-₹{formData.totalDiscount?.toFixed(2) || '0.00'}</span>
                 </div>
+                {isSalesInvoice && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Overall Discount:</span>
+                    <span className="font-medium text-green-600">-{formData.overallDiscount || 0}% (-₹{formData.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-lg border-t pt-3">
                   <span>Grand Total:</span>
                   <span className="text-blue-600">₹{formData.grandTotal?.toFixed(2) || '0.00'}</span>
@@ -2403,10 +2973,11 @@ const InvoiceFormPage: React.FC = () => {
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
+                data-action="create"
                 className={`px-6 py-2 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center space-x-2 ${isDeliveryChallan ? 'bg-orange-600 hover:bg-orange-700' :
-                    isQuotation ? 'bg-blue-600 hover:bg-blue-700' :
-                      isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
-                        'bg-purple-600 hover:bg-purple-700'
+                  isQuotation ? 'bg-blue-600 hover:bg-blue-700' :
+                    isSalesInvoice ? 'bg-green-600 hover:bg-green-700' :
+                      'bg-purple-600 hover:bg-purple-700'
                   }`}
               >
                 {submitting ? (
