@@ -1947,7 +1947,18 @@ const AMCManagement: React.FC = () => {
                         type="date"
                         value={siteSurveyData.surveyDate}
                         onChange={(e) => setSiteSurveyData({ ...siteSurveyData, surveyDate: e.target.value })}
+                        onFocus={(e) => {
+                          // Open the date picker when focused via tab
+                          (e.target as HTMLInputElement).showPicker?.();
+                        }}
+                        onKeyDown={(e) => {
+                          // Open date picker on Enter key
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).showPicker?.();
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Select survey date"
                       />
                     </div>
                     
@@ -2226,7 +2237,18 @@ const AMCManagement: React.FC = () => {
                         type="date"
                         value={amcFormData.startDate}
                         onChange={(e) => setAmcFormData({ ...amcFormData, startDate: e.target.value })}
+                        onFocus={(e) => {
+                          // Open the date picker when focused via tab
+                          (e.target as HTMLInputElement).showPicker?.();
+                        }}
+                        onKeyDown={(e) => {
+                          // Open date picker on Enter key
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).showPicker?.();
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Select start date"
                       />
                     </div>
                     
@@ -2236,7 +2258,18 @@ const AMCManagement: React.FC = () => {
                         type="date"
                         value={amcFormData.endDate}
                         onChange={(e) => setAmcFormData({ ...amcFormData, endDate: e.target.value })}
+                        onFocus={(e) => {
+                          // Open the date picker when focused via tab
+                          (e.target as HTMLInputElement).showPicker?.();
+                        }}
+                        onKeyDown={(e) => {
+                          // Open date picker on Enter key
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).showPicker?.();
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Select end date"
                       />
                     </div>
                     

@@ -2754,15 +2754,24 @@ const ServiceManagement: React.FC = () => {
                         setFormErrors(prev => ({ ...prev, scheduledDate: '' }));
                       }
                     }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Tab' && !e.shiftKey) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        descriptionRef.current?.focus();
-                      }
+                    onFocus={(e) => {
+                      // Open the date picker when focused via tab
+                      (e.target as HTMLInputElement).showPicker?.();
                     }}
+                                          onKeyDown={(e) => {
+                        if (e.key === 'Tab' && !e.shiftKey) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          descriptionRef.current?.focus();
+                        }
+                        // Open date picker on Enter key
+                        if (e.key === 'Enter') {
+                          (e.target as HTMLInputElement).showPicker?.();
+                        }
+                      }}
                     className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.scheduledDate ? 'border-red-500' : 'border-gray-300'
                       }`}
+                    placeholder="Select date"
                   />
                   {formErrors.scheduledDate && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.scheduledDate}</p>
@@ -2838,7 +2847,18 @@ const ServiceManagement: React.FC = () => {
                       type="datetime-local"
                       value={ticketFormData.serviceRequiredDate ? ticketFormData.serviceRequiredDate.replace('Z', '') : ''}
                       onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequiredDate: e.target.value })}
+                      onFocus={(e) => {
+                        // Open the date picker when focused via tab
+                        (e.target as HTMLInputElement).showPicker?.();
+                      }}
+                      onKeyDown={(e) => {
+                        // Open date picker on Enter key
+                        if (e.key === 'Enter') {
+                          (e.target as HTMLInputElement).showPicker?.();
+                        }
+                      }}
                       className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Select date and time"
                     />
                   </div>
 
