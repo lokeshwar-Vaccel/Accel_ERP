@@ -219,13 +219,21 @@ const baseServiceTicketFields = {
   serviceRequestType: Joi.string().allow(''), // Remove validation, allow any string
   requestSubmissionDate: Joi.date().iso(),
   serviceRequiredDate: Joi.string().allow(''), // Allow string format for flexibility
-  engineSerialNumber: Joi.string().max(100).trim().allow(''),
+  engineSerialNumber: Joi.string().min(6).max(12).trim().allow(''),
   customerName: Joi.string().max(200).trim(),
   magiecSystemCode: Joi.string().max(50).trim().allow(''),
   magiecCode: Joi.string().max(50).trim().allow(''),
   serviceRequestEngineer: Joi.string().hex().length(24),
   serviceRequestStatus: Joi.string().valid(...Object.values(TicketStatus)),
-  complaintDescription: Joi.string().max(2000).trim(),
+  complaintDescription: Joi.string().custom((value, helpers) => {
+    if (value) {
+      const wordCount = value.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
+      if (wordCount > 500) {
+        return helpers.error('any.invalid', { message: 'Description cannot exceed 500 words' });
+      }
+    }
+    return value;
+  }).trim(),
   businessVertical: Joi.string().max(100).trim().allow(''),
   invoiceRaised: Joi.boolean(),
   siteIdentifier: Joi.string().max(100).trim().allow(''),
@@ -236,7 +244,15 @@ const baseServiceTicketFields = {
   customer: Joi.string().hex().length(24),
   product: Joi.string().hex().length(24),
   serialNumber: Joi.string().max(100).trim().allow(''),
-  description: Joi.string().max(2000).trim(),
+  description: Joi.string().custom((value, helpers) => {
+    if (value) {
+      const wordCount = value.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
+      if (wordCount > 500) {
+        return helpers.error('any.invalid', { message: 'Description cannot exceed 500 words' });
+      }
+    }
+    return value;
+  }).trim(),
   priority: Joi.string().valid(...Object.values(TicketPriority)),
   status: Joi.string().valid(...Object.values(TicketStatus)),
   assignedTo: Joi.string().hex().length(24),

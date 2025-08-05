@@ -90,7 +90,8 @@ const serviceTicketSchema = new Schema({
   engineSerialNumber: {
     type: String,
     trim: true,
-    maxlength: [100, 'Engine serial number cannot exceed 100 characters']
+    minlength: [6, 'Engine serial number must be at least 6 characters'],
+    maxlength: [12, 'Engine serial number cannot exceed 12 characters']
   },
   customerName: {
     type: String,
@@ -122,7 +123,14 @@ const serviceTicketSchema = new Schema({
   complaintDescription: {
     type: String,
     required: [true, 'Complaint description is required'],
-    maxlength: [2000, 'Complaint description cannot exceed 2000 characters']
+    validate: {
+      validator: function(value: string) {
+        if (!value) return true; // Let required validation handle empty values
+        const wordCount = value.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
+        return wordCount <= 500;
+      },
+      message: 'Complaint description cannot exceed 500 words'
+    }
   },
   businessVertical: {
     type: String,
@@ -173,7 +181,14 @@ const serviceTicketSchema = new Schema({
   description: {
     type: String,
     required: [true, 'Service description is required'],
-    maxlength: [2000, 'Description cannot exceed 2000 characters']
+    validate: {
+      validator: function(value: string) {
+        if (!value) return true; // Let required validation handle empty values
+        const wordCount = value.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
+        return wordCount <= 500;
+      },
+      message: 'Description cannot exceed 500 words'
+    }
   },
   priority: {
     type: String,

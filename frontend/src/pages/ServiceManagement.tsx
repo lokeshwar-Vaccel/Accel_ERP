@@ -732,7 +732,7 @@ const ServiceManagement: React.FC = () => {
   const handleCreateTicket = () => {
     setTicketFormData({
       // Standardized fields
-      serviceRequestType: 'repair',
+      serviceRequestType: '',
       serviceRequiredDate: new Date().toISOString().split('T')[0],
       engineSerialNumber: '',
       customerName: '',
@@ -763,7 +763,7 @@ const ServiceManagement: React.FC = () => {
     setEditingTicket(ticket);
     setTicketFormData({
       // Standardized fields
-      serviceRequestType: ticket.serviceRequestType || 'repair',
+      serviceRequestType: ticket.serviceRequestType || '',
       serviceRequiredDate: ticket.serviceRequiredDate ? ticket.serviceRequiredDate.slice(0, 16) : new Date().toISOString().slice(0, 16),
       engineSerialNumber: ticket.engineSerialNumber || '',
       customerName: ticket.customerName || '',
@@ -855,8 +855,21 @@ const ServiceManagement: React.FC = () => {
     if (!ticketFormData.description.trim()) {
       errors.description = 'Description is required';
     }
-    if (ticketFormData.description.length > 2000) {
-      errors.description = 'Description cannot exceed 2000 characters';
+    
+    // Check word count for description
+    const wordCount = ticketFormData.description.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
+    if (wordCount > 500) {
+      errors.description = 'Description cannot exceed 500 words';
+    }
+
+    // Validate engine serial number if provided
+    if (ticketFormData.engineSerialNumber && ticketFormData.engineSerialNumber.trim()) {
+      const engineSerialLength = ticketFormData.engineSerialNumber.trim().length;
+      if (engineSerialLength < 6) {
+        errors.engineSerialNumber = 'Engine Serial Number must be at least 6 characters';
+      } else if (engineSerialLength > 12) {
+        errors.engineSerialNumber = 'Engine Serial Number cannot exceed 12 characters';
+      }
     }
 
     setFormErrors(errors);
@@ -1463,7 +1476,7 @@ const ServiceManagement: React.FC = () => {
         // Map the Excel headers to our standardized fields with flexible header matching
         const mappedData = {
           serviceRequestNumber: getFieldValue(['Service Request Number', 'SR Number', 'Service Request Number'], ''),
-          serviceRequestType: getFieldValue(['Service Request Type', 'SR Type', 'Service Type'], 'repair'),
+          serviceRequestType: getFieldValue(['Service Request Type', 'SR Type', 'Service Type'], ''),
           requestSubmissionDate: convertExcelDateOnly(getFieldValue(['Request Submission Date', 'Requested Date', 'Submission Date', 'Created Date', 'Request Date', 'Date Requested', 'Request Date', 'Submission Date', 'Created Date', 'Date Created'])),
           serviceRequiredDate: convertExcelDateTime(getFieldValue(['Service Required Date', 'Service Required On Date', 'Required Date'])),
           engineSerialNumber: getFieldValue(['Engine Serial Number', 'Engine Sr No', 'Serial Number'], ''),
@@ -2793,7 +2806,7 @@ const ServiceManagement: React.FC = () => {
                   <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>
                 )}
                 <p className="text-xs text-gray-500 mt-1">
-                  {ticketFormData.description.length}/2000 characters
+                  {ticketFormData.description.trim().split(/\s+/).filter((word: string) => word.length > 0).length}/500 words
                 </p>
               </div>
 
@@ -2837,10 +2850,19 @@ const ServiceManagement: React.FC = () => {
                     <input
                       type="text"
                       value={ticketFormData.engineSerialNumber}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, engineSerialNumber: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter engine serial number"
+                      onChange={(e) => {
+                        setTicketFormData({ ...ticketFormData, engineSerialNumber: e.target.value });
+                        // Clear error when user starts typing
+                        if (formErrors.engineSerialNumber) {
+                          setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
+                        }
+                      }}
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.engineSerialNumber ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="Enter engine serial number (6-12 characters)"
                     />
+                    {formErrors.engineSerialNumber && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.engineSerialNumber}</p>
+                    )}
                   </div>
 
                   {/* MAGIEC System Code */}
@@ -3534,7 +3556,13 @@ const ServiceManagement: React.FC = () => {
                 </label>
                 <textarea
                   value={ticketFormData.description}
-                  onChange={(e) => setTicketFormData({ ...ticketFormData, description: e.target.value })}
+                  onChange={(e) => {
+                    setTicketFormData({ ...ticketFormData, description: e.target.value });
+                    // Clear error when user starts typing
+                    if (formErrors.description) {
+                      setFormErrors(prev => ({ ...prev, description: '' }));
+                    }
+                  }}
                   rows={4}
                   className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.description ? 'border-red-500' : 'border-gray-300'
                     }`}
@@ -3544,7 +3572,7 @@ const ServiceManagement: React.FC = () => {
                   <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>
                 )}
                 <p className="text-xs text-gray-500 mt-1">
-                  {ticketFormData.description.length}/2000 characters
+                  {ticketFormData.description.trim().split(/\s+/).filter((word: string) => word.length > 0).length}/500 words
                 </p>
               </div>
 
