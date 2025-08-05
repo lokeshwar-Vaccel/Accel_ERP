@@ -39,6 +39,34 @@ class ApiClient {
     return response.json();
   }
 
+  // Public API method for unauthenticated requests
+  private async makePublicRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    // Don't set Content-Type for FormData - let browser set it automatically
+    const isFormData = options.body instanceof FormData;
+    
+    const headers: HeadersInit = {
+      ...(!isFormData && { 'Content-Type': 'application/json' }),
+      ...(options.headers as Record<string, string>),
+    };
+
+    const config: RequestInit = {
+      headers,
+      ...options,
+    };
+
+    const response = await fetch(`${this.baseURL}${endpoint}`, config);
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'API request failed');
+    }
+
+    return response.json();
+  }
+
   // Authentication APIs
   auth = {
     login: (credentials: { email: string; password: string }) =>
@@ -505,6 +533,15 @@ class ApiClient {
         method: 'POST',
         body: JSON.stringify(reportData),
       }),
+
+    bulkImport: (tickets: any[]) =>
+      this.makeRequest<{ success: boolean; data: any }>('/services/bulk-import', {
+        method: 'POST',
+        body: JSON.stringify({ tickets }),
+      }),
+
+    export: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { tickets: any[]; totalCount: number } }>(`/services/export${params ? `?${new URLSearchParams(params)}` : ''}`),
   };
 
   // Digital Service Report APIs
@@ -1567,6 +1604,30 @@ class ApiClient {
       getByEnquiry: (enquiryId: string) =>
         this.makeRequest<{ success: boolean; data: any[] }>(`/dg-quotations/by-enquiry/${enquiryId}`),
     },
+  };
+
+  // Feedback APIs
+  feedback = {
+    getByToken: (token: string) =>
+      this.makePublicRequest<{ success: boolean; data: { feedback: any } }>(`/feedback/${token}`),
+
+    submit: (token: string, feedbackData: any) =>
+      this.makePublicRequest<{ success: boolean; data: any }>(`/feedback/${token}`, {
+        method: 'POST',
+        body: JSON.stringify(feedbackData),
+      }),
+
+    sendEmail: (ticketId: string) =>
+      this.makeRequest<{ success: boolean; data: any }>('/feedback/send-email', {
+        method: 'POST',
+        body: JSON.stringify({ ticketId }),
+      }),
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/feedback/stats'),
+
+    getByTicketId: (ticketId: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/feedback/ticket/${ticketId}`),
   };
 }
 

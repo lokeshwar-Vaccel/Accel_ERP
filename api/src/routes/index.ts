@@ -21,15 +21,7 @@ import generalSettingsRoutes from './generalSettings';
 import quotationsRouter from './quotations';
 import inventoryRoutes from './inventory';
 import digitalServiceReportRoutes from './digitalServiceReports';
-import dgEnquiriesRoutes from './dgEnquiries';
-import dgPurchaseOrdersRoutes from './dgPurchaseOrders';
-import proformaInvoicesRoutes from './proformaInvoices';
-import dgInvoicesRoutes from './dgInvoices';
-import dgPaymentsRoutes from './dgPayments';
-import oemsRoutes from './oems';
-import oemOrdersRoutes from './oemOrders';
-import dgReportsRoutes from './dgReports';
-import dgQuotationsRoutes from './dgQuotations';
+import feedbackRoutes from './feedback';
 
 
 const router = Router();
@@ -86,14 +78,6 @@ router.use('/payment-links', paymentLinkRoutes);
 router.use('/quotations', quotationsRouter);
 router.use('/inventory', inventoryRoutes);
 router.use('/digital-service-reports', digitalServiceReportRoutes);
-router.use('/dg-enquiries', dgEnquiriesRoutes);
-router.use('/dg-purchase-orders', dgPurchaseOrdersRoutes);
-router.use('/proforma-invoices', proformaInvoicesRoutes);
-router.use('/dg-invoices', dgInvoicesRoutes);
-router.use('/dg-payments', dgPaymentsRoutes);
-router.use('/oems', oemsRoutes);
-router.use('/oem-orders', oemOrdersRoutes);
-router.use('/dg-reports', dgReportsRoutes);
-router.use('/dg-quotations', dgQuotationsRoutes);
+router.use('/feedback', feedbackRoutes);
 
 export default router;

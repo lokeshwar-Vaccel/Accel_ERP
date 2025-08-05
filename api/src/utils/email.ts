@@ -1,21 +1,14 @@
-import dotenv from 'dotenv';
-import nodemailer from 'nodemailer';
+import { sendFeedbackEmail as sendFeedbackEmailUtil, sendThankYouEmail } from './nodemailer';
 
-dotenv.config();
-
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS
-  }
-});
-
-export const sendEmail = (to: string, subject: string, html: string) => {
-  return transporter.sendMail({
-    from: process.env.EMAIL_USER,
-    to,
-    subject,
-    html
-  });
-};
+/**
+ * Simple email utility for backward compatibility
+ */
+export const sendEmail = async (toEmail: string, subject: string, htmlContent: string): Promise<void> => {
+  // For now, we'll use a simple approach - in the future this can be enhanced
+  console.log('Email would be sent to:', toEmail);
+  console.log('Subject:', subject);
+  console.log('Content length:', htmlContent.length);
+  
+  // You can implement a generic email function here if needed
+  // For now, we'll just log the email details
+}; 

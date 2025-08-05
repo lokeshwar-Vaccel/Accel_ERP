@@ -136,10 +136,8 @@ export const exportServiceTicketToPDF = async (ticket: ServiceTicketPDFData) => 
     ['Priority', ticket.priority.toUpperCase()],
     ['Created Date', new Date(ticket.createdAt).toLocaleDateString()],
     ['Scheduled Date', ticket.scheduledDate ? new Date(ticket.scheduledDate).toLocaleDateString() : 'Not scheduled'],
-    ['SLA Deadline', ticket.slaDeadline ? new Date(ticket.slaDeadline).toLocaleDateString() : 'No SLA'],
-    ['SLA Status', ticket.slaStatus || 'Not set'],
-    ['Working Demand', ticket.assignedTo || 'Unassigned'],
-    ['Problem Description', ticket.description]
+    ['Service Engineer', ticket.assignedTo || 'Unassigned'],
+    ['Problem Description', ticket.description],
   ];
   
   yPosition = createTable(['Field', 'Value'], ticketData, yPosition, [50, 120]);
@@ -326,8 +324,6 @@ export const exportMultipleTicketsToPDF = async (tickets: ServiceTicketPDFData[]
       ['Priority', ticket.priority.toUpperCase()],
       ['Created Date', new Date(ticket.createdAt).toLocaleDateString()],
       ['Scheduled Date', ticket.scheduledDate ? new Date(ticket.scheduledDate).toLocaleDateString() : 'Not scheduled'],
-      ['SLA Deadline', ticket.slaDeadline ? new Date(ticket.slaDeadline).toLocaleDateString() : 'No SLA'],
-      ['SLA Status', ticket.slaStatus || 'Not set'],
       ['Working Demand', ticket.assignedTo || 'Unassigned'],
       ['Problem Description', ticket.description]
     ];

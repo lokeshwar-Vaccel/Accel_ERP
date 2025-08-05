@@ -737,7 +737,9 @@ const AMCManagement: React.FC = () => {
     if (window.confirm('Are you sure you want to delete this AMC contract?')) {
       try {
         await apiClient.amc.delete(amc._id);
-        setAmcs(amcs.filter(a => a._id !== amc._id));
+        
+        // Refresh the AMC data to get real-time updates
+        await fetchAMCs();
       } catch (error) {
         console.error('Error deleting AMC:', error);
       }
@@ -795,7 +797,10 @@ const AMCManagement: React.FC = () => {
       };
 
       const response = await apiClient.amc.create(amcData);
-      setAmcs([response.data, ...amcs]);
+      
+      // Refresh the AMC data to get real-time updates
+      await fetchAMCs();
+      
       setShowAddModal(false);
       setWorkflowStep('inquiry');
       resetAMCForm();
@@ -831,12 +836,13 @@ const AMCManagement: React.FC = () => {
       if (editingAMC) {
         // Update existing draft
         response = await apiClient.amc.update(editingAMC._id, draftData);
-        setAmcs(amcs.map(a => a._id === editingAMC._id ? response.data : a));
       } else {
         // Create new draft
         response = await apiClient.amc.create(draftData);
-        setAmcs([response.data, ...amcs]);
       }
+      
+      // Refresh the AMC data to get real-time updates
+      await fetchAMCs();
       
       // Show success message
       alert('Draft saved successfully! You can continue editing later.');
@@ -860,7 +866,10 @@ const AMCManagement: React.FC = () => {
     try {
       setFormErrors({});
       const response = await apiClient.amc.update(editingAMC._id, amcFormData);
-      setAmcs(amcs.map(a => a._id === editingAMC._id ? response.data : a));
+      
+      // Refresh the AMC data to get real-time updates
+      await fetchAMCs();
+      
       setShowEditModal(false);
       setEditingAMC(null);
       resetAMCForm();
@@ -1431,14 +1440,15 @@ const AMCManagement: React.FC = () => {
   };
 
   const handleBulkRenewal = () => {
-    const expiringContracts = getExpiringContracts();
-    setSelectedContractsForBulkRenewal(expiringContracts);
+    // Use the already selected contracts instead of getting expiring contracts
+    // The selectedContractsForBulkRenewal state already contains the user's selection
     setShowBulkRenewal(true);
   };
 
   const handleBulkSelectionToggle = () => {
     setBulkSelectionMode(!bulkSelectionMode);
     if (bulkSelectionMode) {
+      // Clear selection when exiting bulk mode
       setSelectedContractsForBulkRenewal([]);
     }
   };
@@ -1446,8 +1456,10 @@ const AMCManagement: React.FC = () => {
   const handleContractSelection = (amc: AMC) => {
     const isSelected = selectedContractsForBulkRenewal.some(c => c._id === amc._id);
     if (isSelected) {
+      // Remove from selection
       setSelectedContractsForBulkRenewal(prev => prev.filter(c => c._id !== amc._id));
     } else {
+      // Add to selection
       setSelectedContractsForBulkRenewal(prev => [...prev, amc]);
     }
   };
@@ -1484,7 +1496,12 @@ const AMCManagement: React.FC = () => {
             }`}
           >
             <Settings className="w-4 h-4" />
-            <span className="text-sm">{bulkSelectionMode ? 'Cancel Selection' : 'Bulk Actions'}</span>
+            <span className="text-sm">
+              {bulkSelectionMode 
+                ? `Cancel Selection${selectedContractsForBulkRenewal.length > 0 ? ` (${selectedContractsForBulkRenewal.length})` : ''}`
+                : 'Bulk Actions'
+              }
+            </span>
           </button>
 
           {bulkSelectionMode && selectedContractsForBulkRenewal.length > 0 && (
@@ -1643,8 +1660,10 @@ const AMCManagement: React.FC = () => {
                       type="checkbox"
                       onChange={(e) => {
                         if (e.target.checked) {
-                          setSelectedContractsForBulkRenewal(filteredAMCs);
+                          // Select all filtered AMCs
+                          setSelectedContractsForBulkRenewal([...filteredAMCs]);
                         } else {
+                          // Deselect all
                           setSelectedContractsForBulkRenewal([]);
                         }
                       }}
@@ -1928,7 +1947,18 @@ const AMCManagement: React.FC = () => {
                         type="date"
                         value={siteSurveyData.surveyDate}
                         onChange={(e) => setSiteSurveyData({ ...siteSurveyData, surveyDate: e.target.value })}
+                        onFocus={(e) => {
+                          // Open the date picker when focused via tab
+                          (e.target as HTMLInputElement).showPicker?.();
+                        }}
+                        onKeyDown={(e) => {
+                          // Open date picker on Enter key
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).showPicker?.();
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Select survey date"
                       />
                     </div>
                     
@@ -2207,7 +2237,18 @@ const AMCManagement: React.FC = () => {
                         type="date"
                         value={amcFormData.startDate}
                         onChange={(e) => setAmcFormData({ ...amcFormData, startDate: e.target.value })}
+                        onFocus={(e) => {
+                          // Open the date picker when focused via tab
+                          (e.target as HTMLInputElement).showPicker?.();
+                        }}
+                        onKeyDown={(e) => {
+                          // Open date picker on Enter key
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).showPicker?.();
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Select start date"
                       />
                     </div>
                     
@@ -2217,7 +2258,18 @@ const AMCManagement: React.FC = () => {
                         type="date"
                         value={amcFormData.endDate}
                         onChange={(e) => setAmcFormData({ ...amcFormData, endDate: e.target.value })}
+                        onFocus={(e) => {
+                          // Open the date picker when focused via tab
+                          (e.target as HTMLInputElement).showPicker?.();
+                        }}
+                        onKeyDown={(e) => {
+                          // Open date picker on Enter key
+                          if (e.key === 'Enter') {
+                            (e.target as HTMLInputElement).showPicker?.();
+                          }
+                        }}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Select end date"
                       />
                     </div>
                     
@@ -2808,12 +2860,20 @@ const AMCManagement: React.FC = () => {
                   <span>Edit Contract</span>
                 </button>
                 <button
+                  onClick={() => {
+                    setShowDetailsModal(false);
+                    handleScheduleVisit(selectedAMC);
+                  }}
                   className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2"
                 >
                   <CalendarDays className="w-4 h-4" />
                   <span>Schedule Visit</span>
                 </button>
                 <button
+                  onClick={() => {
+                    setShowDetailsModal(false);
+                    handleGenerateReport();
+                  }}
                   className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
                 >
                   <FileText className="w-4 h-4" />
@@ -2821,6 +2881,10 @@ const AMCManagement: React.FC = () => {
                 </button>
                 {selectedAMC.status === 'active' && selectedAMC.daysUntilExpiry && selectedAMC.daysUntilExpiry <= 60 && (
                   <button
+                    onClick={() => {
+                      setShowDetailsModal(false);
+                      handleRenewContract(selectedAMC);
+                    }}
                     className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center space-x-2"
                   >
                     <RefreshCw className="w-4 h-4" />
@@ -2875,12 +2939,19 @@ const AMCManagement: React.FC = () => {
                           </div>
                           <div className="flex space-x-2">
                             <button
-                              onClick={() => openDetailsModal(amc)}
+                              onClick={() => {
+                                setShowExpiryModal(false);
+                                openDetailsModal(amc);
+                              }}
                               className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
                             >
                               View Details
                             </button>
                             <button
+                              onClick={() => {
+                                setShowExpiryModal(false);
+                                handleRenewContract(amc);
+                              }}
                               className="bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700"
                             >
                               Renew

@@ -1,8 +1,13 @@
 import { Response, NextFunction } from 'express';
 import { ServiceTicket } from '../models/ServiceTicket';
 import { Stock } from '../models/Stock';
+import { User } from '../models/User';
+import { Customer } from '../models/Customer';
+import { Product } from '../models/Product';
 import { AuthenticatedRequest, APIResponse, TicketStatus, TicketPriority, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import { sendFeedbackEmail as sendFeedbackEmailUtil } from '../utils/nodemailer';
+import crypto from 'crypto';
 
 // @desc    Get all service tickets
 // @route   GET /api/v1/services
@@ -55,8 +60,11 @@ export const getServiceTickets = async (
       query.priority = priority;
     }
     
-    if (assignedTo) {
-      query.assignedTo = assignedTo;
+    if (assignedTo && assignedTo.trim() !== '') {
+      query.$or = [
+        { assignedTo: assignedTo },
+        { serviceRequestEngineer: assignedTo }
+      ];
     }
     
     if (customer) {
@@ -134,6 +142,14 @@ export const getServiceTickets = async (
         {
           $lookup: {
             from: 'users',
+            localField: 'serviceRequestEngineer',
+            foreignField: '_id',
+            as: 'serviceRequestEngineer'
+          }
+        },
+        {
+          $lookup: {
+            from: 'users',
             localField: 'createdBy',
             foreignField: '_id',
             as: 'createdBy'
@@ -144,6 +160,7 @@ export const getServiceTickets = async (
             customer: { $arrayElemAt: ['$customer', 0] },
             product: { $arrayElemAt: ['$product', 0] },
             assignedTo: { $arrayElemAt: ['$assignedTo', 0] },
+            serviceRequestEngineer: { $arrayElemAt: ['$serviceRequestEngineer', 0] },
             createdBy: { $arrayElemAt: ['$createdBy', 0] }
           }
         }
@@ -203,8 +220,15 @@ export const getServiceTickets = async (
         pipeline.push({ $match: { priority } });
       }
 
-      if (assignedTo) {
-        pipeline.push({ $match: { assignedTo: assignedTo } });
+      if (assignedTo && assignedTo.trim() !== '') {
+        pipeline.push({ 
+          $match: { 
+            $or: [
+              { assignedTo: assignedTo },
+              { serviceRequestEngineer: assignedTo }
+            ]
+          } 
+        });
       }
 
       if (customer) {
@@ -241,6 +265,7 @@ export const getServiceTickets = async (
         .populate('customer', 'name email phone customerType addresses')
         .populate('product', 'name category brand modelNumber')
         .populate('assignedTo', 'firstName lastName email')
+        .populate('serviceRequestEngineer', 'firstName lastName email')
         .populate('createdBy', 'firstName lastName email')
         .populate('partsUsed.product', 'name category price')
         .sort(sort as string)
@@ -330,10 +355,6 @@ export const createServiceTicket = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Generate ticket number
-    const ticketCount = await ServiceTicket.countDocuments();
-    const ticketNumber = `SPS-${new Date().getFullYear()}-${String(ticketCount + 1).padStart(4, '0')}`;
-
     // Calculate SLA deadline based on priority
     const slaHours = {
       critical: 4,
@@ -345,19 +366,43 @@ export const createServiceTicket = async (
     const slaDeadline = new Date();
     slaDeadline.setHours(slaDeadline.getHours() + slaHours[req.body.priority as TicketPriority]);
 
+    // Prepare ticket data with standardized fields
     const ticketData = {
       ...req.body,
-      ticketNumber,
       slaDeadline,
-      createdBy: req.user!.id
+      createdBy: req.user!.id,
+      // Map legacy fields to standardized fields if not provided
+      customerName: req.body.customerName || (req.body.customer ? 'Customer Name' : ''),
+      complaintDescription: req.body.complaintDescription || req.body.description || '',
+      serviceRequestEngineer: req.body.serviceRequestEngineer || req.body.assignedTo,
+      serviceRequestStatus: req.body.serviceRequestStatus || req.body.status || TicketStatus.OPEN,
+      serviceRequestType: req.body.serviceRequestType || req.body.serviceType || 'repair',
+      requestSubmissionDate: req.body.requestSubmissionDate ? (typeof req.body.requestSubmissionDate === 'string' ? new Date(req.body.requestSubmissionDate.split('T')[0] + 'T00:00:00.000Z') : new Date(req.body.requestSubmissionDate)) : new Date(),
+      serviceRequiredDate: req.body.serviceRequiredDate || req.body.scheduledDate || new Date(),
+      engineSerialNumber: req.body.engineSerialNumber || req.body.serialNumber || '',
+      magiecSystemCode: req.body.magiecSystemCode || '',
+      magiecCode: req.body.magiecCode || '',
+      businessVertical: req.body.businessVertical || '',
+      invoiceRaised: req.body.invoiceRaised || false,
+      siteIdentifier: req.body.siteIdentifier || '',
+      stateName: req.body.stateName || '',
+      siteLocation: req.body.siteLocation || '',
+      // Pass the serviceRequestNumber from Excel to the model
+      serviceRequestNumber: req.body.serviceRequestNumber,
+      // Use serviceRequestNumber as ticketNumber if provided
+      ticketNumber: req.body.serviceRequestNumber || undefined
     };
 
+    console.log('Creating ticket with data:', ticketData);
+
     const ticket = await ServiceTicket.create(ticketData);
+    console.log('Created ticket:', ticket);
 
     const populatedTicket = await ServiceTicket.findById(ticket._id)
       .populate('customer', 'name email phone customerType addresses')
       .populate('product', 'name category brand')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('createdBy', 'firstName lastName email')
+      .populate('serviceRequestEngineer', 'firstName lastName email');
 
     // Process ticket to include primary address
     if (populatedTicket && populatedTicket.customer && (populatedTicket.customer as any).addresses && Array.isArray((populatedTicket.customer as any).addresses)) {
@@ -406,6 +451,26 @@ export const updateServiceTicket = async (
       }
     }
 
+    // Sync standardized fields with legacy fields
+    if (req.body.status) {
+      req.body.serviceRequestStatus = req.body.status;
+    }
+    if (req.body.serviceRequestStatus) {
+      req.body.status = req.body.serviceRequestStatus;
+    }
+    if (req.body.assignedTo) {
+      req.body.serviceRequestEngineer = req.body.assignedTo;
+    }
+    if (req.body.serviceRequestEngineer) {
+      req.body.assignedTo = req.body.serviceRequestEngineer;
+    }
+    if (req.body.description) {
+      req.body.complaintDescription = req.body.description;
+    }
+    if (req.body.complaintDescription) {
+      req.body.description = req.body.complaintDescription;
+    }
+
     const updatedTicket = await ServiceTicket.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -413,7 +478,8 @@ export const updateServiceTicket = async (
     )
       .populate('customer', 'name email phone customerType addresses')
       .populate('product', 'name category brand')
-      .populate('assignedTo', 'firstName lastName email');
+      .populate('assignedTo', 'firstName lastName email')
+      .populate('serviceRequestEngineer', 'firstName lastName email');
 
     // Process ticket to include primary address
     if (updatedTicket && updatedTicket.customer && (updatedTicket.customer as any).addresses && Array.isArray((updatedTicket.customer as any).addresses)) {
@@ -602,6 +668,67 @@ export const updateServiceTicketStatus = async (
 
     await ticket.save();
 
+    // Send feedback email if ticket is resolved
+    if (status === TicketStatus.RESOLVED) {
+      try {
+        // Send feedback email asynchronously (don't wait for it)
+        // Get ticket details for email
+        const populatedTicket = await ServiceTicket.findById(ticket._id)
+          .populate('customer', 'name email phone')
+          .populate('product', 'name category')
+          .populate('assignedTo', 'firstName lastName');
+
+        if (populatedTicket && populatedTicket.customer) {
+          const customer = populatedTicket.customer as any;
+          
+          if (customer.email) {
+            // Create feedback URL
+            const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+            const token = crypto.randomBytes(32).toString('hex');
+            const feedbackUrl = `${baseUrl}/feedback/${token}`;
+            
+            // Create feedback record in database
+            const { CustomerFeedback } = await import('../models/CustomerFeedback');
+            const expiresAt = new Date();
+            expiresAt.setDate(expiresAt.getDate() + 7); // Token expires in 7 days
+            
+            const feedback = new CustomerFeedback({
+              ticketId: ticket._id,
+              customerEmail: customer.email,
+              customerName: customer.name || 'Customer',
+              rating: 0,
+              serviceQuality: 'good',
+              technicianRating: 0,
+              timelinessRating: 0,
+              qualityRating: 0,
+              wouldRecommend: false,
+              token,
+              expiresAt
+            });
+
+            await feedback.save();
+            
+            // Send email using nodemailer utility
+            sendFeedbackEmailUtil(
+              customer.email,
+              customer.name || 'Customer',
+              populatedTicket.ticketNumber || '',
+              feedbackUrl,
+              populatedTicket
+            ).catch(error => {
+              console.error('Failed to send feedback email:', error);
+            });
+          } else {
+            console.error('Customer email not found for ticket:', ticket._id);
+          }
+        } else {
+          console.error('Customer not found for ticket:', ticket._id);
+        }
+      } catch (error) {
+        console.error('Error sending feedback email:', error);
+      }
+    }
+
     const populatedTicket = await ServiceTicket.findById(ticket._id)
       .populate('customer', 'name email phone customerType addresses')
       .populate('product', 'name category brand')
@@ -620,6 +747,228 @@ export const updateServiceTicketStatus = async (
       success: true,
       message: 'Service ticket status updated successfully',
       data: { ticket: populatedTicket }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Bulk import service tickets from Excel
+// @route   POST /api/v1/services/bulk-import
+// @access  Private
+export const bulkImportServiceTickets = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { tickets } = req.body;
+
+
+
+    if (!Array.isArray(tickets) || tickets.length === 0) {
+      return next(new AppError('No tickets provided for import', 400));
+    }
+
+    const importedTickets = [];
+    const errors = [];
+
+    for (let i = 0; i < tickets.length; i++) {
+      const ticketData = tickets[i];
+      
+      try {
+        // Use the serviceRequestEngineer ID directly (frontend already found the correct user)
+        let serviceRequestEngineer = ticketData.serviceRequestEngineer;
+        
+        // Validate that the serviceRequestEngineer ID exists in our database
+        if (serviceRequestEngineer) {
+          const engineer = await User.findById(serviceRequestEngineer);
+          if (!engineer) {
+            throw new Error(`Service Request Engineer with ID ${serviceRequestEngineer} not found`);
+          }
+        }
+
+        // Find customer by name
+        let customer = null;
+        if (ticketData.customerName) {
+          customer = await Customer.findOne({
+            name: { $regex: ticketData.customerName, $options: 'i' }
+          });
+        }
+
+        // Find product by name
+        let product = null;
+        if (ticketData.productName) {
+          product = await Product.findOne({
+            name: { $regex: ticketData.productName, $options: 'i' }
+          });
+        }
+
+        // Map Excel status to application status
+        let mappedStatus = TicketStatus.OPEN;
+        if (ticketData.status) {
+          const statusMapping: { [key: string]: TicketStatus } = {
+            'new': TicketStatus.OPEN,
+            'New': TicketStatus.OPEN,
+            'NEW': TicketStatus.OPEN,
+            'resolved': TicketStatus.RESOLVED,
+            'Resolved': TicketStatus.RESOLVED,
+            'RESOLVED': TicketStatus.RESOLVED,
+            'in progress': TicketStatus.IN_PROGRESS,
+            'In Progress': TicketStatus.IN_PROGRESS,
+            'IN PROGRESS': TicketStatus.IN_PROGRESS,
+            'closed': TicketStatus.CLOSED,
+            'Closed': TicketStatus.CLOSED,
+            'CLOSED': TicketStatus.CLOSED,
+            'cancelled': TicketStatus.CANCELLED,
+            'Cancelled': TicketStatus.CANCELLED,
+            'CANCELLED': TicketStatus.CANCELLED
+          };
+          mappedStatus = statusMapping[ticketData.status] || TicketStatus.OPEN;
+        }
+
+        const ticketDataToCreate = {
+          ...ticketData,
+          // Explicitly pass serviceRequestNumber from Excel to preserve it
+          serviceRequestNumber: ticketData.serviceRequestNumber || '',
+          serviceRequestEngineer: serviceRequestEngineer || req.user!.id,
+          assignedTo: serviceRequestEngineer || req.user!.id, // Set assignedTo to the same as serviceRequestEngineer
+          customer: customer?._id,
+          product: product?._id,
+          createdBy: req.user!.id,
+          requestSubmissionDate: ticketData.requestSubmissionDate ? new Date(ticketData.requestSubmissionDate.split('T')[0] + 'T00:00:00.000Z') : new Date(),
+          serviceRequiredDate: ticketData.serviceRequiredDate ? new Date(ticketData.serviceRequiredDate) : new Date(),
+          serviceRequestStatus: mappedStatus,
+          serviceRequestType: ticketData.serviceRequestType || 'repair',
+          priority: ticketData.priority || TicketPriority.MEDIUM,
+          status: mappedStatus,
+          description: ticketData.complaintDescription || ticketData.description || '',
+          complaintDescription: ticketData.complaintDescription || ticketData.description || '',
+          customerName: ticketData.customerName || '',
+          engineSerialNumber: ticketData.engineSerialNumber || ticketData.serialNumber || '',
+          magiecSystemCode: ticketData.magiecSystemCode || '',
+          magiecCode: ticketData.magiecCode || '',
+          businessVertical: ticketData.businessVertical || '',
+          invoiceRaised: ticketData.invoiceRaised || false,
+          siteIdentifier: ticketData.siteIdentifier || '',
+          stateName: ticketData.stateName || '',
+          siteLocation: ticketData.siteLocation || ''
+        };
+
+        const ticket = await ServiceTicket.create(ticketDataToCreate);
+
+
+
+        importedTickets.push(ticket);
+      } catch (error) {
+        errors.push({
+          row: i + 1,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          data: ticketData
+        });
+      }
+    }
+
+    const response: APIResponse = {
+      success: true,
+      message: `Successfully imported ${importedTickets.length} tickets${errors.length > 0 ? ` with ${errors.length} errors` : ''}`,
+      data: {
+        importedCount: importedTickets.length,
+        errorCount: errors.length,
+        errors: errors.length > 0 ? errors : undefined
+      }
+    };
+
+    res.status(201).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export service tickets to Excel
+// @route   GET /api/v1/services/export
+// @access  Private
+export const exportServiceTickets = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      page = 1, 
+      limit = 1000, 
+      search, 
+      status, 
+      priority, 
+      assignedTo, 
+      customer, 
+      product,
+      dateFrom,
+      dateTo 
+    } = req.query;
+
+    const query: any = {};
+
+    if (search) {
+      query.$or = [
+        { serviceRequestNumber: { $regex: search, $options: 'i' } },
+        { ticketNumber: { $regex: search, $options: 'i' } },
+        { customerName: { $regex: search, $options: 'i' } },
+        { complaintDescription: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    if (status) query.status = status;
+    if (priority) query.priority = priority;
+    if (assignedTo) query.assignedTo = assignedTo;
+    if (customer) query.customer = customer;
+    if (product) query.product = product;
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = new Date(dateFrom as string);
+      if (dateTo) query.createdAt.$lte = new Date(dateTo as string);
+    }
+
+    const tickets = await ServiceTicket.find(query)
+      .populate('customer', 'name email phone')
+      .populate('product', 'name category brand')
+      .populate('assignedTo', 'firstName lastName email')
+      .populate('serviceRequestEngineer', 'firstName lastName email')
+      .populate('createdBy', 'firstName lastName email')
+      .sort({ createdAt: -1 })
+      .limit(Number(limit));
+
+    // Transform data for Excel export with the same field names as import
+    const excelData = tickets.map(ticket => ({
+      'SR Number': ticket.serviceRequestNumber || '',
+      'SR Type': ticket.serviceRequestType || '',
+      'Requested Date': ticket.requestSubmissionDate?.toISOString().split('T')[0] || '',
+      'Required Date': ticket.serviceRequiredDate?.toISOString().split('T')[0] || '',
+      'Engine Serial Number': ticket.engineSerialNumber || '',
+      'Customer Name': ticket.customerName || '',
+      'MAGIEC': ticket.magiecSystemCode || '',
+      'MAGIEC Code': ticket.magiecCode || '',
+      'SR Engineer': ticket.serviceRequestEngineer ? 
+        `${(ticket.serviceRequestEngineer as any).firstName || ''} ${(ticket.serviceRequestEngineer as any).lastName || ''}`.trim() : '',
+      'Status': ticket.serviceRequestStatus || '',
+      'Complaint': ticket.complaintDescription || '',
+      'Vertical': ticket.businessVertical || '',
+      'Invoice': ticket.invoiceRaised ? 'Yes' : 'No',
+      'Site Id': ticket.siteIdentifier || '',
+      'State Name': ticket.stateName || '',
+      'Site Location': ticket.siteLocation || ''
+    }));
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Service tickets exported successfully',
+      data: {
+        tickets: excelData,
+        totalCount: excelData.length
+      }
     };
 
     res.status(200).json(response);
