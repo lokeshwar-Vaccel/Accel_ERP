@@ -22,7 +22,15 @@ import quotationsRouter from './quotations';
 import inventoryRoutes from './inventory';
 import digitalServiceReportRoutes from './digitalServiceReports';
 import feedbackRoutes from './feedback';
-
+import dgEnquiriesRoutes from './dgEnquiries';
+import dgPurchaseOrdersRoutes from './dgPurchaseOrders';
+import proformaInvoicesRoutes from './proformaInvoices';
+import dgInvoicesRoutes from './dgInvoices';
+import dgPaymentsRoutes from './dgPayments';
+import oemsRoutes from './oems';
+import oemOrdersRoutes from './oemOrders';
+import dgReportsRoutes from './dgReports';
+import dgQuotationsRoutes from './dgQuotations';
 
 const router = Router();
 
@@ -50,7 +58,7 @@ router.get('/', (req, res) => {
       invoices: '/invoices',
       payments: '/payments',
       paymentLinks: '/payment-links',
-      inventory: '/inventory'
+      inventory: '/inventory',
     }
   });
 });
@@ -79,5 +87,14 @@ router.use('/quotations', quotationsRouter);
 router.use('/inventory', inventoryRoutes);
 router.use('/digital-service-reports', digitalServiceReportRoutes);
 router.use('/feedback', feedbackRoutes);
+router.use('/dg-enquiries', dgEnquiriesRoutes);
+router.use('/dg-purchase-orders', dgPurchaseOrdersRoutes);
+router.use('/proforma-invoices', proformaInvoicesRoutes);
+router.use('/dg-invoices', dgInvoicesRoutes);
+router.use('/dg-payments', dgPaymentsRoutes);
+router.use('/oems', oemsRoutes);
+router.use('/oem-orders', oemOrdersRoutes);
+router.use('/dg-reports', dgReportsRoutes);
+router.use('/dg-quotations', dgQuotationsRoutes);
 
 export default router;
