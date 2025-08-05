@@ -305,7 +305,6 @@ const QuotationFormPage: React.FC = () => {
                     taxRate: item.taxRate || 0,
                     discount: item.discount || 0,
                     partNo: item.partNo || '',
-                    hsnCode: item.hsnCode || '',
                     hsnNumber: item.hsnNumber || '',
                     uom: item.uom || 'nos',
                     discountedAmount: item.discountedAmount || 0,
@@ -1357,7 +1356,6 @@ const QuotationFormPage: React.FC = () => {
                     taxRate: 0,
                     discount: 0,
                     partNo: '',
-                    hsnCode: '',
                     hsnNumber: '',
                     uom: 'nos',
                     discountedAmount: 0,
@@ -1383,7 +1381,6 @@ const QuotationFormPage: React.FC = () => {
                     taxRate: 0,
                     discount: 0,
                     partNo: '',
-                    hsnCode: '',
                     hsnNumber: '',
                     uom: 'nos',
                     discountedAmount: 0,
@@ -2555,7 +2552,6 @@ const QuotationFormPage: React.FC = () => {
                                                 data-field="hsnNumber"
                                                 className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
                                                 placeholder="HSN"
-                                                disabled={true}
                                             />
                                         </div>
 

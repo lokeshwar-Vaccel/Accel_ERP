@@ -352,6 +352,51 @@ class ApiClient {
       }),
   };
 
+  // DG Invoice APIs
+  dgInvoices = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { invoices: any[]; pagination: any } }>(`/dg-invoices${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: { invoice: any } }>(`/dg-invoices/${id}`),
+
+    create: (invoiceData: any) =>
+      this.makeRequest<{ success: boolean; data: { invoice: any }; message: string }>('/dg-invoices', {
+        method: 'POST',
+        body: JSON.stringify(invoiceData),
+      }),
+
+    update: (id: string, data: any) =>
+      this.makeRequest<{ success: boolean; data: { invoice: any }; message: string }>(`/dg-invoices/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/dg-invoices/${id}`, {
+        method: 'DELETE',
+      }),
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/dg-invoices/stats'),
+
+    priceUpdate: (id: string, data: any) =>
+      this.makeRequest<{ success: boolean; data: { invoice: any }; message: string }>(`/dg-invoices/${id}/products`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+
+    sendEmail: (id: string) =>
+      this.makeRequest<{ success: boolean; data: { paymentLink: string }; message: string }>(`/dg-invoices/${id}/send-email`, {
+        method: 'POST',
+      }),
+
+    sendReminder: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/dg-invoices/${id}/send-reminder`, {
+        method: 'POST',
+      }),
+  };
+
   // Payment Management APIs
   payments = {
     createRazorpayOrder: (orderData: any) =>
@@ -1284,6 +1329,12 @@ class ApiClient {
           body: JSON.stringify(invoiceData),
         }),
 
+      updateItem: (invoiceId: string, itemIndex: number, itemData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/dg-invoices/${invoiceId}/items/${itemIndex}`, {
+          method: 'PUT',
+          body: JSON.stringify(itemData),
+        }),
+
       updatePaymentStatus: (id: string, paymentStatus: string, paidAmount?: number) =>
         this.makeRequest<{ success: boolean; data: any }>(`/dg-invoices/${id}/payment-status`, {
           method: 'PATCH',
@@ -1294,6 +1345,19 @@ class ApiClient {
         this.makeRequest<{ success: boolean; data: any }>(`/dg-invoices/${id}/delivery-status`, {
           method: 'PATCH',
           body: JSON.stringify({ deliveryStatus, ...dates }),
+        }),
+
+      getStats: () =>
+        this.makeRequest<{ success: boolean; data: any }>('/dg-invoices/stats'),
+
+      sendEmail: (id: string) =>
+        this.makeRequest<{ success: boolean; message: string; data: any }>(`/dg-invoices/${id}/send-email`, {
+          method: 'POST',
+        }),
+
+      sendReminder: (id: string) =>
+        this.makeRequest<{ success: boolean; message: string }>(`/dg-invoices/${id}/send-reminder`, {
+          method: 'POST',
         }),
 
       delete: (id: string) =>

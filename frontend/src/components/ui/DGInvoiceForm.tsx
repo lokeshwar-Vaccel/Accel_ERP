@@ -3,6 +3,8 @@ import { Modal } from './Modal';
 import { Input } from './Input';
 import { Select } from './Select';
 import { Button } from './Botton';
+import { apiClient } from '../../utils/api';
+import toast from 'react-hot-toast';
 
 interface DGInvoiceFormProps {
   isOpen: boolean;
@@ -167,33 +169,20 @@ const DGInvoiceForm: React.FC<DGInvoiceFormProps> = ({
     setLoading(true);
 
     try {
-      let endpoint = '/dg-invoices';
-      let method = 'POST';
-
       if (mode === 'from-po' && purchaseOrder) {
-        endpoint = `/dg-invoices/from-po/${purchaseOrder._id}`;
+        await apiClient.dgSales.invoices.createFromPO(purchaseOrder._id, formData);
       } else if (mode === 'edit' && initialData) {
-        endpoint = `/dg-invoices/${initialData._id}`;
-        method = 'PUT';
-      }
-
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1'}${endpoint}`, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
-        },
-        body: JSON.stringify(formData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to save DG invoice');
+        await apiClient.dgSales.invoices.update(initialData._id, formData);
+      } else {
+        await apiClient.dgSales.invoices.create(formData);
       }
 
       onSuccess();
       onClose();
+      toast.success(`DG Invoice ${mode === 'edit' ? 'updated' : 'created'} successfully!`);
     } catch (error) {
       console.error('Error saving DG Invoice:', error);
+      toast.error(`Failed to ${mode === 'edit' ? 'update' : 'create'} DG invoice. Please try again.`);
     } finally {
       setLoading(false);
     }

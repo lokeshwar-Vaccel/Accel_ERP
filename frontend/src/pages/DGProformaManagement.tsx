@@ -19,8 +19,10 @@ import {
   X,
   RefreshCw,
   Mail,
-  Printer
+  Printer,
+  IndianRupee
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { Button } from '../components/ui/Botton';
 import { Input } from '../components/ui/Input';
 import { Badge } from '../components/ui/Badge';
@@ -34,6 +36,7 @@ type ProformaStatus = 'draft' | 'sent' | 'approved' | 'used' | 'expired';
 type ProformaPurpose = 'loan' | 'finance' | 'advance' | 'other';
 
 interface ProformaItem {
+  productId?: string;
   description: string;
   specifications: string;
   kva: string;
@@ -43,6 +46,23 @@ interface ProformaItem {
   taxRate: number;
   taxAmount: number;
   totalPrice: number;
+}
+
+interface Product {
+  _id: string;
+  name: string;
+  description?: string;
+  category: string;
+  brand?: string;
+  modelNumber?: string;
+  specifications?: Record<string, any>;
+  price: number;
+  gst?: number;
+  productType1?: string;
+  productType2?: string;
+  productType3?: string;
+  partNo: string;
+  make?: string;
 }
 
 interface Customer {
@@ -180,6 +200,8 @@ const DGProformaManagement: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [purchaseOrders, setPurchaseOrders] = useState<DGPurchaseOrder[]>([]);
   const [quotations, setQuotations] = useState<DGQuotation[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [gensetProducts, setGensetProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -187,6 +209,11 @@ const DGProformaManagement: React.FC = () => {
   const [itemsPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Product search states
+  const [productSearchTerms, setProductSearchTerms] = useState<{ [key: number]: string }>({});
+  const [showProductDropdowns, setShowProductDropdowns] = useState<{ [key: number]: boolean }>({});
+  const [highlightedProductIndex, setHighlightedProductIndex] = useState<{ [key: number]: number }>({});
 
   // Modal States
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -221,10 +248,10 @@ const DGProformaManagement: React.FC = () => {
     advanceAmount: 0,
     balanceAmount: 0,
     customerAddress: {
-      address: '',
-      state: '',
-      district: '',
-      pincode: ''
+      address: 'Address will be filled when customer is selected',
+      state: 'State will be filled when customer is selected',
+      district: 'District will be filled when customer is selected',
+      pincode: '000000'
     },
     companyDetails: {
       name: 'Sun Power Solutions',
@@ -263,7 +290,8 @@ const DGProformaManagement: React.FC = () => {
       await Promise.all([
         fetchCustomers(),
         fetchPurchaseOrders(),
-        fetchQuotations()
+        fetchQuotations(),
+        fetchProducts()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -329,6 +357,43 @@ const DGProformaManagement: React.FC = () => {
     }
   };
 
+  const fetchProducts = async () => {
+    try {
+      const response = await apiClient.products.getAll({limit: 100});
+      let productsData: Product[] = [];
+      
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          productsData = response.data;
+        } else if ((response.data as any).products && Array.isArray((response.data as any).products)) {
+          productsData = (response.data as any).products;
+        }
+      }
+
+      console.log("productsData:",productsData);
+      
+      
+      setProducts(productsData);
+      
+      // Filter genset products
+      const gensetItems = productsData.filter(product => 
+        product.category === 'genset'
+        // product.productType1?.toLowerCase().includes('genset') ||
+        // product.productType2?.toLowerCase().includes('genset') ||
+        // product.productType3?.toLowerCase().includes('genset') ||
+        // product.name?.toLowerCase().includes('genset')
+      );
+
+      console.log("gensetItems:",gensetItems);
+      
+      setGensetProducts(gensetItems);
+    } catch (error) {
+      console.error('Error fetching products:', error);
+      setProducts([]);
+      setGensetProducts([]);
+    }
+  };
+
   // Form handling functions
   const handleCreateProforma = () => {
     setFormData({
@@ -339,6 +404,7 @@ const DGProformaManagement: React.FC = () => {
       dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       validUntil: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       items: [{
+        productId: '',
         description: '',
         specifications: '',
         kva: '',
@@ -355,10 +421,10 @@ const DGProformaManagement: React.FC = () => {
       advanceAmount: 0,
       balanceAmount: 0,
       customerAddress: {
-        address: '',
-        state: '',
-        district: '',
-        pincode: ''
+        address: 'Address will be filled when customer is selected',
+        state: 'State will be filled when customer is selected',
+        district: 'District will be filled when customer is selected',
+        pincode: '000000'
       },
       companyDetails: {
         name: 'Sun Power Solutions',
@@ -419,55 +485,121 @@ const DGProformaManagement: React.FC = () => {
 
   // Validation function
   const validateForm = (): boolean => {
+    console.log('🔍 Starting form validation...');
     const errors: FormErrors = {};
 
+    // Check customer
     if (!formData.customerId) {
+      console.log('❌ Customer validation failed');
       errors.customerId = 'Customer is required';
+    } else {
+      console.log('✅ Customer validation passed');
     }
 
+    // Check issue date
     if (!formData.issueDate) {
+      console.log('❌ Issue date validation failed');
       errors.issueDate = 'Issue date is required';
+    } else {
+      console.log('✅ Issue date validation passed');
     }
 
-    if (!formData.dueDate) {
-      errors.dueDate = 'Due date is required';
-    }
+    // Due date is optional for proforma invoice
+    // if (!formData.dueDate) {
+    //   errors.dueDate = 'Due date is required';
+    // }
 
+    // Check valid until date
     if (!formData.validUntil) {
+      console.log('❌ Valid until date validation failed');
       errors.validUntil = 'Valid until date is required';
+    } else {
+      console.log('✅ Valid until date validation passed');
     }
 
+    // Check purpose
     if (!formData.purpose) {
+      console.log('❌ Purpose validation failed');
       errors.purpose = 'Purpose is required';
+    } else {
+      console.log('✅ Purpose validation passed');
     }
 
-    if (!formData.customerAddress.address) {
-      errors.customerAddress = 'Customer address is required';
+    // Customer address validation - required by backend
+    const isPlaceholderAddress = formData.customerAddress.address.includes('will be filled when customer is selected');
+    const isPlaceholderState = formData.customerAddress.state.includes('will be filled when customer is selected');
+    const isPlaceholderDistrict = formData.customerAddress.district.includes('will be filled when customer is selected');
+    
+    if (!formData.customerAddress.address || formData.customerAddress.address.trim() === '' || isPlaceholderAddress) {
+      console.log('❌ Customer address validation failed');
+      errors.customerAddress = 'Please select a customer or enter valid address details';
+    }
+    if (!formData.customerAddress.state || formData.customerAddress.state.trim() === '' || isPlaceholderState) {
+      console.log('❌ Customer state validation failed');
+      errors.customerAddress = 'Please select a customer or enter valid address details';
+    }
+    if (!formData.customerAddress.district || formData.customerAddress.district.trim() === '' || isPlaceholderDistrict) {
+      console.log('❌ Customer district validation failed');
+      errors.customerAddress = 'Please select a customer or enter valid address details';
+    }
+    if (!formData.customerAddress.pincode || formData.customerAddress.pincode.trim() === '' || formData.customerAddress.pincode === '000000' || formData.customerAddress.pincode === '123456') {
+      console.log('❌ Customer pincode validation failed');
+      errors.customerAddress = 'Please select a customer or enter valid pincode';
+    }
+    if (!errors.customerAddress) {
+      console.log('✅ Customer address validation passed');
     }
 
-    if (!formData.companyDetails.name || !formData.companyDetails.address) {
-      errors.companyDetails = 'Company details are required';
+    // Company details should have defaults so this should not fail
+    if (!formData.companyDetails.name) {
+      console.log('❌ Company details validation failed');
+      errors.companyDetails = 'Company name is required';
+    } else {
+      console.log('✅ Company details validation passed');
     }
 
     // Validate items
+    console.log('🔍 Validating items:', formData.items);
     if (formData.items.length === 0) {
+      console.log('❌ Items validation failed - no items');
       errors.items = 'At least one item is required';
     } else {
+      let hasValidItem = false;
       formData.items.forEach((item, index) => {
-        if (!item.description) {
+        console.log(`🔍 Validating item ${index + 1}:`, item);
+        
+        if (!item.description || item.description.trim() === '') {
+          console.log(`❌ Item ${index + 1} description validation failed`);
           errors[`item_${index}_description`] = 'Item description is required';
         }
         if (item.quantity <= 0) {
+          console.log(`❌ Item ${index + 1} quantity validation failed:`, item.quantity);
           errors[`item_${index}_quantity`] = 'Quantity must be greater than 0';
         }
         if (item.unitPrice <= 0) {
+          console.log(`❌ Item ${index + 1} unit price validation failed:`, item.unitPrice);
           errors[`item_${index}_unitPrice`] = 'Unit price must be greater than 0';
         }
+        
+        if (!errors[`item_${index}_description`] && 
+            !errors[`item_${index}_quantity`] && 
+            !errors[`item_${index}_unitPrice`]) {
+          console.log(`✅ Item ${index + 1} validation passed`);
+          hasValidItem = true;
+        }
       });
+      
+      if (!hasValidItem && formData.items.length > 0) {
+        console.log('❌ No valid items found');
+        errors.items = 'At least one valid item with description, quantity > 0, and price > 0 is required';
+      }
     }
 
+    console.log('📋 Final validation errors:', errors);
     setFormErrors(errors);
-    return Object.keys(errors).length === 0;
+    const isValid = Object.keys(errors).length === 0;
+    console.log('🎯 Validation result:', isValid);
+    return isValid;
   };
 
   // Calculate totals
@@ -486,7 +618,288 @@ const DGProformaManagement: React.FC = () => {
     }));
   };
 
-  // Update item calculations
+  // Recalculate totals when items change (but avoid infinite loops)
+  useEffect(() => {
+    const subtotal = formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    const totalTax = formData.items.reduce((sum, item) => sum + item.taxAmount, 0);
+    const totalAmount = subtotal + totalTax;
+    const balanceAmount = totalAmount - formData.advanceAmount;
+
+    // Only update if values have actually changed
+    if (formData.subtotal !== subtotal || formData.totalTax !== totalTax || 
+        formData.totalAmount !== totalAmount || formData.balanceAmount !== balanceAmount) {
+      setFormData(prev => ({
+        ...prev,
+        subtotal,
+        totalTax,
+        totalAmount,
+        balanceAmount
+      }));
+    }
+  }, [formData.items, formData.advanceAmount]);
+
+  // Product search utilities
+  const updateProductSearchTerm = (index: number, term: string) => {
+    setProductSearchTerms(prev => ({ ...prev, [index]: term }));
+  };
+
+  const getFilteredProducts = (searchTerm: string) => {
+    if (!searchTerm.trim()) return gensetProducts;
+    
+    const term = searchTerm.toLowerCase();
+    return gensetProducts.filter(product =>
+      product.name?.toLowerCase().includes(term) ||
+      product.partNo?.toLowerCase().includes(term) ||
+      product.brand?.toLowerCase().includes(term) ||
+      product.modelNumber?.toLowerCase().includes(term) ||
+      product.category?.toLowerCase().includes(term)
+    );
+  };
+
+  const getProductName = (productId: string) => {
+    const product = gensetProducts.find(p => p._id === productId);
+    return product?.name || '';
+  };
+
+  const getProductPartNo = (productId: string) => {
+    const product = gensetProducts.find(p => p._id === productId);
+    return product?.partNo || '';
+  };
+
+  // Add new item
+  const addProformaItem = () => {
+    const newItem: ProformaItem = {
+      productId: '',
+      description: '',
+      specifications: '',
+      kva: '',
+      phase: '',
+      quantity: 1,
+      unitPrice: 0,
+      taxRate: 18,
+      taxAmount: 0,
+      totalPrice: 0
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      items: [...prev.items, newItem]
+    }));
+  };
+
+  // Remove item
+  const removeProformaItem = (index: number) => {
+    if (formData.items.length <= 1) return;
+    
+    setFormData(prev => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index)
+    }));
+  };
+
+  // Update item field
+  const updateProformaItem = (index: number, field: string, value: any) => {
+    const newItems = [...formData.items];
+    
+    if (field === 'product') {
+      const selectedProduct = gensetProducts.find(p => p._id === value);
+      if (selectedProduct) {
+        console.log('Auto-filling product:', selectedProduct);
+        
+        // Build comprehensive description with product details
+        let productDescription = selectedProduct.name;
+        if (selectedProduct.brand) {
+          productDescription += ` - ${selectedProduct.brand}`;
+        }
+        if (selectedProduct.modelNumber) {
+          productDescription += ` ${selectedProduct.modelNumber}`;
+        }
+        if (selectedProduct.make && selectedProduct.make !== selectedProduct.brand) {
+          productDescription += ` (${selectedProduct.make})`;
+        }
+
+        // Build detailed specifications
+        let detailedSpecs = selectedProduct.description || '';
+        if (selectedProduct.specifications) {
+          const specs = selectedProduct.specifications;
+          const specParts = [];
+          
+          if (specs.kva) specParts.push(`KVA: ${specs.kva}`);
+          if (specs.phase) specParts.push(`Phase: ${specs.phase}`);
+          if (specs.power) specParts.push(`Power: ${specs.power}`);
+          if (specs.voltage) specParts.push(`Voltage: ${specs.voltage}`);
+          if (specs.frequency) specParts.push(`Frequency: ${specs.frequency}`);
+          if (specs.fuelType) specParts.push(`Fuel: ${specs.fuelType}`);
+          if (specs.engineModel) specParts.push(`Engine: ${specs.engineModel}`);
+          if (specs.alternatorModel) specParts.push(`Alternator: ${specs.alternatorModel}`);
+          
+          if (specParts.length > 0) {
+            if (detailedSpecs) {
+              detailedSpecs += ' | ' + specParts.join(', ');
+            } else {
+              detailedSpecs = specParts.join(', ');
+            }
+          }
+        }
+
+        // Extract KVA and Phase with enhanced logic
+        let kvaValue = '';
+        let phaseValue = '';
+        
+        if (selectedProduct.specifications) {
+          kvaValue = selectedProduct.specifications.kva || 
+                    selectedProduct.specifications.rating || 
+                    selectedProduct.specifications.capacity || '';
+          phaseValue = selectedProduct.specifications.phase || 
+                      selectedProduct.specifications.phaseType || '';
+        }
+        
+        // Try to extract KVA from product name if not in specifications
+        if (!kvaValue && selectedProduct.name) {
+          const kvaMatch = selectedProduct.name.match(/(\d+)\s*kva/i);
+          if (kvaMatch) {
+            kvaValue = `${kvaMatch[1]} KVA`;
+          }
+        }
+        
+        // Set default phase if not specified
+        if (!phaseValue) {
+          // Try to detect from name or default to common genset configuration
+          if (selectedProduct.name?.toLowerCase().includes('single')) {
+            phaseValue = 'Single Phase';
+          } else if (selectedProduct.name?.toLowerCase().includes('three')) {
+            phaseValue = 'Three Phase';
+          } else {
+            phaseValue = 'Three Phase'; // Default for most gensets
+          }
+        }
+
+        // Auto-fill all relevant fields
+        newItems[index] = {
+          ...newItems[index],
+          productId: selectedProduct._id,
+          description: productDescription,
+          specifications: detailedSpecs,
+          unitPrice: selectedProduct.price || 0,
+          taxRate: selectedProduct.gst || 18,
+          kva: kvaValue,
+          phase: phaseValue
+        };
+
+        console.log('Auto-filled item data:', {
+          productName: selectedProduct.name,
+          description: productDescription,
+          specifications: detailedSpecs,
+          unitPrice: selectedProduct.price,
+          taxRate: selectedProduct.gst,
+          kva: kvaValue,
+          phase: phaseValue
+        });
+
+        // Show success toast notification
+        toast.success(`✅ Auto-filled: ${selectedProduct.name} - ₹${(selectedProduct.price || 0).toLocaleString()}`, {
+          duration: 3000,
+          position: 'top-right',
+          style: {
+            background: '#10B981',
+            color: 'white',
+          },
+        });
+      }
+    } else {
+      (newItems[index] as any)[field] = value;
+    }
+
+    // Recalculate for this item
+    const item = newItems[index];
+    item.taxAmount = (item.quantity * item.unitPrice * item.taxRate) / 100;
+    item.totalPrice = (item.quantity * item.unitPrice) + item.taxAmount;
+
+    setFormData(prev => ({ ...prev, items: newItems }));
+  };
+
+  // Keyboard navigation handlers
+  const handleProductKeyDown = (e: React.KeyboardEvent, index: number) => {
+    const filteredProducts = getFilteredProducts(productSearchTerms[index] || '');
+    const currentHighlighted = highlightedProductIndex[index] || -1;
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        const nextIndex = currentHighlighted < filteredProducts.length - 1 ? currentHighlighted + 1 : 0;
+        setHighlightedProductIndex(prev => ({ ...prev, [index]: nextIndex }));
+        break;
+
+      case 'ArrowUp':
+        e.preventDefault();
+        const prevIndex = currentHighlighted > 0 ? currentHighlighted - 1 : filteredProducts.length - 1;
+        setHighlightedProductIndex(prev => ({ ...prev, [index]: prevIndex }));
+        break;
+
+      case 'Enter':
+      case 'Tab':
+        e.preventDefault();
+        if (currentHighlighted >= 0 && filteredProducts[currentHighlighted]) {
+          updateProformaItem(index, 'product', filteredProducts[currentHighlighted]._id);
+          setShowProductDropdowns(prev => ({ ...prev, [index]: false }));
+          updateProductSearchTerm(index, '');
+          setHighlightedProductIndex(prev => ({ ...prev, [index]: -1 }));
+          
+          // Focus next field
+          setTimeout(() => {
+            const quantityInput = document.querySelector(`[data-row="${index}"][data-field="quantity"]`) as HTMLInputElement;
+            if (quantityInput) {
+              quantityInput.focus();
+              quantityInput.select();
+            }
+          }, 50);
+        }
+        break;
+
+      case 'Escape':
+        setShowProductDropdowns(prev => ({ ...prev, [index]: false }));
+        updateProductSearchTerm(index, '');
+        break;
+    }
+  };
+
+  const handleCellKeyDown = (e: React.KeyboardEvent, index: number, field: string) => {
+    switch (e.key) {
+      case 'Tab':
+        if (!e.shiftKey && field === 'totalPrice') {
+          e.preventDefault();
+          addProformaItem();
+          setTimeout(() => {
+            const nextProductInput = document.querySelector(`[data-row="${index + 1}"][data-field="product"]`) as HTMLInputElement;
+            if (nextProductInput) {
+              nextProductInput.focus();
+            }
+          }, 50);
+        }
+        break;
+
+      case 'Enter':
+        e.preventDefault();
+        if (field === 'totalPrice') {
+          addProformaItem();
+          setTimeout(() => {
+            const nextProductInput = document.querySelector(`[data-row="${index + 1}"][data-field="product"]`) as HTMLInputElement;
+            if (nextProductInput) {
+              nextProductInput.focus();
+            }
+          }, 50);
+        }
+        break;
+    }
+  };
+
+  // Handle product selection (Legacy function - now uses updateProformaItem)
+  const handleProductSelect = (index: number, productId: string) => {
+    console.log('handleProductSelect called for product:', productId);
+    updateProformaItem(index, 'product', productId);
+  };
+
+  // Update item calculations (kept for backward compatibility)
   const updateItemCalculations = (index: number) => {
     const newItems = [...formData.items];
     const item = newItems[index];
@@ -497,17 +910,29 @@ const DGProformaManagement: React.FC = () => {
       ...prev,
       items: newItems
     }));
-    
-    calculateTotals();
   };
 
   // Form submission
   const handleFormSubmit = async () => {
-    if (!validateForm()) {
+    console.log('🚀 Form submission started');
+    console.log('📋 Current form data:', formData);
+    
+    const isValid = validateForm();
+    console.log('✅ Validation result:', isValid);
+    console.log('❌ Form errors:', formErrors);
+    
+    if (!isValid) {
+      console.log('🛑 Form validation failed, stopping submission');
+      toast.error('Please fix the validation errors before submitting', {
+        duration: 4000,
+        position: 'top-right',
+      });
       return;
     }
 
     setSubmitting(true);
+    console.log('🔄 Starting API call...');
+    
     try {
       const submitData = {
         ...formData,
@@ -516,20 +941,32 @@ const DGProformaManagement: React.FC = () => {
         quotationId: formData.quotationId || undefined
       };
 
+      console.log('📤 Submitting data:', submitData);
+
       if (editingProforma) {
-        await apiClient.dgSales.proformaInvoices.update(editingProforma._id, submitData);
+        console.log('📝 Updating existing proforma:', editingProforma._id);
+        await (apiClient as any).dgSales.proformaInvoices.update(editingProforma._id, submitData);
+        toast.success('✅ Proforma invoice updated successfully!');
       } else {
-        await apiClient.dgSales.proformaInvoices.create(submitData);
+        console.log('🆕 Creating new proforma');
+        const response = await (apiClient as any).dgSales.proformaInvoices.create(submitData);
+        console.log('✅ Create response:', response);
+        toast.success('✅ Proforma invoice created successfully!');
       }
 
       setShowCreateModal(false);
       setShowEditModal(false);
       setEditingProforma(null);
       fetchProformaInvoices();
-    } catch (error) {
-      console.error('Error saving proforma invoice:', error);
+    } catch (error: any) {
+      console.error('💥 Error saving proforma invoice:', error);
+      toast.error(`❌ Error: ${error?.message || 'Failed to save proforma invoice'}`, {
+        duration: 5000,
+        position: 'top-right',
+      });
     } finally {
       setSubmitting(false);
+      console.log('✅ Form submission completed');
     }
   };
 
@@ -670,7 +1107,7 @@ const DGProformaManagement: React.FC = () => {
                   {formatCurrency(proformaInvoices.reduce((sum, pi) => sum + pi.totalAmount, 0))}
                 </p>
               </div>
-              <DollarSign className="w-8 h-8 text-green-600" />
+              <IndianRupee className="w-8 h-8 text-green-600" />
             </div>
           </Card>
           <Card className="p-4">
@@ -749,7 +1186,7 @@ const DGProformaManagement: React.FC = () => {
                 >
                   <Eye className="h-4 w-4" />
                 </Button>
-                {pi.status === 'draft' && (
+                {/* {pi.status === 'draft' && (
                   <Button
                     size="sm"
                     variant="outline"
@@ -757,7 +1194,7 @@ const DGProformaManagement: React.FC = () => {
                   >
                     <Edit className="h-4 w-4" />
                   </Button>
-                )}
+                )} */}
                 {pi.status === 'draft' && (
                   <Button
                     size="sm"
@@ -802,7 +1239,7 @@ const DGProformaManagement: React.FC = () => {
           size="xl"
         >
           <div className="">
-            {/* <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">
                   {showCreateModal ? 'Create Proforma Invoice' : 'Edit Proforma Invoice'}
@@ -821,7 +1258,7 @@ const DGProformaManagement: React.FC = () => {
               >
                 <X className="w-6 h-6" />
               </button>
-            </div> */}
+            </div>
 
             <div className="space-y-6 max-h-[70vh] overflow-y-auto">
               {/* Basic Information */}
@@ -836,16 +1273,53 @@ const DGProformaManagement: React.FC = () => {
                       value={formData.customerId}
                       onChange={(e) => {
                         const customer = customers.find(c => c._id === e.target.value);
-                        setFormData(prev => ({
-                          ...prev,
-                          customerId: e.target.value,
-                          customerAddress: customer ? {
-                            address: customer.address || '',
-                            state: customer.district || '',
-                            district: customer.district || '',
-                            pincode: customer.pinCode || ''
-                          } : prev.customerAddress
-                        }));
+                        console.log('Selected customer:', customer);
+                        
+                        if (customer) {
+                          // Build comprehensive customer address with fallbacks
+                          const customerAddress = {
+                            address: customer.address || customer.corporateName || `${customer.name} Office Address`,
+                            state: customer.district || customer.tehsil || 'Unknown State', 
+                            district: customer.district || customer.tehsil || 'Unknown District',
+                            pincode: customer.pinCode || '123456' // Use a valid-looking default
+                          };
+                          
+                          console.log('Setting customer address:', customerAddress);
+                          
+                          setFormData(prev => ({
+                            ...prev,
+                            customerId: e.target.value,
+                            customerAddress: customerAddress
+                          }));
+                          
+                          // Show appropriate toast based on address quality
+                          if (customer.address && customer.pinCode) {
+                            toast.success(`✅ Customer & Address auto-filled: ${customer.name}`, {
+                              duration: 2000,
+                              position: 'top-right',
+                            });
+                          } else {
+                            toast(`⚠️ Customer selected: ${customer.name}. Please verify address details.`, {
+                              duration: 3000,
+                              position: 'top-right',
+                              style: {
+                                background: '#F59E0B',
+                                color: 'white',
+                              },
+                            });
+                          }
+                        } else {
+                          setFormData(prev => ({
+                            ...prev,
+                            customerId: e.target.value,
+                            customerAddress: {
+                              address: 'Please enter customer address',
+                              state: 'Please enter state',
+                              district: 'Please enter district',
+                              pincode: '123456'
+                            }
+                          }));
+                        }
                       }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.customerId ? 'border-red-500' : 'border-gray-300'}`}
                     >
@@ -972,29 +1446,97 @@ const DGProformaManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Items */}
+              {/* Customer Address Section */}
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Items</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">Customer Address <span className="text-red-500">*</span></h3>
+                  <div className="text-xs text-blue-600 bg-blue-50 px-2 py-1 rounded">
+                    💡 Auto-filled when customer is selected
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Address <span className="text-red-500">*</span>
+                    </label>
+                    <textarea
+                      value={formData.customerAddress.address}
+                      onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        customerAddress: { ...prev.customerAddress, address: e.target.value }
+                      }))}
+                      rows={3}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.customerAddress ? 'border-red-500' : 'border-gray-300'}`}
+                      placeholder="Enter customer address"
+                    />
+                    {formErrors.customerAddress && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.customerAddress}</p>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        State <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.customerAddress.state}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          customerAddress: { ...prev.customerAddress, state: e.target.value }
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter state"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        District <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.customerAddress.district}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          customerAddress: { ...prev.customerAddress, district: e.target.value }
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter district"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Pin Code <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.customerAddress.pincode}
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          customerAddress: { ...prev.customerAddress, pincode: e.target.value }
+                        }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter pin code"
+                        maxLength={6}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">Proforma Items</h3>
                   <Button
-                    onClick={() => setFormData(prev => ({ 
-                      ...prev, 
-                      items: [...prev.items, {
-                        description: '',
-                        specifications: '',
-                        kva: '',
-                        phase: '',
-                        quantity: 1,
-                        unitPrice: 0,
-                        taxRate: 18,
-                        taxAmount: 0,
-                        totalPrice: 0
-                      }]
-                    }))}
-                    className="bg-blue-600 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:bg-blue-700 transition-colors"
+                    onClick={addProformaItem}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-2"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>Add Item</span>
+                    <span>Add Row</span>
                   </Button>
                 </div>
 
@@ -1004,179 +1546,401 @@ const DGProformaManagement: React.FC = () => {
                   </div>
                 )}
 
-                <div className="space-y-4">
+                {/* Desktop Table View */}
+                <div className="hidden lg:block border border-gray-300 rounded-lg bg-white shadow-sm overflow-x-auto">
+                  {/* Table Header */}
+                  <div className="bg-gray-100 border-b border-gray-300 min-w-[1000px]">
+                    <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                         style={{ gridTemplateColumns: '60px 150px 1fr 100px 80px 100px 80px 100px 60px' }}>
+                      <div className="p-3 border-r border-gray-300 text-center bg-gray-200">S.No</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Product Code</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Product Name</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">GST(%)</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Tax Amount</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Total</div>
+                      <div className="p-3 text-center bg-gray-200 font-medium"></div>
+                    </div>
+                  </div>
+
+                  {/* Table Body */}
+                  <div className="divide-y divide-gray-200 min-w-[1000px]">
+                    {formData.items.map((item, index) => {
+                      const rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+
+                      return (
+                        <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${rowBg}`}
+                             style={{ gridTemplateColumns: '60px 150px 1fr 100px 80px 100px 80px 100px 60px' }}>
+                          
+                          {/* S.No */}
+                          <div className="p-2 border-r border-gray-200 text-center text-sm font-medium text-gray-600 flex items-center justify-center">
+                            {index + 1}
+                          </div>
+
+                          {/* Product Code with Enhanced Search */}
+                          <div className="p-1 border-r border-gray-200 relative">
+                            <input
+                              type="text"
+                              value={productSearchTerms[index] || getProductPartNo(item.productId || '')}
+                              onChange={(e) => {
+                                updateProductSearchTerm(index, e.target.value);
+                                setShowProductDropdowns({
+                                  ...showProductDropdowns,
+                                  [index]: true
+                                });
+                                setHighlightedProductIndex({
+                                  ...highlightedProductIndex,
+                                  [index]: -1
+                                });
+                              }}
+                              onFocus={() => {
+                                if (!productSearchTerms[index] && !item.productId) {
+                                  updateProductSearchTerm(index, '');
+                                }
+                                setShowProductDropdowns({
+                                  ...showProductDropdowns,
+                                  [index]: true
+                                });
+                              }}
+                              onBlur={() => {
+                                setTimeout(() => {
+                                  setShowProductDropdowns({
+                                    ...showProductDropdowns,
+                                    [index]: false
+                                  });
+                                }, 200);
+                              }}
+                              onKeyDown={(e) => handleProductKeyDown(e, index)}
+                              data-row={index}
+                              data-field="product"
+                              className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                              placeholder="Type to search..."
+                              autoComplete="off"
+                            />
+                            {showProductDropdowns[index] && (
+                              <div
+                                className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-[400px] overflow-hidden"
+                                style={{ width: '450px', minWidth: '450px' }}
+                              >
+                                <div className="p-2 border-b border-gray-200 bg-gray-50">
+                                  <div className="text-xs text-gray-600">
+                                    {getFilteredProducts(productSearchTerms[index] || '').length} products found
+                                    {productSearchTerms[index] && (
+                                      <span className="ml-2 text-blue-600 font-medium">
+                                        for "{productSearchTerms[index]}"
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                <div className="overflow-y-auto max-h-96">
+                                  {getFilteredProducts(productSearchTerms[index] || '').length === 0 ? (
+                                    <div className="px-3 py-4 text-center text-sm text-gray-500">
+                                      <div>No genset products found</div>
+                                      <div className="text-xs mt-1">Try different search terms</div>
+                                    </div>
+                                  ) : (
+                                    getFilteredProducts(productSearchTerms[index] || '').map((product, productIndex) => (
+                                      <button
+                                        key={product._id}
+                                        onMouseDown={(e) => {
+                                          e.preventDefault();
+                                          updateProformaItem(index, 'product', product._id);
+                                          setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
+                                          updateProductSearchTerm(index, '');
+                                          setHighlightedProductIndex({ ...highlightedProductIndex, [index]: -1 });
+                                          setTimeout(() => {
+                                            const quantityInput = document.querySelector(`[data-row="${index}"][data-field="quantity"]`) as HTMLInputElement;
+                                            if (quantityInput) {
+                                              quantityInput.focus();
+                                              quantityInput.select();
+                                            }
+                                          }, 50);
+                                        }}
+                                        className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${
+                                          item.productId === product._id ? 'bg-blue-100 text-blue-800' :
+                                          highlightedProductIndex[index] === productIndex ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                          'text-gray-700'
+                                        }`}
+                                      >
+                                        <div className="flex justify-between items-start">
+                                          <div className="flex-1 min-w-0 pr-4">
+                                            <div className="font-medium text-gray-900 mb-1 flex items-center">
+                                              <div><span className="font-medium">Part No:</span> {product?.partNo}</div>
+                                              {highlightedProductIndex[index] === productIndex && (
+                                                <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded">
+                                                  Selected - Press Enter
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="text-xs text-gray-600 space-y-0.5">
+                                              <div><span className="font-medium">Name:</span> {product?.name || 'N/A'}</div>
+                                              <div>
+                                                <span className="font-medium">Brand:</span> {product?.brand || 'N/A'} •
+                                                <span className="font-medium"> Category:</span> {product?.category || 'N/A'}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          <div className="text-right flex-shrink-0 ml-4">
+                                            <div className="font-bold text-lg text-green-600">₹{product?.price?.toLocaleString() || '0'}</div>
+                                            <div className="text-xs text-gray-500 mt-0.5">per unit</div>
+                                          </div>
+                                        </div>
+                                      </button>
+                                    ))
+                                  )}
+                                </div>
+
+                                <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-t border-gray-200">
+                                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Tab/Enter</kbd> Select •
+                                  <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Product Name */}
+                          <div className="p-1 border-r border-gray-200">
+                            <input
+                              type="text"
+                              value={item.productId ? getProductName(item.productId) : (item.description || '')}
+                              onChange={(e) => updateProformaItem(index, 'description', e.target.value)}
+                              onKeyDown={(e) => handleCellKeyDown(e, index, 'description')}
+                              data-row={index}
+                              data-field="description"
+                              className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                              placeholder="Product Name"
+                            />
+                          </div>
+
+                          {/* Quantity */}
+                          <div className="p-1 border-r border-gray-200">
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              value={item.quantity}
+                              onChange={(e) => updateProformaItem(index, 'quantity', parseInt(e.target.value) || 1)}
+                              onKeyDown={(e) => handleCellKeyDown(e, index, 'quantity')}
+                              data-row={index}
+                              data-field="quantity"
+                              className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                              placeholder="1"
+                            />
+                          </div>
+
+                          {/* GST */}
+                          <div className="p-1 border-r border-gray-200">
+                            <input
+                              type="number"
+                              min="0"
+                              max="100"
+                              step="0.01"
+                              value={item.taxRate || 0}
+                              onChange={(e) => updateProformaItem(index, 'taxRate', parseFloat(e.target.value) || 0)}
+                              onKeyDown={(e) => handleCellKeyDown(e, index, 'taxRate')}
+                              data-row={index}
+                              data-field="taxRate"
+                              className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                              placeholder="18"
+                            />
+                          </div>
+
+                          {/* Unit Price */}
+                          <div className="p-1 border-r border-gray-200">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unitPrice.toFixed(2)}
+                              onChange={(e) => updateProformaItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                              onKeyDown={(e) => handleCellKeyDown(e, index, 'unitPrice')}
+                              data-row={index}
+                              data-field="unitPrice"
+                              className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                              placeholder="0.00"
+                            />
+                          </div>
+
+                          {/* Tax Amount */}
+                          <div className="p-1 border-r border-gray-200">
+                            <div className="p-2 text-sm text-right text-gray-600">
+                              ₹{item.taxAmount?.toFixed(2) || '0.00'}
+                            </div>
+                          </div>
+
+                          {/* Total */}
+                          <div className="p-1 border-r border-gray-200">
+                            <div 
+                              className="p-2 text-sm text-right font-bold text-blue-600"
+                              data-row={index}
+                              data-field="totalPrice"
+                              tabIndex={0}
+                              onKeyDown={(e) => handleCellKeyDown(e, index, 'totalPrice')}
+                            >
+                              ₹{item.totalPrice?.toFixed(2) || '0.00'}
+                            </div>
+                          </div>
+
+                          {/* Remove Button */}
+                          <div className="p-0 h-full">
+                            <button
+                              onClick={() => removeProformaItem(index)}
+                              className="w-full h-full text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors flex items-center justify-center border-0 hover:bg-red-100 bg-transparent"
+                              title="Remove this item"
+                              disabled={formData.items.length <= 1}
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Navigation Hints */}
+                  <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1000px]">
+                    <div className="text-sm text-gray-600 mb-1 mt-20">
+                      <strong>🚀 Excel-Like Proforma Items:</strong> Search → Select → Set Quantity → Tab → Next Row
+                    </div>
+                    <div className="text-xs text-gray-500  mb-10">
+                      <kbd className="px-1 py-0.5 bg-gray-200 rounded">Type</kbd> Search Product →
+                      <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">↑↓</kbd> Navigate →
+                      <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Enter</kbd> Select →
+                      <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Tab</kbd> Next Field →
+                      <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Enter on Total</kbd> Add Row
+                    </div>
+                  </div>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="lg:hidden space-y-4">
                   {formData.items.map((item, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-medium">Item {index + 1}</h4>
+                    <div key={index} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex justify-between items-start mb-3">
+                        <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">
+                          #{index + 1}
+                        </span>
                         <button
-                          onClick={() => setFormData(prev => ({ 
-                            ...prev, 
-                            items: prev.items.filter((_, i) => i !== index)
-                          }))}
-                          className="text-red-600 hover:text-red-800"
+                          onClick={() => removeProformaItem(index)}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded"
+                          title="Remove this item"
+                          disabled={formData.items.length <= 1}
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <X className="w-4 h-4" />
                         </button>
                       </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                      <div className="space-y-3">
+                        {/* Product Selection */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Description <span className="text-red-500">*</span>
-                          </label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={productSearchTerms[index] || getProductPartNo(item.productId || '')}
+                              onChange={(e) => {
+                                updateProductSearchTerm(index, e.target.value);
+                                setShowProductDropdowns({
+                                  ...showProductDropdowns,
+                                  [index]: true
+                                });
+                              }}
+                              onFocus={() => {
+                                setShowProductDropdowns({
+                                  ...showProductDropdowns,
+                                  [index]: true
+                                });
+                              }}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Search genset product..."
+                              autoComplete="off"
+                            />
+                            {showProductDropdowns[index] && (
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                                {getFilteredProducts(productSearchTerms[index] || '').map((product) => (
+                                  <button
+                                    key={product._id}
+                                    onMouseDown={(e) => {
+                                      e.preventDefault();
+                                      updateProformaItem(index, 'product', product._id);
+                                      setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
+                                      updateProductSearchTerm(index, '');
+                                    }}
+                                    className="w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0"
+                                  >
+                                    <div className="font-medium">{product.name}</div>
+                                    <div className="text-xs text-gray-500">
+                                      {product.partNo} • ₹{product.price?.toLocaleString()}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Description */}
+                        <div>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Description</label>
                           <input
                             type="text"
                             value={item.description}
-                            onChange={(e) => {
-                              const newItems = [...formData.items];
-                              newItems[index].description = e.target.value;
-                              setFormData(prev => ({ ...prev, items: newItems }));
-                            }}
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors[`item_${index}_description`] ? 'border-red-500' : 'border-gray-300'}`}
+                            onChange={(e) => updateProformaItem(index, 'description', e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             placeholder="Item description"
                           />
-                          {formErrors[`item_${index}_description`] && (
-                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_description`]}</p>
-                          )}
                         </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Specifications
-                          </label>
-                          <input
-                            type="text"
-                            value={item.specifications}
-                            onChange={(e) => {
-                              const newItems = [...formData.items];
-                              newItems[index].specifications = e.target.value;
-                              setFormData(prev => ({ ...prev, items: newItems }));
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Technical specifications"
-                          />
+                        {/* Quantity and Unit Price */}
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => updateProformaItem(index, 'quantity', parseInt(e.target.value) || 1)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="1"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">Unit Price</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={item.unitPrice.toFixed(2)}
+                              onChange={(e) => updateProformaItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="0.00"
+                            />
+                          </div>
                         </div>
 
+                        {/* Tax Rate */}
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            KVA Rating
-                          </label>
-                          <input
-                            type="text"
-                            value={item.kva}
-                            onChange={(e) => {
-                              const newItems = [...formData.items];
-                              newItems[index].kva = e.target.value;
-                              setFormData(prev => ({ ...prev, items: newItems }));
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="e.g., 10 KVA"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Phase
-                          </label>
-                          <select
-                            value={item.phase}
-                            onChange={(e) => {
-                              const newItems = [...formData.items];
-                              newItems[index].phase = e.target.value;
-                              setFormData(prev => ({ ...prev, items: newItems }));
-                            }}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          >
-                            <option value="">Select phase...</option>
-                            <option value="Single Phase">Single Phase</option>
-                            <option value="Three Phase">Three Phase</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Quantity <span className="text-red-500">*</span>
-                          </label>
+                          <label className="block text-xs font-medium text-gray-700 mb-1">Tax Rate (%)</label>
                           <input
                             type="number"
-                            value={item.quantity}
-                            onChange={(e) => {
-                              const newItems = [...formData.items];
-                              newItems[index].quantity = parseInt(e.target.value) || 1;
-                              setFormData(prev => ({ ...prev, items: newItems }));
-                              updateItemCalculations(index);
-                            }}
-                            min="1"
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors[`item_${index}_quantity`] ? 'border-red-500' : 'border-gray-300'}`}
-                          />
-                          {formErrors[`item_${index}_quantity`] && (
-                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_quantity`]}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Unit Price <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="number"
-                            value={item.unitPrice}
-                            onChange={(e) => {
-                              const newItems = [...formData.items];
-                              newItems[index].unitPrice = parseFloat(e.target.value) || 0;
-                              setFormData(prev => ({ ...prev, items: newItems }));
-                              updateItemCalculations(index);
-                            }}
-                            min="0"
-                            step="0.01"
-                            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors[`item_${index}_unitPrice`] ? 'border-red-500' : 'border-gray-300'}`}
-                          />
-                          {formErrors[`item_${index}_unitPrice`] && (
-                            <p className="text-red-500 text-xs mt-1">{formErrors[`item_${index}_unitPrice`]}</p>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Tax Rate (%)
-                          </label>
-                          <input
-                            type="number"
-                            value={item.taxRate}
-                            onChange={(e) => {
-                              const newItems = [...formData.items];
-                              newItems[index].taxRate = parseFloat(e.target.value) || 0;
-                              setFormData(prev => ({ ...prev, items: newItems }));
-                              updateItemCalculations(index);
-                            }}
                             min="0"
                             max="100"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            value={item.taxRate}
+                            onChange={(e) => updateProformaItem(index, 'taxRate', parseFloat(e.target.value) || 0)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="18"
                           />
                         </div>
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Tax Amount
-                          </label>
-                          <input
-                            type="number"
-                            value={item.taxAmount.toFixed(2)}
-                            disabled
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Total Price
-                          </label>
-                          <input
-                            type="number"
-                            value={item.totalPrice.toFixed(2)}
-                            disabled
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100"
-                          />
+                        {/* Total */}
+                        <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                          <span className="text-sm font-medium text-gray-700">Total:</span>
+                          <span className="text-lg font-bold text-blue-600">
+                            ₹{item.totalPrice?.toFixed(2) || '0.00'}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -1215,7 +1979,8 @@ const DGProformaManagement: React.FC = () => {
                       }}
                       min="0"
                       step="0.01"
-                      className="w-full text-lg font-bold text-blue-900 border-none focus:ring-0"
+                      className="w-full text-lg font-bold text-blue-900 bg-transparent border border-blue-200 rounded px-2 py-1 focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="0.00"
                     />
                   </div>
                   <div className="bg-white p-3 rounded-lg border border-blue-200">

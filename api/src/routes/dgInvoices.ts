@@ -1,68 +1,44 @@
 import { Router } from 'express';
-import { protect, restrictTo, checkPermission } from '../middleware/auth';
-import { UserRole } from '../types';
-import {
-  createDGInvoice,
-  getDGInvoices,
+import { protect, checkPermission, checkModuleAccess } from '../middleware/auth';
+import { 
+  getDGInvoices, 
   getDGInvoice,
+  createDGInvoice, 
   updateDGInvoice,
-  updatePaymentStatus,
-  updateDeliveryStatus,
-  createDGInvoiceFromPO,
-  deleteDGInvoice
+  deleteDGInvoice,
+  getDGInvoiceStats, 
+  updateDGInvoiceProductPriceAndGST,
+  sendDGInvoiceEmail,
+  sendDGPaymentReminder
 } from '../controllers/dgInvoiceController';
 
 const router = Router();
 
-// All routes are protected
+// All routes are protected and require DG invoice management access
 router.use(protect);
+// router.use(checkModuleAccess('dgSales'));
 
-// @route   GET /api/v1/dg-invoices
-router.get('/', getDGInvoices);
+// DG Invoice routes
+router.route('/')
+  .get(checkPermission('read'), getDGInvoices)
+  .post(checkPermission('write'), createDGInvoice);
 
-// @route   POST /api/v1/dg-invoices
-router.post('/', 
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
+router.route('/stats')
+  .get(checkPermission('read'), getDGInvoiceStats);
+
+router.route('/:id')
+  .get(checkPermission('read'), getDGInvoice)
+  .put(checkPermission('write'), updateDGInvoice)
+  .delete(checkPermission('delete'), deleteDGInvoice);
+
+router.put(
+  '/:invoiceId/products',
   checkPermission('write'),
-  createDGInvoice
+  updateDGInvoiceProductPriceAndGST
 );
 
-// @route   POST /api/v1/dg-invoices/from-po/:poId
-router.post('/from-po/:poId',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
-  checkPermission('write'),
-  createDGInvoiceFromPO
-);
-
-// @route   GET /api/v1/dg-invoices/:id
-router.get('/:id', getDGInvoice);
-
-// @route   PUT /api/v1/dg-invoices/:id
-router.put('/:id',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
-  checkPermission('write'),
-  updateDGInvoice
-);
-
-// @route   PATCH /api/v1/dg-invoices/:id/payment-status
-router.patch('/:id/payment-status',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
-  checkPermission('write'),
-  updatePaymentStatus
-);
-
-// @route   PATCH /api/v1/dg-invoices/:id/delivery-status
-router.patch('/:id/delivery-status',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
-  checkPermission('write'),
-  updateDeliveryStatus
-);
-
-// @route   DELETE /api/v1/dg-invoices/:id
-router.delete('/:id',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN),
-  checkPermission('write'),
-  deleteDGInvoice
-);
+// Email routes
+router.post('/:id/send-email', checkPermission('write'), sendDGInvoiceEmail);
+router.post('/:id/send-reminder', checkPermission('write'), sendDGPaymentReminder);
 
 export default router; 

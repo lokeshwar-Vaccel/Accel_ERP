@@ -74,7 +74,13 @@ const QuotationSchema = new Schema<IQuotation>({
   invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
   issueDate: { type: Date, },
   validUntil: { type: Date, },
-  customer: { type: Schema.Types.ObjectId, ref: 'Customer' },
+  customer: {
+    _id: { type: String }, // Customer ID for reference
+    name: { type: String, required: true },
+    email: { type: String, required: true },
+    phone: { type: String, required: true },
+    pan: { type: String }
+  },
 
   company: {
     name: { type: String, },

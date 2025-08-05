@@ -71,11 +71,11 @@ interface StockLocationData {
   isActive: boolean;
 }
 
-const InvoiceFormPage: React.FC = () => {
+const DGInvoiceFormPage: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
-  const currentUser = useSelector((state: RootState) => state.auth.user);
+//   const currentUser = useSelector((state: RootState) => state.auth.user);
 
   // Determine if this is edit mode
   const isEditMode = Boolean(id);
@@ -203,7 +203,50 @@ const InvoiceFormPage: React.FC = () => {
   // Initialize data
   useEffect(() => {
     fetchAllData();
+    // Load existing DG invoice data if in edit mode
+    if (isEditMode && id) {
+      fetchDGInvoiceData(id);
+    }
   }, []);
+
+  // Function to fetch existing DG invoice data for edit mode
+  const fetchDGInvoiceData = async (invoiceId: string) => {
+    try {
+      const response = await apiClient.dgInvoices.getById(invoiceId);
+      if (response.success && response.data.invoice) {
+        const invoice = response.data.invoice;
+        
+        // Convert invoice data back to form format
+        setFormData(prev => ({
+          ...prev,
+          customer: invoice.customer,
+          location: invoice.location,
+          notes: invoice.notes || '',
+          terms: invoice.terms || '',
+          items: invoice.items || [],
+          billToAddress: invoice.billToAddress,
+          shipToAddress: invoice.shipToAddress,
+          assignedEngineer: invoice.assignedEngineer,
+          overallDiscount: invoice.overallDiscount || 0,
+          overallDiscountAmount: invoice.overallDiscountAmount || 0,
+          validUntil: invoice.dueDate ? new Date(invoice.dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          subtotal: invoice.subtotal || 0,
+          totalTax: invoice.taxAmount || 0,
+          grandTotal: invoice.totalAmount || 0
+        }));
+
+        // Load customer addresses if customer exists
+        if (invoice.customer?._id) {
+          loadCustomerAddresses(invoice.customer._id);
+        }
+
+        console.log('Loaded DG invoice data for edit:', invoice);
+      }
+    } catch (error) {
+      console.error('Error fetching DG invoice data:', error);
+      toast.error('Failed to load DG invoice data');
+    }
+  };
 
   // Auto-focus location field when form loads (Excel-like behavior)
   useEffect(() => {
@@ -238,7 +281,7 @@ const InvoiceFormPage: React.FC = () => {
     }
   }, [loading]);
 
-    // Handle quotation data initialization
+  // Handle quotation data initialization
   useEffect(() => {
     if (quotationData && !loading) {
       console.log('InvoiceForm: Received quotation data:', quotationData);
@@ -1015,7 +1058,7 @@ const InvoiceFormPage: React.FC = () => {
       // Sanitize data before sending - converting to invoice format
       const sanitizedData = sanitizeQuotationData(submissionData);
 
-      // Convert to invoice format with proper invoice type
+      // Convert to DG invoice format with proper invoice type
       const invoiceData = {
         customer: sanitizedData.customer?._id || '',
         dueDate: sanitizedData.validUntil ? new Date(sanitizedData.validUntil).toISOString() : new Date().toISOString(),
@@ -1031,28 +1074,34 @@ const InvoiceFormPage: React.FC = () => {
           discount: Number(item.discount || 0),
           uom: item.uom || 'nos',
           partNo: item.partNo || '',
-          hsnNumber: item.hsnNumber || item.hsnSac
+          hsnNumber: item.hsnNumber || ''
         })),
         billToAddress: sanitizedData.billToAddress,
         shipToAddress: sanitizedData.shipToAddress,
+        // DG specific fields
+        supplierName: sanitizedData.supplierName || '',
+        supplierEmail: sanitizedData.supplierEmail || '',
+        supplierAddress: sanitizedData.supplierAddress,
+        poNumber: sanitizedData.poNumber || '',
+        dgSalesEnquiry: sanitizedData.dgSalesEnquiry,
         ...(sanitizedData.assignedEngineer && sanitizedData.assignedEngineer.trim() !== '' && { assignedEngineer: sanitizedData.assignedEngineer }),
         overallDiscount: sanitizedData.overallDiscount || 0,
         overallDiscountAmount: sanitizedData.overallDiscountAmount || 0,
         reduceStock: reduceStock
       };
 
-      console.log('Submitting invoice data:', invoiceData);
+      console.log('Submitting DG invoice data:', invoiceData);
       console.log('Overall discount amount being sent:', invoiceData.overallDiscountAmount);
 
       if (isEditMode) {
-        await apiClient.invoices.update(id!, invoiceData);
+        await apiClient.dgInvoices.update(id!, invoiceData);
         toast.success(`${getInvoiceTypeTitle()} updated successfully!`);
       } else {
-        await apiClient.invoices.create(invoiceData);
+        await apiClient.dgInvoices.create(invoiceData);
         toast.success(`${getInvoiceTypeTitle()} created successfully!`);
       }
 
-      navigate('/billing');
+      navigate('/dg-sales');
     } catch (error) {
       console.error(`Error saving ${getInvoiceTypeTitle().toLowerCase()}:`, error);
       toast.error(`Failed to ${isEditMode ? 'update' : 'create'} ${getInvoiceTypeTitle().toLowerCase()}. Please try again.`);
@@ -1684,69 +1733,20 @@ const InvoiceFormPage: React.FC = () => {
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader
-        title={isEditMode ? `Edit ${getInvoiceTypeTitle()}` : `Create ${getInvoiceTypeTitle()}`}
-        subtitle={isEditMode ? `Modify ${getInvoiceTypeTitle().toLowerCase()} details` : `Create a new ${getInvoiceTypeTitle().toLowerCase()}`}
+        title={isEditMode ? `Edit ${getInvoiceTypeTitle()}` : `Create DG Invoice`}
+        subtitle={isEditMode ? `Modify ${getInvoiceTypeTitle().toLowerCase()} details` : `Create a new DG Invoice`}
       >
         <div className="flex space-x-3">
           <Button
-            onClick={() => navigate('/billing')}
+            onClick={() => navigate('/dg-sales')}
             className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Billing</span>
+            <span>Back to DG Sales</span>
           </Button>
         </div>
       </PageHeader>
 
-      {/* 🚀 EXCEL-LIKE NAVIGATION GUIDE */}
-      <div className={`bg-gradient-to-r border rounded-lg p-4 ${isDeliveryChallan ? 'from-orange-50 to-amber-50 border-orange-200' :
-        isQuotation ? 'from-blue-50 to-indigo-50 border-blue-200' :
-          isSalesInvoice ? 'from-green-50 to-emerald-50 border-green-200' :
-            'from-purple-50 to-violet-50 border-purple-200'
-        }`}>
-        <div className="flex items-center mb-2">
-          <span className="text-lg">⚡</span>
-          <h3 className={`text-sm font-semibold ml-2 ${isDeliveryChallan ? 'text-orange-900' :
-            isQuotation ? 'text-blue-900' :
-              isSalesInvoice ? 'text-green-900' :
-                'text-purple-900'
-            }`}>
-            Excel-Like {getInvoiceTypeTitle()} Form Enabled!
-          </h3>
-        </div>
-        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 text-xs ${isDeliveryChallan ? 'text-orange-800' :
-          isQuotation ? 'text-blue-800' :
-            isSalesInvoice ? 'text-green-800' :
-              'text-purple-800'
-          }`}>
-          <div>
-            <p className="font-medium mb-1">🎯 Complete Form Navigation:</p>
-            <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
-              isQuotation ? 'bg-blue-200' :
-                isSalesInvoice ? 'bg-green-200' :
-                  'bg-purple-200'
-              }`}>Tab/Enter</kbd> Move forward</p>
-            {/* <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
-                isQuotation ? 'bg-blue-200' :
-                  isSalesInvoice ? 'bg-green-200' :
-                    'bg-purple-200'
-              }`}>Shift+Tab</kbd> Move backward</p> */}
-            <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
-              isQuotation ? 'bg-blue-200' :
-                isSalesInvoice ? 'bg-green-200' :
-                  'bg-purple-200'
-              }`}>↑↓</kbd> Navigate dropdowns</p>
-          </div>
-          <div>
-            <p className="font-medium mb-1">🔥 Super Fast {getInvoiceTypeTitle()} Flow:</p>
-            <p>Location → Customer → Address → {isDeliveryChallan ? 'Delivery Date' : 'Due Date'} → {getInvoiceTypeTitle()} Items</p>
-            <p><strong>{getInvoiceTypeTitle()} Items:</strong> Search → Select → Quantity → Auto Next Row</p>
-            {isDeliveryChallan && (
-              <p className="text-xs mt-1 font-medium">📦 <strong>Delivery Challan:</strong> No stock reduction, delivery tracking only</p>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Form Content */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -2163,7 +2163,7 @@ const InvoiceFormPage: React.FC = () => {
             </div>
 
             {/* Assign to Engineer - Only for Sales Invoices */}
-            {isSalesInvoice && (
+            {/* {isSalesInvoice && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Assign to Engineer
@@ -2300,7 +2300,7 @@ const InvoiceFormPage: React.FC = () => {
                   )}
                 </div>
               </div>
-            )}
+            )} */}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2400,7 +2400,7 @@ const InvoiceFormPage: React.FC = () => {
           {/* Excel-Style Items Table */}
           <div>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">{getInvoiceTypeTitle()} Items</h3>
+              <h3 className="text-lg font-medium text-gray-900">DG Invoice Items</h3>
               <button
                 onClick={addInvoiceItem}
                 type="button"
@@ -2643,7 +2643,6 @@ const InvoiceFormPage: React.FC = () => {
                           data-field="hsnNumber"
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50"
                           placeholder="HSN"
-                          disabled={true}
                         />
                       </div>
 
@@ -2988,7 +2987,7 @@ const InvoiceFormPage: React.FC = () => {
                 ) : (
                   <>
                     <Save className="w-4 h-4" />
-                    <span>{isEditMode ? `Update ${getInvoiceTypeTitle()}` : `Create ${getInvoiceTypeTitle()}`}</span>
+                    <span>{isEditMode ? `Update DG Invoice` : `Create DG Invoice`}</span>
                   </>
                 )}
               </button>
@@ -3000,4 +2999,4 @@ const InvoiceFormPage: React.FC = () => {
   );
 };
 
-export default InvoiceFormPage; 
+export default DGInvoiceFormPage; 

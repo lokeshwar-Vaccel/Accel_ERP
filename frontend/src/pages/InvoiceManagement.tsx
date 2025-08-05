@@ -24,7 +24,9 @@ import {
   AlertCircle,
   XCircle,
   TrendingDown,
-  IndianRupee
+  IndianRupee,
+  Printer,
+  Receipt
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -96,7 +98,7 @@ interface InvoiceItem {
   unitPrice: number;
   taxRate: number;
   // totalPrice and taxAmount are calculated, not needed in form state
-  hsnSac?: string;
+  hsnNumber?: string;
   gstRate?: number;
   partNo?: string;
   uom?: string;
@@ -156,7 +158,7 @@ interface NewInvoiceItem {
   quantity: number;
   unitPrice: number;
   taxRate?: number;
-  hsnSac?: string;
+  // hsnSac?: string;
   gstRate?: number;
   partNo?: string;
   uom?: string;
@@ -331,7 +333,7 @@ const InvoiceManagement: React.FC = () => {
         taxRate: 0,
         gstRate: 0,
         partNo: '',
-        hsnSac: '',
+        hsnNumber: '',
         uom: 'nos',
         discount: 0
       }
@@ -1080,7 +1082,7 @@ const InvoiceManagement: React.FC = () => {
         quantity: item.quantity || 0,
         unitPrice: item.unitPrice || 0,
         taxRate: item.taxRate || 0,
-        hsnSac: item.hsnCode || item.hsnSac || '',
+        hsnNumber: item.hsnNumber || item.hsnSac || '',
         partNo: item.partNo || '',
         uom: item.uom || 'nos',
         discount: item.discount || 0
@@ -1420,6 +1422,23 @@ const InvoiceManagement: React.FC = () => {
         });
       }
 
+      // Payment Receipt Actions - Available for invoices with payments
+      if (invoice.paidAmount > 0) {
+        // actions.push({
+        //   icon: <Receipt className="w-4 h-4" />,
+        //   label: 'Download Receipt',
+        //   action: () => generatePaymentReceipt(invoice),
+        //   color: 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50'
+        // });
+        
+        actions.push({
+          icon: <Printer className="w-4 h-4" />,
+          label: 'Print Receipt',
+          action: () => printPaymentReceipt(invoice),
+          color: 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+        });
+      }
+
       // Email actions
       if (invoice.status === 'draft' && invoice.invoiceType === 'sale') {
         actions.push({
@@ -1494,7 +1513,7 @@ const InvoiceManagement: React.FC = () => {
           taxRate: 0,
           gstRate: 0,
           partNo: '',
-          hsnSac: '',
+          hsnNumber: '',
           uom: 'nos',
           discount: 0
         }
@@ -1836,7 +1855,7 @@ const InvoiceManagement: React.FC = () => {
           discount: Number(item.discount || 0),
           uom: item.uom || 'nos',
           partNo: item.partNo || '',
-          hsnSac: item.hsnSac || ''
+          hsnNumber: item.hsnNumber || ''
         }))
       };
 
@@ -2096,7 +2115,7 @@ const InvoiceManagement: React.FC = () => {
     const tableBody = selectedInvoice.items.map((item: any, idx: number) => [
       (idx + 1).toString(),
       item.description || '',
-      item.hsnSac || '',
+      item.hsnNumber || '',
       (item.taxRate || 0) + '%',
       item.partNo || '',
       item.quantity?.toFixed(2) || '',
@@ -2381,7 +2400,7 @@ const InvoiceManagement: React.FC = () => {
             <tr>
               <th style="width: 30px;">S.No</th>
               <th class="description-col">Description</th>
-              <th style="width: 80px;">HSN Code</th>
+              <th style="width: 80px;">HSN Number</th>
               <th style="width: 40px;">Qty</th>
               <th style="width: 40px;">UOM</th>
               <th style="width: 80px;">Part No</th>
@@ -2396,7 +2415,7 @@ const InvoiceManagement: React.FC = () => {
               <tr>
                 <td>${idx + 1}</td>
                 <td class="description-col">${item.description || ''}</td>
-                <td>${item.hsnSac || item?.product?.hsnNumber || 'N/A'}</td>
+                <td>${item.hsnNumber || item?.product?.hsnNumber || 'N/A'}</td>
                 <td>${item.quantity || 0}</td>
                 <td>${item.uom || 'nos'}</td>
                 <td>${item.partNo || item?.product?.partNo || 'N/A'}</td>
@@ -2484,6 +2503,254 @@ const InvoiceManagement: React.FC = () => {
           printWindow.print();
         }, 500);
       };
+    }
+  };
+
+  // Payment Receipt Generation Function
+  const generatePaymentReceipt = (invoice: Invoice) => {
+    if (!invoice) return;
+
+    const doc = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let y = 15;
+
+    // Header: Company Info
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PAYMENT RECEIPT', pageWidth / 2, y, { align: 'center' });
+    y += 10;
+
+    doc.setFontSize(13);
+    doc.text(generalSettings?.companyName || 'Sun Power Services', pageWidth / 2, y, { align: 'center' });
+    y += 5;
+    
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(generalSettings?.companyAddress || '', pageWidth / 2, y, { align: 'center' });
+    y += 4;
+    doc.text(`GSTIN: ${generalSettings?.companyGSTIN || ''}`, pageWidth / 2, y, { align: 'center' });
+    y += 4;
+    doc.text(`Contact: ${generalSettings?.companyPhone || ''}  Email: ${generalSettings?.companyEmail || ''}`, pageWidth / 2, y, { align: 'center' });
+    y += 10;
+
+    // Draw line
+    doc.line(10, y, pageWidth - 10, y);
+    y += 8;
+
+    // Receipt Details
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Receipt Details:', 10, y);
+    y += 6;
+
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Receipt Date: ${new Date().toLocaleDateString()}`, 10, y);
+    doc.text(`Receipt Time: ${new Date().toLocaleTimeString()}`, 120, y);
+    y += 5;
+    doc.text(`Invoice Number: ${invoice.invoiceNumber}`, 10, y);
+    doc.text(`Invoice Date: ${new Date(invoice.issueDate).toLocaleDateString()}`, 120, y);
+    y += 5;
+    doc.text(`Payment Status: ${invoice.paymentStatus.toUpperCase()}`, 10, y);
+    y += 8;
+
+    // Customer Details
+    doc.setFont('helvetica', 'bold');
+    doc.text('Customer Details:', 10, y);
+    y += 6;
+
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Name: ${invoice.customer?.name || 'N/A'}`, 10, y);
+    y += 5;
+    doc.text(`Email: ${invoice.customer?.email || 'N/A'}`, 10, y);
+    y += 5;
+    doc.text(`Phone: ${invoice.customer?.phone || 'N/A'}`, 10, y);
+    y += 8;
+
+    // Payment Summary Table
+    doc.setFont('helvetica', 'bold');
+    doc.text('Payment Summary:', 10, y);
+    y += 8;
+
+    // Create payment summary table
+    const summaryData = [
+      ['Description', 'Amount'],
+      ['Invoice Total', `₹${invoice.totalAmount?.toFixed(2)}`],
+      ['Amount Paid', `₹${invoice.paidAmount?.toFixed(2)}`],
+      ['Remaining Amount', `₹${invoice.remainingAmount?.toFixed(2)}`]
+    ];
+
+    autoTable(doc, {
+      startY: y,
+      head: [summaryData[0]],
+      body: summaryData.slice(1),
+      theme: 'grid',
+      styles: { fontSize: 9, cellPadding: 3 },
+      headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' },
+      columnStyles: {
+        0: { cellWidth: 80 },
+        1: { cellWidth: 40, halign: 'right' }
+      }
+    });
+
+    y = (doc as any).lastAutoTable.finalY + 10;
+
+    // Payment History (if available)
+    if (invoice.paidAmount > 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Payment History:', 10, y);
+      y += 8;
+
+      // Sample payment history - you might want to fetch actual payment records
+      const paymentHistory = [
+        ['Date', 'Method', 'Amount', 'Status'],
+        [new Date().toLocaleDateString(), 'Online/Cash', `₹${invoice.paidAmount?.toFixed(2)}`, 'Completed']
+      ];
+
+      autoTable(doc, {
+        startY: y,
+        head: [paymentHistory[0]],
+        body: paymentHistory.slice(1),
+        theme: 'grid',
+        styles: { fontSize: 9, cellPadding: 3 },
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0], fontStyle: 'bold' }
+      });
+
+      y = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Amount in Words
+    if (invoice.paidAmount > 0) {
+      doc.setFont('helvetica', 'bold');
+      doc.text('Amount Paid (in words):', 10, y);
+      y += 5;
+      doc.setFont('helvetica', 'normal');
+      doc.text(numberToWords(invoice.paidAmount), 10, y, { maxWidth: pageWidth - 20 });
+      y += 10;
+    }
+
+    // Footer
+    y += 15;
+    doc.line(10, y, pageWidth - 10, y);
+    y += 8;
+
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.text('This is a computer generated receipt and does not require signature.', pageWidth / 2, y, { align: 'center' });
+    y += 4;
+    doc.text('Thank you for your business!', pageWidth / 2, y, { align: 'center' });
+
+    // Save the PDF
+    doc.save(`Payment_Receipt_${invoice.invoiceNumber}_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
+  };
+
+  // Print Payment Receipt Function
+  const printPaymentReceipt = (invoice: Invoice) => {
+    if (!invoice) return;
+
+    const printContent = `
+    <html>
+      <head>
+        <title>Payment Receipt - ${invoice.invoiceNumber}</title>
+        <style>
+          @page { size: A4; margin: 0.5in; }
+          body { font-family: Arial, sans-serif; margin: 0; padding: 0; line-height: 1.6; color: #000; font-size: 12px; }
+          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
+          .header h1 { margin: 0 0 10px 0; font-size: 24px; font-weight: bold; color: #000; }
+          .header h2 { margin: 0 0 8px 0; font-size: 18px; font-weight: bold; color: #000; }
+          .header div { margin: 3px 0; font-size: 11px; }
+          .receipt-details { margin-bottom: 20px; background-color: #f9f9f9; padding: 15px; border: 1px solid #ddd; }
+          .receipt-details h3 { margin: 0 0 10px 0; font-size: 14px; font-weight: bold; }
+          .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+          .details-grid div { font-size: 11px; }
+          .customer-section { margin-bottom: 20px; border: 1px solid #000; padding: 15px; }
+          .customer-section h3 { margin: 0 0 10px 0; font-size: 14px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 5px; }
+          .payment-summary { margin-bottom: 20px; }
+          .payment-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
+          .payment-table th, .payment-table td { border: 1px solid #000; padding: 8px; text-align: left; }
+          .payment-table th { background-color: #f0f0f0; font-weight: bold; }
+          .payment-table .amount { text-align: right; font-weight: bold; }
+          .amount-words { margin: 15px 0; padding: 10px; border: 1px solid #000; background-color: #f9f9f9; }
+          .amount-words strong { font-weight: bold; }
+          .footer { margin-top: 30px; text-align: center; font-size: 10px; border-top: 1px solid #000; padding-top: 15px; }
+          @media print { body { margin: 0; -webkit-print-color-adjust: exact; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>PAYMENT RECEIPT</h1>
+          <h2>${generalSettings?.companyName || 'Sun Power Services'}</h2>
+          <div>${generalSettings?.companyAddress || ''}</div>
+          <div>GSTIN: ${generalSettings?.companyGSTIN || ''}</div>
+          <div>Contact: ${generalSettings?.companyPhone || ''} | Email: ${generalSettings?.companyEmail || ''}</div>
+        </div>
+
+        <div class="receipt-details">
+          <h3>Receipt Details</h3>
+          <div class="details-grid">
+            <div><strong>Receipt Date:</strong> ${new Date().toLocaleDateString()}</div>
+            <div><strong>Receipt Time:</strong> ${new Date().toLocaleTimeString()}</div>
+            <div><strong>Invoice Number:</strong> ${invoice.invoiceNumber}</div>
+            <div><strong>Invoice Date:</strong> ${new Date(invoice.issueDate).toLocaleDateString()}</div>
+            <div><strong>Payment Status:</strong> ${invoice.paymentStatus.toUpperCase()}</div>
+            <div><strong>Invoice Type:</strong> ${invoice.invoiceType.toUpperCase()}</div>
+          </div>
+        </div>
+
+        <div class="customer-section">
+          <h3>Customer Details</h3>
+          <div><strong>Name:</strong> ${invoice.customer?.name || 'N/A'}</div>
+          <div><strong>Email:</strong> ${invoice.customer?.email || 'N/A'}</div>
+          <div><strong>Phone:</strong> ${invoice.customer?.phone || 'N/A'}</div>
+        </div>
+
+        <div class="payment-summary">
+          <h3>Payment Summary</h3>
+          <table class="payment-table">
+            <thead>
+              <tr>
+                <th>Description</th>
+                <th>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Invoice Total</td>
+                <td class="amount">₹${invoice.totalAmount?.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td>Amount Paid</td>
+                <td class="amount">₹${invoice.paidAmount?.toFixed(2)}</td>
+              </tr>
+              <tr style="background-color: #f0f0f0;">
+                <td><strong>Remaining Amount</strong></td>
+                <td class="amount"><strong>₹${invoice.remainingAmount?.toFixed(2)}</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        ${invoice.paidAmount > 0 ? `
+        <div class="amount-words">
+          <strong>Amount Paid (in words):</strong> ${numberToWords(invoice.paidAmount)}
+        </div>
+        ` : ''}
+
+        <div class="footer">
+          <div><em>This is a computer generated receipt and does not require signature.</em></div>
+          <div><strong>Thank you for your business!</strong></div>
+          <div>Generated on: ${new Date().toLocaleString()}</div>
+        </div>
+      </body>
+    </html>
+    `;
+
+    const printWindow = window.open('', '_blank');
+    if (printWindow) {
+      printWindow.document.write(printContent);
+      printWindow.document.close();
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
     }
   };
 
@@ -2620,7 +2887,7 @@ const InvoiceManagement: React.FC = () => {
             <tr>
               <th style="width: 30px;">S.No</th>
               <th class="description-col">Description</th>
-              <th style="width: 80px;">HSN Code</th>
+              <th style="width: 80px;">HSN Number</th>
               <th style="width: 40px;">Qty</th>
               <th style="width: 40px;">UOM</th>
               <th style="width: 80px;">Part No</th>
@@ -2635,7 +2902,7 @@ const InvoiceManagement: React.FC = () => {
               <tr>
                 <td>${idx + 1}</td>
                 <td class="description-col">${item.description || ''}</td>
-                <td>${item.hsnCode || 'N/A'}</td>
+                <td>${item.hsnNumber || 'N/A'}</td>
                 <td>${item.quantity || 0}</td>
                 <td>${item.uom || 'nos'}</td>
                 <td>${item.partNo || 'N/A'}</td>
@@ -3143,6 +3410,26 @@ const InvoiceManagement: React.FC = () => {
                   </svg>
                   Print
                 </button>
+                
+                {/* Payment Receipt Buttons - Show only if there are payments */}
+                {/* {selectedInvoice.paidAmount > 0 && (
+                  <>
+                    <button
+                      onClick={() => generatePaymentReceipt(selectedInvoice)}
+                      className="flex items-center px-3 py-1 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                    >
+                      <Receipt className="w-4 h-4 mr-1" />
+                      Receipt PDF
+                    </button>
+                    <button
+                      onClick={() => printPaymentReceipt(selectedInvoice)}
+                      className="flex items-center px-3 py-1 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700"
+                    >
+                      <Printer className="w-4 h-4 mr-1" />
+                      Print Receipt
+                    </button>
+                  </>
+                )} */}
                 <button
                   onClick={() => {
                     setShowViewModal(false);
@@ -3294,7 +3581,7 @@ const InvoiceManagement: React.FC = () => {
                   )}
                 </div>
 
-                <div>
+               { selectedInvoice?.assignedEngineer && <div>
                   <h4 className="font-medium text-gray-900 mb-2">Assigned Engineer:</h4>
                   <div className="text-sm text-gray-600">
                     {selectedInvoice?.assignedEngineer ? (
@@ -3312,7 +3599,7 @@ const InvoiceManagement: React.FC = () => {
                       <p className="text-gray-500 italic">No engineer assigned</p>
                     )}
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* Total Amount Mismatch Warning */}
@@ -3359,7 +3646,7 @@ const InvoiceManagement: React.FC = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN Code</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN Number</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">UOM</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
@@ -3376,7 +3663,7 @@ const InvoiceManagement: React.FC = () => {
                       {(selectedInvoice.items || []).map((item: any, index: number) => (
                         <tr key={index}>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.hsnSac || item?.product?.hsnNumber || 'N/A'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.hsnNumber || item?.product?.hsnNumber || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.uom || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.partNo || item?.product?.partNo || 'N/A'}</td>
@@ -4244,7 +4531,7 @@ const InvoiceManagement: React.FC = () => {
               </div>
 
               {/* Company Information */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className={`grid grid-cols-1 md:grid-cols-3 gap-6 ${selectedQuotation.assignedEngineer ? 'md:grid-cols-4' : ''}`} >
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">From:</h4>
                   <div className="text-sm text-gray-600">
@@ -4298,7 +4585,7 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                 </div>
 
-                <div>
+                { selectedQuotation.assignedEngineer && <div>
                   <h4 className="font-medium text-gray-900 mb-2">Assigned Engineer:</h4>
                   <div className="text-sm text-gray-600">
                     {selectedQuotation.assignedEngineer ? (
@@ -4316,7 +4603,7 @@ const InvoiceManagement: React.FC = () => {
                       <p className="text-gray-500 italic">No engineer assigned</p>
                     )}
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* Quotation Items */}
@@ -4327,7 +4614,7 @@ const InvoiceManagement: React.FC = () => {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN Code</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">HSN Number</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Qty</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">UOM</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
@@ -4341,7 +4628,7 @@ const InvoiceManagement: React.FC = () => {
                       {(selectedQuotation.items || []).map((item: any, index: number) => (
                         <tr key={index}>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.description}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.hsnCode || 'N/A'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{item.hsnNumber || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.uom}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.partNo || 'N/A'}</td>

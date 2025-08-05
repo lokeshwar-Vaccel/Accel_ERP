@@ -11,6 +11,7 @@ import DGPurchaseOrderManagement from './DGPurchaseOrderManagement';
 import DGProformaManagement from './DGProformaManagement';
 import ProformaInvoiceForm from '../components/ui/ProformaInvoiceForm';
 import DGInvoiceForm from '../components/ui/DGInvoiceForm';
+import DGInvoiceManagement from './DGInvoiceManagement';
 import DGPaymentForm from '../components/ui/DGPaymentForm';
 
 import DGEnquiryForm from '../components/ui/DGEnquiryForm';
@@ -112,12 +113,7 @@ export default function DGSales() {
   const [showInvoiceForm, setShowInvoiceForm] = useState(false);
   const [invoiceData, setInvoiceData] = useState<any>(null);
 
-  // Step 7: Customer Payments
-  const [customerPayments, setCustomerPayments] = useState<any[]>([]);
-  const [showPaymentForm, setShowPaymentForm] = useState(false);
-  const [paymentData, setPaymentData] = useState<any>(null);
-
-  // Step 8: OEMs List
+  // Step 6: OEMs List
   const [oems, setOems] = useState<any[]>([]);
   const [showOEMForm, setShowOEMForm] = useState(false);
   const [showOEMViewModal, setShowOEMViewModal] = useState(false);
@@ -178,10 +174,9 @@ export default function DGSales() {
     { step: 3, title: "Purchase Order from Customer", icon: ShoppingCart, description: "Manage customer purchase orders" },
     { step: 4, title: "Proforma Invoice", icon: FileSpreadsheet, description: "Generate proforma invoices for finance" },
     { step: 5, title: "Final Invoice", icon: FileText, description: "Create final invoices and delivery tracking" },
-    { step: 6, title: "Customer Payment Tracking", icon: CreditCard, description: "Track and verify customer payments" },
-    { step: 7, title: "List of OEMs", icon: Building, description: "Manage OEM suppliers and products" },
-    { step: 8, title: "PO to OEM", icon: ShoppingCart, description: "Purchase orders to OEM suppliers" },
-    { step: 9, title: "OEM Payment Tracking", icon: CreditCard, description: "Track payments to OEM suppliers" },
+    { step: 6, title: "List of OEMs", icon: Building, description: "Manage OEM suppliers and products" },
+    { step: 7, title: "PO to OEM", icon: ShoppingCart, description: "Purchase orders to OEM suppliers" },
+    { step: 8, title: "OEM Payment Tracking", icon: CreditCard, description: "Track payments to OEM suppliers" },
     { step: 10, title: "DG Movement Tracking", icon: Truck, description: "Track delivery, installation & commissioning" },
     { step: 11, title: "Profit & Loss Reports", icon: BarChart3, description: "Financial analytics and reporting" },
     { step: 12, title: "Old DG Buyback Enquiry", icon: Upload, description: "Old DG buyback enquiries" },
@@ -225,7 +220,7 @@ export default function DGSales() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const customersResponse = await apiClient.customers.dgCustomers.getAll({});
+        const customersResponse = await apiClient.customers.dgCustomers.getAll({limit: 100});
         let customers: any[] = [];
         if (customersResponse.data) {
           if (Array.isArray(customersResponse.data)) {
@@ -311,16 +306,7 @@ export default function DGSales() {
             setFinalInvoices([]);
           }
           break;
-        case 6: // Customer Payments
-          try {
-            const paymentsResponse = await apiClient.dgSales.payments.getAll(params);
-            setCustomerPayments(paymentsResponse.data || []);
-          } catch (err) {
-            console.warn('Failed to load payments');
-            setCustomerPayments([]);
-          }
-          break;
-        case 7: // OEMs
+        case 6: // OEMs
           try {
             const oemsResponse = await apiClient.dgSales.oems.getAll(params);
             setOems(oemsResponse.data || []);
@@ -329,7 +315,7 @@ export default function DGSales() {
             setOems([]);
           }
           break;
-        case 8: // OEM Orders
+        case 7: // OEM Orders
           try {
             const oemOrdersResponse = await apiClient.dgSales.oemOrders.getAll(params);
             setOemOrders(oemOrdersResponse.data || []);
@@ -338,7 +324,7 @@ export default function DGSales() {
             setOemOrders([]);
           }
           break;
-        case 9: // OEM Payments
+        case 8: // OEM Payments
           try {
             // Placeholder for OEM payments - API not implemented yet
             setOemPayments([]);
@@ -571,6 +557,8 @@ export default function DGSales() {
         await apiClient.dgSales.oems.create(oemFormData);
         toast.success('OEM created successfully');
         setShowOEMForm(false);
+        // loadStepData(6);
+        // fetchOems();
       } else if (showOEMEditModal && selectedOEM) {
         await apiClient.dgSales.oems.update(selectedOEM._id, oemFormData);
         toast.success('OEM updated successfully');
@@ -578,7 +566,7 @@ export default function DGSales() {
       }
       
       resetOEMForm();
-      loadStepData(7); // Refresh OEMs
+      loadStepData(6); // Refresh OEMs
     } catch (error) {
       console.error('Failed to save OEM:', error);
       toast.error('Failed to save OEM');
@@ -629,11 +617,10 @@ export default function DGSales() {
       case 2: return dgCustomers.length > 0;
                       case 3: return true; // Handled by DGPurchaseOrderManagement component
         case 4: return true; // Handled by DGPurchaseOrderManagement component
-      case 5: return proformaInvoices.length > 0;
-      case 6: return finalInvoices.length > 0;
-      case 7: return customerPayments.length > 0;
-      case 8: return oems.length > 0;
-      case 9: return oemOrders.length > 0;
+      case 5: return finalInvoices.length > 0;
+      case 6: return oems.length > 0;
+      case 7: return oemOrders.length > 0;
+      case 8: return oemPayments.length > 0;
       default: return false;
     }
   };
@@ -644,11 +631,10 @@ export default function DGSales() {
       case 2: return dgCustomers.length;
                       case 3: return 0; // Handled by DGPurchaseOrderManagement component
         case 4: return 0; // Handled by DGPurchaseOrderManagement component
-      case 5: return proformaInvoices.length;
-      case 6: return finalInvoices.length;
-      case 7: return customerPayments.length;
-      case 8: return oems.length;
-      case 9: return oemOrders.length;
+      case 5: return finalInvoices.length;
+      case 6: return oems.length;
+      case 7: return oemOrders.length;
+      case 8: return oemPayments.length;
       default: return 0;
     }
   };
@@ -897,7 +883,7 @@ export default function DGSales() {
                       { key: 'customerName', title: 'Customer Name' },
                       { key: 'location', title: 'Location' },
                       { key: 'kva', title: 'KVA Required' },
-                      { key: 'customerStatus', title: 'Customer Status' },
+                      // { key: 'customerStatus', title: 'Customer Status' },
                       { key: 'status', title: 'Enquiry Status' },
                       { key: 'actions', title: 'Actions' }
                     ]}
@@ -1075,136 +1061,9 @@ export default function DGSales() {
         return <DGProformaManagement />;
 
       case 5: // Final Invoices
-        return (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Final Invoices</h3>
-                  <div className="flex space-x-3">
-                    <Input
-                      placeholder="Search invoices..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-64"
-                    />
-                    <Button variant="outline">
-                      <Filter className="h-4 w-4 mr-2" />
-                      Filter
-                    </Button>
-                    <Button onClick={() => setShowInvoiceForm(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      New Invoice
-                    </Button>
-                  </div>
-                </div>
-              </div>
+        return <DGInvoiceManagement />;
 
-              <Table
-                columns={[
-                  { key: 'invoiceNumber', title: 'Invoice Number', sortable: true },
-                  { key: 'customer', title: 'Customer' },
-                  { key: 'date', title: 'Issue Date', sortable: true },
-                  { key: 'amount', title: 'Amount', sortable: true },
-                  { key: 'paymentStatus', title: 'Payment Status' },
-                  { key: 'deliveryStatus', title: 'Delivery Status' },
-                  { key: 'actions', title: 'Actions' }
-                ]}
-                data={finalInvoices.map(invoice => ({
-                  invoiceNumber: invoice.invoiceNumber || '',
-                  customer: invoice.customer?.name || '',
-                  date: invoice.issueDate ? new Date(invoice.issueDate).toLocaleDateString() : '',
-                  amount: invoice.totalAmount ? `₹${invoice.totalAmount.toLocaleString()}` : '',
-                  paymentStatus: <Badge variant="warning">{invoice.paymentStatus || 'Pending'}</Badge>,
-                  deliveryStatus: <Badge variant="info">{invoice.deliveryStatus || 'Pending'}</Badge>,
-                  actions: (
-                    <div className="flex space-x-2">
-                      <Button size="sm" variant="outline">View</Button>
-                      <Button size="sm" variant="outline">Edit</Button>
-                      <Button size="sm" onClick={() => {
-                        setPaymentData(invoice);
-                        setShowPaymentForm(true);
-                      }}>Record Payment</Button>
-                    </div>
-                  )
-                }))}
-                loading={loading}
-                pagination={{
-                  page: currentPage,
-                  pages: Math.ceil(finalInvoices.length / itemsPerPage) || 1,
-                  total: finalInvoices.length,
-                  limit: itemsPerPage
-                }}
-                onPageChange={setCurrentPage}
-              />
-            </div>
-          </div>
-        );
-
-      case 6: // Customer Payments
-        return (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">Customer Payments</h3>
-                  <div className="flex space-x-3">
-                    <Input
-                      placeholder="Search payments..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-64"
-                    />
-                    <Button variant="outline">
-                      <Filter className="h-4 w-4 mr-2" />
-                      Filter
-                    </Button>
-                    <Button onClick={() => setShowPaymentForm(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Record Payment
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <Table
-                columns={[
-                  { key: 'paymentRef', title: 'Payment Reference', sortable: true },
-                  { key: 'customer', title: 'Customer' },
-                  { key: 'invoice', title: 'Invoice' },
-                  { key: 'amount', title: 'Amount', sortable: true },
-                  { key: 'method', title: 'Payment Method' },
-                  { key: 'status', title: 'Status' },
-                  { key: 'actions', title: 'Actions' }
-                ]}
-                data={customerPayments.map(payment => ({
-                  paymentRef: payment.paymentReference || '',
-                  customer: payment.customer?.name || '',
-                  invoice: payment.invoice?.invoiceNumber || '',
-                  amount: payment.amount ? `₹${payment.amount.toLocaleString()}` : '',
-                  method: payment.paymentMethod || '',
-                  status: <Badge variant="success">{payment.status || 'Completed'}</Badge>,
-                  actions: (
-                    <div className="flex space-x-2">
-                      <Button size="sm" variant="outline">View</Button>
-                      <Button size="sm" variant="outline">Verify</Button>
-                    </div>
-                  )
-                }))}
-                loading={loading}
-                pagination={{
-                  page: currentPage,
-                  pages: Math.ceil(customerPayments.length / itemsPerPage) || 1,
-                  total: customerPayments.length,
-                  limit: itemsPerPage
-                }}
-                onPageChange={setCurrentPage}
-              />
-            </div>
-          </div>
-        );
-
-      case 7: // OEMs
+      case 6: // OEMs
         return (
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow">
@@ -1568,7 +1427,7 @@ export default function DGSales() {
             {/* Quick Stats */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
               <div className="bg-blue-50 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold text-blue-600">{enquiries.length}</div>
+                <div className="text-2xl font-bold text-blue-600">{totalItems}</div>
                 <div className="text-xs text-blue-700">Total Enquiries</div>
               </div>
               <div className="bg-green-50 p-3 rounded-lg text-center">
@@ -1606,7 +1465,7 @@ export default function DGSales() {
                   title={step.description}
                 >
                   <IconComponent className="h-4 w-4 mx-auto mb-1" />
-                  <div className="truncate">{step.step}. {step.title.split(' ')[0]}</div>
+                  <div className="truncate"> {step.title.split(' ')[0]}</div>
                 </button>
               );
             })}
@@ -1925,6 +1784,7 @@ export default function DGSales() {
                         setSelectedFile(null);
                         setPreviewData(null);
                         loadStepData(1);
+                        toast.success('Import successful!');
                       } else {
                         setError('Import failed. Please try again.');
                       }
@@ -2039,22 +1899,6 @@ export default function DGSales() {
         />
       )}
 
-      {showPaymentForm && (
-        <DGPaymentForm
-          isOpen={showPaymentForm}
-          onClose={() => {
-            setShowPaymentForm(false);
-            setPaymentData(null);
-          }}
-          onSuccess={() => {
-            setShowPaymentForm(false);
-            setPaymentData(null);
-            if (activeStep === 7) loadStepData(7);
-          }}
-          initialData={paymentData}
-        />
-      )}
-
       {/* DG Enquiry Form Modal */}
       {showEnquiryForm && (
         <DGEnquiryForm
@@ -2112,6 +1956,7 @@ export default function DGSales() {
                 <Input
                   value={oemFormData.companyName}
                   onChange={(e) => setOemFormData({ ...oemFormData, companyName: e.target.value })}
+                  placeholder="Enter company name"
                   required
                 />
               </div>
@@ -2122,6 +1967,7 @@ export default function DGSales() {
                 <Input
                   value={oemFormData.contactPerson}
                   onChange={(e) => setOemFormData({ ...oemFormData, contactPerson: e.target.value })}
+                  placeholder="Enter contact person name"
                   required
                 />
               </div>
@@ -2133,6 +1979,7 @@ export default function DGSales() {
                   type="email"
                   value={oemFormData.email}
                   onChange={(e) => setOemFormData({ ...oemFormData, email: e.target.value })}
+                  placeholder="Enter email address"
                   required
                 />
               </div>
@@ -2143,6 +1990,7 @@ export default function DGSales() {
                 <Input
                   value={oemFormData.phone}
                   onChange={(e) => setOemFormData({ ...oemFormData, phone: e.target.value })}
+                  placeholder="Enter phone number"
                   required
                 />
               </div>
@@ -2153,6 +2001,7 @@ export default function DGSales() {
                 <Input
                   value={oemFormData.alternatePhone || ''}
                   onChange={(e) => setOemFormData({ ...oemFormData, alternatePhone: e.target.value })}
+                  placeholder="Enter alternate phone number"
                 />
               </div>
               <div>
@@ -2185,6 +2034,7 @@ export default function DGSales() {
                       ...oemFormData,
                       address: { ...oemFormData.address, street: e.target.value }
                     })}
+                    placeholder="Enter street address"
                     required
                   />
                 </div>
@@ -2198,6 +2048,7 @@ export default function DGSales() {
                       ...oemFormData,
                       address: { ...oemFormData.address, city: e.target.value }
                     })}
+                    placeholder="Enter city"
                     required
                   />
                 </div>
@@ -2211,6 +2062,7 @@ export default function DGSales() {
                       ...oemFormData,
                       address: { ...oemFormData.address, state: e.target.value }
                     })}
+                    placeholder="Enter state"
                     required
                   />
                 </div>
@@ -2224,6 +2076,7 @@ export default function DGSales() {
                       ...oemFormData,
                       address: { ...oemFormData.address, pincode: e.target.value }
                     })}
+                    placeholder="Enter pincode"
                     required
                   />
                 </div>
@@ -2244,6 +2097,7 @@ export default function DGSales() {
                       ...oemFormData,
                       bankDetails: { ...oemFormData.bankDetails, bankName: e.target.value }
                     })}
+                    placeholder="Enter bank name"
                     required
                   />
                 </div>
@@ -2257,6 +2111,7 @@ export default function DGSales() {
                       ...oemFormData,
                       bankDetails: { ...oemFormData.bankDetails, accountNo: e.target.value }
                     })}
+                    placeholder="Enter account number"
                     required
                   />
                 </div>
@@ -2270,6 +2125,7 @@ export default function DGSales() {
                       ...oemFormData,
                       bankDetails: { ...oemFormData.bankDetails, ifsc: e.target.value.toUpperCase() }
                     })}
+                    placeholder="Enter IFSC code"
                     required
                   />
                 </div>
@@ -2283,6 +2139,7 @@ export default function DGSales() {
                       ...oemFormData,
                       bankDetails: { ...oemFormData.bankDetails, branch: e.target.value }
                     })}
+                    placeholder="Enter branch name"
                     required
                   />
                 </div>
@@ -2300,6 +2157,7 @@ export default function DGSales() {
                   <Input
                     value={oemFormData.paymentTerms}
                     onChange={(e) => setOemFormData({ ...oemFormData, paymentTerms: e.target.value })}
+                    placeholder="Enter payment terms"
                   />
                 </div>
                 <div>
@@ -2309,6 +2167,7 @@ export default function DGSales() {
                   <Input
                     value={oemFormData.deliveryTerms}
                     onChange={(e) => setOemFormData({ ...oemFormData, deliveryTerms: e.target.value })}
+                    placeholder="Enter delivery terms"
                   />
                 </div>
                 <div>
@@ -2318,6 +2177,7 @@ export default function DGSales() {
                   <Input
                     value={oemFormData.warrantyTerms}
                     onChange={(e) => setOemFormData({ ...oemFormData, warrantyTerms: e.target.value })}
+                    placeholder="Enter warranty terms"
                   />
                 </div>
               </div>
@@ -2335,6 +2195,7 @@ export default function DGSales() {
                     type="number"
                     value={oemFormData.creditLimit}
                     onChange={(e) => setOemFormData({ ...oemFormData, creditLimit: Number(e.target.value) })}
+                    placeholder="Enter credit limit amount"
                   />
                 </div>
                 <div>
@@ -2345,6 +2206,7 @@ export default function DGSales() {
                     type="number"
                     value={oemFormData.creditDays}
                     onChange={(e) => setOemFormData({ ...oemFormData, creditDays: Number(e.target.value) })}
+                    placeholder="Enter credit days"
                   />
                 </div>
               </div>
@@ -2360,6 +2222,7 @@ export default function DGSales() {
                 onChange={(e) => setOemFormData({ ...oemFormData, notes: e.target.value })}
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Enter additional notes (optional)"
               />
             </div>
 

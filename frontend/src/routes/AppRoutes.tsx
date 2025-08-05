@@ -24,6 +24,7 @@ import { ForgotPasswordForm } from "components/features/auth/ForgotPasswordForm"
 import { LoginForm } from "components/features/auth/LoginForm";
 import { ResetPasswordForm } from "components/features/auth/ResetPasswordForm";
 import DGSales from "pages/DGSales";
+import DGInvoiceForm from "pages/DGInvoiceForm";
 
 const AppRoutes: React.FC = () => {
     return (
@@ -84,6 +85,10 @@ const AppRoutes: React.FC = () => {
 
             {/* DG Sales */}
             <Route path="/dg-sales" element={<DGSales />} />
+            
+            {/* DG Invoice Management */}
+            <Route path="/dg-sales/invoice/create" element={<DGInvoiceForm />} />
+            <Route path="/dg-sales/invoice/edit/:id" element={<DGInvoiceForm />} />
 
             {/* 404 - Page not found */}
             <Route path="*" element={<NotFound />} />

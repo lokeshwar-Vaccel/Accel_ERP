@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Plus, ChevronDown, Save, Eye, Edit } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { apiClient } from '../../utils/api';
@@ -264,6 +264,15 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
     }
   }, [formData.items, formData.services]);
 
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (calculateTimeoutRef.current) {
+        clearTimeout(calculateTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const generateQuotationNumber = async () => {
     try {
       const response = await apiClient.dgSales.quotations.generateNumber();
@@ -389,10 +398,28 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
     }
   };
 
+  // Debounced calculation function
+  const calculateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  
+  const debouncedCalculate = useCallback(() => {
+    if (calculateTimeoutRef.current) {
+      clearTimeout(calculateTimeoutRef.current);
+    }
+    calculateTimeoutRef.current = setTimeout(() => {
+      calculateTotals();
+    }, 150);
+  }, []);
+
   // Update item field
   const updateItem = (index: number, field: string, value: any) => {
-    if (formData.items) {
+    if (formData.items && formData.items[index]) {
       const newItems = [...formData.items];
+      
+      // Ensure numeric fields are properly handled
+      if (['quantity', 'unitPrice', 'discount', 'taxRate'].includes(field)) {
+        value = Number(value) || 0;
+      }
+      
       newItems[index] = { ...newItems[index], [field]: value };
       setFormData(prev => ({ ...prev, items: newItems }));
     }
@@ -432,10 +459,10 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
 
     // Calculate items totals and update individual item fields
     const updatedItems = formData.items?.map(item => {
-      const itemTotal = item.quantity * item.unitPrice;
-      const discountAmount = (itemTotal * item.discount) / 100;
+      const itemTotal = (item.quantity || 0) * (item.unitPrice || 0);
+      const discountAmount = (itemTotal * (item.discount || 0)) / 100;
       const discountedAmount = itemTotal - discountAmount;
-      const taxAmount = (discountedAmount * item.taxRate) / 100;
+      const taxAmount = (discountedAmount * (item.taxRate || 0)) / 100;
       const totalPrice = discountedAmount + taxAmount;
       
       subtotal += itemTotal;
@@ -452,10 +479,10 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
 
     // Calculate services totals and update individual service fields
     const updatedServices = formData.services?.map(service => {
-      const serviceTotal = service.quantity * service.unitPrice;
-      const discountAmount = (serviceTotal * service.discount) / 100;
+      const serviceTotal = (service.quantity || 0) * (service.unitPrice || 0);
+      const discountAmount = (serviceTotal * (service.discount || 0)) / 100;
       const discountedAmount = serviceTotal - discountAmount;
-      const taxAmount = (discountedAmount * service.taxRate) / 100;
+      const taxAmount = (discountedAmount * (service.taxRate || 0)) / 100;
       const totalPrice = discountedAmount + taxAmount;
       
       subtotal += serviceTotal;
@@ -945,14 +972,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
                         </label>
                         <Input
                           type="number"
+                          name="quantity"
                           value={item.quantity}
                           onChange={(e) => {
-                            updateItem(index, 'quantity', parseFloat(e.target.value) || 0);
-                            calculateTotals();
+                            const newValue = parseInt(e.target.value) || 0;
+                            updateItem(index, 'quantity', newValue);
+                            debouncedCalculate();
                           }}
                           min="0"
-                          step="0.01"
-                          disabled={mode === 'view'}
+                          step="1"
+                          // disabled={mode === 'view'}
                         />
                       </div>
                       <div>
@@ -963,8 +992,9 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
                           type="number"
                           value={item.unitPrice}
                           onChange={(e) => {
-                            updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0);
-                            calculateTotals();
+                            const newValue = parseFloat(e.target.value) || 0;
+                            updateItem(index, 'unitPrice', newValue);
+                            debouncedCalculate();
                           }}
                           min="0"
                           step="0.01"
@@ -976,7 +1006,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
                           Total
                         </label>
                         <Input
-                          value={`₹${(item.quantity * item.unitPrice).toFixed(2)}`}
+                          value={`₹${((item.quantity || 0) * (item.unitPrice || 0)).toFixed(2)}`}
                           disabled
                           className="bg-gray-50"
                         />
@@ -1059,8 +1089,8 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
                           onChange={(e) => {
                             const newServices = [...(formData.services || [])];
                             newServices[index].quantity = parseFloat(e.target.value) || 0;
-                            calculateTotals();
                             setFormData(prev => ({ ...prev, services: newServices }));
+                            debouncedCalculate();
                           }}
                           min="0"
                           step="0.01"
@@ -1077,8 +1107,8 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
                           onChange={(e) => {
                             const newServices = [...(formData.services || [])];
                             newServices[index].unitPrice = parseFloat(e.target.value) || 0;
-                            calculateTotals();
                             setFormData(prev => ({ ...prev, services: newServices }));
+                            debouncedCalculate();
                           }}
                           min="0"
                           step="0.01"

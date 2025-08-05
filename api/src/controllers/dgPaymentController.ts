@@ -40,7 +40,7 @@ export const createDGPayment = async (
     }
 
     // Check if payment amount is valid
-    if (amount > dgInvoice.balanceAmount) {
+    if (amount > dgInvoice.remainingAmount) {
       return next(new AppError('Payment amount exceeds balance amount', 400));
     }
 

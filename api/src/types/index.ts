@@ -207,6 +207,8 @@ export interface IProduct extends Document {
   category: ProductCategory;
   brand?: string;
   modelNumber?: string;
+  partNo?: string;
+  hsnNumber?: string;
   specifications?: Record<string, any>;
   price: number;
   gst: number;
