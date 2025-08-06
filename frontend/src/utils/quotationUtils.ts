@@ -113,10 +113,7 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
     if (!data.customer.name || (typeof data.customer.name === 'string' && !data.customer.name.trim())) {
       errors.push({ field: 'customer.name', message: 'Customer name is required' });
     }
-    // Remove address validation from customer
   }
-  console.log("data.billToAddress:", data.billToAddress);
-  console.log("data.shipToAddress:", data.shipToAddress);
 
   // Location validation
   if (!data.location || (typeof data.location === 'string' && !data.location.trim())) {

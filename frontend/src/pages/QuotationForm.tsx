@@ -29,7 +29,6 @@ import {
     validateQuotationData
 } from '../utils/quotationUtils';
 import { numberToWords } from '../utils';
-import { createPortal } from 'react-dom';
 
 // Types
 interface Customer {
@@ -107,7 +106,7 @@ const QuotationFormPage: React.FC = () => {
     // Form states
     const [formData, setFormData] = useState<Partial<QuotationData>>(getDefaultQuotationData());
     const [errors, setErrors] = useState<ValidationError[]>([]);
-    
+
     // 🚀 STOCK DISPLAY STATES (Read-only for quotations)
     const [productStockCache, setProductStockCache] = useState<Record<string, any>>({});
     const [stockValidation, setStockValidation] = useState<Record<number, any>>({});
@@ -130,14 +129,6 @@ const QuotationFormPage: React.FC = () => {
     const UOM_OPTIONS = [
         'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'
     ];
-
-    // Portal dropdown position tracking
-    const [dropdownPosition, setDropdownPosition] = useState<{
-        top: number;
-        left: number;
-        width: number;
-        rowIndex: number;
-    } | null>(null);
 
 
 
@@ -169,7 +160,6 @@ const QuotationFormPage: React.FC = () => {
                 setShowBillToAddressDropdown(false);
                 setShowShipToAddressDropdown(false);
                 setShowEngineerDropdown(false);
-                setDropdownPosition(null);
             }
         };
 
@@ -178,49 +168,44 @@ const QuotationFormPage: React.FC = () => {
     }, []);
 
     console.log("formData.location:", formData.location);
-    
+
 
     // Auto-focus location field when form loads (Excel-like behavior)
     useEffect(() => {
         if (!loading) {
-          const focusFields = () => {
-            const locationInput = document.querySelector('[data-field="location"]') as HTMLInputElement | null;
-            const customerInput = document.querySelector('[data-field="customer"]') as HTMLInputElement | null;
-      
-            if (locationInput) {
-              if (locationInput.value.trim()) {
-                // Location already selected, move focus to customer
-                if (customerInput) {
-                  customerInput.focus();
-                  customerInput.select();
-                  return;
-                }
-              } else {
-                // Location not selected, focus it
-                locationInput.focus();
-                locationInput.select();
-                return;
-              }
-            }
-          };
-      
-          // Try immediate
-          focusFields();
-      
-          // Fallbacks to handle rendering delays
-          setTimeout(focusFields, 50);
-          setTimeout(focusFields, 200);
-        }
-      }, [loading]);
+            const focusFields = () => {
+                const locationInput = document.querySelector('[data-field="location"]') as HTMLInputElement | null;
+                const customerInput = document.querySelector('[data-field="customer"]') as HTMLInputElement | null;
 
-    // 🚀 LOAD STOCK WHEN LOCATION IS SET (WORKS FOR BOTH CREATE AND EDIT MODE)
-    useEffect(() => {
-        if (formData.location && Object.keys(productStockCache).length === 0) {
-            loadAllStockForLocation();
+                if (locationInput) {
+                    if (locationInput.value.trim()) {
+                        // Location already selected, move focus to customer
+                        if (customerInput) {
+                            customerInput.focus();
+                            customerInput.select();
+                            return;
+                        }
+                    } else {
+                        // Location not selected, focus it
+                        locationInput.focus();
+                        locationInput.select();
+                        return;
+                    }
+                }
+            };
+
+            // Try immediate
+            focusFields();
+
+            // Fallbacks to handle rendering delays
+            setTimeout(focusFields, 50);
+            setTimeout(focusFields, 200);
         }
-    }, [formData.location, productStockCache]);
-      
-    
+    }, [loading]);
+
+
+
+
 
     const fetchAllData = async () => {
         setLoading(true);
@@ -550,20 +535,6 @@ const QuotationFormPage: React.FC = () => {
         setProductSearchTerms(prev => ({ ...prev, [itemIndex]: searchTerm }));
     };
 
-    // Calculate dropdown position for portal rendering
-    const calculateDropdownPosition = (inputElement: HTMLElement, rowIndex: number) => {
-        const rect = inputElement.getBoundingClientRect();
-        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
-        
-        setDropdownPosition({
-            top: rect.bottom + scrollTop,
-            left: rect.left + scrollLeft,
-            width: rect.width,
-            rowIndex
-        });
-    };
-
     const updateUomSearchTerm = (itemIndex: number, searchTerm: string) => {
         setUomSearchTerms(prev => ({
             ...prev,
@@ -656,7 +627,6 @@ const QuotationFormPage: React.FC = () => {
                 updateProductSearchTerm(rowIndex, '');
                 setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
-                setDropdownPosition(null);
             }
 
             // Move directly to quantity field
@@ -680,7 +650,6 @@ const QuotationFormPage: React.FC = () => {
                 updateProductSearchTerm(rowIndex, '');
                 setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
-                setDropdownPosition(null);
 
                 // Move directly to quantity field in same row
                 setTimeout(() => {
@@ -704,9 +673,9 @@ const QuotationFormPage: React.FC = () => {
                 const newIndex = currentHighlighted < 0 ? 0 : Math.min(currentHighlighted + 1, matchingProducts.length - 1);
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: newIndex });
 
-                // Scroll to highlighted item in portal dropdown
+                // Scroll to highlighted item
                 setTimeout(() => {
-                    const highlightedElement = document.querySelector(`[data-product-index="${newIndex}"]`);
+                    const highlightedElement = document.querySelector(`[data-dropdown="${rowIndex}"] [data-product-index="${newIndex}"]`);
                     if (highlightedElement) {
                         highlightedElement.scrollIntoView({
                             behavior: 'smooth',
@@ -722,9 +691,9 @@ const QuotationFormPage: React.FC = () => {
                 const newIndex = currentHighlighted < 0 ? 0 : Math.max(currentHighlighted - 1, 0);
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: newIndex });
 
-                // Scroll to highlighted item in portal dropdown
+                // Scroll to highlighted item
                 setTimeout(() => {
-                    const highlightedElement = document.querySelector(`[data-product-index="${newIndex}"]`);
+                    const highlightedElement = document.querySelector(`[data-dropdown="${rowIndex}"] [data-product-index="${newIndex}"]`);
                     if (highlightedElement) {
                         highlightedElement.scrollIntoView({
                             behavior: 'smooth',
@@ -738,7 +707,6 @@ const QuotationFormPage: React.FC = () => {
             setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
             updateProductSearchTerm(rowIndex, '');
             setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
-            setDropdownPosition(null);
         }
     };
 
@@ -757,34 +725,13 @@ const QuotationFormPage: React.FC = () => {
         if (e.key === 'ArrowUp') {
             e.preventDefault();
             let newQuantity = currentQuantity + 1;
-            
-            // 🚨 ALLOW INCREASING QUANTITY UP TO AVAILABLE STOCK
-            if (currentItem?.product && formData.location && productStockCache[currentItem.product]) {
-                const stockInfo = productStockCache[currentItem.product];
-                if (stockInfo.available === 0) {
-                    newQuantity = 0; // Keep at 0 for out-of-stock products
-                    toast.error('Cannot increase quantity - product is out of stock', { duration: 2000 });
-                } else if (newQuantity > stockInfo.available) {
-                    // Allow increasing up to available stock, but show warning if exceeding
-                    newQuantity = stockInfo.available;
-                    toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
-                }
-            }
-            
             updateQuotationItem(rowIndex, 'quantity', newQuantity);
 
         } else if (e.key === 'ArrowDown') {
             e.preventDefault();
             let newQuantity = Math.max(1, currentQuantity - 1); // Minimum quantity is 1
-            
-            // 🚨 FORCE TO 0 FOR OUT-OF-STOCK PRODUCTS
-            if (currentItem?.product && formData.location && productStockCache[currentItem.product]) {
-                const stockInfo = productStockCache[currentItem.product];
-                if (stockInfo.available === 0) {
-                    newQuantity = 0; // Force to 0 for out-of-stock products
-                }
-            }
-            
+            updateQuotationItem(rowIndex, 'quantity', newQuantity);
+
             updateQuotationItem(rowIndex, 'quantity', newQuantity);
 
         } else if (e.key === 'Tab') {
@@ -960,7 +907,7 @@ const QuotationFormPage: React.FC = () => {
     // Location dropdown keyboard navigation
     const handleLocationKeyDown = (e: React.KeyboardEvent) => {
         const filteredLocations = locations.filter(location =>
-            location.name.toLowerCase().includes(locationSearchTerm.toLowerCase()) 
+            location.name.toLowerCase().includes(locationSearchTerm.toLowerCase())
             // location.type.toLowerCase().includes(locationSearchTerm.toLowerCase())
         );
 
@@ -1030,7 +977,7 @@ const QuotationFormPage: React.FC = () => {
                 setShowLocationDropdown(false);
                 setHighlightedLocationIndex(-1);
                 setLocationSearchTerm('');
-                
+
 
             }
 
@@ -1279,108 +1226,7 @@ const QuotationFormPage: React.FC = () => {
         }
     };
 
-    // 🚀 STOCK DISPLAY FUNCTIONS (Read-only for quotations)
-    const loadAllStockForLocation = async () => {
-        if (!formData.location) return;
 
-        try {
-            const response = await apiClient.stock.getStock({
-                location: formData.location,
-                limit: 10000
-            });
-
-            let stockData: any[] = [];
-            if (response.data?.stockLevels && Array.isArray(response.data.stockLevels)) {
-                stockData = response.data.stockLevels;
-            }
-
-            const newStockCache: any = {};
-            stockData.forEach(stock => {
-                const productId = stock.product?._id || stock.product;
-                if (productId) {
-                    const totalQuantity = Number(stock.quantity) || 0;
-                    const reservedQuantity = Number(stock.reservedQuantity) || 0;
-                    const available = Math.max(0, totalQuantity - reservedQuantity);
-                    
-                    newStockCache[productId] = {
-                        available,
-                        isValid: available > 0,
-                        message: available === 0 ? 'Out of stock' : `${available} available`,
-                        totalQuantity,
-                        reservedQuantity
-                    };
-                }
-            });
-
-            products.forEach(product => {
-                if (!newStockCache[product._id]) {
-                    newStockCache[product._id] = {
-                        available: 0,
-                        isValid: false,
-                        message: 'Out of stock',
-                        totalQuantity: 0,
-                        reservedQuantity: 0
-                    };
-                }
-            });
-
-            setProductStockCache(newStockCache);
-        } catch (error) {
-            console.error('Error loading stock for location:', error);
-        }
-    };
-
-    const validateStockForItem = async (itemIndex: number, productId: string, quantity: number) => {
-        if (!productId || !formData.location || quantity <= 0) {
-            setStockValidation(prev => ({
-                ...prev,
-                [itemIndex]: { available: 0, isValid: true, message: '' }
-            }));
-            return;
-        }
-
-        try {
-            const response = await apiClient.stock.getStock({
-                product: productId,
-                location: formData.location
-            });
-
-            let stockData: any[] = [];
-            if (response.data) {
-                if (Array.isArray(response.data)) {
-                    stockData = response.data;
-                } else if (response.data.stockLevels && Array.isArray(response.data.stockLevels)) {
-                    stockData = response.data.stockLevels;
-                }
-            }
-
-            const stockItem = stockData.length > 0 ? stockData[0] : null;
-            const available = stockItem ? (stockItem.availableQuantity || (stockItem.quantity - (stockItem.reservedQuantity || 0))) : 0;
-
-            const isValid = quantity <= available && available > 0;
-            const message = available === 0
-                ? `Out of stock`
-                : !isValid
-                    ? `Only ${available} units available`
-                    : `${available} units available`;
-
-            setStockValidation(prev => ({
-                ...prev,
-                [itemIndex]: { available, isValid, message }
-            }));
-
-            setProductStockCache(prev => ({
-                ...prev,
-                [productId]: { available, isValid: quantity <= available, message }
-            }));
-        } catch (error) {
-            console.error('Error validating stock:', error);
-            setStockValidation(prev => ({
-                ...prev,
-                [itemIndex]: { available: 0, isValid: false, message: 'Unable to check stock' }
-            }));
-        }
-    };
 
     const addQuotationItem = () => {
         setFormData(prev => ({
@@ -1409,7 +1255,7 @@ const QuotationFormPage: React.FC = () => {
         setFormData(prev => {
             const currentItems = prev.items || [];
             const newItems = currentItems.filter((_, i) => i !== index);
-            
+
             // If we're removing the last item, add a new empty row
             if (newItems.length === 0) {
                 newItems.push({
@@ -1427,7 +1273,7 @@ const QuotationFormPage: React.FC = () => {
                     totalPrice: 0
                 });
             }
-            
+
             return {
                 ...prev,
                 items: newItems
@@ -1451,7 +1297,7 @@ const QuotationFormPage: React.FC = () => {
                     updatedItems[index].hsnNumber = productObj.hsnNumber || '';
                     updatedItems[index].uom = productObj.uom || 'nos';
                 }
-                
+
                 // 🚨 AUTO-SET QUANTITY TO 0 FOR OUT-OF-STOCK PRODUCTS
                 if (formData.location && productStockCache[value]) {
                     const stockInfo = productStockCache[value];
@@ -1460,13 +1306,6 @@ const QuotationFormPage: React.FC = () => {
                         // toast.error(`${productObj?.name || 'Product'} is out of stock. Quantity set to 0.`, { duration: 3000 });
                     }
                 }
-                
-                // Load stock information for display (read-only)
-                validateStockForItem(index, value, updatedItems[index].quantity);
-            }
-
-            if (field === 'quantity') {
-                validateStockForItem(index, updatedItems[index].product, value);
             }
 
             // Recalculate totals
@@ -1491,36 +1330,8 @@ const QuotationFormPage: React.FC = () => {
 
     const validateForm = (): boolean => {
         const validation = validateQuotationData(formData);
-        
-        // 🚨 FILTER OUT QUANTITY VALIDATION FOR OUT-OF-STOCK PRODUCTS
-        let filteredErrors = validation.errors;
-        
-        if (formData.location) {
-            // Filter out "Quantity must be greater than 0" errors for out-of-stock products
-            filteredErrors = validation.errors.filter(error => {
-                // Check if this is a quantity validation error
-                if (error.field.includes('.quantity') && error.message.includes('Quantity must be greater than 0')) {
-                    // Extract the item index from the field name like "items[0].quantity"
-                    const match = error.field.match(/items\[(\d+)\]\.quantity/);
-                    if (match) {
-                        const itemIndex = parseInt(match[1]);
-                        const item = formData.items?.[itemIndex];
-                        
-                        if (item?.product) {
-                            const stockInfo = productStockCache[item.product];
-                            // If product is out of stock, ignore the quantity validation error
-                            if (stockInfo && stockInfo.available === 0 && item.quantity === 0) {
-                                return false; // Filter out this error
-                            }
-                        }
-                    }
-                }
-                return true; // Keep other errors
-            });
-        }
-        
-        setErrors(filteredErrors);
-        return filteredErrors.length === 0;
+        setErrors(validation.errors);
+        return validation.errors.length === 0;
     };
 
     const handleSubmit = async () => {
@@ -1569,145 +1380,6 @@ const QuotationFormPage: React.FC = () => {
         }
     };
 
-    // Portal-based Product Dropdown Component
-    const ProductDropdownPortal = () => {
-        if (!dropdownPosition || !showProductDropdowns[dropdownPosition.rowIndex]) {
-            return null;
-        }
-
-        const currentRowIndex = dropdownPosition.rowIndex;
-        const searchTerm = productSearchTerms[currentRowIndex] || '';
-
-        return createPortal(
-            <div
-                className="fixed bg-white border border-gray-300 rounded-md shadow-lg z-[9999] max-h-[400px] overflow-hidden"
-                style={{
-                    top: `${dropdownPosition.top}px`,
-                    left: `${dropdownPosition.left}px`,
-                    width: '450px',
-                    minWidth: '450px'
-                }}
-            >
-                <div className="p-2 border-b border-gray-200 bg-gray-50">
-                    <div className="text-xs text-gray-600">
-                        {getFilteredProducts(searchTerm).length} products found
-                        {searchTerm && (
-                            <span className="ml-2 text-blue-600 font-medium">
-                                for "{searchTerm}"
-                            </span>
-                        )}
-                    </div>
-                </div>
-
-                <div className="overflow-y-auto max-h-96">
-                    {getFilteredProducts(searchTerm).length === 0 ? (
-                        <div className="px-3 py-4 text-center text-sm text-gray-500">
-                            <div>No products found</div>
-                            <div className="text-xs mt-1">Try different search terms</div>
-                        </div>
-                    ) : (
-                        getFilteredProducts(searchTerm).map((product, productIndex) => {
-                            const currentItem = formData.items?.[currentRowIndex];
-                            return (
-                                <button
-                                    key={product._id}
-                                    data-product-index={productIndex}
-                                    onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        updateQuotationItem(currentRowIndex, 'product', product._id);
-                                        setShowProductDropdowns({ ...showProductDropdowns, [currentRowIndex]: false });
-                                        updateProductSearchTerm(currentRowIndex, '');
-                                        setHighlightedProductIndex({ ...highlightedProductIndex, [currentRowIndex]: -1 });
-                                        setDropdownPosition(null);
-                                        setTimeout(() => {
-                                            const quantityInput = document.querySelector(`[data-row="${currentRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
-                                            if (quantityInput) {
-                                                quantityInput.focus();
-                                                quantityInput.select();
-                                            }
-                                        }, 50);
-                                    }}
-                                    className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${currentItem?.product === product._id ? 'bg-blue-100 text-blue-800' :
-                                            highlightedProductIndex[currentRowIndex] === productIndex ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
-                                                'text-gray-700'
-                                        } ${productIndex === 0 && searchTerm && highlightedProductIndex[currentRowIndex] === -1 ? 'bg-yellow-50 border-l-4 border-l-blue-500' : ''}`}
-                                >
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex-1 min-w-0 pr-4">
-                                            <div className="font-medium text-gray-900 mb-1 flex items-center">
-                                                <div><span className="font-medium">Part No:</span>{product?.partNo}</div>
-                                                {highlightedProductIndex[currentRowIndex] === productIndex && (
-                                                    <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded">
-                                                        Selected - Press Enter
-                                                    </span>
-                                                )}
-                                                {productIndex === 0 && searchTerm && highlightedProductIndex[currentRowIndex] === -1 && (
-                                                    <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-                                                        Best match
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="text-xs text-gray-600 space-y-0.5">
-                                                <div><span className="font-medium">Product Name:</span> {product?.name || 'N/A'}</div>
-                                                <div>
-                                                    <span className="font-medium">Brand:</span> {product?.brand || 'N/A'} •
-                                                    <span className="font-medium">Category:</span> {product?.category || 'N/A'}
-                                                </div>
-                                                
-                                                {/* Stock Display in Product Details */}
-                                                {formData.location && (
-                                                    (() => {
-                                                        const stockInfo = productStockCache[product._id];
-                                                        if (stockInfo) {
-                                                            return (
-                                                                <div className="mt-1 flex items-center">
-                                                                    <span className="font-medium text-gray-700">Stock Available:</span>
-                                                                    <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${stockInfo.available === 0
-                                                                            ? 'bg-red-100 text-red-800 border border-red-300' 
-                                                                            : stockInfo.available <= 5
-                                                                                ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-                                                                                : 'bg-green-100 text-green-800 border border-green-300'
-                                                                    }`}>
-                                                                        {stockInfo.available === 0 ? '❌ OUT OF STOCK' : `✅ ${stockInfo.available} units`}
-                                                                    </span>
-                                                                </div>
-                                                            );
-                                                        }
-                                                        // Show loading state when stock info is not yet available
-                                                        return (
-                                                            <div className="mt-1 flex items-center">
-                                                                <span className="font-medium text-gray-500">Stock Available:</span>
-                                                                <span className="ml-2 px-2 py-0.5 rounded-md text-xs bg-gray-100 text-gray-600 border border-gray-300">
-                                                                    Loading...
-                                                                </span>
-                                                            </div>
-                                                        );
-                                                    })()
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="text-right flex-shrink-0 ml-4">
-                                            <div className="font-bold text-lg text-green-600">₹{product?.price?.toLocaleString()}</div>
-                                            <div className="text-xs text-gray-500 mt-0.5">per unit</div>
-                                        </div>
-                                    </div>
-                                </button>
-                            );
-                        })
-                    )}
-                </div>
-
-                <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-t border-gray-200">
-                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
-                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Tab/Enter</kbd> Select → Set Qty → Tab/Enter Add Row •
-                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Shift+Tab</kbd> Previous •
-                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
-                </div>
-            </div>,
-            document.body
-        );
-    };
-
     if (loading) {
         return (
             <div className="pl-2 pr-6 py-6">
@@ -1721,9 +1393,6 @@ const QuotationFormPage: React.FC = () => {
 
     return (
         <div className="pl-2 pr-6 py-6 space-y-4">
-            {/* Portal-based Product Dropdown */}
-            <ProductDropdownPortal />
-            
             <PageHeader
                 title={isEditMode ? 'Edit Quotation' : 'Create Quotation'}
                 subtitle={isEditMode ? 'Modify quotation details' : 'Create a new customer quotation'}
@@ -1740,7 +1409,7 @@ const QuotationFormPage: React.FC = () => {
             </PageHeader>
 
             {/* 🚀 EXCEL-LIKE NAVIGATION GUIDE */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+            {/* <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-center mb-2">
                     <span className="text-lg">⚡</span>
                     <h3 className="text-sm font-semibold text-blue-900 ml-2">Excel-Like Navigation Enabled!</h3>
@@ -1749,7 +1418,7 @@ const QuotationFormPage: React.FC = () => {
                     <div>
                         <p className="font-medium mb-1">🎯 Complete Form Navigation:</p>
                         <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Tab/Enter</kbd> Move forward</p>
-                        {/* <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Shift+Tab</kbd> Move backward</p> */}
+                        <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Shift+Tab</kbd> Move backward</p>
                         <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">↑↓</kbd> Navigate dropdowns</p>
                     </div>
                     <div>
@@ -1758,7 +1427,7 @@ const QuotationFormPage: React.FC = () => {
                         <p><strong>Products:</strong> Search → Select → Quantity → Tab (Next Row) → Enter (Notes)</p>
                     </div>
                 </div>
-            </div>
+            </div> */}
 
             {/* Form Content */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1795,40 +1464,40 @@ const QuotationFormPage: React.FC = () => {
                                         setHighlightedLocationIndex(-1);
                                         // Clear search term to show current selection when focusing
                                         if (!locationSearchTerm && formData.location) {
-                                          setLocationSearchTerm('');
+                                            setLocationSearchTerm('');
                                         }
-                                        
+
                                         // Auto-scroll to selected location within dropdown container only
                                         setTimeout(() => {
-                                          const selectedLocationIndex = locations.findIndex(loc => loc._id === formData.location);
-                                          if (selectedLocationIndex >= 0) {
-                                            // Find the dropdown container first
-                                            const dropdownContainer = document.querySelector('.dropdown-container .max-h-60');
-                                            const selectedElement = document.querySelector(`[data-location-index="${selectedLocationIndex}"]`);
-                                            
-                                            if (selectedElement && dropdownContainer) {
-                                              // Calculate scroll position relative to dropdown container
-                                              const containerRect = dropdownContainer.getBoundingClientRect();
-                                              const elementRect = selectedElement.getBoundingClientRect();
-                                              const containerScrollTop = dropdownContainer.scrollTop;
-                                              
-                                              // Calculate the position of element relative to container
-                                              const elementTop = elementRect.top - containerRect.top + containerScrollTop;
-                                              const elementHeight = elementRect.height;
-                                              const containerHeight = containerRect.height;
-                                              
-                                              // Calculate ideal scroll position to center the element
-                                              const idealScrollTop = elementTop - (containerHeight / 2) + (elementHeight / 2);
-                                              
-                                              // Smooth scroll within the dropdown container only
-                                              dropdownContainer.scrollTo({
-                                                top: Math.max(0, idealScrollTop),
-                                                behavior: 'smooth'
-                                              });
+                                            const selectedLocationIndex = locations.findIndex(loc => loc._id === formData.location);
+                                            if (selectedLocationIndex >= 0) {
+                                                // Find the dropdown container first
+                                                const dropdownContainer = document.querySelector('.dropdown-container .max-h-60');
+                                                const selectedElement = document.querySelector(`[data-location-index="${selectedLocationIndex}"]`);
+
+                                                if (selectedElement && dropdownContainer) {
+                                                    // Calculate scroll position relative to dropdown container
+                                                    const containerRect = dropdownContainer.getBoundingClientRect();
+                                                    const elementRect = selectedElement.getBoundingClientRect();
+                                                    const containerScrollTop = dropdownContainer.scrollTop;
+
+                                                    // Calculate the position of element relative to container
+                                                    const elementTop = elementRect.top - containerRect.top + containerScrollTop;
+                                                    const elementHeight = elementRect.height;
+                                                    const containerHeight = containerRect.height;
+
+                                                    // Calculate ideal scroll position to center the element
+                                                    const idealScrollTop = elementTop - (containerHeight / 2) + (elementHeight / 2);
+
+                                                    // Smooth scroll within the dropdown container only
+                                                    dropdownContainer.scrollTo({
+                                                        top: Math.max(0, idealScrollTop),
+                                                        behavior: 'smooth'
+                                                    });
+                                                }
                                             }
-                                          }
                                         }, 150);
-                                      }}
+                                    }}
                                     autoComplete="off"
                                     onKeyDown={handleLocationKeyDown}
                                     placeholder="Search location or press ↓ to open"
@@ -1874,19 +1543,16 @@ const QuotationFormPage: React.FC = () => {
                                                                 setShowLocationDropdown(false);
                                                                 setLocationSearchTerm('');
                                                                 setHighlightedLocationIndex(-1);
-                                                                
+
                                                                 // Clear stock cache when location changes
                                                                 setProductStockCache({});
                                                                 setStockValidation({});
-                                                                
-                                                                // Load ALL stock for this location
-                                                                setTimeout(() => {
-                                                                    loadAllStockForLocation();
-                                                                }, 100);
+
+
                                                             }}
                                                             className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.location === location._id ? 'bg-blue-100 text-blue-800' :
-                                                                    highlightedLocationIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
-                                                                        'text-gray-700 hover:bg-gray-50'
+                                                                highlightedLocationIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                                    'text-gray-700 hover:bg-gray-50'
                                                                 }`}
                                                         >
                                                             <div>
@@ -1975,6 +1641,7 @@ const QuotationFormPage: React.FC = () => {
                                                             key={customer._id}
                                                             data-customer-index={index}
                                                             onClick={() => {
+                                                                console.log('Selected customer:', customer);
                                                                 setFormData({
                                                                     ...formData,
                                                                     customer: {
@@ -1993,8 +1660,8 @@ const QuotationFormPage: React.FC = () => {
                                                                 setAddresses(customer.addresses || []);
                                                             }}
                                                             className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.customer?._id === customer._id ? 'bg-blue-100 text-blue-800' :
-                                                                    highlightedCustomerIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
-                                                                        'text-gray-700 hover:bg-gray-50'
+                                                                highlightedCustomerIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                                    'text-gray-700 hover:bg-gray-50'
                                                                 }`}
                                                         >
                                                             <div>
@@ -2015,8 +1682,8 @@ const QuotationFormPage: React.FC = () => {
                                     </div>
                                 )}
                             </div>
-                            </div>
                         </div>
+                    </div>
 
                     {/* Bill To and Ship To Addresses */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2040,8 +1707,8 @@ const QuotationFormPage: React.FC = () => {
                                     placeholder={!formData.customer?._id ? "Select customer first" : "Press ↓ to open address list"}
                                     data-field="bill-to-address"
                                     className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
-                                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                            : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                        : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                                         }`}
                                 />
                                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
@@ -2088,7 +1755,7 @@ const QuotationFormPage: React.FC = () => {
                                                 }}
                                                 className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.billToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
                                                     highlightedBillToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
-                                                            'text-gray-700 hover:bg-gray-50'
+                                                        'text-gray-700 hover:bg-gray-50'
                                                     }`}
                                             >
                                                 <div>
@@ -2278,7 +1945,7 @@ const QuotationFormPage: React.FC = () => {
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                             />
                         </div>
-                        </div>
+                    </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -2298,10 +1965,10 @@ const QuotationFormPage: React.FC = () => {
                                 onKeyDown={(e) => {
                                     if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
                                         e.preventDefault();
-                                    // Move to engineer field
+                                        // Move to engineer field
                                         setTimeout(() => {
-                                        const engineerInput = document.querySelector('[data-field="engineer"]') as HTMLInputElement;
-                                        if (engineerInput) engineerInput.focus();
+                                            const engineerInput = document.querySelector('[data-field="engineer"]') as HTMLInputElement;
+                                            if (engineerInput) engineerInput.focus();
                                         }, 50);
                                     } else if (e.key === 'Tab' && e.shiftKey) {
                                         e.preventDefault();
@@ -2314,212 +1981,212 @@ const QuotationFormPage: React.FC = () => {
                                 }}
                                 data-field="valid-until"
                                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            title="Tab/Enter: Move to engineer field | Shift+Tab: Back to validity period"
+                                title="Tab/Enter: Move to engineer field | Shift+Tab: Back to validity period"
                             />
                         </div>
 
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Assign to Engineer
-                        </label>
-                        <div className="relative dropdown-container">
-                            <input
-                                type="text"
-                                value={engineerSearchTerm || getEngineerLabel(formData.assignedEngineer || '')}
-                                onChange={(e) => {
-                                    setEngineerSearchTerm(e.target.value);
-                                    if (!showEngineerDropdown) setShowEngineerDropdown(true);
-                                    setHighlightedEngineerIndex(-1);
-                                }}
-                                onFocus={() => {
-                                    setShowEngineerDropdown(true);
-                                    setHighlightedEngineerIndex(-1);
-                                    if (!engineerSearchTerm && formData.assignedEngineer) {
-                                        setEngineerSearchTerm('');
-                                    }
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'ArrowDown') {
-                                        e.preventDefault();
-                                        setShowEngineerDropdown(true);
-                                        setHighlightedEngineerIndex(prev => 
-                                            prev < fieldOperators.length - 1 ? prev + 1 : 0
-                                        );
-                                    } else if (e.key === 'ArrowUp') {
-                                        e.preventDefault();
-                                        setShowEngineerDropdown(true);
-                                        setHighlightedEngineerIndex(prev => 
-                                            prev > 0 ? prev - 1 : fieldOperators.length - 1
-                                        );
-                                    } else if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        if (showEngineerDropdown && highlightedEngineerIndex >= 0) {
-                                            const selectedEngineer = fieldOperators[highlightedEngineerIndex];
-                                            setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
-                                            setShowEngineerDropdown(false);
-                                            setEngineerSearchTerm('');
-                                            setHighlightedEngineerIndex(-1);
-                                        } else if (showEngineerDropdown && fieldOperators.length === 1) {
-                                            const selectedEngineer = fieldOperators[0];
-                                            setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
-                                            setShowEngineerDropdown(false);
-                                            setEngineerSearchTerm('');
-                                            setHighlightedEngineerIndex(-1);
-                                        }
-                                    } else if (e.key === 'Escape') {
-                                        setShowEngineerDropdown(false);
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Assign to Engineer
+                            </label>
+                            <div className="relative dropdown-container">
+                                <input
+                                    type="text"
+                                    value={engineerSearchTerm || getEngineerLabel(formData.assignedEngineer || '')}
+                                    onChange={(e) => {
+                                        setEngineerSearchTerm(e.target.value);
+                                        if (!showEngineerDropdown) setShowEngineerDropdown(true);
                                         setHighlightedEngineerIndex(-1);
-                                    } else if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
-                                        e.preventDefault();
-                                        // Move to first product field in the list
-                                        setTimeout(() => {
-                                            const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
-                                            if (firstProductInput) firstProductInput.focus();
-                                        }, 50);
-                                    } else if (e.key === 'Tab' && e.shiftKey) {
-                                        e.preventDefault();
-                                        // Move back to Valid Until field
-                                        setTimeout(() => {
-                                            const validUntilInput = document.querySelector('[data-field="valid-until"]') as HTMLInputElement;
-                                            if (validUntilInput) validUntilInput.focus();
-                                        }, 50);
-                                    }
-                                }}
-                                autoComplete="off"
-                                placeholder="Search engineer or press ↓ to open"
-                                data-field="engineer"
-                                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                            />
-                            <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEngineerDropdown ? 'rotate-180' : ''}`} />
-                    </div>
-                            {showEngineerDropdown && (
-                                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                                    {(() => {
-                                        const filteredEngineers = fieldOperators.filter(engineer =>
-                                            engineer.name.toLowerCase().includes(engineerSearchTerm.toLowerCase()) ||
-                                            (engineer.firstName && engineer.firstName.toLowerCase().includes(engineerSearchTerm.toLowerCase())) ||
-                                            (engineer.lastName && engineer.lastName.toLowerCase().includes(engineerSearchTerm.toLowerCase())) ||
-                                            (engineer.email && engineer.email.toLowerCase().includes(engineerSearchTerm.toLowerCase()))
-                                        );
+                                    }}
+                                    onFocus={() => {
+                                        setShowEngineerDropdown(true);
+                                        setHighlightedEngineerIndex(-1);
+                                        if (!engineerSearchTerm && formData.assignedEngineer) {
+                                            setEngineerSearchTerm('');
+                                        }
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'ArrowDown') {
+                                            e.preventDefault();
+                                            setShowEngineerDropdown(true);
+                                            setHighlightedEngineerIndex(prev =>
+                                                prev < fieldOperators.length - 1 ? prev + 1 : 0
+                                            );
+                                        } else if (e.key === 'ArrowUp') {
+                                            e.preventDefault();
+                                            setShowEngineerDropdown(true);
+                                            setHighlightedEngineerIndex(prev =>
+                                                prev > 0 ? prev - 1 : fieldOperators.length - 1
+                                            );
+                                        } else if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            if (showEngineerDropdown && highlightedEngineerIndex >= 0) {
+                                                const selectedEngineer = fieldOperators[highlightedEngineerIndex];
+                                                setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
+                                                setShowEngineerDropdown(false);
+                                                setEngineerSearchTerm('');
+                                                setHighlightedEngineerIndex(-1);
+                                            } else if (showEngineerDropdown && fieldOperators.length === 1) {
+                                                const selectedEngineer = fieldOperators[0];
+                                                setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
+                                                setShowEngineerDropdown(false);
+                                                setEngineerSearchTerm('');
+                                                setHighlightedEngineerIndex(-1);
+                                            }
+                                        } else if (e.key === 'Escape') {
+                                            setShowEngineerDropdown(false);
+                                            setHighlightedEngineerIndex(-1);
+                                        } else if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
+                                            e.preventDefault();
+                                            // Move to first product field in the list
+                                            setTimeout(() => {
+                                                const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
+                                                if (firstProductInput) firstProductInput.focus();
+                                            }, 50);
+                                        } else if (e.key === 'Tab' && e.shiftKey) {
+                                            e.preventDefault();
+                                            // Move back to Valid Until field
+                                            setTimeout(() => {
+                                                const validUntilInput = document.querySelector('[data-field="valid-until"]') as HTMLInputElement;
+                                                if (validUntilInput) validUntilInput.focus();
+                                            }, 50);
+                                        }
+                                    }}
+                                    autoComplete="off"
+                                    placeholder="Search engineer or press ↓ to open"
+                                    data-field="engineer"
+                                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEngineerDropdown ? 'rotate-180' : ''}`} />
+                                </div>
+                                {showEngineerDropdown && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                        {(() => {
+                                            const filteredEngineers = fieldOperators.filter(engineer =>
+                                                engineer.name.toLowerCase().includes(engineerSearchTerm.toLowerCase()) ||
+                                                (engineer.firstName && engineer.firstName.toLowerCase().includes(engineerSearchTerm.toLowerCase())) ||
+                                                (engineer.lastName && engineer.lastName.toLowerCase().includes(engineerSearchTerm.toLowerCase())) ||
+                                                (engineer.email && engineer.email.toLowerCase().includes(engineerSearchTerm.toLowerCase()))
+                                            );
 
-                                        return (
-                                            <>
-                                                <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
-                                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
-                                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
-                                                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
-                                                </div>
+                                            return (
+                                                <>
+                                                    <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                                    </div>
 
-                                                <button
-                                                    onClick={() => {
-                                                        setFormData({ ...formData, assignedEngineer: '' });
-                                                        setShowEngineerDropdown(false);
-                                                        setEngineerSearchTerm('');
-                                                    }}
-                                                    className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.assignedEngineer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                                                >
-                                                    Select engineer
-                                                </button>
-
-                                                {filteredEngineers.map((engineer, index) => (
                                                     <button
-                                                        key={engineer._id}
                                                         onClick={() => {
-                                                            setFormData({ ...formData, assignedEngineer: engineer._id });
+                                                            setFormData({ ...formData, assignedEngineer: '' });
                                                             setShowEngineerDropdown(false);
                                                             setEngineerSearchTerm('');
-                                                            setHighlightedEngineerIndex(-1);
                                                         }}
-                                                        className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.assignedEngineer === engineer._id ? 'bg-blue-100 text-blue-800' :
+                                                        className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.assignedEngineer ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                                    >
+                                                        Select engineer
+                                                    </button>
+
+                                                    {filteredEngineers.map((engineer, index) => (
+                                                        <button
+                                                            key={engineer._id}
+                                                            onClick={() => {
+                                                                setFormData({ ...formData, assignedEngineer: engineer._id });
+                                                                setShowEngineerDropdown(false);
+                                                                setEngineerSearchTerm('');
+                                                                setHighlightedEngineerIndex(-1);
+                                                            }}
+                                                            className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.assignedEngineer === engineer._id ? 'bg-blue-100 text-blue-800' :
                                                                 highlightedEngineerIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
                                                                     'text-gray-700 hover:bg-gray-50'
-                                                            }`}
-                                                    >
-                                                        <div>
-                                                            <div className="font-medium">{engineer.name}</div>
-                                                            <div className="text-xs text-gray-500">{engineer.email}</div>
-                                                            {engineer.phone && (
-                                                                <div className="text-xs text-gray-500">{engineer.phone}</div>
-                                                            )}
-                                                        </div>
-                                                    </button>
-                                                ))}
+                                                                }`}
+                                                        >
+                                                            <div>
+                                                                <div className="font-medium">{engineer.name}</div>
+                                                                <div className="text-xs text-gray-500">{engineer.email}</div>
+                                                                {engineer.phone && (
+                                                                    <div className="text-xs text-gray-500">{engineer.phone}</div>
+                                                                )}
+                                                            </div>
+                                                        </button>
+                                                    ))}
 
-                                                {filteredEngineers.length === 0 && (
-                                                    <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                                                        No engineers found
-                                                    </div>
-                                                )}
-                                            </>
-                                        );
-                                    })()}
-                                </div>
-                            )}
-                        </div>
-                        {/* {getFieldErrorMessage('assignedEngineer') && (
+                                                    {filteredEngineers.length === 0 && (
+                                                        <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                                            No engineers found
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+                            </div>
+                            {/* {getFieldErrorMessage('assignedEngineer') && (
                             <p className="mt-1 text-sm text-red-600">{getFieldErrorMessage('assignedEngineer')}</p>
                         )} */}
-                    </div>
+                        </div>
                     </div>
                 </div>
 
 
 
-                    {/* Excel-Style Items Table */}
-                    <div>
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-medium text-gray-900">Quotation Items</h3>
-                            <button
-                                onClick={addQuotationItem}
-                                type="button"
-                                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-2"
-                            >
-                                <Plus className="w-4 h-4" />
-                                <span>Add Row</span>
-                            </button>
+                {/* Excel-Style Items Table */}
+                <div className="mb-10 p-5">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium text-gray-900">Quotation Items</h3>
+                        <button
+                            onClick={addQuotationItem}
+                            type="button"
+                            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-2"
+                        >
+                            <Plus className="w-4 h-4" />
+                            <span>Add Row</span>
+                        </button>
+                    </div>
+
+                    {/* Desktop Table View */}
+                    <div className="hidden lg:block border border-gray-300 rounded-lg bg-white shadow-sm overflow-x-auto">
+                        {/* Table Header */}
+                        <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
+                            <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                                style={{ gridTemplateColumns: '60px 150px 1fr 90px 80px 100px 60px 120px 100px 80px 60px' }}>
+                                <div className="p-3 border-r border-gray-300 text-center bg-gray-200">S.No</div>
+                                <div className="p-3 border-r border-gray-300 bg-gray-200">Product Code</div>
+                                <div className="p-3 border-r border-gray-300 bg-gray-200">Product Name</div>
+                                <div className="p-3 border-r border-gray-300 bg-gray-200">HSC/SAC</div>
+                                <div className="p-3 border-r border-gray-300 bg-gray-200">GST(%)</div>
+                                <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                                <div className="p-3 border-r border-gray-300 bg-gray-200">UOM</div>
+                                <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                                <div className="p-3 border-r border-gray-300 bg-gray-200">Discount</div>
+                                <div className="p-3 border-r border-gray-300 bg-gray-200">Total</div>
+                                <div className="p-3 text-center bg-gray-200 font-medium"></div>
+                            </div>
                         </div>
 
-                        {/* Desktop Table View */}
-                        <div className="hidden lg:block border border-gray-300 rounded-lg bg-white shadow-sm overflow-x-auto">
-                            {/* Table Header */}
-                            <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
-                                <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
-                                    style={{ gridTemplateColumns: '60px 150px 1fr 90px 80px 100px 60px 120px 100px 80px 60px' }}>
-                                    <div className="p-3 border-r border-gray-300 text-center bg-gray-200">S.No</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Product Code</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Product Name</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSC/SAC</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">GST(%)</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">UOM</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Discount</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Total</div>
-                                    <div className="p-3 text-center bg-gray-200 font-medium"></div>
-                                </div>
-                            </div>
+                        {/* Table Body */}
+                        <div className="divide-y divide-gray-200 min-w-[1200px] mb-60 border-b border-gray-200 rounded-lg">
+                            {(formData.items || []).map((item, index) => {
+                                const stockInfo = stockValidation[index];
+                                let rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                                if (stockInfo) {
+                                    if (stockInfo.available === 0) rowBg = 'bg-red-100';
+                                    else if (!stockInfo.isValid) rowBg = 'bg-yellow-100';
+                                    else if (stockInfo.available > 0) rowBg = 'bg-green-50';
+                                }
 
-                            {/* Table Body */}
-                            <div className="divide-y divide-gray-200 min-w-[1200px]">
-                                {(formData.items || []).map((item, index) => {
-                                    const stockInfo = stockValidation[index];
-                                    let rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
-                                    if (stockInfo) {
-                                        if (stockInfo.available === 0) rowBg = 'bg-red-100';
-                                        else if (!stockInfo.isValid) rowBg = 'bg-yellow-100';
-                                        else if (stockInfo.available > 0) rowBg = 'bg-green-50';
-                                    }
-
-                                    return (
-                                        <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${rowBg}`}
-                                            style={{ gridTemplateColumns: '60px 150px 1fr 90px 80px 100px 60px 120px 100px 80px 60px' }}>
+                                return (
+                                    <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${rowBg}`}
+                                        style={{ gridTemplateColumns: '60px 150px 1fr 90px 80px 100px 60px 120px 100px 80px 60px' }}>
                                         {/* S.No */}
                                         <div className="p-2 border-r border-gray-200 text-center text-sm font-medium text-gray-600 flex items-center justify-center">
                                             {index + 1}
                                         </div>
 
-                                        {/* Product Code - Enhanced with portal dropdown */}
+                                        {/* Product Code - Enhanced with fixed dropdown */}
                                         <div className="p-1 border-r border-gray-200 relative">
                                             <input
                                                 type="text"
@@ -2536,7 +2203,7 @@ const QuotationFormPage: React.FC = () => {
                                                         [index]: -1
                                                     });
                                                 }}
-                                                onFocus={(e) => {
+                                                onFocus={() => {
                                                     if (!productSearchTerms[index] && !item.product) {
                                                         updateProductSearchTerm(index, '');
                                                     }
@@ -2545,13 +2212,8 @@ const QuotationFormPage: React.FC = () => {
                                                         [index]: true
                                                     });
 
-                                                    // Calculate dropdown position for portal
-                                                    calculateDropdownPosition(e.target, index);
-
                                                     // Load all stock for location if not already loaded
-                                                    if (formData.location && Object.keys(productStockCache).length === 0) {
-                                                        loadAllStockForLocation();
-                                                    }
+
                                                 }}
                                                 onBlur={() => {
                                                     setTimeout(() => {
@@ -2559,7 +2221,6 @@ const QuotationFormPage: React.FC = () => {
                                                             ...showProductDropdowns,
                                                             [index]: false
                                                         });
-                                                        setDropdownPosition(null);
                                                     }, 200);
                                                 }}
                                                 onKeyDown={(e) => handleProductKeyDown(e, index)}
@@ -2569,6 +2230,128 @@ const QuotationFormPage: React.FC = () => {
                                                 placeholder="Type to search..."
                                                 autoComplete="off"
                                             />
+                                            {showProductDropdowns[index] && (
+                                                <div
+                                                    className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-[400px] overflow-hidden"
+                                                    data-dropdown={index}
+                                                    style={{ width: '450px', minWidth: '450px' }}
+                                                >
+                                                    <div className="p-2 border-b border-gray-200 bg-gray-50">
+                                                        <div className="text-xs text-gray-600">
+                                                            {getFilteredProducts(productSearchTerms[index] || '').length} products found
+                                                            {productSearchTerms[index] && (
+                                                                <span className="ml-2 text-blue-600 font-medium">
+                                                                    for "{productSearchTerms[index]}"
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="overflow-y-auto max-h-96">
+                                                        {getFilteredProducts(productSearchTerms[index] || '').length === 0 ? (
+                                                            <div className="px-3 py-4 text-center text-sm text-gray-500">
+                                                                <div>No products found</div>
+                                                                <div className="text-xs mt-1">Try different search terms</div>
+                                                            </div>
+                                                        ) : (
+                                                            getFilteredProducts(productSearchTerms[index] || '').map((product, productIndex) => (
+                                                                <button
+                                                                    key={product._id}
+                                                                    data-product-index={productIndex}
+                                                                    onMouseDown={(e) => {
+                                                                        e.preventDefault();
+                                                                        updateQuotationItem(index, 'product', product._id);
+                                                                        setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
+                                                                        updateProductSearchTerm(index, '');
+                                                                        setHighlightedProductIndex({ ...highlightedProductIndex, [index]: -1 });
+                                                                        setTimeout(() => {
+                                                                            const quantityInput = document.querySelector(`[data-row="${index}"][data-field="quantity"]`) as HTMLInputElement;
+                                                                            if (quantityInput) {
+                                                                                quantityInput.focus();
+                                                                                quantityInput.select();
+                                                                            }
+                                                                        }, 50);
+                                                                    }}
+                                                                    className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.product === product._id ? 'bg-blue-100 text-blue-800' :
+                                                                        highlightedProductIndex[index] === productIndex ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                                            'text-gray-700'
+                                                                        } ${productIndex === 0 && productSearchTerms[index] && highlightedProductIndex[index] === -1 ? 'bg-yellow-50 border-l-4 border-l-blue-500' : ''}`}
+                                                                >
+                                                                    <div className="flex justify-between items-start">
+                                                                        <div className="flex-1 min-w-0 pr-4">
+                                                                            <div className="font-medium text-gray-900 mb-1 flex items-center">
+                                                                                <div><span className="font-medium">Part No:</span>{product?.partNo}</div>
+                                                                                {highlightedProductIndex[index] === productIndex && (
+                                                                                    <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded">
+                                                                                        Selected - Press Enter
+                                                                                    </span>
+                                                                                )}
+                                                                                {productIndex === 0 && productSearchTerms[index] && highlightedProductIndex[index] === -1 && (
+                                                                                    <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+                                                                                        Best match
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                            <div className="text-xs text-gray-600 space-y-0.5">
+                                                                                <div><span className="font-medium">Product Name:</span> {product?.name || 'N/A'}</div>
+                                                                                <div>
+                                                                                    {/* <span className="font-medium">Brand:</span> {product?.brand || 'N/A'} • */}
+                                                                                    <span className="font-medium">Category:</span> {product?.category || 'N/A'}
+                                                                                </div>
+
+                                                                                {/* Stock Display in Product Details */}
+                                                                                {/* {formData.location && (
+                                                                                    (() => {
+                                                                                        const stockInfo = productStockCache[product._id];
+                                                                                        if (stockInfo) {
+                                                                                            return (
+                                                                                                <div className="mt-1 flex items-center">
+                                                                                                    <span className="font-medium text-gray-700">Stock Available:</span>
+                                                                                                    <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${stockInfo.available === 0
+                                                                                                        ? 'bg-red-100 text-red-800 border border-red-300'
+                                                                                                        : stockInfo.available <= 5
+                                                                                                            ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                                                                                            : 'bg-green-100 text-green-800 border border-green-300'
+                                                                                                        }`}>
+                                                                                                        {stockInfo.available === 0 ? '❌ OUT OF STOCK' : `✅ ${stockInfo.available} units`}
+                                                                                                    </span>
+                                                                                                </div>
+                                                                                            );
+                                                                                        }
+                                                                                        // Show loading state when stock info is not yet available
+                                                                                        return (
+                                                                                            <div className="mt-1 flex items-center">
+                                                                                                <span className="font-medium text-gray-500">Stock Available:</span>
+                                                                                                <span className="ml-2 px-2 py-0.5 rounded-md text-xs bg-gray-100 text-gray-600 border border-gray-300">
+                                                                                                    Loading...
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        );
+                                                                                    })()
+                                                                                )} */}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="text-right flex-shrink-0 ml-4">
+                                                                            <div className="font-bold text-lg text-green-600">₹{product?.price?.toLocaleString()}</div>
+                                                                            <div className="text-xs text-gray-500 mt-0.5">per unit</div>
+
+
+
+                                                                        </div>
+                                                                    </div>
+                                                                </button>
+                                                            ))
+                                                        )}
+                                                    </div>
+
+                                                    <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-t border-gray-200">
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Tab/Enter</kbd> Select → Set Qty → Tab/Enter Add Row •
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Shift+Tab</kbd> Previous •
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Product Name */}
@@ -2585,16 +2368,16 @@ const QuotationFormPage: React.FC = () => {
                                                     placeholder="Product Name"
                                                     disabled={true}
                                                 />
-                                                
+
                                                 {/* Stock Badge in Product Name Field */}
                                                 {formData.location && item.product && productStockCache[item.product] && (
                                                     <div className="flex-shrink-0">
                                                         <span className={`text-xs px-2 py-1 rounded-full font-medium ${productStockCache[item.product].available === 0
-                                                                ? 'bg-red-100 text-red-800'
-                                                                : productStockCache[item.product].available <= 5
-                                                                    ? 'bg-yellow-100 text-yellow-800'
-                                                                    : 'bg-green-100 text-green-800'
-                                                        }`}>
+                                                            ? 'bg-red-100 text-red-800'
+                                                            : productStockCache[item.product].available <= 5
+                                                                ? 'bg-yellow-100 text-yellow-800'
+                                                                : 'bg-green-100 text-green-800'
+                                                            }`}>
                                                             {productStockCache[item.product].available === 0
                                                                 ? '❌ Out of Stock'
                                                                 : `📦 ${productStockCache[item.product].available} in stock`}
@@ -2660,43 +2443,27 @@ const QuotationFormPage: React.FC = () => {
                                                 value={item.quantity}
                                                 onChange={(e) => {
                                                     let newQuantity = parseFloat(e.target.value) || 1;
-                                                    
-                                                    // If product is selected and out of stock, force quantity to 0
-                                                    if (item.product && formData.location && productStockCache[item.product]) {
-                                                        const stockInfo = productStockCache[item.product];
-                                                        if (stockInfo.available === 0) {
-                                                            if (newQuantity > 0) {
-                                                                toast.error('This product is out of stock. Quantity set to 0.', { duration: 2000 });
-                                                            }
-                                                            newQuantity = 0;
-                                                        } else if (newQuantity > stockInfo.available) {
-                                                            // Allow increasing up to available stock, but show warning if exceeding
-                                                            newQuantity = stockInfo.available;
-                                                            toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
-                                                        }
-                                                    }
-
                                                     updateQuotationItem(index, 'quantity', newQuantity);
                                                 }}
                                                 onKeyDown={(e) => handleQuantityKeyDown(e, index)}
                                                 data-row={index}
                                                 data-field="quantity"
                                                 className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right ${item.product && formData.location && productStockCache[item.product] ? (
-                                                    productStockCache[item.product].available === 0 
-                                                        ? 'bg-red-50 text-red-600 font-bold cursor-not-allowed' 
-                                                        : item.quantity > 0 && Number(item.quantity) > productStockCache[item.product].available 
-                                                            ? 'text-red-600 font-bold' 
+                                                    productStockCache[item.product].available === 0
+                                                        ? 'bg-red-50 text-red-600 font-bold cursor-not-allowed'
+                                                        : item.quantity > 0 && Number(item.quantity) > productStockCache[item.product].available
+                                                            ? 'text-red-600 font-bold'
                                                             : ''
                                                 ) : ''
-                                                }`}
+                                                    }`}
                                                 placeholder="1.00"
                                                 title={
-                                                    item.product && formData.location && productStockCache[item.product]?.available === 0 
+                                                    item.product && formData.location && productStockCache[item.product]?.available === 0
                                                         ? "Product is out of stock - quantity locked at 0"
                                                         : "Tab/Enter here adds new row | ↑↓ arrows: adjust quantity | Shift+Tab: back to product"
                                                 }
                                             />
-                                            
+
                                             {/* Warning: Quantity exceeds available stock */}
                                             {item.product &&
                                                 item.quantity > 0 &&
@@ -2792,22 +2559,22 @@ const QuotationFormPage: React.FC = () => {
                                                 </button>
                                             )} */}
                                         </div>
-                                            <div className="p-0 h-full">
-                                                <button
-                                                    onClick={() => removeQuotationItem(index)}
-                                                    className="w-full h-full text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors flex items-center justify-center border-0 hover:bg-red-100 bg-transparent"
-                                                    title="Remove this item"
-                                                >
-                                                    <X className="w-4 h-4" />
-                                                </button>
-                                            </div>
+                                        <div className="p-0 h-full">
+                                            <button
+                                                onClick={() => removeQuotationItem(index)}
+                                                className="w-full h-full text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors flex items-center justify-center border-0 hover:bg-red-100 bg-transparent"
+                                                title="Remove this item"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
                                         </div>
-                                    );
-                                })}
-                            </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
 
-                            {/* Navigation Hints */}
-                            <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1200px]">
+                        {/* Navigation Hints */}
+                        {/* <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1200px]">
                                 <div className="text-sm text-gray-600 mb-1 mt-16">
                                     <strong>🚀 Excel-Like Quotation Items:</strong> Search → Select → Set Quantity → Tab → Next Row | Enter → Notes
                                 </div>
@@ -2822,248 +2589,234 @@ const QuotationFormPage: React.FC = () => {
                                 <div className="text-xs text-gray-400 mb-5">
                                     ⚡ <strong>Complete Excel-like quotation form navigation!</strong> • Stock validation enabled for accurate quotations
                                 </div>
-                            </div>
-                        </div>
+                            </div> */}
+                    </div>
 
-                        {/* Mobile Card View */}
-                        <div className="lg:hidden space-y-4">
-                            {(formData.items || []).map((item, index) => {
-                                const stockInfo = stockValidation[index];
-                                let cardBg = 'bg-white';
-                                if (stockInfo) {
-                                    if (stockInfo.available === 0) cardBg = 'bg-red-50';
-                                    else if (!stockInfo.isValid) cardBg = 'bg-yellow-50';
-                                    else if (stockInfo.available > 0) cardBg = 'bg-green-50';
-                                }
+                    {/* Mobile Card View */}
+                    <div className="lg:hidden space-y-4">
+                        {(formData.items || []).map((item, index) => {
+                            const stockInfo = stockValidation[index];
+                            let cardBg = 'bg-white';
+                            if (stockInfo) {
+                                if (stockInfo.available === 0) cardBg = 'bg-red-50';
+                                else if (!stockInfo.isValid) cardBg = 'bg-yellow-50';
+                                else if (stockInfo.available > 0) cardBg = 'bg-green-50';
+                            }
 
-                                return (
-                                    <div key={index} className={`${cardBg} border border-gray-200 rounded-lg p-4 shadow-sm`}>
-                                        <div className="flex justify-between items-start mb-3">
-                                            <div className="flex items-center space-x-2">
-                                                <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">
-                                                    #{index + 1}
-                                                </span>
-                                                {formData.location && item.product && productStockCache[item.product] && (
+                            return (
+                                <div key={index} className={`${cardBg} border border-gray-200 rounded-lg p-4 shadow-sm`}>
+                                    <div className="flex justify-between items-start mb-3">
+                                        <div className="flex items-center space-x-2">
+                                            <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded">
+                                                #{index + 1}
+                                            </span>
+                                            {formData.location && item.product && productStockCache[item.product] && (
                                                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${productStockCache[item.product].available === 0
-                                                            ? 'bg-red-100 text-red-800'
-                                                            : productStockCache[item.product].available <= 5
-                                                                ? 'bg-yellow-100 text-yellow-800'
-                                                                : 'bg-green-100 text-green-800'
+                                                    ? 'bg-red-100 text-red-800'
+                                                    : productStockCache[item.product].available <= 5
+                                                        ? 'bg-yellow-100 text-yellow-800'
+                                                        : 'bg-green-100 text-green-800'
                                                     }`}>
-                                                        {productStockCache[item.product].available === 0
-                                                            ? '❌ Out of Stock'
-                                                            : `📦 ${productStockCache[item.product].available} in stock`}
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <button
-                                                onClick={() => removeQuotationItem(index)}
-                                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded"
-                                                title="Remove this item"
-                                            >
-                                                <X className="w-4 h-4" />
-                                            </button>
+                                                    {productStockCache[item.product].available === 0
+                                                        ? '❌ Out of Stock'
+                                                        : `📦 ${productStockCache[item.product].available} in stock`}
+                                                </span>
+                                            )}
                                         </div>
+                                        <button
+                                            onClick={() => removeQuotationItem(index)}
+                                            className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded"
+                                            title="Remove this item"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
 
-                                        {/* Product Selection */}
-                                        <div className="space-y-3">
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
-                                                <div className="relative">
-                                                    <input
-                                                        type="text"
-                                                        value={productSearchTerms[index] || getProductPartNo(item.product)}
-                                                        onChange={(e) => {
-                                                            updateProductSearchTerm(index, e.target.value);
-                                                            setShowProductDropdowns({
-                                                                ...showProductDropdowns,
-                                                                [index]: true
-                                                            });
-                                                            setHighlightedProductIndex({
-                                                                ...highlightedProductIndex,
-                                                                [index]: -1
-                                                            });
-                                                        }}
-                                                        onFocus={() => {
-                                                            if (!productSearchTerms[index] && !item.product) {
-                                                                updateProductSearchTerm(index, '');
-                                                            }
-                                                            setShowProductDropdowns({
-                                                                ...showProductDropdowns,
-                                                                [index]: true
-                                                            });
-                                                            if (formData.location && Object.keys(productStockCache).length === 0) {
-                                                                loadAllStockForLocation();
-                                                            }
-                                                        }}
-                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                        placeholder="Search product..."
-                                                        autoComplete="off"
-                                                    />
-                                                    {showProductDropdowns[index] && (
-                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                                                            {getFilteredProducts(productSearchTerms[index] || '').map((product, productIndex) => (
-                                                                <button
-                                                                    key={product._id}
-                                                                    onMouseDown={(e) => {
-                                                                        e.preventDefault();
-                                                                        updateQuotationItem(index, 'product', product._id);
-                                                                        setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
-                                                                        updateProductSearchTerm(index, '');
-                                                                        setHighlightedProductIndex({ ...highlightedProductIndex, [index]: -1 });
-                                                                    }}
+                                    {/* Product Selection */}
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    value={productSearchTerms[index] || getProductPartNo(item.product)}
+                                                    onChange={(e) => {
+                                                        updateProductSearchTerm(index, e.target.value);
+                                                        setShowProductDropdowns({
+                                                            ...showProductDropdowns,
+                                                            [index]: true
+                                                        });
+                                                        setHighlightedProductIndex({
+                                                            ...highlightedProductIndex,
+                                                            [index]: -1
+                                                        });
+                                                    }}
+                                                    onFocus={() => {
+                                                        if (!productSearchTerms[index] && !item.product) {
+                                                            updateProductSearchTerm(index, '');
+                                                        }
+                                                        setShowProductDropdowns({
+                                                            ...showProductDropdowns,
+                                                            [index]: true
+                                                        });
+
+                                                    }}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                    placeholder="Search product..."
+                                                    autoComplete="off"
+                                                />
+                                                {showProductDropdowns[index] && (
+                                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                                                        {getFilteredProducts(productSearchTerms[index] || '').map((product, productIndex) => (
+                                                            <button
+                                                                key={product._id}
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
+                                                                    updateQuotationItem(index, 'product', product._id);
+                                                                    setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
+                                                                    updateProductSearchTerm(index, '');
+                                                                    setHighlightedProductIndex({ ...highlightedProductIndex, [index]: -1 });
+                                                                }}
                                                                 className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.product === product._id ? 'bg-blue-100 text-blue-800' : 'text-gray-700'
                                                                     }`}
-                                                                >
-                                                                    <div className="font-medium">{product.name}</div>
-                                                                    <div className="text-xs text-gray-500">
-                                                                        {product.partNo} • ₹{product.price?.toLocaleString()}
-                                                                    </div>
-                                                                </button>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Quantity and Price Row */}
-                                            <div className="grid grid-cols-2 gap-3">
-                                                <div>
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        step="1"
-                                                        value={item.quantity}
-                                                        onChange={(e) => {
-                                                            let newQuantity = parseFloat(e.target.value) || 1;
-                                                            if (item.product && formData.location && productStockCache[item.product]) {
-                                                                const stockInfo = productStockCache[item.product];
-                                                                if (stockInfo.available === 0) {
-                                                                    if (newQuantity > 0) {
-                                                                        toast.error('This product is out of stock. Quantity set to 0.', { duration: 2000 });
-                                                                    }
-                                                                    newQuantity = 0;
-                                                                } else if (newQuantity > stockInfo.available) {
-                                                                    newQuantity = stockInfo.available;
-                                                                    toast.error(`Maximum available quantity is ${stockInfo.available}`, { duration: 2000 });
-                                                                }
-                                                            }
-                                                            updateQuotationItem(index, 'quantity', newQuantity);
-                                                        }}
-                                                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${item.product && formData.location && productStockCache[item.product]?.available === 0
-                                                                ? 'bg-red-50 text-red-600' : ''
-                                                        }`}
-                                                        placeholder="1"
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="block text-xs font-medium text-gray-700 mb-1">Unit Price</label>
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        step="0.01"
-                                                        value={item.unitPrice.toFixed(2)}
-                                                        onChange={(e) => updateQuotationItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                        placeholder="0.00"
-                                                        disabled={true}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {/* Discount Row */}
-                                            <div>
-                                                <label className="block text-xs font-medium text-gray-700 mb-1">Discount (%)</label>
-                                                <input
-                                                    type="number"
-                                                    step="1"
-                                                    value={item.discount === 0 ? '' : item.discount}
-                                                    onChange={(e) => updateQuotationItem(index, 'discount', parseFloat(e.target.value) || 0)}
-                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                                    placeholder="0"
-                                                />
-                                            </div>
-
-                                            {/* Total */}
-                                            <div className="flex justify-between items-center pt-2 border-t border-gray-200">
-                                                <span className="text-sm font-medium text-gray-700">Total:</span>
-                                                <span className="text-lg font-bold text-blue-600">
-                                                    ₹{item.totalPrice?.toFixed(2) || '0.00'}
-                                                </span>
+                                                            >
+                                                                <div className="font-medium">{product.name}</div>
+                                                                <div className="text-xs text-gray-500">
+                                                                    {product.partNo} • ₹{product.price?.toLocaleString()}
+                                                                </div>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
+
+                                        {/* Quantity and Price Row */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="1"
+                                                    value={item.quantity}
+                                                    onChange={(e) => {
+                                                        let newQuantity = parseFloat(e.target.value) || 1;
+                                                        updateQuotationItem(index, 'quantity', newQuantity);
+                                                    }}
+                                                    className={`w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${item.product && formData.location && productStockCache[item.product]?.available === 0
+                                                        ? 'bg-red-50 text-red-600' : ''
+                                                        }`}
+                                                    placeholder="1"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Unit Price</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={item.unitPrice.toFixed(2)}
+                                                    onChange={(e) => updateQuotationItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                    placeholder="0.00"
+                                                    disabled={true}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Discount Row */}
+                                        <div>
+                                            <label className="block text-xs font-medium text-gray-700 mb-1">Discount (%)</label>
+                                            <input
+                                                type="number"
+                                                step="1"
+                                                value={item.discount === 0 ? '' : item.discount}
+                                                onChange={(e) => updateQuotationItem(index, 'discount', parseFloat(e.target.value) || 0)}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                placeholder="0"
+                                            />
+                                        </div>
+
+                                        {/* Total */}
+                                        <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                                            <span className="text-sm font-medium text-gray-700">Total:</span>
+                                            <span className="text-lg font-bold text-blue-600">
+                                                ₹{item.totalPrice?.toFixed(2) || '0.00'}
+                                            </span>
+                                        </div>
                                     </div>
-                                );
-                            })}
-                        </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+
+                {/* Notes and Terms */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2 p-5">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
+                        <textarea
+                            value={formData.notes || ''}
+                            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Tab' && e.shiftKey) {
+                                    e.preventDefault();
+                                    // Move back to last product's quantity field
+                                    const lastRowIndex = (formData.items || []).length - 1;
+                                    setTimeout(() => {
+                                        const lastQuantityInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
+                                        if (lastQuantityInput) lastQuantityInput.focus();
+                                    }, 50);
+                                } else if (e.key === 'Tab' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    // Move to Terms field
+                                    setTimeout(() => {
+                                        const termsInput = document.querySelector('[data-field="terms"]') as HTMLTextAreaElement;
+                                        if (termsInput) termsInput.focus();
+                                    }, 50);
+                                }
+                            }}
+                            rows={3}
+                            data-field="notes"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                            placeholder="Additional notes..."
+                        />
                     </div>
 
-                    {/* Notes and Terms */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
-                            <textarea
-                                value={formData.notes || ''}
-                                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Tab' && e.shiftKey) {
-                                        e.preventDefault();
-                                        // Move back to last product's quantity field
-                                        const lastRowIndex = (formData.items || []).length - 1;
-                                        setTimeout(() => {
-                                            const lastQuantityInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
-                                            if (lastQuantityInput) lastQuantityInput.focus();
-                                        }, 50);
-                                    } else if (e.key === 'Tab' && !e.shiftKey) {
-                                        e.preventDefault();
-                                        // Move to Terms field
-                                        setTimeout(() => {
-                                            const termsInput = document.querySelector('[data-field="terms"]') as HTMLTextAreaElement;
-                                            if (termsInput) termsInput.focus();
-                                        }, 50);
-                                    }
-                                }}
-                                rows={3}
-                                data-field="notes"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                                placeholder="Additional notes..."
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions (Optional)</label>
-                            <textarea
-                                value={formData.terms || ''}
-                                onChange={(e) => setFormData({ ...formData, terms: e.target.value })}
-                                // onKeyDown={(e) => {
-                                //     if (e.key === 'Tab' && e.shiftKey) {
-                                //         e.preventDefault();
-                                //         // Move back to Notes field
-                                //         setTimeout(() => {
-                                //             const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
-                                //             if (notesInput) notesInput.focus();
-                                //         }, 50);
-                                //     } else if (e.key === 'Tab' && !e.shiftKey) {
-                                //         e.preventDefault();
-                                //         // Move to Create Quotation button
-                                //         setTimeout(() => {
-                                //             // Find the enabled Create/Update Quotation button
-                                //             const createBtn = document.querySelector('button.px-6.py-2.bg-blue-600:not([disabled])') as HTMLButtonElement;
-                                //             if (createBtn) createBtn.focus();
-                                //         }, 50);
-                                //     }
-                                // }}
-                                rows={3}
-                                data-field="terms"
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                                placeholder="Terms and conditions..."
-                            />
-                        </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Terms & Conditions (Optional)</label>
+                        <textarea
+                            value={formData.terms || ''}
+                            onChange={(e) => setFormData({ ...formData, terms: e.target.value })}
+                            // onKeyDown={(e) => {
+                            //     if (e.key === 'Tab' && e.shiftKey) {
+                            //         e.preventDefault();
+                            //         // Move back to Notes field
+                            //         setTimeout(() => {
+                            //             const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                            //             if (notesInput) notesInput.focus();
+                            //         }, 50);
+                            //     } else if (e.key === 'Tab' && !e.shiftKey) {
+                            //         e.preventDefault();
+                            //         // Move to Create Quotation button
+                            //         setTimeout(() => {
+                            //             // Find the enabled Create/Update Quotation button
+                            //             const createBtn = document.querySelector('button.px-6.py-2.bg-blue-600:not([disabled])') as HTMLButtonElement;
+                            //             if (createBtn) createBtn.focus();
+                            //         }, 50);
+                            //     }
+                            // }}
+                            rows={3}
+                            data-field="terms"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                            placeholder="Terms and conditions..."
+                        />
                     </div>
+                </div>
 
                 {/* Overall Discount */}
-                <div className="border-t border-gray-200 pt-4">
+                <div className="border-t border-gray-200 p-4">
                     <div className="flex justify-end">
                         <div className="w-80">
                             <div className="flex items-center justify-between">
@@ -3098,76 +2851,76 @@ const QuotationFormPage: React.FC = () => {
                                 />
                             </div>
                         </div>
-                        </div>
                     </div>
+                </div>
 
-                    {/* Totals */}
-                    <div className="border-t border-gray-200 pt-4">
-                        <div className="flex justify-end">
-                            <div className="w-80 space-y-3">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600">Subtotal:</span>
-                                    <span className="font-medium">₹{formData.subtotal?.toFixed(2) || '0.00'}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600">Total Tax:</span>
-                                    <span className="font-medium">₹{formData.totalTax?.toFixed(2) || '0.00'}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-600">Total Discount:</span>
-                                    <span className="font-medium text-green-600">-₹{formData.totalDiscount?.toFixed(2) || '0.00'}</span>
-                                </div>
+                {/* Totals */}
+                <div className="border-t border-gray-200 pt-4 m-4">
+                    <div className="flex justify-end">
+                        <div className="w-80 space-y-3">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Subtotal:</span>
+                                <span className="font-medium">₹{formData.subtotal?.toFixed(2) || '0.00'}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Total Tax:</span>
+                                <span className="font-medium">₹{formData.totalTax?.toFixed(2) || '0.00'}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-gray-600">Total Discount:</span>
+                                <span className="font-medium text-green-600">-₹{formData.totalDiscount?.toFixed(2) || '0.00'}</span>
+                            </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Overall Discount:</span>
                                 <span className="font-medium text-green-600">-{formData.overallDiscount || 0}% (-₹{formData.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
-                                </div>
-                                <div className="flex justify-between font-bold text-lg border-t pt-3">
-                                    <span>Grand Total:</span>
-                                    <span className="text-blue-600">₹{formData.grandTotal?.toFixed(2) || '0.00'}</span>
-                                </div>
+                            </div>
+                            <div className="flex justify-between font-bold text-lg border-t pt-3">
+                                <span>Grand Total:</span>
+                                <span className="text-blue-600">₹{formData.grandTotal?.toFixed(2) || '0.00'}</span>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                {/* Footer */}
-                <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
-                    <div className="flex flex-col gap-2">
-                        <div className="text-sm text-gray-600">
-                            <span className='text-md font-bold text-gray-900'>Amount in Words: </span>
-                            <span className="text-sm text-gray-700 font-medium max-w-xs text-right">
-                                {formData.grandTotal ? numberToWords(formData.grandTotal) : 'Zero Rupees Only'}
-                            </span>
-                        </div>
-                        <div className="text-sm text-gray-600">
-                            {(formData.items || []).length} item(s) • Total: ₹{formData.grandTotal?.toFixed(2) || '0.00'}
-                        </div>
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-between items-center">
+                <div className="flex flex-col gap-2">
+                    <div className="text-sm text-gray-600">
+                        <span className='text-md font-bold text-gray-900'>Amount in Words: </span>
+                        <span className="text-sm text-gray-700 font-medium max-w-xs text-right">
+                            {formData.grandTotal ? numberToWords(formData.grandTotal) : 'Zero Rupees Only'}
+                        </span>
                     </div>
-                    <div className="flex space-x-3">
-                        <button
-                            onClick={() => navigate('/billing')}
-                            disabled={submitting}
-                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleSubmit}
-                            disabled={submitting}
-                            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
-                        >
-                            {submitting ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    <span>{isEditMode ? 'Updating...' : 'Creating...'}</span>
-                                </>
-                            ) : (
-                                <>
-                                    <Save className="w-4 h-4" />
-                                    <span>{isEditMode ? 'Update Quotation' : 'Create Quotation'}</span>
-                                </>
-                            )}
-                        </button>
+                    <div className="text-sm text-gray-600">
+                        {(formData.items || []).length} item(s) • Total: ₹{formData.grandTotal?.toFixed(2) || '0.00'}
+                    </div>
+                </div>
+                <div className="flex space-x-3">
+                    <button
+                        onClick={() => navigate('/billing')}
+                        disabled={submitting}
+                        className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleSubmit}
+                        disabled={submitting}
+                        className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
+                    >
+                        {submitting ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                <span>{isEditMode ? 'Updating...' : 'Creating...'}</span>
+                            </>
+                        ) : (
+                            <>
+                                <Save className="w-4 h-4" />
+                                <span>{isEditMode ? 'Update Quotation' : 'Create Quotation'}</span>
+                            </>
+                        )}
+                    </button>
                 </div>
             </div>
         </div>

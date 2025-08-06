@@ -8,8 +8,8 @@ export interface IQuotation extends Document {
   customer: {
     _id?: string; // Customer ID for reference
     name: string;
-    email: string;
-    phone: string;
+    email?: string;
+    phone?: string;
     pan?: string;
   };
   company: {
@@ -77,8 +77,8 @@ const QuotationSchema = new Schema<IQuotation>({
   customer: {
     _id: { type: String }, // Customer ID for reference
     name: { type: String, required: true },
-    email: { type: String, required: true },
-    phone: { type: String, required: true },
+    email: { type: String },
+    phone: { type: String },
     pan: { type: String }
   },
 
