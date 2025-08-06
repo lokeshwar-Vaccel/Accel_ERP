@@ -32,6 +32,8 @@ import PageHeader from '../components/ui/PageHeader';
 import AMCReport from '../components/AMCReport';
 import VisitScheduler from '../components/VisitScheduler';
 import ContractRenewal from '../components/ContractRenewal';
+import { MultiSelect } from '../components/ui/MultiSelect';
+import { Pagination } from '../components/ui/Pagination';
 
 // Types matching backend structure
 type AMCStatus = 'active' | 'expired' | 'cancelled' | 'pending' | 'suspended' | 'draft';
@@ -203,6 +205,12 @@ const AMCManagement: React.FC = () => {
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
@@ -378,6 +386,16 @@ const AMCManagement: React.FC = () => {
     }
   }, [location]);
 
+  // Effect to handle pagination changes
+  useEffect(() => {
+    fetchAMCs(currentPage, itemsPerPage);
+  }, [currentPage, itemsPerPage, searchTerm, statusFilter, customerFilter, expiryFilter]);
+
+  // Effect to reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, customerFilter, expiryFilter]);
+
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -396,12 +414,43 @@ const AMCManagement: React.FC = () => {
     }
   };
 
-  const fetchAMCs = async () => {
+  const fetchAMCs = async (page = currentPage, limit = itemsPerPage) => {
     try {
-      const response = await apiClient.amc.getAll();
+      const params: any = {
+        page,
+        limit,
+      };
+
+      // Only add search if it's not empty
+      if (searchTerm && searchTerm.trim() !== '') {
+        params.search = searchTerm.trim();
+      }
+
+      // Only add status if it's not 'all'
+      if (statusFilter !== 'all') {
+        params.status = statusFilter;
+      }
+
+      // Only add customer if it's not 'all' and is a valid ObjectId
+      if (customerFilter !== 'all' && customerFilter.match(/^[0-9a-fA-F]{24}$/)) {
+        params.customer = customerFilter;
+      }
+
+      // Only add expiringIn if it's not 'all' and convert to number
+      if (expiryFilter !== 'all') {
+        // Extract number from strings like '30days', '60days', '90days'
+        const expiringDays = parseInt(expiryFilter.replace('days', ''));
+        if (!isNaN(expiringDays)) {
+          params.expiringIn = expiringDays;
+        }
+      }
+
+      const response = await apiClient.amc.getAll(params);
       
       // Handle response format - API returns { success: boolean; data: { contracts: any[] }; pagination: any }
       let amcData: AMC[] = [];
+      let paginationData = { total: 0, pages: 0 };
+      
       if (response.success && response.data) {
         const data = response.data as any;
         if (data.contracts && Array.isArray(data.contracts)) {
@@ -409,20 +458,26 @@ const AMCManagement: React.FC = () => {
         } else if (Array.isArray(response.data)) {
           // Fallback for different response format
           amcData = response.data;
-        } else {
         }
-      } else {
+        
+        // Extract pagination data
+        if (response.pagination) {
+          paginationData = response.pagination;
+        } else if (data.pagination) {
+          paginationData = data.pagination;
+        }
       }
       
       setAmcs(amcData);
+      setTotalItems(paginationData.total || amcData.length);
+      setTotalPages(paginationData.pages || Math.ceil(amcData.length / limit));
       
-      // Only show fallback data if there's no real data
-      if (amcData.length === 0) {
-      }
     } catch (error) {
       console.error('Error fetching AMCs:', error);
-      // Don't show fallback data - show the actual error state
+      // Show empty state on error
       setAmcs([]);
+      setTotalItems(0);
+      setTotalPages(0);
     }
   };
 
@@ -787,14 +842,36 @@ const AMCManagement: React.FC = () => {
     try {
       setFormErrors({});
       
+      // Convert dates to ISO 8601 format with proper validation
+      const formatDateToISO = (dateString: string) => {
+        if (!dateString || dateString.trim() === '') return undefined;
+        try {
+          const date = new Date(dateString);
+          if (isNaN(date.getTime())) return undefined;
+          return date.toISOString();
+        } catch (error) {
+          console.error('Error formatting date:', error);
+          return undefined;
+        }
+      };
+
       const amcData = {
         ...amcFormData,
+        startDate: formatDateToISO(amcFormData.startDate),
+        endDate: formatDateToISO(amcFormData.endDate),
         // Include workflow data in the AMC creation
         siteSurvey: siteSurveyData,
         equipmentAssessment: equipmentAssessment,
         servicePlan: servicePlan,
         status: 'active' // Set as active when fully completed
       };
+
+      // Remove undefined values to avoid validation issues
+      Object.keys(amcData).forEach(key => {
+        if (amcData[key as keyof typeof amcData] === undefined) {
+          delete amcData[key as keyof typeof amcData];
+        }
+      });
 
       const response = await apiClient.amc.create(amcData);
       
@@ -822,8 +899,40 @@ const AMCManagement: React.FC = () => {
     try {
       setFormErrors({});
       
-      const draftData = {
-        ...amcFormData,
+      // Convert dates to ISO 8601 format with proper validation
+      const formatDateToISO = (dateString: string) => {
+        if (!dateString || dateString.trim() === '') return undefined;
+        try {
+          const date = new Date(dateString);
+          if (isNaN(date.getTime())) return undefined;
+          return date.toISOString();
+        } catch (error) {
+          console.error('Error formatting date:', error);
+          return undefined;
+        }
+      };
+
+      // For drafts, we need to provide default values for required fields
+      const currentDate = new Date().toISOString();
+      const defaultEndDate = new Date();
+      defaultEndDate.setFullYear(defaultEndDate.getFullYear() + 1); // Default 1 year from now
+
+      // Ensure we have all required fields for draft
+      const formattedData = {
+        customer: amcFormData.customer || '',
+        products: amcFormData.products && amcFormData.products.length > 0 ? amcFormData.products : [],
+        startDate: formatDateToISO(amcFormData.startDate) || currentDate,
+        endDate: formatDateToISO(amcFormData.endDate) || defaultEndDate.toISOString(),
+        contractValue: amcFormData.contractValue || 0,
+        scheduledVisits: amcFormData.scheduledVisits || 4,
+        terms: amcFormData.terms || '',
+        billingCycle: amcFormData.billingCycle || 'monthly',
+        discountPercentage: amcFormData.discountPercentage || 0,
+        responseTime: amcFormData.responseTime || 0,
+        emergencyContactHours: amcFormData.emergencyContactHours || '',
+        coverageArea: amcFormData.coverageArea || '',
+        renewalTerms: amcFormData.renewalTerms || '',
+        exclusions: amcFormData.exclusions || [],
         siteSurvey: siteSurveyData,
         equipmentAssessment: equipmentAssessment,
         servicePlan: servicePlan,
@@ -835,10 +944,10 @@ const AMCManagement: React.FC = () => {
       let response: any;
       if (editingAMC) {
         // Update existing draft
-        response = await apiClient.amc.update(editingAMC._id, draftData);
+        response = await apiClient.amc.update(editingAMC._id, formattedData);
       } else {
         // Create new draft
-        response = await apiClient.amc.create(draftData);
+        response = await apiClient.amc.create(formattedData);
       }
       
       // Refresh the AMC data to get real-time updates
@@ -865,7 +974,34 @@ const AMCManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const response = await apiClient.amc.update(editingAMC._id, amcFormData);
+      
+      // Convert dates to ISO 8601 format with proper validation
+      const formatDateToISO = (dateString: string) => {
+        if (!dateString || dateString.trim() === '') return undefined;
+        try {
+          const date = new Date(dateString);
+          if (isNaN(date.getTime())) return undefined;
+          return date.toISOString();
+        } catch (error) {
+          console.error('Error formatting date:', error);
+          return undefined;
+        }
+      };
+      
+      const formattedData = {
+        ...amcFormData,
+        startDate: formatDateToISO(amcFormData.startDate),
+        endDate: formatDateToISO(amcFormData.endDate)
+      };
+
+      // Remove undefined values to avoid validation issues
+      Object.keys(formattedData).forEach(key => {
+        if (formattedData[key as keyof typeof formattedData] === undefined) {
+          delete formattedData[key as keyof typeof formattedData];
+        }
+      });
+      
+      const response = await apiClient.amc.update(editingAMC._id, formattedData);
       
       // Refresh the AMC data to get real-time updates
       await fetchAMCs();
@@ -941,46 +1077,9 @@ const AMCManagement: React.FC = () => {
     setFormErrors({});
   };
 
-  const filteredAMCs = amcs.filter(amc => {
-    const customerName = getCustomerName(amc.customer);
-    const contractNumber = amc.contractNumber || '';
-    const matchesSearch = contractNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         customerName.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || amc.status === statusFilter;
-    const matchesCustomer = customerFilter === 'all' || 
-                           (amc.customer && typeof amc.customer === 'object' && amc.customer._id === customerFilter);
-    
-    // Expiry filter
-    let matchesExpiry = true;
-    if (expiryFilter !== 'all') {
-      const today = new Date();
-      const endDate = new Date(amc.endDate);
-      const daysUntilExpiry = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-      
-      switch (expiryFilter) {
-        case '30days':
-          matchesExpiry = daysUntilExpiry <= 30 && daysUntilExpiry > 0;
-          break;
-        case '60days':
-          matchesExpiry = daysUntilExpiry <= 60 && daysUntilExpiry > 0;
-          break;
-        case '90days':
-          matchesExpiry = daysUntilExpiry <= 90 && daysUntilExpiry > 0;
-          break;
-        case 'expired':
-          matchesExpiry = daysUntilExpiry <= 0;
-          break;
-      }
-    }
-
-    // Payment filter
-    let matchesPayment = true;
-    if (paymentFilter !== 'all') {
-      matchesPayment = amc.paymentStatus === paymentFilter;
-    }
-    
-    return matchesSearch && matchesStatus && matchesCustomer && matchesExpiry && matchesPayment;
-  });
+  // Since we're using pagination and backend filtering, we'll use the amcs directly
+  // The backend is now handling search, status, customer, and expiry filtering
+  const filteredAMCs = amcs;
 
   const getStatusColor = (status: AMCStatus) => {
     switch (status) {
@@ -1454,14 +1553,19 @@ const AMCManagement: React.FC = () => {
   };
 
   const handleContractSelection = (amc: AMC) => {
-    const isSelected = selectedContractsForBulkRenewal.some(c => c._id === amc._id);
-    if (isSelected) {
-      // Remove from selection
-      setSelectedContractsForBulkRenewal(prev => prev.filter(c => c._id !== amc._id));
-    } else {
-      // Add to selection
-      setSelectedContractsForBulkRenewal(prev => [...prev, amc]);
-    }
+    setSelectedContractsForBulkRenewal(prev => {
+      const isSelected = prev.some(c => c._id === amc._id);
+      if (isSelected) {
+        return prev.filter(c => c._id !== amc._id);
+      } else {
+        return [...prev, amc];
+      }
+    });
+  };
+
+  // Handle page change for pagination
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
   };
 
   return (
@@ -1643,7 +1747,7 @@ const AMCManagement: React.FC = () => {
         
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xs text-gray-600">
-            Showing {filteredAMCs.length} of {amcs.length} contracts
+            Showing {filteredAMCs.length} of {totalItems} contracts
           </span>
         </div>
       </div>
@@ -1804,6 +1908,19 @@ const AMCManagement: React.FC = () => {
         </div>
       </div>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="mt-6 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={handlePageChange}
+            totalItems={totalItems}
+            itemsPerPage={itemsPerPage}
+          />
+        </div>
+      )}
+
       {/* Enhanced AMC Workflow Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1887,23 +2004,22 @@ const AMCManagement: React.FC = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Equipment/Products *</label>
-                    <select
-                      multiple
+                    <MultiSelect
+                      label="Equipment/Products *"
+                      options={products.map(product => ({
+                        value: product._id,
+                        label: product.name,
+                        category: product.category,
+                        brand: product.brand,
+                        modelNumber: product.modelNumber
+                      }))}
                       value={amcFormData.products}
-                      onChange={(e) => {
-                        const selectedValues = Array.from(e.target.selectedOptions, option => option.value);
-                        setAmcFormData({ ...amcFormData, products: selectedValues });
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 h-32"
-                    >
-                      {products.map(product => (
-                        <option key={product._id} value={product._id}>
-                          {product.name} - {product.category} ({product.brand})
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple products</p>
+                      onChange={(selectedValues) => setAmcFormData({ ...amcFormData, products: selectedValues })}
+                      placeholder="Select equipment/products..."
+                      error={formErrors.products}
+                      searchable={true}
+                      maxHeight={200}
+                    />
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2504,30 +2620,22 @@ const AMCManagement: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Products *
-                </label>
-                <select
-                  multiple
+                <MultiSelect
+                  label="Products *"
+                  options={products.map(product => ({
+                    value: product._id,
+                    label: product.name,
+                    category: product.category,
+                    brand: product.brand,
+                    modelNumber: product.modelNumber
+                  }))}
                   value={amcFormData.products}
-                  onChange={(e) => {
-                    const selectedValues = Array.from(e.target.selectedOptions, option => option.value);
-                    setAmcFormData({ ...amcFormData, products: selectedValues });
-                  }}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-32 ${
-                    formErrors.products ? 'border-red-500' : 'border-gray-300'
-                  }`}
-                >
-                  {products.map(product => (
-                    <option key={product._id} value={product._id}>
-                      {product.name} ({product.category})
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple products</p>
-                {formErrors.products && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.products}</p>
-                )}
+                  onChange={(selectedValues) => setAmcFormData({ ...amcFormData, products: selectedValues })}
+                  placeholder="Select products..."
+                  error={formErrors.products}
+                  searchable={true}
+                  maxHeight={200}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-4">

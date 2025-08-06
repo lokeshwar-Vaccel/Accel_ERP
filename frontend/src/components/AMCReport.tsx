@@ -15,6 +15,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
+import { exportAMCReportToPDF } from '../utils/pdfExport';
 
 interface AMCReportProps {
   isOpen: boolean;
@@ -26,10 +27,20 @@ interface ReportData {
   [key: string]: any;
 }
 
+interface Customer {
+  _id: string;
+  name: string;
+  email?: string;
+  phone: string;
+  customerType: string;
+}
+
 const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'contract_summary' }) => {
   const [selectedReport, setSelectedReport] = useState(reportType);
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [filters, setFilters] = useState({
     dateFrom: '',
     dateTo: '',
@@ -63,13 +74,34 @@ const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'co
     }
   };
 
+  const fetchCustomers = async () => {
+    try {
+      const response = await apiClient.customers.getAll({});
+      if (response.success && response.data) {
+        // Handle different response structures
+        let customersData: Customer[] = [];
+        if (Array.isArray(response.data)) {
+          customersData = response.data;
+        } else if (response.data.customers && Array.isArray(response.data.customers)) {
+          customersData = response.data.customers;
+        }
+        setCustomers(customersData);
+      }
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      setCustomers([]);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
+      fetchCustomers();
       generateReport();
     }
   }, [isOpen, selectedReport, filters]);
 
   const formatCurrency = (amount: number) => {
+    if (!amount || isNaN(amount)) return '₹0.00';
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR'
@@ -77,7 +109,33 @@ const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'co
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN');
+    if (!dateString) return 'N/A';
+    try {
+      return new Date(dateString).toLocaleDateString('en-IN');
+    } catch (error) {
+      return 'Invalid Date';
+    }
+  };
+
+  const getCustomerName = (customerId: string) => {
+    if (!customerId) return 'Unknown Customer';
+    const customer = customers.find(c => c._id === customerId);
+    return customer ? customer.name : 'Unknown Customer';
+  };
+
+  const handleExportPDF = async () => {
+    if (!reportData) return;
+    
+    try {
+      await exportAMCReportToPDF({
+        reportType: selectedReport,
+        reportData,
+        filters,
+        generatedAt: new Date().toISOString()
+      });
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+    }
   };
 
   const renderContractSummary = () => {
@@ -138,6 +196,52 @@ const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'co
             ))}
           </div>
         </div>
+
+        {reportData.contracts && reportData.contracts.length > 0 && (
+          <div className="bg-white p-6 rounded-lg shadow border">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Contract Details</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contract</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Value</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {reportData.contracts.slice(0, 10).map((contract: any, index: number) => (
+                    <tr key={index}>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {contract.contractNumber}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {typeof contract.customer === 'object' ? contract.customer.name : getCustomerName(contract.customer)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {formatCurrency(contract.contractValue)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          contract.status === 'active' ? 'bg-green-100 text-green-800' :
+                          contract.status === 'expired' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {contract.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {contract.endDate ? formatDate(contract.endDate) : 'N/A'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -258,7 +362,9 @@ const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'co
                 {reportData.contracts?.map((contract: any, index: number) => (
                   <tr key={index}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{contract.contractNumber}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contract.customer}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {typeof contract.customer === 'object' ? contract.customer.name : getCustomerName(contract.customer)}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contract.scheduledVisits}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contract.completedVisits}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contract.completionRate?.toFixed(1)}%</td>
@@ -321,7 +427,9 @@ const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'co
               <div key={index} className="flex items-center justify-between p-4 bg-orange-50 rounded-lg border border-orange-200">
                 <div>
                   <h4 className="font-medium text-gray-900">{contract.contractNumber}</h4>
-                  <p className="text-sm text-gray-600">{contract.customer}</p>
+                  <p className="text-sm text-gray-600">
+                    {typeof contract.customer === 'object' ? contract.customer.name : getCustomerName(contract.customer)}
+                  </p>
                   <p className="text-xs text-orange-700">
                     Expires on {formatDate(contract.endDate)} ({contract.daysUntilExpiry} days left)
                   </p>
@@ -422,15 +530,40 @@ const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'co
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium text-gray-700 mb-1">Customer</label>
-                <input
-                  type="text"
-                  value={filters.customer}
-                  onChange={(e) => setFilters({ ...filters, customer: e.target.value })}
-                  placeholder="Filter by customer"
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+                <button
+                  type="button"
+                  onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 text-left bg-white"
+                >
+                  {filters.customer ? getCustomerName(filters.customer) : 'All Customers'}
+                </button>
+                {showCustomerDropdown && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                    <button
+                      onClick={() => {
+                        setFilters({ ...filters, customer: '' });
+                        setShowCustomerDropdown(false);
+                      }}
+                      className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-200"
+                    >
+                      All Customers
+                    </button>
+                    {customers.map((customer) => (
+                      <button
+                        key={customer._id}
+                        onClick={() => {
+                          setFilters({ ...filters, customer: customer._id });
+                          setShowCustomerDropdown(false);
+                        }}
+                        className="w-full px-3 py-2 text-left hover:bg-gray-50 border-b border-gray-200"
+                      >
+                        {customer.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
@@ -472,11 +605,9 @@ const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'co
               <span>Refresh Report</span>
             </button>
             <button
-              onClick={() => {
-                // TODO: Implement PDF export
-                console.log('Export to PDF');
-              }}
-              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center space-x-2"
+              onClick={handleExportPDF}
+              disabled={loading || !reportData}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center space-x-2"
             >
               <Download className="w-4 h-4" />
               <span>Export PDF</span>

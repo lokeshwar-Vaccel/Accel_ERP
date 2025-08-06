@@ -12,10 +12,10 @@ export const getAMCContracts = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { 
-      page = 1, 
-      limit = 10, 
-      sort = '-createdAt', 
+    const {
+      page = 1,
+      limit = 10,
+      sort = '-createdAt',
       search,
       status,
       customer,
@@ -32,22 +32,22 @@ export const getAMCContracts = async (
 
     // Build query
     const query: any = {};
-    
+
     if (search) {
       query.$or = [
         { contractNumber: { $regex: search, $options: 'i' } },
         { terms: { $regex: search, $options: 'i' } }
       ];
     }
-    
+
     if (status) {
       query.status = status;
     }
-    
+
     if (customer) {
       query.customer = customer;
     }
-    
+
     if (dateFrom || dateTo) {
       query.createdAt = {};
       if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
@@ -228,7 +228,7 @@ export const scheduleAMCVisit = async (
     };
 
     contract.visitSchedule.push(visitData);
-    
+
     // Update next visit date
     const nextVisit = new Date(scheduledDate);
     nextVisit.setDate(nextVisit.getDate() + 30); // Next visit in 30 days
@@ -242,7 +242,7 @@ export const scheduleAMCVisit = async (
     const response: APIResponse = {
       success: true,
       message: 'AMC visit scheduled successfully',
-      data: { 
+      data: {
         contract: populatedContract,
         newVisit: visitData
       }
@@ -287,7 +287,7 @@ export const completeAMCVisit = async (
     const response: APIResponse = {
       success: true,
       message: 'AMC visit completed successfully',
-      data: { 
+      data: {
         contract,
         completedVisit: visit
       }
@@ -308,14 +308,14 @@ export const renewAMCContract = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { 
-      newStartDate, 
-      newEndDate, 
-      newContractValue, 
-      newScheduledVisits, 
-      priceAdjustment, 
-      updatedTerms, 
-      addProducts, 
+    const {
+      newStartDate,
+      newEndDate,
+      newContractValue,
+      newScheduledVisits,
+      priceAdjustment,
+      updatedTerms,
+      addProducts,
       removeProducts
     } = req.body;
 
@@ -356,7 +356,7 @@ export const renewAMCContract = async (
       contract.products = [...contract.products, ...addProducts];
     }
     if (removeProducts && removeProducts.length > 0) {
-      contract.products = contract.products.filter(product => 
+      contract.products = contract.products.filter(product =>
         !removeProducts.includes(product.toString())
       );
     }
@@ -372,7 +372,7 @@ export const renewAMCContract = async (
     const response: APIResponse = {
       success: true,
       message: 'AMC contract renewed successfully',
-      data: { 
+      data: {
         contract: populatedContract,
         priceAdjustment: priceAdjustment ? {
           type: priceAdjustment.type,
@@ -413,7 +413,7 @@ export const getExpiringContracts = async (
     const response: APIResponse = {
       success: true,
       message: `Contracts expiring in ${days} days retrieved successfully`,
-      data: { 
+      data: {
         contracts: expiringContracts,
         count: expiringContracts.length
       }
@@ -471,7 +471,7 @@ export const getAMCStats = async (
       }
     ]);
 
-    const visitCompletionRate = visitStats[0] ? 
+    const visitCompletionRate = visitStats[0] ?
       (visitStats[0].totalCompleted / visitStats[0].totalScheduled * 100) : 0;
 
     const response: APIResponse = {
@@ -493,7 +493,7 @@ export const getAMCStats = async (
   } catch (error) {
     next(error);
   }
-}; 
+};
 
 // @desc    Generate AMC reports
 // @route   GET /api/v1/amc/reports/:type
@@ -514,17 +514,17 @@ export const generateAMCReport = async (
     };
 
     const query: any = {};
-    
+
     if (dateFrom || dateTo) {
       query.createdAt = {};
       if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
       if (dateTo) query.createdAt.$lte = new Date(dateTo);
     }
-    
+
     if (customer) {
       query.customer = customer;
     }
-    
+
     if (status) {
       query.status = status;
     }
@@ -570,73 +570,73 @@ export const generateAMCReport = async (
         };
         break;
 
-             case 'visit_completion':
-         const visitStats = contracts.reduce((acc, c) => {
-           acc.totalScheduled += c.scheduledVisits;
-           acc.totalCompleted += c.completedVisits;
-           acc.overdueVisits += Math.max(0, c.scheduledVisits - c.completedVisits);
-           return acc;
-         }, { totalScheduled: 0, totalCompleted: 0, overdueVisits: 0 });
+      case 'visit_completion':
+        const visitStats = contracts.reduce((acc, c) => {
+          acc.totalScheduled += c.scheduledVisits;
+          acc.totalCompleted += c.completedVisits;
+          acc.overdueVisits += Math.max(0, c.scheduledVisits - c.completedVisits);
+          return acc;
+        }, { totalScheduled: 0, totalCompleted: 0, overdueVisits: 0 });
 
-         reportData = {
-           ...visitStats,
-           completionRate: visitStats.totalScheduled > 0 ? (visitStats.totalCompleted / visitStats.totalScheduled) * 100 : 0,
-           contracts: contracts.map(c => ({
-             contractNumber: c.contractNumber,
-             customer: (c.customer as any)?.name || 'Unknown',
-             scheduledVisits: c.scheduledVisits,
-             completedVisits: c.completedVisits,
-             completionRate: c.scheduledVisits > 0 ? (c.completedVisits / c.scheduledVisits) * 100 : 0
-           }))
-         };
-         break;
+        reportData = {
+          ...visitStats,
+          completionRate: visitStats.totalScheduled > 0 ? (visitStats.totalCompleted / visitStats.totalScheduled) * 100 : 0,
+          contracts: contracts.map(c => ({
+            contractNumber: c.contractNumber,
+            customer: (c.customer as any)?.name || 'Unknown',
+            scheduledVisits: c.scheduledVisits,
+            completedVisits: c.completedVisits,
+            completionRate: c.scheduledVisits > 0 ? (c.completedVisits / c.scheduledVisits) * 100 : 0
+          }))
+        };
+        break;
 
-       case 'customer_satisfaction':
-         const customerStats = contracts.reduce((acc, c) => {
-           const customerName = (c.customer as any)?.name || 'Unknown';
-           if (!acc[customerName]) {
-             acc[customerName] = {
-               totalContracts: 0,
-               totalValue: 0,
-               averageSatisfaction: 0,
-               contracts: []
-             };
-           }
-           acc[customerName].totalContracts++;
-           acc[customerName].totalValue += c.contractValue;
-           acc[customerName].contracts.push(c);
-           return acc;
-         }, {} as Record<string, any>);
+      case 'customer_satisfaction':
+        const customerStats = contracts.reduce((acc, c) => {
+          const customerName = (c.customer as any)?.name || 'Unknown';
+          if (!acc[customerName]) {
+            acc[customerName] = {
+              totalContracts: 0,
+              totalValue: 0,
+              averageSatisfaction: 0,
+              contracts: []
+            };
+          }
+          acc[customerName].totalContracts++;
+          acc[customerName].totalValue += c.contractValue;
+          acc[customerName].contracts.push(c);
+          return acc;
+        }, {} as Record<string, any>);
 
-         reportData = {
-           customerStats,
-           topCustomers: Object.entries(customerStats)
-             .sort(([, a], [, b]) => b.totalValue - a.totalValue)
-             .slice(0, 10)
-         };
-         break;
+        reportData = {
+          customerStats,
+          topCustomers: Object.entries(customerStats)
+            .sort(([, a], [, b]) => b.totalValue - a.totalValue)
+            .slice(0, 10)
+        };
+        break;
 
-             case 'expiring_contracts':
-         const thirtyDaysFromNow = new Date();
-         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
-         
-         const expiringContracts = contracts.filter(c => {
-           const endDate = new Date(c.endDate);
-           return endDate <= thirtyDaysFromNow && c.status === AMCStatus.ACTIVE;
-         });
+      case 'expiring_contracts':
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-         reportData = {
-           expiringContracts: expiringContracts.length,
-           totalValueAtRisk: expiringContracts.reduce((sum, c) => sum + c.contractValue, 0),
-           contracts: expiringContracts.map(c => ({
-             contractNumber: c.contractNumber,
-             customer: (c.customer as any)?.name || 'Unknown',
-             endDate: c.endDate,
-             contractValue: c.contractValue,
-             daysUntilExpiry: Math.ceil((new Date(c.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-           }))
-         };
-         break;
+        const expiringContracts = contracts.filter(c => {
+          const endDate = new Date(c.endDate);
+          return endDate <= thirtyDaysFromNow && c.status === AMCStatus.ACTIVE;
+        });
+
+        reportData = {
+          expiringContracts: expiringContracts.length,
+          totalValueAtRisk: expiringContracts.reduce((sum, c) => sum + c.contractValue, 0),
+          contracts: expiringContracts.map(c => ({
+            contractNumber: c.contractNumber,
+            customer: (c.customer as any)?.name || 'Unknown',
+            endDate: c.endDate,
+            contractValue: c.contractValue,
+            daysUntilExpiry: Math.ceil((new Date(c.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+          }))
+        };
+        break;
 
       default:
         throw new AppError('Invalid report type', 400);
@@ -664,9 +664,9 @@ export const scheduleEnhancedVisit = async (
 ): Promise<void> => {
   try {
     const { id } = req.params;
-    const { 
-      scheduledDate, 
-      assignedTo, 
+    const {
+      scheduledDate,
+      assignedTo,
       visitType = 'routine',
       estimatedDuration = 2,
       notes,
@@ -690,11 +690,11 @@ export const scheduleEnhancedVisit = async (
       const endDate = new Date(amc.endDate);
       const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
       const visitsPerMonth = amc.scheduledVisits / (totalDays / 30);
-      
+
       for (let i = 0; i < amc.scheduledVisits; i++) {
         const visitDate = new Date(startDate);
         visitDate.setDate(startDate.getDate() + (i * (totalDays / amc.scheduledVisits)));
-        
+
         visitSchedule.push({
           scheduledDate: visitDate.toISOString(),
           assignedTo: assignedTo || amc.createdBy,
@@ -758,7 +758,7 @@ export const bulkRenewContracts = async (
       const originalStart = new Date(contract.startDate);
       const originalEnd = new Date(contract.endDate);
       const duration = originalEnd.getTime() - originalStart.getTime();
-      
+
       const newStartDate = new Date(originalEnd);
       const newEndDate = new Date(newStartDate.getTime() + duration);
 
@@ -832,20 +832,20 @@ export const getAMCPerformance = async (
     const totalVisits = amc.scheduledVisits;
     const completedVisits = amc.completedVisits;
     const completionRate = totalVisits > 0 ? (completedVisits / totalVisits) * 100 : 0;
-    
+
     const daysUntilExpiry = Math.ceil((new Date(amc.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
     const contractProgress = Math.max(0, Math.min(100, ((new Date().getTime() - new Date(amc.startDate).getTime()) / (new Date(amc.endDate).getTime() - new Date(amc.startDate).getTime())) * 100));
 
-         const performanceMetrics = {
-       contractProgress,
-       completionRate,
-       daysUntilExpiry,
-       remainingVisits: totalVisits - completedVisits,
-       overdueVisits: Math.max(0, totalVisits - completedVisits),
-       averageResponseTime: 0,
-       customerSatisfaction: 0,
-       issueResolutionRate: 0
-     };
+    const performanceMetrics = {
+      contractProgress,
+      completionRate,
+      daysUntilExpiry,
+      remainingVisits: totalVisits - completedVisits,
+      overdueVisits: Math.max(0, totalVisits - completedVisits),
+      averageResponseTime: 0,
+      customerSatisfaction: 0,
+      issueResolutionRate: 0
+    };
 
     const response: APIResponse = {
       success: true,
@@ -857,7 +857,7 @@ export const getAMCPerformance = async (
   } catch (error) {
     next(error);
   }
-}; 
+};
 
 // @desc    Get AMC contract by ID with full details
 // @route   GET /api/v1/amc/:id/details
@@ -1010,7 +1010,7 @@ export const getExpiringSoon = async (
     const response: APIResponse = {
       success: true,
       message: `Contracts expiring in ${days} days retrieved successfully`,
-      data: { 
+      data: {
         contracts: expiringContracts,
         count: expiringContracts.length,
         totalValue: expiringContracts.reduce((sum, c) => sum + c.contractValue, 0)
@@ -1052,7 +1052,7 @@ export const getVisitsDue = async (
     const response: APIResponse = {
       success: true,
       message: `Contracts with visits due in ${days} days retrieved successfully`,
-      data: { 
+      data: {
         contracts: contractsDue,
         count: contractsDue.length
       }
@@ -1123,7 +1123,7 @@ export const getAMCDashboard = async (
   } catch (error) {
     next(error);
   }
-}; 
+};
 
 // @desc    Delete AMC contract
 // @route   DELETE /api/v1/amc/:id
@@ -1161,7 +1161,7 @@ export const deleteAMCContract = async (
     const response: APIResponse = {
       success: true,
       message: 'AMC contract deleted successfully',
-      data: { 
+      data: {
         deletedContract: {
           _id: contract._id,
           contractNumber: contract.contractNumber,
@@ -1221,7 +1221,7 @@ export const bulkDeleteAMCContracts = async (
     const response: APIResponse = {
       success: true,
       message: `${deleteResult.deletedCount} AMC contracts deleted successfully`,
-      data: { 
+      data: {
         deletedCount: deleteResult.deletedCount,
         deletedContracts: contracts.map(c => ({
           _id: c._id,
@@ -1270,7 +1270,7 @@ export const archiveAMCContract = async (
     const response: APIResponse = {
       success: true,
       message: 'AMC contract archived successfully',
-      data: { 
+      data: {
         contract,
         archivedAt: new Date(),
         reason: reason || 'Manual archive'

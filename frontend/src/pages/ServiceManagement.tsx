@@ -510,7 +510,7 @@ const ServiceManagement: React.FC = () => {
       if (assigneeFilter !== 'all' && assigneeFilter && assigneeFilter.trim() !== '') {
         params.assignedTo = assigneeFilter;
       }
-      
+
       // Filter out undefined values from params
       const cleanParams = Object.fromEntries(
         Object.entries(params).filter(([_, value]) => value !== undefined && value !== null)
@@ -600,7 +600,7 @@ const ServiceManagement: React.FC = () => {
     try {
       // Fetch field operators from API
       const response = await apiClient.users.getFieldOperators();
-      
+
       if (response.success && response.data.fieldOperators) {
         const fieldOperators: User[] = response.data.fieldOperators.map((operator: any) => ({
           _id: operator._id || operator.id, // Try both _id and id
@@ -855,7 +855,7 @@ const ServiceManagement: React.FC = () => {
     if (!ticketFormData.description.trim()) {
       errors.description = 'Description is required';
     }
-    
+
     // Check word count for description
     const wordCount = ticketFormData.description.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
     if (wordCount > 500) {
@@ -2758,17 +2758,17 @@ const ServiceManagement: React.FC = () => {
                       // Open the date picker when focused via tab
                       (e.target as HTMLInputElement).showPicker?.();
                     }}
-                                          onKeyDown={(e) => {
-                        if (e.key === 'Tab' && !e.shiftKey) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          descriptionRef.current?.focus();
-                        }
-                        // Open date picker on Enter key
-                        if (e.key === 'Enter') {
-                          (e.target as HTMLInputElement).showPicker?.();
-                        }
-                      }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Tab' && !e.shiftKey) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        descriptionRef.current?.focus();
+                      }
+                      // Open date picker on Enter key
+                      if (e.key === 'Enter') {
+                        (e.target as HTMLInputElement).showPicker?.();
+                      }
+                    }}
                     className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.scheduledDate ? 'border-red-500' : 'border-gray-300'
                       }`}
                     placeholder="Select date"
@@ -4192,8 +4192,8 @@ const ServiceManagement: React.FC = () => {
                           <span
                             key={star}
                             className={`text-2xl ${star <= selectedFeedback.rating
-                                ? 'text-yellow-400'
-                                : 'text-gray-300'
+                              ? 'text-yellow-400'
+                              : 'text-gray-300'
                               }`}
                           >
                             ★
@@ -4218,8 +4218,8 @@ const ServiceManagement: React.FC = () => {
                               <span
                                 key={star}
                                 className={`text-lg ${star <= selectedFeedback.technicianRating
-                                    ? 'text-yellow-400'
-                                    : 'text-gray-300'
+                                  ? 'text-yellow-400'
+                                  : 'text-gray-300'
                                   }`}
                               >
                                 ★
@@ -4240,8 +4240,8 @@ const ServiceManagement: React.FC = () => {
                               <span
                                 key={star}
                                 className={`text-lg ${star <= selectedFeedback.timelinessRating
-                                    ? 'text-yellow-400'
-                                    : 'text-gray-300'
+                                  ? 'text-yellow-400'
+                                  : 'text-gray-300'
                                   }`}
                               >
                                 ★
@@ -4262,8 +4262,8 @@ const ServiceManagement: React.FC = () => {
                               <span
                                 key={star}
                                 className={`text-lg ${star <= selectedFeedback.qualityRating
-                                    ? 'text-yellow-400'
-                                    : 'text-gray-300'
+                                  ? 'text-yellow-400'
+                                  : 'text-gray-300'
                                   }`}
                               >
                                 ★
@@ -4282,12 +4282,12 @@ const ServiceManagement: React.FC = () => {
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h3 className="text-lg font-medium text-gray-900 mb-2">Service Quality</h3>
                     <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${selectedFeedback.serviceQuality === 'excellent'
-                        ? 'bg-green-100 text-green-800'
-                        : selectedFeedback.serviceQuality === 'good'
-                          ? 'bg-blue-100 text-blue-800'
-                          : selectedFeedback.serviceQuality === 'average'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-red-100 text-red-800'
+                      ? 'bg-green-100 text-green-800'
+                      : selectedFeedback.serviceQuality === 'good'
+                        ? 'bg-blue-100 text-blue-800'
+                        : selectedFeedback.serviceQuality === 'average'
+                          ? 'bg-yellow-100 text-yellow-800'
+                          : 'bg-red-100 text-red-800'
                       }`}>
                       {selectedFeedback.serviceQuality.charAt(0).toUpperCase() + selectedFeedback.serviceQuality.slice(1)}
                     </span>
@@ -4297,8 +4297,8 @@ const ServiceManagement: React.FC = () => {
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h3 className="text-lg font-medium text-gray-900 mb-2">Would Recommend</h3>
                     <span className={`inline-flex px-3 py-1 rounded-full text-sm font-medium ${selectedFeedback.wouldRecommend
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-800'
                       }`}>
                       {selectedFeedback.wouldRecommend ? 'Yes' : 'No'}
                     </span>
