@@ -875,7 +875,7 @@ export default function DGSales() {
                   (currentPage - 1) * itemsPerPage,
                   currentPage * itemsPerPage
                 );
-                
+
                 return (
                   <Table
                     columns={[

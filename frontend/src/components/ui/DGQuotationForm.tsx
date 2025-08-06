@@ -544,8 +544,37 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
         return obj;
       };
 
+      // Remove _id fields from items and services arrays
+      const cleanedFormData = cleanData(formData);
+      
+      // Clean items array - remove _id fields
+      if (cleanedFormData.items) {
+        cleanedFormData.items = cleanedFormData.items.map((item: any) => {
+          const { _id, ...itemWithoutId } = item;
+          return itemWithoutId;
+        });
+      }
+      
+      // Clean services array - remove _id fields
+      if (cleanedFormData.services) {
+        cleanedFormData.services = cleanedFormData.services.map((service: any) => {
+          const { _id, ...serviceWithoutId } = service;
+          return serviceWithoutId;
+        });
+      }
+
+      // Remove MongoDB fields that shouldn't be sent in updates
+      const { 
+        _id, 
+        createdBy, 
+        createdAt, 
+        updatedAt, 
+        __v, 
+        ...cleanedFormDataWithoutId 
+      } = cleanedFormData;
+
       const submitData = {
-        ...cleanData(formData),
+        ...cleanedFormDataWithoutId,
         issueDate: new Date(formData.issueDate!),
         validUntil: new Date(formData.validUntil!)
       };

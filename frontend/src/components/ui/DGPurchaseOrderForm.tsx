@@ -384,8 +384,29 @@ const DGPurchaseOrderForm: React.FC<DGPurchaseOrderFormProps> = ({
         return obj;
       };
 
+      // Remove _id fields from items array
+      const cleanedFormData = cleanData(formData);
+      
+      // Clean items array - remove _id fields
+      if (cleanedFormData.items) {
+        cleanedFormData.items = cleanedFormData.items.map((item: any) => {
+          const { _id, ...itemWithoutId } = item;
+          return itemWithoutId;
+        });
+      }
+
+      // Remove MongoDB fields that shouldn't be sent in updates
+      const { 
+        _id, 
+        createdBy, 
+        createdAt, 
+        updatedAt, 
+        __v, 
+        ...cleanedFormDataWithoutId 
+      } = cleanedFormData;
+
       const submitData = {
-        ...cleanData(formData),
+        ...cleanedFormDataWithoutId,
         orderDate: new Date(formData.orderDate!),
         expectedDeliveryDate: formData.expectedDeliveryDate ? new Date(formData.expectedDeliveryDate) : undefined,
         actualDeliveryDate: formData.actualDeliveryDate ? new Date(formData.actualDeliveryDate) : undefined,

@@ -44,7 +44,7 @@ export const createDGEnquirySchema = Joi.object({
     'string.empty': 'Address is required',
     'any.required': 'Address is required'
   }),
-  pincode: Joi.string().required().trim().pattern(/^\d{6}$/).messages({
+  pincode: Joi.string().optional().trim().pattern(/^\d{6}$/).messages({
     'string.empty': 'Pincode is required',
     'any.required': 'Pincode is required',
     'string.pattern.base': 'Pincode must be 6 digits'
@@ -77,14 +77,14 @@ export const createDGEnquirySchema = Joi.object({
   subSegment: Joi.string().optional().allow(''),
   dgOwnership: Joi.string().valid('NOT_OWNED', 'OWNED', 'RENTED').default('NOT_OWNED'),
   financeRequired: Joi.boolean().default(false),
-  financeCompany: Joi.when('financeRequired', {
-    is: true,
-    then: Joi.string().required().trim().messages({
-      'string.empty': 'Finance company is required when finance is needed',
-      'any.required': 'Finance company is required when finance is needed'
-    }),
-    otherwise: Joi.string().optional().allow('')
-  }),
+  // financeCompany: Joi.when('financeRequired', {
+  //   is: true,
+  //   then: Joi.string().required().trim().messages({
+  //     'string.empty': 'Finance company is required when finance is needed',
+  //     'any.required': 'Finance company is required when finance is needed'
+  //   }),
+  //   otherwise: Joi.string().optional().allow('')
+  // }),
   
   // Employee Information
   assignedEmployeeCode: Joi.string().optional().allow(''),
@@ -137,7 +137,7 @@ export const updateDGEnquirySchema = Joi.object({
   
   // Address Information
   address: Joi.string().optional().trim(),
-  pincode: Joi.string().optional().trim().pattern(/^\d{6}$/).messages({
+  pincode: Joi.string().optional().trim().allow('').pattern(/^\d{6}$/).messages({
     'string.pattern.base': 'Pincode must be 6 digits'
   }),
   tehsil: Joi.string().optional().allow(''),

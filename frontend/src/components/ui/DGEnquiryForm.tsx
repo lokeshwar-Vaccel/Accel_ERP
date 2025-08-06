@@ -85,10 +85,10 @@ const initialFormData: EnquiryFormData = {
   
   // DG Requirements
   kva: '',
-  phase: 'Three Phase',
-  quantity: '1',
-  segment: '',
-  subSegment: '',
+      phase: 'Three Phase',
+    quantity: '1',
+    segment: 'Manufacturing',
+    subSegment: '',
   dgOwnership: 'NOT_OWNED',
   financeRequired: false,
   financeCompany: '',
@@ -111,6 +111,8 @@ export default function DGEnquiryForm({ isOpen, onClose, onSuccess, initialData,
   const [errors, setErrors] = useState<Partial<EnquiryFormData>>({});
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
+
+  console.log('formData3434', formData);
 
   useEffect(() => {
     if (initialData && mode === 'edit') {
@@ -149,7 +151,7 @@ export default function DGEnquiryForm({ isOpen, onClose, onSuccess, initialData,
         kva: initialData.kva ? String(initialData.kva) : '',
         phase: initialData.phase || 'Three Phase',
         quantity: initialData.quantity ? String(initialData.quantity) : '1',
-        segment: initialData.segment || '',
+        segment: initialData.segment || 'Manufacturing',
         subSegment: initialData.subSegment || '',
         dgOwnership: initialData.dgOwnership || 'NOT_OWNED',
         financeRequired: Boolean(initialData.financeRequired),
@@ -210,11 +212,11 @@ export default function DGEnquiryForm({ isOpen, onClose, onSuccess, initialData,
       newErrors.address = 'Address is required';
     }
 
-    if (!formData.pincode.trim()) {
-      newErrors.pincode = 'Pincode is required';
-    } else if (!/^\d{6}$/.test(formData.pincode)) {
-      newErrors.pincode = 'Pincode must be 6 digits';
-    }
+    // if (!formData.pincode.trim()) {
+    //   newErrors.pincode = 'Pincode is required';
+    // } else if (!/^\d{6}$/.test(formData.pincode)) {
+    //   newErrors.pincode = 'Pincode must be 6 digits';
+    // }
 
     if (!formData.district.trim()) {
       newErrors.district = 'District is required';
@@ -237,9 +239,9 @@ export default function DGEnquiryForm({ isOpen, onClose, onSuccess, initialData,
       newErrors.quantity = 'Quantity must be a number';
     }
 
-    if (formData.financeRequired && !formData.financeCompany.trim()) {
-      newErrors.financeCompany = 'Finance company is required when finance is needed';
-    }
+    // if (formData.financeRequired && !formData.financeCompany.trim()) {
+    //   newErrors.financeCompany = 'Finance company is required when finance is needed';
+    // }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -286,9 +288,9 @@ export default function DGEnquiryForm({ isOpen, onClose, onSuccess, initialData,
         
         // DG Requirements
         kva: parseInt(formData.kva) || 0,
-        phase: formData.phase,
+        phase: formData.phase || 'Three Phase',
         quantity: parseInt(formData.quantity) || 1,
-        segment: formData.segment || undefined,
+        segment: formData.segment || 'Manufacturing',
         subSegment: formData.subSegment.trim() || undefined,
         dgOwnership: formData.dgOwnership,
         financeRequired: Boolean(formData.financeRequired),

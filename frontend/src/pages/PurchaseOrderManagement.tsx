@@ -2847,7 +2847,7 @@ const PurchaseOrderManagement: React.FC = () => {
                             <div className="bg-gray-50 rounded-lg p-3 mb-4">
                               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
                                 <div>
-                                  <div className="text-xs text-gray-500 mb-1">Unit Price</div>
+                                  <div className="text-xs text-gray-500 mb-1">Price (GNDP)</div>
                                   <div className="text-sm font-semibold text-gray-900">{formatCurrency(item.unitPrice)}</div>
                                 </div>
                                 <div>

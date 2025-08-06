@@ -252,15 +252,15 @@ const DGInvoiceManagement: React.FC = () => {
       try {
         const response = await apiClient.dgInvoices.getAll({ limit: 100 });
         const allInvoices = response.data?.invoices || [];
-        
-        const stats = {
-          totalInvoices: allInvoices.length,
-          paidInvoices: allInvoices.filter((inv: any) => inv.paymentStatus === 'paid').length,
-          overdueInvoices: allInvoices.filter((inv: any) => inv.status === 'overdue').length,
-          totalRevenue: allInvoices.reduce((sum: number, inv: any) => sum + (inv.paidAmount || 0), 0)
-        };
-        
-        setStats(stats);
+      
+      const stats = {
+        totalInvoices: allInvoices.length,
+        paidInvoices: allInvoices.filter((inv: any) => inv.paymentStatus === 'paid').length,
+        overdueInvoices: allInvoices.filter((inv: any) => inv.status === 'overdue').length,
+        totalRevenue: allInvoices.reduce((sum: number, inv: any) => sum + (inv.paidAmount || 0), 0)
+      };
+      
+      setStats(stats);
       } catch (fallbackError) {
         console.error('Error calculating fallback stats:', fallbackError);
         setStats({
@@ -846,11 +846,11 @@ const DGInvoiceManagement: React.FC = () => {
                           ) : (
                             <Send className="w-4 h-4" />
                           )}
-                        </button>
+                      </button>
                       )}
                       {/* Send Reminder - Only for sent invoices that aren't paid */}
                       {invoice.status === 'sent' && invoice.paymentStatus !== 'paid' && (
-                        <button
+                      <button
                           onClick={() => quickSendReminder(invoice)}
                           disabled={submitting}
                           className={`text-blue-600 hover:text-blue-900 hover:bg-blue-50 ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}
@@ -1038,7 +1038,7 @@ const DGInvoiceManagement: React.FC = () => {
             </div>
 
             
-          </div>
+                  </div>
         </Modal>
       )}
 
@@ -1048,7 +1048,7 @@ const DGInvoiceManagement: React.FC = () => {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-6xl max-h-[95vh] overflow-hidden flex flex-col">
             {/* Fixed Header */}
             <div className="flex items-center justify-between p-5 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-t-2xl flex-shrink-0">
-              <div>
+                  <div>
                 <h2 className="text-2xl font-bold text-gray-900">Update Payment</h2>
                 <p className="text-sm text-gray-600 mt-1">Process payment for DG invoice #{selectedInvoice.invoiceNumber}</p>
               </div>
@@ -1159,8 +1159,8 @@ const DGInvoiceManagement: React.FC = () => {
                               <CheckCircle className="w-3 h-3" />
                               <span>Real-time verification</span>
                             </div>
-                          </div>
-                        )}
+                  </div>
+                )}
                       </div>
                     </div>
                   </div>
@@ -1180,13 +1180,13 @@ const DGInvoiceManagement: React.FC = () => {
                           <div className="flex justify-between items-center py-2 border-b border-yellow-200">
                             <span className="text-yellow-700">Previously Paid:</span>
                             <span className="font-semibold text-yellow-800">₹{(selectedInvoice.paidAmount || 0).toLocaleString()}</span>
-                          </div>
-                        )}
+              </div>
+            )}
 
                         <div className="flex justify-between items-center py-2 border-b border-yellow-200">
                           <span className="text-yellow-700">New Payment:</span>
                           <span className="font-semibold text-yellow-800">₹{(paymentUpdate.paidAmount || 0).toLocaleString()}</span>
-                        </div>
+          </div>
 
                         {paymentUpdate.paidAmount < ((selectedInvoice.totalAmount || 0) - (selectedInvoice.paidAmount || 0)) && (
                           <div className="flex justify-between items-center py-2">
@@ -1346,9 +1346,9 @@ const DGInvoiceManagement: React.FC = () => {
                       Payment Details
                     </h3>
 
-                    <div className="space-y-4">
+          <div className="space-y-4">
                       {/* Payment Status */}
-                      <div>
+            <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Payment Status
                         </label>
@@ -1403,10 +1403,10 @@ const DGInvoiceManagement: React.FC = () => {
                             </div>
                           )}
                         </div>
-                      </div>
+            </div>
 
                       {/* Payment Method */}
-                      <div>
+            <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Payment Method
                         </label>
@@ -1458,7 +1458,7 @@ const DGInvoiceManagement: React.FC = () => {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Payment Date
                         </label>
-                        <input
+              <input
                           type="date"
                           value={paymentUpdate.paymentDate}
                           onChange={(e) => {
@@ -1479,14 +1479,14 @@ const DGInvoiceManagement: React.FC = () => {
                         {formErrors.paymentDate && (
                           <p className="text-red-500 text-sm mt-1">{formErrors.paymentDate}</p>
                         )}
-                      </div>
+            </div>
 
                       {/* Payment Notes */}
-                      <div>
+            <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Payment Notes
                         </label>
-                        <textarea
+              <textarea
                           value={paymentUpdate.notes}
                           onChange={(e) => setPaymentUpdate({ ...paymentUpdate, notes: e.target.value })}
                           rows={4}
@@ -1497,7 +1497,7 @@ const DGInvoiceManagement: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              </div>
+            </div>
 
               {/* Error Messages */}
               {(formErrors.general || formErrors.razorpay || Object.keys(formErrors).length > 0) && (
@@ -1536,13 +1536,13 @@ const DGInvoiceManagement: React.FC = () => {
               <div className="sticky bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-6 py-4 mt-5 z-10">
                 <div className="flex space-x-4">
                   <button
-                    onClick={() => setShowPaymentModal(false)}
+                onClick={() => setShowPaymentModal(false)}
                     className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                  >
-                    Cancel
+              >
+                Cancel
                   </button>
                   <button
-                    onClick={submitPaymentUpdate}
+                onClick={submitPaymentUpdate}
                     disabled={!isPaymentFormValid() || submitting}
                     className="flex-1 px-6 py-3 bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium shadow-lg"
                   >
@@ -1550,12 +1550,12 @@ const DGInvoiceManagement: React.FC = () => {
                       <div className="flex items-center justify-center">
                         <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
                         Processing...
-                      </div>
+            </div>
                     ) : (
                       paymentUpdate.useRazorpay ? 'Proceed to Payment' : 'Update Payment'
                     )}
                   </button>
-                </div>
+          </div>
               </div>
 
             </div>

@@ -136,30 +136,55 @@ const CreatePurchaseOrder: React.FC = () => {
     const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
     const [showAddressDropdown, setShowAddressDropdown] = useState(false);
     const [showProductDropdowns, setShowProductDropdowns] = useState<Record<number, boolean>>({});
+    const [showCategoryDropdowns, setShowCategoryDropdowns] = useState<Record<number, boolean>>({});
+    const [showUomDropdowns, setShowUomDropdowns] = useState<Record<number, boolean>>({});
+    const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+    const [showSourceTypeDropdown, setShowSourceTypeDropdown] = useState(false);
+    const [showDepartmentDropdown, setShowDepartmentDropdown] = useState(false);
 
     // Search states
     const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
     const [addressSearchTerm, setAddressSearchTerm] = useState('');
     const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
+    const [categorySearchTerms, setCategorySearchTerms] = useState<Record<number, string>>({});
+    const [uomSearchTerms, setUomSearchTerms] = useState<Record<number, string>>({});
+    const [prioritySearchTerm, setPrioritySearchTerm] = useState('');
+    const [sourceTypeSearchTerm, setSourceTypeSearchTerm] = useState('');
+    const [departmentSearchTerm, setDepartmentSearchTerm] = useState('');
 
     // Search helper functions
     const updateProductSearchTerm = (itemIndex: number, searchTerm: string) => {
         setProductSearchTerms(prev => ({ ...prev, [itemIndex]: searchTerm }));
     };
 
+    const updateCategorySearchTerm = (itemIndex: number, searchTerm: string) => {
+        setCategorySearchTerms(prev => ({ ...prev, [itemIndex]: searchTerm }));
+    };
+
+    const updateUomSearchTerm = (itemIndex: number, searchTerm: string) => {
+        setUomSearchTerms(prev => ({ ...prev, [itemIndex]: searchTerm }));
+    };
+
     // Keyboard navigation states
     const [highlightedSupplierIndex, setHighlightedSupplierIndex] = useState(-1);
     const [highlightedAddressIndex, setHighlightedAddressIndex] = useState(-1);
     const [highlightedProductIndex, setHighlightedProductIndex] = useState<Record<number, number>>({});
+    const [highlightedCategoryIndex, setHighlightedCategoryIndex] = useState<Record<number, number>>({});
+    const [highlightedUomIndex, setHighlightedUomIndex] = useState<Record<number, number>>({});
+    const [highlightedPriorityIndex, setHighlightedPriorityIndex] = useState(-1);
+    const [highlightedSourceTypeIndex, setHighlightedSourceTypeIndex] = useState(-1);
+    const [highlightedDepartmentIndex, setHighlightedDepartmentIndex] = useState(-1);
+    const [isTabTransitioning, setIsTabTransitioning] = useState(false);
 
     // Refs for keyboard navigation
     const formRef = useRef<HTMLFormElement>(null);
     const supplierInputRef = useRef<HTMLInputElement>(null);
     const addressInputRef = useRef<HTMLInputElement>(null);
     const deliveryDateInputRef = useRef<HTMLInputElement>(null);
-    const prioritySelectRef = useRef<HTMLSelectElement>(null);
-    const sourceTypeSelectRef = useRef<HTMLSelectElement>(null);
-    const departmentSelectRef = useRef<HTMLSelectElement>(null);
+    const prioritySelectRef = useRef<HTMLInputElement>(null);
+    const sourceTypeSelectRef = useRef<HTMLInputElement>(null);
+    const departmentSelectRef = useRef<HTMLInputElement>(null);
+    const createPOButtonRef = useRef<HTMLButtonElement>(null);
 
     // Auto-focus on supplier field when component mounts
     useEffect(() => {
@@ -176,10 +201,22 @@ const CreatePurchaseOrder: React.FC = () => {
         const handleClickOutside = (event: MouseEvent) => {
             const target = event.target as Element;
 
-            // Close supplier dropdown
+            // Don't close dropdowns if we're in a tab transition
+            if (isTabTransitioning) {
+                return;
+            }
+
+            // Close all dropdowns
             if (!target.closest('.dropdown-container')) {
                 setShowSupplierDropdown(false);
                 setShowAddressDropdown(false);
+                setShowPriorityDropdown(false);
+                setShowSourceTypeDropdown(false);
+                setShowDepartmentDropdown(false);
+                // Close product, category, and UOM dropdowns for all rows
+                setShowProductDropdowns({});
+                setShowCategoryDropdowns({});
+                setShowUomDropdowns({});
             }
         };
 
@@ -409,8 +446,7 @@ const CreatePurchaseOrder: React.FC = () => {
     const getFilteredProducts = (searchTerm: string = '') => {
         return products.filter(product =>
             product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            product.partNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            product.brand?.toLowerCase().includes(searchTerm.toLowerCase())
+            product.partNo?.toLowerCase().includes(searchTerm.toLowerCase())
         );
     };
 
@@ -475,9 +511,7 @@ const CreatePurchaseOrder: React.FC = () => {
                 if (!item.category?.trim()) {
                     newErrors.push(`Category is required for new product in item ${index + 1}`);
                 }
-                if (!item.brand?.trim()) {
-                    newErrors.push(`Brand is required for new product in item ${index + 1}`);
-                }
+
                 if (!item.hsnNumber?.trim()) {
                     newErrors.push(`HSN/SAC is required for new product in item ${index + 1}`);
                 }
@@ -512,6 +546,149 @@ const CreatePurchaseOrder: React.FC = () => {
     };
 
     const user = useSelector((state: RootState) => state.auth.user);
+
+    // Dropdown data arrays
+    const priorityOptions = [
+        { value: 'low', label: 'Low Priority' },
+        { value: 'medium', label: 'Medium Priority' },
+        { value: 'high', label: 'High Priority' },
+        { value: 'urgent', label: 'Urgent' }
+    ];
+
+    const sourceTypeOptions = [
+        { value: 'manual', label: 'Manual Purchase' },
+        { value: 'amc', label: 'AMC Requirement' },
+        { value: 'service', label: 'Service Request' },
+        { value: 'inventory', label: 'Inventory Replenishment' }
+    ];
+
+    const categoryOptions = [
+        { value: 'spare_part', label: 'Spare Part' },
+        { value: 'accessory', label: 'Accessory' },
+        { value: 'genset', label: 'Genset' }
+    ];
+
+    const uomOptions = [
+        { value: 'nos', label: 'Nos' },
+        { value: 'kg', label: 'Kg' },
+        { value: 'litre', label: 'Litre' },
+        { value: 'meter', label: 'Meter' },
+        { value: 'sq.ft', label: 'Sq.Ft' },
+        { value: 'hour', label: 'Hour' },
+        { value: 'set', label: 'Set' },
+        { value: 'box', label: 'Box' },
+        { value: 'can', label: 'Can' },
+        { value: 'roll', label: 'Roll' }
+    ];
+
+    const departmentOptions = [
+        { value: 'RETAIL', label: 'RETAIL' },
+        { value: 'INDUSTRIAL', label: 'INDUSTRIAL' },
+        { value: 'IE', label: 'IE' },
+        { value: 'TELECOM', label: 'TELECOM' },
+        { value: 'EV', label: 'EV' },
+        { value: 'RET/TEL', label: 'RET/TEL' }
+    ];
+
+    // Helper functions for dropdown options
+    const getFilteredPriorities = (searchTerm: string = '') => {
+        return priorityOptions.filter(option =>
+            option.label.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    };
+
+    const getFilteredSourceTypes = (searchTerm: string = '') => {
+        return sourceTypeOptions.filter(option =>
+            option.label.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    };
+
+    const getFilteredCategories = (searchTerm: string = '') => {
+        return categoryOptions.filter(option =>
+            option.label.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    };
+
+    const getFilteredUomOptions = (searchTerm: string = '') => {
+        return uomOptions.filter(option =>
+            option.label.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    };
+
+    const getFilteredDepartments = (searchTerm: string = '') => {
+        return departmentOptions.filter(option =>
+            option.label.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    };
+
+    const getCategoryLabel = (value: string) => {
+        const option = categoryOptions.find(opt => opt.value === value);
+        return option?.label || '';
+    };
+
+    const getUomLabel = (value: string) => {
+        const option = uomOptions.find(opt => opt.value === value);
+        return option?.label || '';
+    };
+
+    const getPriorityLabel = (value: string) => {
+        const option = priorityOptions.find(opt => opt.value === value);
+        return option?.label || '';
+    };
+
+    const getSourceTypeLabel = (value: string) => {
+        const option = sourceTypeOptions.find(opt => opt.value === value);
+        return option?.label || '';
+    };
+
+    const getDepartmentLabel = (value: string) => {
+        const option = departmentOptions.find(opt => opt.value === value);
+        return option?.label || '';
+    };
+
+    // Handler functions for dropdown selections
+    const handlePrioritySelect = (value: string) => {
+        setFormData(prev => ({ ...prev, priority: value as any }));
+        setShowPriorityDropdown(false);
+        setPrioritySearchTerm('');
+        setHighlightedPriorityIndex(-1);
+
+        // Auto-focus on source type field after priority selection
+        setTimeout(() => {
+            sourceTypeSelectRef.current?.focus();
+            setShowSourceTypeDropdown(true);
+        }, 50);
+    };
+
+    const handleSourceTypeSelect = (value: string) => {
+        setFormData(prev => ({ ...prev, sourceType: value as any }));
+        setShowSourceTypeDropdown(false);
+        setSourceTypeSearchTerm('');
+        setHighlightedSourceTypeIndex(-1);
+
+        // Auto-focus on department field after source type selection
+        setTimeout(() => {
+            departmentSelectRef.current?.focus();
+            setShowDepartmentDropdown(true);
+        }, 50);
+    };
+
+    const handleDepartmentSelect = (value: string) => {
+        setFormData(prev => ({ ...prev, department: value }));
+        setShowDepartmentDropdown(false);
+        setDepartmentSearchTerm('');
+        setHighlightedDepartmentIndex(-1);
+
+        // Auto-focus on first product field after department selection
+        setTimeout(() => {
+            const firstProductInput = document.querySelector(`[data-row="0"][data-field="partNo"]`) as HTMLInputElement;
+            if (firstProductInput) {
+                firstProductInput.focus();
+                // Also open the product dropdown for better UX
+                setShowProductDropdowns({ ...showProductDropdowns, 0: true });
+            }
+        }, 50);
+    };
 
     const handleSubmitPO = async () => {
         if (!validateForm()) {
@@ -548,7 +725,7 @@ const CreatePurchaseOrder: React.FC = () => {
                         name: item.name || item.partNo || 'New Product', // Use dedicated name field
                         partNo: item.partNo || `AUTO-${Date.now()}`,
                         category: item.category || 'spare_part',
-                        brand: item.brand || 'Generic',
+                        brand: 'Generic', // Default brand since it's not required
                         gndp: item.gndp,
                         price: item.gndp, // Use GNDP as price for now
                         gst: item.taxRate || 0,
@@ -583,26 +760,26 @@ const CreatePurchaseOrder: React.FC = () => {
                 }
             }
 
-            console.log("updatedItems:",updatedItems);
-            
-            
+            console.log("updatedItems:", updatedItems);
+
+
             // Filter out empty items and map our frontend fields to backend expected fields
             const mappedItems = updatedItems
-            .filter(item => {
-                // Keep items that have a valid product ID (either existing or newly created)
-                return item.product && item.product !== '' && !item.product.startsWith('temp-');
-            })
-            .map(item => ({
-                product: item.product,
-                quantity: item.quantity,
-                unitPrice: item.gndp, // Map gndp to unitPrice
-                totalPrice: item.totalPrice,
-                taxRate: item.taxRate || 0,
-                description: item.name || item.description || '', // Use name as description
-                receivedQuantity: 0
-            }));
-            
-            console.log("mappedItems:",mappedItems);
+                .filter(item => {
+                    // Keep items that have a valid product ID (either existing or newly created)
+                    return item.product && item.product !== '' && !item.product.startsWith('temp-');
+                })
+                .map(item => ({
+                    product: item.product,
+                    quantity: item.quantity,
+                    unitPrice: item.gndp, // Map gndp to unitPrice
+                    totalPrice: item.totalPrice,
+                    taxRate: item.taxRate || 0,
+                    description: item.name || item.description || '', // Use name as description
+                    receivedQuantity: 0
+                }));
+
+            console.log("mappedItems:", mappedItems);
             // Validate that we have at least one valid item
             if (mappedItems.length === 0) {
                 toast.error('Please add at least one item to the purchase order');
@@ -677,6 +854,31 @@ const CreatePurchaseOrder: React.FC = () => {
         );
 
         switch (e.key) {
+            case 'Tab':
+                e.preventDefault();
+                if (e.shiftKey) {
+                    // Shift+Tab: Move back to supplier field
+                    setShowAddressDropdown(false);
+                    setAddressSearchTerm('');
+                    setHighlightedAddressIndex(-1);
+                    setTimeout(() => {
+                        supplierInputRef.current?.focus();
+                        setShowSupplierDropdown(true);
+                    }, 50);
+                } else {
+                    // Tab: Move to next field (Delivery Date)
+                    if (highlightedAddressIndex >= 0 && filteredAddresses[highlightedAddressIndex]) {
+                        handleAddressSelect(filteredAddresses[highlightedAddressIndex].id || '');
+                    } else {
+                        setShowAddressDropdown(false);
+                        setAddressSearchTerm('');
+                        setHighlightedAddressIndex(-1);
+                        setTimeout(() => {
+                            deliveryDateInputRef.current?.focus();
+                        }, 50);
+                    }
+                }
+                break;
             case 'ArrowDown':
                 e.preventDefault();
                 setHighlightedAddressIndex(prev =>
@@ -711,6 +913,33 @@ const CreatePurchaseOrder: React.FC = () => {
         );
 
         switch (e.key) {
+            case 'Tab':
+                e.preventDefault();
+                if (e.shiftKey) {
+                    // Shift+Tab: Move to previous field (if any)
+                    // For now, just close dropdown
+                    setShowSupplierDropdown(false);
+                    setSupplierSearchTerm('');
+                    setHighlightedSupplierIndex(-1);
+                    setTimeout(() => {
+                        addressInputRef.current?.focus();
+                        setShowAddressDropdown(true);
+                    }, 50);
+                } else {
+                    // Tab: Move to next field (Address)
+                    if (highlightedSupplierIndex >= 0 && filteredSuppliers[highlightedSupplierIndex]) {
+                        handleSupplierSelect(filteredSuppliers[highlightedSupplierIndex]._id);
+                    } else {
+                        setShowSupplierDropdown(false);
+                        setSupplierSearchTerm('');
+                        setHighlightedSupplierIndex(-1);
+                        setTimeout(() => {
+                            deliveryDateInputRef.current?.focus();
+                            // setShowDeliveryDateDropdown(true);
+                        }, 50);
+                    }
+                }
+                break;
             case 'ArrowDown':
                 e.preventDefault();
                 setHighlightedSupplierIndex(prev =>
@@ -733,6 +962,316 @@ const CreatePurchaseOrder: React.FC = () => {
                 setSupplierSearchTerm('');
                 setHighlightedSupplierIndex(-1);
                 break;
+        }
+    };
+
+    const handlePriorityKeyDown = (e: React.KeyboardEvent) => {
+        const filteredPriorities = getFilteredPriorities(prioritySearchTerm);
+
+        switch (e.key) {
+            case 'Tab':
+                e.preventDefault();
+                if (e.shiftKey) {
+                    // Shift+Tab: Move back to delivery date field
+                    setShowPriorityDropdown(false);
+                    setPrioritySearchTerm('');
+                    setHighlightedPriorityIndex(-1);
+                    setTimeout(() => {
+                        deliveryDateInputRef.current?.focus();
+                    }, 50);
+                } else {
+                    // Tab: Move to next field (Source Type)
+                    if (highlightedPriorityIndex >= 0 && filteredPriorities[highlightedPriorityIndex]) {
+                        handlePrioritySelect(filteredPriorities[highlightedPriorityIndex].value);
+                    } else {
+                        setShowPriorityDropdown(false);
+                        setPrioritySearchTerm('');
+                        setHighlightedPriorityIndex(-1);
+                        setTimeout(() => {
+                            sourceTypeSelectRef.current?.focus();
+                            setShowSourceTypeDropdown(true);
+                        }, 50);
+                    }
+                }
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                setHighlightedPriorityIndex(prev =>
+                    prev < filteredPriorities.length - 1 ? prev + 1 : prev
+                );
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setHighlightedPriorityIndex(prev => prev > 0 ? prev - 1 : -1);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (highlightedPriorityIndex >= 0 && filteredPriorities[highlightedPriorityIndex]) {
+                    handlePrioritySelect(filteredPriorities[highlightedPriorityIndex].value);
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                setShowPriorityDropdown(false);
+                setPrioritySearchTerm('');
+                setHighlightedPriorityIndex(-1);
+                break;
+        }
+    };
+
+    const handleSourceTypeKeyDown = (e: React.KeyboardEvent) => {
+        const filteredSourceTypes = getFilteredSourceTypes(sourceTypeSearchTerm);
+
+        switch (e.key) {
+            case 'Tab':
+                e.preventDefault();
+                if (e.shiftKey) {
+                    // Shift+Tab: Move back to priority field
+                    setShowSourceTypeDropdown(false);
+                    setSourceTypeSearchTerm('');
+                    setHighlightedSourceTypeIndex(-1);
+                    setTimeout(() => {
+                        prioritySelectRef.current?.focus();
+                        setShowPriorityDropdown(true);
+                    }, 50);
+                } else {
+                    // Tab: Move to next field (Department)
+                    if (highlightedSourceTypeIndex >= 0 && filteredSourceTypes[highlightedSourceTypeIndex]) {
+                        handleSourceTypeSelect(filteredSourceTypes[highlightedSourceTypeIndex].value);
+                    } else {
+                        setShowSourceTypeDropdown(false);
+                        setSourceTypeSearchTerm('');
+                        setHighlightedSourceTypeIndex(-1);
+                        setTimeout(() => {
+                            departmentSelectRef.current?.focus();
+                            setShowDepartmentDropdown(true);
+                        }, 50);
+                    }
+                }
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                setHighlightedSourceTypeIndex(prev =>
+                    prev < filteredSourceTypes.length - 1 ? prev + 1 : prev
+                );
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setHighlightedSourceTypeIndex(prev => prev > 0 ? prev - 1 : -1);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (highlightedSourceTypeIndex >= 0 && filteredSourceTypes[highlightedSourceTypeIndex]) {
+                    handleSourceTypeSelect(filteredSourceTypes[highlightedSourceTypeIndex].value);
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                setShowSourceTypeDropdown(false);
+                setSourceTypeSearchTerm('');
+                setHighlightedSourceTypeIndex(-1);
+                break;
+        }
+    };
+
+    const handleDepartmentKeyDown = (e: React.KeyboardEvent) => {
+        const filteredDepartments = getFilteredDepartments(departmentSearchTerm);
+
+        switch (e.key) {
+            case 'Tab':
+                e.preventDefault();
+                if (e.shiftKey) {
+                    // Shift+Tab: Move back to source type field
+                    setShowDepartmentDropdown(false);
+                    setDepartmentSearchTerm('');
+                    setHighlightedDepartmentIndex(-1);
+                    setTimeout(() => {
+                        sourceTypeSelectRef.current?.focus();
+                        setShowSourceTypeDropdown(true);
+                    }, 50);
+                } else {
+                    // Tab: Move to first product field
+                    if (highlightedDepartmentIndex >= 0 && filteredDepartments[highlightedDepartmentIndex]) {
+                        handleDepartmentSelect(filteredDepartments[highlightedDepartmentIndex].value);
+                    } else {
+                        setShowDepartmentDropdown(false);
+                        setDepartmentSearchTerm('');
+                        setHighlightedDepartmentIndex(-1);
+                        setTimeout(() => {
+                            const firstProductInput = document.querySelector(`[data-row="0"][data-field="partNo"]`) as HTMLInputElement;
+                            if (firstProductInput) {
+                                firstProductInput.focus();
+                                // Also open the product dropdown for better UX
+                                setShowProductDropdowns({ ...showProductDropdowns, 0: true });
+                            }
+                        }, 50);
+                    }
+                }
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                setHighlightedDepartmentIndex(prev =>
+                    prev < filteredDepartments.length - 1 ? prev + 1 : prev
+                );
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setHighlightedDepartmentIndex(prev => prev > 0 ? prev - 1 : -1);
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (highlightedDepartmentIndex >= 0 && filteredDepartments[highlightedDepartmentIndex]) {
+                    handleDepartmentSelect(filteredDepartments[highlightedDepartmentIndex].value);
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                setShowDepartmentDropdown(false);
+                setDepartmentSearchTerm('');
+                setHighlightedDepartmentIndex(-1);
+                break;
+        }
+    };
+
+    const handleUomKeyDown = (e: React.KeyboardEvent, rowIndex: number) => {
+        const searchTerm = uomSearchTerms[rowIndex] || '';
+        const matchingUoms = getFilteredUomOptions(searchTerm);
+        const currentHighlighted = highlightedUomIndex[rowIndex] ?? -1;
+
+        // Ctrl+Delete or Command+Delete: Remove current row
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+            e.preventDefault();
+            removeItem(rowIndex);
+            return;
+        }
+
+        if (e.key === 'Tab') {
+            e.preventDefault();
+
+            if (e.shiftKey) {
+                // Shift+Tab: Move back to GST field
+                setTimeout(() => {
+                    const prevInput = document.querySelector(`[data-row="${rowIndex}"][data-field="taxRate"]`) as HTMLInputElement;
+                    if (prevInput) prevInput.focus();
+                }, 50);
+                return;
+            }
+
+            // Tab: Move to next field (GNDP Price)
+            setTimeout(() => {
+                const nextInput = document.querySelector(`[data-row="${rowIndex}"][data-field="gndp"]`) as HTMLInputElement;
+                if (nextInput) nextInput.focus();
+            }, 50);
+
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+
+            // Auto-select highlighted UOM or first match if there's a search term
+            if (matchingUoms.length > 0) {
+                const selectedUom = currentHighlighted >= 0 && currentHighlighted < matchingUoms.length
+                    ? matchingUoms[currentHighlighted]
+                    : matchingUoms[0];
+                updateItem(rowIndex, 'uom', selectedUom.value);
+                updateUomSearchTerm(rowIndex, '');
+                setShowUomDropdowns({ ...showUomDropdowns, [rowIndex]: false });
+                setHighlightedUomIndex({ ...highlightedUomIndex, [rowIndex]: -1 });
+
+                // Move to next field (GNDP Price)
+                setTimeout(() => {
+                    const nextInput = document.querySelector(`[data-row="${rowIndex}"][data-field="gndp"]`) as HTMLInputElement;
+                    if (nextInput) nextInput.focus();
+                }, 100);
+            }
+
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (showUomDropdowns[rowIndex] && matchingUoms.length > 0) {
+                const newIndex = currentHighlighted < 0 ? 0 : Math.min(currentHighlighted + 1, matchingUoms.length - 1);
+                setHighlightedUomIndex({ ...highlightedUomIndex, [rowIndex]: newIndex });
+            }
+
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (showUomDropdowns[rowIndex] && matchingUoms.length > 0) {
+                const newIndex = currentHighlighted < 0 ? 0 : Math.max(currentHighlighted - 1, 0);
+                setHighlightedUomIndex({ ...highlightedUomIndex, [rowIndex]: newIndex });
+            }
+
+        } else if (e.key === 'Escape') {
+            setShowUomDropdowns({ ...showUomDropdowns, [rowIndex]: false });
+            updateUomSearchTerm(rowIndex, '');
+            setHighlightedUomIndex({ ...highlightedUomIndex, [rowIndex]: -1 });
+        }
+    };
+
+    const handleCategoryKeyDown = (e: React.KeyboardEvent, rowIndex: number) => {
+        const searchTerm = categorySearchTerms[rowIndex] || '';
+        const matchingCategories = getFilteredCategories(searchTerm);
+        const currentHighlighted = highlightedCategoryIndex[rowIndex] ?? -1;
+
+        // Ctrl+Delete or Command+Delete: Remove current row
+        if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+            e.preventDefault();
+            removeItem(rowIndex);
+            return;
+        }
+
+        if (e.key === 'Tab') {
+            e.preventDefault();
+
+            if (e.shiftKey) {
+                // Shift+Tab: Move to previous field (Product Name)
+                setTimeout(() => {
+                    const prevInput = document.querySelector(`[data-row="${rowIndex}"][data-field="name"]`) as HTMLInputElement;
+                    if (prevInput) prevInput.focus();
+                }, 50);
+                return;
+            }
+
+            // Tab: Move to next field (HSN/SAC)
+            setTimeout(() => {
+                const nextInput = document.querySelector(`[data-row="${rowIndex}"][data-field="hsnNumber"]`) as HTMLInputElement;
+                if (nextInput) nextInput.focus();
+            }, 50);
+
+        } else if (e.key === 'Enter') {
+            e.preventDefault();
+
+            // Auto-select highlighted category or first match if there's a search term
+            if (matchingCategories.length > 0) {
+                const selectedCategory = currentHighlighted >= 0 && currentHighlighted < matchingCategories.length
+                    ? matchingCategories[currentHighlighted]
+                    : matchingCategories[0];
+                updateItem(rowIndex, 'category', selectedCategory.value);
+                updateCategorySearchTerm(rowIndex, '');
+                setShowCategoryDropdowns({ ...showCategoryDropdowns, [rowIndex]: false });
+                setHighlightedCategoryIndex({ ...highlightedCategoryIndex, [rowIndex]: -1 });
+
+                // Move to next field (HSN/SAC)
+                setTimeout(() => {
+                    const nextInput = document.querySelector(`[data-row="${rowIndex}"][data-field="hsnNumber"]`) as HTMLInputElement;
+                    if (nextInput) nextInput.focus();
+                }, 100);
+            }
+
+        } else if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            if (showCategoryDropdowns[rowIndex] && matchingCategories.length > 0) {
+                const newIndex = currentHighlighted < 0 ? 0 : Math.min(currentHighlighted + 1, matchingCategories.length - 1);
+                setHighlightedCategoryIndex({ ...highlightedCategoryIndex, [rowIndex]: newIndex });
+            }
+
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            if (showCategoryDropdowns[rowIndex] && matchingCategories.length > 0) {
+                const newIndex = currentHighlighted < 0 ? 0 : Math.max(currentHighlighted - 1, 0);
+                setHighlightedCategoryIndex({ ...highlightedCategoryIndex, [rowIndex]: newIndex });
+            }
+
+        } else if (e.key === 'Escape') {
+            setShowCategoryDropdowns({ ...showCategoryDropdowns, [rowIndex]: false });
+            updateCategorySearchTerm(rowIndex, '');
+            setHighlightedCategoryIndex({ ...highlightedCategoryIndex, [rowIndex]: -1 });
         }
     };
 
@@ -764,6 +1303,13 @@ const CreatePurchaseOrder: React.FC = () => {
                 return;
             }
 
+            // Check if no products found and search term exists - auto-create new product
+            if (matchingProducts.length === 0 && searchTerm.trim()) {
+                // Auto-create new product with the search term
+                handleCreateNewProductInline(rowIndex, searchTerm);
+                return;
+            }
+
             // Auto-select highlighted product or first match if there's a search term
             if (matchingProducts.length > 0) {
                 const selectedProduct = currentHighlighted >= 0 && currentHighlighted < matchingProducts.length
@@ -786,6 +1332,13 @@ const CreatePurchaseOrder: React.FC = () => {
 
         } else if (e.key === 'Enter') {
             e.preventDefault();
+
+            // Check if no products found and search term exists - auto-create new product
+            if (matchingProducts.length === 0 && searchTerm.trim()) {
+                // Auto-create new product with the search term
+                handleCreateNewProductInline(rowIndex, searchTerm);
+                return;
+            }
 
             // Auto-select highlighted product or first match if there's a search term
             if (matchingProducts.length > 0) {
@@ -880,14 +1433,29 @@ const CreatePurchaseOrder: React.FC = () => {
             e.preventDefault();
 
             if (e.shiftKey) {
-                // Shift+Tab: Move back to same row's product field
-                setTimeout(() => {
-                    const productInput = document.querySelector(`[data-row="${rowIndex}"][data-field="product"]`) as HTMLInputElement;
-                    if (productInput) {
-                        productInput.focus();
-                        productInput.select();
-                    }
-                }, 50);
+                // Shift+Tab: Move back based on whether it's a new product or existing product
+                const currentItem = formData.items[rowIndex];
+                const isNewProduct = currentItem?.isNewProduct;
+                
+                if (isNewProduct) {
+                    // For new products: Quantity → GNDP Price
+                    setTimeout(() => {
+                        const gndpInput = document.querySelector(`[data-row="${rowIndex}"][data-field="gndp"]`) as HTMLInputElement;
+                        if (gndpInput) {
+                            gndpInput.focus();
+                            gndpInput.select();
+                        }
+                    }, 50);
+                } else {
+                    // For existing products: Quantity → Part No
+                    setTimeout(() => {
+                        const partNoInput = document.querySelector(`[data-row="${rowIndex}"][data-field="partNo"]`) as HTMLInputElement;
+                        if (partNoInput) {
+                            partNoInput.focus();
+                            partNoInput.select();
+                        }
+                    }, 50);
+                }
                 return;
             }
 
@@ -899,7 +1467,7 @@ const CreatePurchaseOrder: React.FC = () => {
             // Tab: Move to next row's product field
             const nextRowIndex = rowIndex + 1;
             setTimeout(() => {
-                const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="product"]`) as HTMLInputElement;
+                const nextInput = document.querySelector(`[data-row="${nextRowIndex}"][data-field="partNo"]`) as HTMLInputElement;
                 if (nextInput) nextInput.focus();
             }, 100);
         } else if (e.key === 'Enter') {
@@ -914,7 +1482,14 @@ const CreatePurchaseOrder: React.FC = () => {
 
     // Enhanced cell navigation for Excel-like behavior
     const handleCellKeyDown = (e: React.KeyboardEvent, rowIndex: number, field: string) => {
-        const fields = ['product', 'name', 'description', 'category', 'brand', 'hsnNumber', 'taxRate', 'quantity', 'uom', 'gndp'];
+        const currentItem = formData.items[rowIndex];
+        const isNewProduct = currentItem?.isNewProduct;
+        
+        // Define fields based on whether it's a new product or existing product
+        const fields = isNewProduct 
+            ? ['partNo', 'name', 'category', 'hsnNumber', 'taxRate', 'uom', 'gndp', 'quantity']
+            : ['partNo', 'quantity']; // For existing products, only Part No and Quantity are editable
+        
         const currentFieldIndex = fields.indexOf(field);
 
         // Ctrl+Delete or Command+Delete: Remove current row
@@ -940,8 +1515,11 @@ const CreatePurchaseOrder: React.FC = () => {
                     } else {
                         // If at first row, first field, move to department field
                         setTimeout(() => {
-                            const departmentInput = document.querySelector('[data-field="department"]') as HTMLSelectElement;
-                            if (departmentInput) departmentInput.focus();
+                            const departmentInput = document.querySelector('[data-field="department"]') as HTMLInputElement;
+                            if (departmentInput) {
+                                departmentInput.focus();
+                                setShowDepartmentDropdown(true);
+                            }
                         }, 50);
                         return;
                     }
@@ -1016,21 +1594,33 @@ const CreatePurchaseOrder: React.FC = () => {
     };
 
     const handleCreateNewProductInline = (index: number, searchTerm: string) => {
-        console.log("searchTerm:",searchTerm);
-        
+        console.log("Creating new product with searchTerm:", searchTerm);
+
         // Create a new product item inline in the row
         updateItem(index, 'isNewProduct', true);
         updateItem(index, 'partNo', searchTerm);
-        // updateItem(index, 'name', searchTerm); // Use dedicated name field
-        // updateItem(index, 'description', searchTerm); // Use search term as default description
         updateItem(index, 'category', 'spare_part'); // Default category
-        updateItem(index, 'brand', 'Generic'); // Default brand
         updateItem(index, 'uom', 'nos'); // Default UOM
+        updateItem(index, 'name', ''); // Default UOM
         updateItem(index, 'product', `temp-${Date.now()}`); // Temporary ID
+        updateItem(index, 'gndp', 0); // Reset GNDP price
+        updateItem(index, 'taxRate', 0); // Reset tax rate
+        updateItem(index, 'quantity', 1); // Reset quantity
+
+        // Close the product dropdown
         setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
         updateProductSearchTerm(index, '');
 
-        toast('New product added to row. Fill in required fields (Name, Part No, Category, Brand, HSN/SAC, GST, GNDP Price, UOM) and submit PO to create it.', { duration: 4000 });
+        // Focus on the Product Name field after a short delay
+        setTimeout(() => {
+            const productNameInput = document.querySelector(`[data-row="${index}"][data-field="name"]`) as HTMLInputElement;
+            if (productNameInput) {
+                productNameInput.focus();
+                productNameInput.select();
+            }
+        }, 100);
+
+        toast.success('New product added to row! Fill in required fields and submit PO to create it.', { duration: 4000 });
     };
 
     if (loading) {
@@ -1058,14 +1648,6 @@ const CreatePurchaseOrder: React.FC = () => {
                         <ArrowLeft className="w-4 h-4" />
                         <span>Back to Purchase Orders</span>
                     </button>
-                    <button
-                        onClick={handleSubmitPO}
-                        disabled={submitting}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                        <Save className="w-4 h-4" />
-                        <span>{submitting ? 'Creating...' : 'Create PO'}</span>
-                    </button>
                 </div>
             </PageHeader>
 
@@ -1080,14 +1662,11 @@ const CreatePurchaseOrder: React.FC = () => {
                         <p className="font-medium mb-1">🎯 Complete Form Navigation:</p>
                         <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Tab/Enter</kbd> Move forward</p>
                         <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">↑↓</kbd> Navigate dropdowns</p>
-                        <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Ctrl+S</kbd> Save</p>
-                        <p><kbd className="px-1 py-0.5 bg-blue-200 rounded text-xs">Auto-focus</kbd> Supplier field opens on page load</p>
                     </div>
                     <div>
                         <p className="font-medium mb-1">🔥 Super Fast Flow:</p>
                         <p><strong>Auto-start:</strong> Page loads → Supplier dropdown opens → Select → Auto-focus Address</p>
                         <p><strong>Address:</strong> Select supplier → Auto-focus → Search/Select address → Auto-focus Date</p>
-                        <p><strong>Products:</strong> Search → Select → Quantity → Tab (Next Field) → Enter (Next Row)</p>
                     </div>
                 </div>
             </div>
@@ -1176,7 +1755,7 @@ const CreatePurchaseOrder: React.FC = () => {
                         {/* Delivery Address */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Delivery Address *
+                                Supplier Address *
                             </label>
                             <div className="relative dropdown-container">
                                 <input
@@ -1263,11 +1842,30 @@ const CreatePurchaseOrder: React.FC = () => {
                                 type="date"
                                 value={formData.expectedDeliveryDate}
                                 onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
+                                // onFocus={(e) => {
+                                //     (e.target as HTMLInputElement).showPicker?.();
+                                // }}
                                 onKeyDown={(e) => {
-                                    if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
+                                    if (e.key === 'Tab') {
+                                        e.preventDefault();
+                                        if (e.shiftKey) {
+                                            // Shift+Tab: Move back to address field
+                                            setTimeout(() => {
+                                                addressInputRef.current?.focus();
+                                                setShowAddressDropdown(true);
+                                            }, 50);
+                                        } else {
+                                            // Tab: Move to priority field
+                                            setTimeout(() => {
+                                                prioritySelectRef.current?.focus();
+                                                setShowPriorityDropdown(true);
+                                            }, 50);
+                                        }
+                                    } else if (e.key === 'Enter') {
                                         e.preventDefault();
                                         setTimeout(() => {
                                             prioritySelectRef.current?.focus();
+                                            setShowPriorityDropdown(true);
                                         }, 50);
                                     }
                                 }}
@@ -1282,26 +1880,53 @@ const CreatePurchaseOrder: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Priority
                             </label>
-                            <select
-                                ref={prioritySelectRef}
-                                value={formData.priority}
-                                onChange={(e) => setFormData({ ...formData, priority: e.target.value as any })}
-                                onKeyDown={(e) => {
-                                    if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
-                                        e.preventDefault();
-                                        setTimeout(() => {
-                                            sourceTypeSelectRef.current?.focus();
-                                        }, 50);
-                                    }
-                                }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                data-field="priority"
-                            >
-                                <option value="low">Low Priority</option>
-                                <option value="medium">Medium Priority</option>
-                                <option value="high">High Priority</option>
-                                <option value="urgent">Urgent</option>
-                            </select>
+                            <div className="relative dropdown-container">
+                                <input
+                                    ref={prioritySelectRef}
+                                    type="text"
+                                    value={prioritySearchTerm || getPriorityLabel(formData.priority)}
+                                    onChange={(e) => {
+                                        setPrioritySearchTerm(e.target.value);
+                                        if (!showPriorityDropdown) setShowPriorityDropdown(true);
+                                        setHighlightedPriorityIndex(-1);
+                                    }}
+                                    onFocus={() => {
+                                        setShowPriorityDropdown(true);
+                                        setHighlightedPriorityIndex(-1);
+                                        if (!prioritySearchTerm && formData.priority) {
+                                            setPrioritySearchTerm('');
+                                        }
+                                    }}
+                                    onKeyDown={handlePriorityKeyDown}
+                                    placeholder="Search priority or press ↓ to open"
+                                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                    data-field="priority"
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPriorityDropdown ? 'rotate-180' : ''}`} />
+                                </div>
+                                {showPriorityDropdown && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                        <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                        </div>
+                                        {getFilteredPriorities(prioritySearchTerm).map((option, index) => (
+                                            <button
+                                                key={option.value}
+                                                onClick={() => handlePrioritySelect(option.value)}
+                                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.priority === option.value ? 'bg-blue-100 text-blue-800' :
+                                                    highlightedPriorityIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                        'text-gray-700 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                <div className="font-medium text-gray-900">{option.label}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Source Type */}
@@ -1309,26 +1934,53 @@ const CreatePurchaseOrder: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Source Type
                             </label>
-                            <select
-                                ref={sourceTypeSelectRef}
-                                value={formData.sourceType}
-                                onChange={(e) => setFormData({ ...formData, sourceType: e.target.value as any })}
-                                onKeyDown={(e) => {
-                                    if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
-                                        e.preventDefault();
-                                        setTimeout(() => {
-                                            departmentSelectRef.current?.focus();
-                                        }, 50);
-                                    }
-                                }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                data-field="source-type"
-                            >
-                                <option value="manual">Manual Purchase</option>
-                                <option value="amc">AMC Requirement</option>
-                                <option value="service">Service Request</option>
-                                <option value="inventory">Inventory Replenishment</option>
-                            </select>
+                            <div className="relative dropdown-container">
+                                <input
+                                    ref={sourceTypeSelectRef}
+                                    type="text"
+                                    value={sourceTypeSearchTerm || getSourceTypeLabel(formData.sourceType)}
+                                    onChange={(e) => {
+                                        setSourceTypeSearchTerm(e.target.value);
+                                        if (!showSourceTypeDropdown) setShowSourceTypeDropdown(true);
+                                        setHighlightedSourceTypeIndex(-1);
+                                    }}
+                                    onFocus={() => {
+                                        setShowSourceTypeDropdown(true);
+                                        setHighlightedSourceTypeIndex(-1);
+                                        if (!sourceTypeSearchTerm && formData.sourceType) {
+                                            setSourceTypeSearchTerm('');
+                                        }
+                                    }}
+                                    onKeyDown={handleSourceTypeKeyDown}
+                                    placeholder="Search source type or press ↓ to open"
+                                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                    data-field="source-type"
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showSourceTypeDropdown ? 'rotate-180' : ''}`} />
+                                </div>
+                                {showSourceTypeDropdown && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                        <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                        </div>
+                                        {getFilteredSourceTypes(sourceTypeSearchTerm).map((option, index) => (
+                                            <button
+                                                key={option.value}
+                                                onClick={() => handleSourceTypeSelect(option.value)}
+                                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.sourceType === option.value ? 'bg-blue-100 text-blue-800' :
+                                                    highlightedSourceTypeIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                        'text-gray-700 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                <div className="font-medium text-gray-900">{option.label}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Department */}
@@ -1336,33 +1988,53 @@ const CreatePurchaseOrder: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Department
                             </label>
-                            <select
-                                ref={departmentSelectRef}
-                                value={formData.department || ''}
-                                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                                onKeyDown={(e) => {
-                                    if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
-                                        e.preventDefault();
-                                        // Move to first product field in the table
-                                        setTimeout(() => {
-                                            const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
-                                            if (firstProductInput) {
-                                                firstProductInput.focus();
-                                            }
-                                        }, 50);
-                                    }
-                                }}
-                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                data-field="department"
-                            >
-                                <option value="">Select Department</option>
-                                <option value="RETAIL">RETAIL</option>
-                                <option value="INDUSTRIAL">INDUSTRIAL</option>
-                                <option value="IE">IE</option>
-                                <option value="TELECOM">TELECOM</option>
-                                <option value="EV">EV</option>
-                                <option value="RET/TEL">RET/TEL</option>
-                            </select>
+                            <div className="relative dropdown-container">
+                                <input
+                                    ref={departmentSelectRef}
+                                    type="text"
+                                    value={departmentSearchTerm || getDepartmentLabel(formData.department || '')}
+                                    onChange={(e) => {
+                                        setDepartmentSearchTerm(e.target.value);
+                                        if (!showDepartmentDropdown) setShowDepartmentDropdown(true);
+                                        setHighlightedDepartmentIndex(-1);
+                                    }}
+                                    onFocus={() => {
+                                        setShowDepartmentDropdown(true);
+                                        setHighlightedDepartmentIndex(-1);
+                                        if (!departmentSearchTerm && formData.department) {
+                                            setDepartmentSearchTerm('');
+                                        }
+                                    }}
+                                    onKeyDown={handleDepartmentKeyDown}
+                                    placeholder="Search department or press ↓ to open"
+                                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                    data-field="department"
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showDepartmentDropdown ? 'rotate-180' : ''}`} />
+                                </div>
+                                {showDepartmentDropdown && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                        <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                        </div>
+                                        {getFilteredDepartments(departmentSearchTerm).map((option, index) => (
+                                            <button
+                                                key={option.value}
+                                                onClick={() => handleDepartmentSelect(option.value)}
+                                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.department === option.value ? 'bg-blue-100 text-blue-800' :
+                                                    highlightedDepartmentIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                        'text-gray-700 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                <div className="font-medium text-gray-900">{option.label}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
 
@@ -1384,33 +2056,30 @@ const CreatePurchaseOrder: React.FC = () => {
                         {/* Desktop Table View */}
                         <div className="hidden lg:block border border-gray-300 rounded-lg bg-white shadow-sm overflow-x-auto">
                             {/* Table Header */}
-                            <div className="bg-gray-100 border-b border-gray-300 min-w-[1400px]">
+                            <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
                                 <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
-                                    style={{ gridTemplateColumns: '60px 150px 1fr 120px 100px 80px 80px 100px 60px 120px 80px 60px 40px' }}>
+                                    style={{ gridTemplateColumns: '60px 150px 1fr 100px 90px 100px 80px 120px 90px 100px 40px' }}>
                                     <div className="p-3 border-r border-gray-300 text-center bg-gray-200">S.No</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Part No</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Product Name</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Category</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Brand</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">HSC/SAC</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">GST(%)</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">UOM</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">GNDP Price</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Total</div>
                                     <div className="p-3 text-center bg-gray-200 font-medium"></div>
                                 </div>
                             </div>
 
                             {/* Table Body */}
-                            <div className="divide-y divide-gray-200 min-w-[1400px]">
+                            <div className="divide-y divide-gray-200 min-w-[1200px]">
                                 {(formData.items || []).map((item, index) => (
-                                    <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${
-                                        item.isNewProduct ? 'bg-green-50 border-l-green-500' : 
+                                    <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${item.isNewProduct ? 'bg-green-50 border-l-green-500' :
                                         index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                                    }`}
-                                        style={{ gridTemplateColumns: '60px 150px 1fr 120px 100px 80px 80px 100px 60px 120px 80px 60px 40px' }}>
+                                        }`}
+                                        style={{ gridTemplateColumns: '60px 150px 1fr 100px 90px 100px 80px 120px 90px 100px 40px' }}>
 
                                         {/* S.No */}
                                         <div className="p-2 border-r border-gray-200 text-center text-sm font-medium text-gray-600 flex items-center justify-center">
@@ -1501,7 +2170,11 @@ const CreatePurchaseOrder: React.FC = () => {
                                                                 <div>No products found</div>
                                                                 <div className="text-xs mt-1">Try different search terms</div>
                                                                 <button
-                                                                    onClick={() => handleCreateNewProductInline(index, productSearchTerms[index] || '')}
+                                                                    onMouseDown={(e) => {
+                                                                        e.preventDefault();
+                                                                        e.stopPropagation();
+                                                                        handleCreateNewProductInline(index, productSearchTerms[index] || '');
+                                                                    }}
                                                                     className="mt-2 px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs"
                                                                 >
                                                                     + Create New Product
@@ -1549,7 +2222,6 @@ const CreatePurchaseOrder: React.FC = () => {
                                                                             <div className="text-xs text-gray-600 space-y-0.5">
                                                                                 <div><span className="font-medium">Product Name:</span> {product?.name || 'N/A'}</div>
                                                                                 <div>
-                                                                                    <span className="font-medium">Brand:</span> {product?.brand || 'N/A'} •
                                                                                     <span className="font-medium">Category:</span> {product?.category || 'N/A'}
                                                                                 </div>
                                                                             </div>
@@ -1566,7 +2238,8 @@ const CreatePurchaseOrder: React.FC = () => {
 
                                                     <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-t border-gray-200">
                                                         <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
-                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Tab/Enter</kbd> Select → Set Qty → Tab/Enter Add Row •
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Tab/Enter</kbd> Select •
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Tab/Enter</kbd> No Results = Create New •
                                                         <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Shift+Tab</kbd> Previous •
                                                         <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
                                                     </div>
@@ -1593,42 +2266,80 @@ const CreatePurchaseOrder: React.FC = () => {
                                             />
                                         </div>
 
-                                        {/* Description */}
-                                        <div className="p-1 border-r border-gray-200">
-                                            <input
-                                                type="text"
-                                                value={item.description || ''}
-                                                onChange={(e) => updateItem(index, 'description', e.target.value)}
-                                                onKeyDown={(e) => handleCellKeyDown(e, index, 'description')}
-                                                data-row={index}
-                                                data-field="description"
-                                                className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 ${item.isNewProduct
-                                                    ? 'bg-green-50 focus:bg-green-100 focus:ring-green-500 border border-green-300 rounded'
-                                                    : 'focus:bg-blue-50'
-                                                    }`}
-                                                placeholder="Description"
-                                            />
-                                        </div>
+
 
                                         {/* Category */}
-                                        <div className="p-1 border-r border-gray-200">
+                                        <div className="p-1 border-r border-gray-200 relative">
                                             {item.isNewProduct ? (
-                                                <select
-                                                    value={item.category || 'spare_part'}
-                                                    onChange={(e) => updateItem(index, 'category', e.target.value)}
-                                                    onKeyDown={(e) => handleCellKeyDown(e, index, 'category')}
-                                                    data-row={index}
-                                                    data-field="category"
-                                                    className="w-full p-2 border border-green-300 bg-green-50 text-sm focus:outline-none focus:bg-green-100 focus:ring-1 focus:ring-green-500 rounded"
-                                                    required
-                                                >
-                                                    <option value="spare_part">Spare Part</option>
-                                                    <option value="equipment">Equipment</option>
-                                                    <option value="consumable">Consumable</option>
-                                                    <option value="tool">Tool</option>
-                                                    <option value="accessory">Accessory</option>
-                                                    <option value="service">Service</option>
-                                                </select>
+                                                <>
+                                                    <input
+                                                        type="text"
+                                                        value={categorySearchTerms[index] || getCategoryLabel(item.category || 'spare_part')}
+                                                        onChange={(e) => {
+                                                            updateCategorySearchTerm(index, e.target.value);
+                                                            setShowCategoryDropdowns({
+                                                                ...showCategoryDropdowns,
+                                                                [index]: true
+                                                            });
+                                                            setHighlightedCategoryIndex({
+                                                                ...highlightedCategoryIndex,
+                                                                [index]: -1
+                                                            });
+                                                        }}
+                                                        onFocus={() => {
+                                                            setShowCategoryDropdowns({
+                                                                ...showCategoryDropdowns,
+                                                                [index]: true
+                                                            });
+                                                            setHighlightedCategoryIndex({
+                                                                ...highlightedCategoryIndex,
+                                                                [index]: -1
+                                                            });
+                                                        }}
+                                                        onBlur={() => {
+                                                            setTimeout(() => {
+                                                                setShowCategoryDropdowns({
+                                                                    ...showCategoryDropdowns,
+                                                                    [index]: false
+                                                                });
+                                                            }, 200);
+                                                        }}
+                                                        onKeyDown={(e) => handleCategoryKeyDown(e, index)}
+                                                        data-row={index}
+                                                        data-field="category"
+                                                        className="w-full p-2 border border-green-300 bg-green-50 text-sm focus:outline-none focus:bg-green-100 focus:ring-1 focus:ring-green-500 rounded"
+                                                        placeholder="Search category..."
+                                                        autoComplete="off"
+                                                        required
+                                                    />
+                                                    {showCategoryDropdowns[index] && (
+                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                                                            
+                                                            {getFilteredCategories(categorySearchTerms[index] || '').map((option, optionIndex) => (
+                                                                <button
+                                                                    key={option.value}
+                                                                    onMouseDown={(e) => {
+                                                                        e.preventDefault();
+                                                                        updateItem(index, 'category', option.value);
+                                                                        setShowCategoryDropdowns({ ...showCategoryDropdowns, [index]: false });
+                                                                        updateCategorySearchTerm(index, '');
+                                                                        setHighlightedCategoryIndex({ ...highlightedCategoryIndex, [index]: -1 });
+                                                                        setTimeout(() => {
+                                                                            const nextInput = document.querySelector(`[data-row="${index}"][data-field="hsnNumber"]`) as HTMLInputElement;
+                                                                            if (nextInput) nextInput.focus();
+                                                                        }, 50);
+                                                                    }}
+                                                                    className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.category === option.value ? 'bg-blue-100 text-blue-800' :
+                                                                        highlightedCategoryIndex[index] === optionIndex ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                                            'text-gray-700'
+                                                                        }`}
+                                                                >
+                                                                    <div className="font-medium text-gray-900">{option.label}</div>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </>
                                             ) : (
                                                 <input
                                                     type="text"
@@ -1642,39 +2353,22 @@ const CreatePurchaseOrder: React.FC = () => {
                                             )}
                                         </div>
 
-                                        {/* Brand */}
-                                        <div className="p-1 border-r border-gray-200">
-                                            {item.isNewProduct ? (
-                                                <input
-                                                    type="text"
-                                                    value={item.brand || ''}
-                                                    onChange={(e) => updateItem(index, 'brand', e.target.value)}
-                                                    onKeyDown={(e) => handleCellKeyDown(e, index, 'brand')}
-                                                    data-row={index}
-                                                    data-field="brand"
-                                                    className="w-full p-2 border border-green-300 bg-green-50 text-sm focus:outline-none focus:bg-green-100 focus:ring-1 focus:ring-green-500 rounded"
-                                                    placeholder="Brand *"
-                                                    required
-                                                />
-                                            ) : (
-                                                <input
-                                                    type="text"
-                                                    value={item.product ? (products.find(p => p._id === item.product)?.brand || '') : ''}
-                                                    onKeyDown={(e) => handleCellKeyDown(e, index, 'brand')}
-                                                    data-row={index}
-                                                    data-field="brand"
-                                                    className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 cursor-pointer"
-                                                    disabled
-                                                />
-                                            )}
-                                        </div>
+
 
                                         {/* HSN/SAC */}
                                         <div className="p-1 border-r border-gray-200">
                                             <input
-                                                type="text"
+                                                type="text" // not "number", to control input better
+                                                inputMode="numeric" // shows numeric keyboard on mobile
+                                                pattern="\d{8}" // optional: HTML5 pattern
+                                                maxLength={8} // hard limit to 8 digits
                                                 value={item.hsnNumber || ''}
-                                                onChange={(e) => updateItem(index, 'hsnNumber', e.target.value)}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    if (/^\d{0,8}$/.test(val)) {
+                                                        updateItem(index, 'hsnNumber', val);
+                                                    }
+                                                }}
                                                 onKeyDown={(e) => handleCellKeyDown(e, index, 'hsnNumber')}
                                                 data-row={index}
                                                 data-field="hsnNumber"
@@ -1686,6 +2380,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                                 disabled={!!(item.product && !item.isNewProduct)}
                                                 required={item.isNewProduct}
                                             />
+
                                         </div>
 
                                         {/* GST */}
@@ -1710,48 +2405,78 @@ const CreatePurchaseOrder: React.FC = () => {
                                             />
                                         </div>
 
-                                        {/* Quantity */}
-                                        <div className="p-1 border-r border-gray-200 relative">
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                step="1"
-                                                value={item.quantity}
-                                                onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 1)}
-                                                onKeyDown={(e) => handleQuantityKeyDown(e, index)}
-                                                data-row={index}
-                                                data-field="quantity"
-                                                className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right ${item.isNewProduct
-                                                    ? 'bg-green-50 focus:bg-green-100 focus:ring-green-500'
-                                                    : 'focus:bg-blue-50'
-                                                    }`}
-                                                placeholder="1.00"
-                                            />
-                                        </div>
-
                                         {/* UOM */}
                                         <div className="p-1 border-r border-gray-200 relative">
                                             {item.isNewProduct ? (
-                                                <select
-                                                    value={item.uom || 'nos'}
-                                                    onChange={(e) => updateItem(index, 'uom', e.target.value)}
-                                                    onKeyDown={(e) => handleCellKeyDown(e, index, 'uom')}
-                                                    data-row={index}
-                                                    data-field="uom"
-                                                    className="w-full p-2 border border-green-300 bg-green-50 text-sm focus:outline-none focus:bg-green-100 focus:ring-1 focus:ring-green-500 rounded"
-                                                    required
-                                                >
-                                                    <option value="nos">Nos</option>
-                                                    <option value="kg">Kg</option>
-                                                    <option value="litre">Litre</option>
-                                                    <option value="meter">Meter</option>
-                                                    <option value="sq.ft">Sq.Ft</option>
-                                                    <option value="hour">Hour</option>
-                                                    <option value="set">Set</option>
-                                                    <option value="box">Box</option>
-                                                    <option value="can">Can</option>
-                                                    <option value="roll">Roll</option>
-                                                </select>
+                                                <>
+                                                    <input
+                                                        type="text"
+                                                        value={uomSearchTerms[index] || getUomLabel(item.uom || 'nos')}
+                                                        onChange={(e) => {
+                                                            updateUomSearchTerm(index, e.target.value);
+                                                            setShowUomDropdowns({
+                                                                ...showUomDropdowns,
+                                                                [index]: true
+                                                            });
+                                                            setHighlightedUomIndex({
+                                                                ...highlightedUomIndex,
+                                                                [index]: -1
+                                                            });
+                                                        }}
+                                                        onFocus={() => {
+                                                            setShowUomDropdowns({
+                                                                ...showUomDropdowns,
+                                                                [index]: true
+                                                            });
+                                                            setHighlightedUomIndex({
+                                                                ...highlightedUomIndex,
+                                                                [index]: -1
+                                                            });
+                                                        }}
+                                                        onBlur={() => {
+                                                            setTimeout(() => {
+                                                                setShowUomDropdowns({
+                                                                    ...showUomDropdowns,
+                                                                    [index]: false
+                                                                });
+                                                            }, 200);
+                                                        }}
+                                                        onKeyDown={(e) => handleUomKeyDown(e, index)}
+                                                        data-row={index}
+                                                        data-field="uom"
+                                                        className="w-full p-2 border border-green-300 bg-green-50 text-sm focus:outline-none focus:bg-green-100 focus:ring-1 focus:ring-green-500 rounded"
+                                                        placeholder="Search UOM..."
+                                                        autoComplete="off"
+                                                        required
+                                                    />
+                                                    {showUomDropdowns[index] && (
+                                                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                                                            
+                                                            {getFilteredUomOptions(uomSearchTerms[index] || '').map((option, optionIndex) => (
+                                                                <button
+                                                                    key={option.value}
+                                                                    onMouseDown={(e) => {
+                                                                        e.preventDefault();
+                                                                        updateItem(index, 'uom', option.value);
+                                                                        setShowUomDropdowns({ ...showUomDropdowns, [index]: false });
+                                                                        updateUomSearchTerm(index, '');
+                                                                        setHighlightedUomIndex({ ...highlightedUomIndex, [index]: -1 });
+                                                                        setTimeout(() => {
+                                                                            const nextInput = document.querySelector(`[data-row="${index}"][data-field="gndp"]`) as HTMLInputElement;
+                                                                            if (nextInput) nextInput.focus();
+                                                                        }, 50);
+                                                                    }}
+                                                                    className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.uom === option.value ? 'bg-blue-100 text-blue-800' :
+                                                                        highlightedUomIndex[index] === optionIndex ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                                            'text-gray-700'
+                                                                        }`}
+                                                                >
+                                                                    <div className="font-medium text-gray-900">{option.label}</div>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </>
                                             ) : (
                                                 <input
                                                     type="text"
@@ -1786,6 +2511,26 @@ const CreatePurchaseOrder: React.FC = () => {
                                             />
                                         </div>
 
+
+                                        {/* Quantity */}
+                                        <div className="p-1 border-r border-gray-200 relative">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                value={item.quantity}
+                                                onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 1)}
+                                                onKeyDown={(e) => handleQuantityKeyDown(e, index)}
+                                                data-row={index}
+                                                data-field="quantity"
+                                                className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right ${item.isNewProduct
+                                                    ? 'bg-green-50 focus:bg-green-100 focus:ring-green-500'
+                                                    : 'focus:bg-blue-50'
+                                                    }`}
+                                                placeholder="1.00"
+                                            />
+                                        </div>
+
                                         {/* Total */}
                                         <div className="p-1 border-r border-gray-200">
                                             <div className="p-2 text-sm text-right font-bold text-blue-600">
@@ -1807,7 +2552,7 @@ const CreatePurchaseOrder: React.FC = () => {
                             </div>
 
                             {/* Navigation Hints */}
-                            <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1400px]">
+                            <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1200px]">
                                 <div className="text-sm text-gray-600 mb-1 mt-16">
                                     <strong>🚀 Excel-Like Purchase Order Items:</strong> Search → Select → Set Quantity → Tab → Next Row | Enter → Notes
                                 </div>
@@ -1957,13 +2702,26 @@ const CreatePurchaseOrder: React.FC = () => {
                             value={formData.notes || ''}
                             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
                             onKeyDown={(e) => {
-                                if (e.key === 'Tab' && e.shiftKey) {
+                                if (e.key === 'Tab') {
                                     e.preventDefault();
-                                    // Move back to last product's quantity field
-                                    const lastRowIndex = formData.items.length - 1;
+                                    if (e.shiftKey) {
+                                        // Shift+Tab: Move back to last product's quantity field
+                                        const lastRowIndex = formData.items.length - 1;
+                                        setTimeout(() => {
+                                            const lastQuantityInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
+                                            if (lastQuantityInput) lastQuantityInput.focus();
+                                        }, 50);
+                                    } else {
+                                        // Tab: Move to Create PO button
+                                        setTimeout(() => {
+                                            createPOButtonRef.current?.focus();
+                                        }, 50);
+                                    }
+                                } else if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    // Enter: Move to Create PO button
                                     setTimeout(() => {
-                                        const lastQuantityInput = document.querySelector(`[data-row="${lastRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
-                                        if (lastQuantityInput) lastQuantityInput.focus();
+                                        createPOButtonRef.current?.focus();
                                     }, 50);
                                 }
                             }}
@@ -2017,8 +2775,41 @@ const CreatePurchaseOrder: React.FC = () => {
                             </div>
                         </div>
                     </div>
+                    {/* Create PO Button - Bottom Right */}
+                    <div className="flex justify-end gap-5">
+                        <button
+                            onClick={() => navigate('/purchase-order-management')}
+                            disabled={submitting}
+                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            ref={createPOButtonRef}
+                            onClick={handleSubmitPO}
+                            disabled={submitting}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Tab' && e.shiftKey) {
+                                    e.preventDefault();
+                                    // Shift+Tab: Move back to notes field
+                                    setTimeout(() => {
+                                        const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                                        if (notesInput) notesInput.focus();
+                                    }, 50);
+                                } else if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSubmitPO();
+                                }
+                            }}
+                            className="bg-blue-600 text-white px-6 py-3 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
+                        >
+                            <Save className="w-5 h-5" />
+                            <span className="font-medium">{submitting ? 'Creating...' : 'Create PO'}</span>
+                        </button>
+                    </div>
                 </div>
             </div>
+
 
 
         </div>

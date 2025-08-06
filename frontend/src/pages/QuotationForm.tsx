@@ -1087,16 +1087,22 @@ const QuotationFormPage: React.FC = () => {
                 setCustomerSearchTerm('');
                 setAddresses(selectedCustomer.addresses || []);
 
-                // Move to next field (customer address)
+                // Move to next field (Bill To Address) and open dropdown
                 setTimeout(() => {
-                    const addressInput = document.querySelector('[data-field="customer-address"]') as HTMLInputElement;
-                    if (addressInput) addressInput.focus();
+                    const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
+                    if (billToAddressInput) {
+                        billToAddressInput.focus();
+                        setShowBillToAddressDropdown(true);
+                    }
                 }, 50);
             } else if (!showCustomerDropdown) {
-                // If no dropdown open, just move to next field
+                // If no dropdown open, just move to next field (Bill To Address) and open dropdown
                 setTimeout(() => {
-                    const addressInput = document.querySelector('[data-field="customer-address"]') as HTMLInputElement;
-                    if (addressInput) addressInput.focus();
+                    const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
+                    if (billToAddressInput) {
+                        billToAddressInput.focus();
+                        setShowBillToAddressDropdown(true);
+                    }
                 }, 50);
             }
         } else if (e.key === 'Tab' && e.shiftKey) {
@@ -1151,16 +1157,22 @@ const QuotationFormPage: React.FC = () => {
                 setShowBillToAddressDropdown(false);
                 setHighlightedBillToAddressIndex(-1);
 
-                // Move to next field (ship to address)
+                // Move to next field (ship to address) and open dropdown
                 setTimeout(() => {
                     const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
-                    if (shipToAddressInput) shipToAddressInput.focus();
+                    if (shipToAddressInput) {
+                        shipToAddressInput.focus();
+                        setShowShipToAddressDropdown(true);
+                    }
                 }, 50);
             } else if (!showBillToAddressDropdown) {
-                // If no dropdown open, just move to next field
+                // If no dropdown open, just move to next field (ship to address) and open dropdown
                 setTimeout(() => {
                     const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
-                    if (shipToAddressInput) shipToAddressInput.focus();
+                    if (shipToAddressInput) {
+                        shipToAddressInput.focus();
+                        setShowShipToAddressDropdown(true);
+                    }
                 }, 50);
             }
         } else if (e.key === 'Tab' && e.shiftKey) {

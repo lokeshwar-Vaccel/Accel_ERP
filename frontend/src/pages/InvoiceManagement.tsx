@@ -31,6 +31,7 @@ import {
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
 import PageHeader from '../components/ui/PageHeader';
+import { Tooltip } from '../components/ui/Tooltip';
 import { apiClient } from '../utils/api';
 import { RootState } from '../redux/store';
 import jsPDF from 'jspdf';
@@ -1391,14 +1392,6 @@ const InvoiceManagement: React.FC = () => {
       color: 'text-blue-600 hover:text-blue-900 hover:bg-blue-50'
     });
 
-    // Edit invoice - Available for all invoice types
-    // actions.push({
-    //   icon: <Edit className="w-4 h-4" />,
-    //   label: 'Edit',
-    //   action: () => handleEditInvoice(invoice),
-    //   color: 'text-green-600 hover:text-green-900 hover:bg-green-50'
-    // });
-
     // Only show payment-related actions for sales invoices
     if (invoice.invoiceType === 'sale' || invoice.invoiceType === 'purchase') {
 
@@ -1424,12 +1417,6 @@ const InvoiceManagement: React.FC = () => {
 
       // Payment Receipt Actions - Available for invoices with payments
       if (invoice.paidAmount > 0) {
-        // actions.push({
-        //   icon: <Receipt className="w-4 h-4" />,
-        //   label: 'Download Receipt',
-        //   action: () => generatePaymentReceipt(invoice),
-        //   color: 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50'
-        // });
         
         actions.push({
           icon: <Printer className="w-4 h-4" />,
@@ -1458,7 +1445,7 @@ const InvoiceManagement: React.FC = () => {
         });
       }
 
-      if (invoice.status === 'sent' && invoice.paymentStatus === 'pending' || invoice.invoiceType === 'purchase') {
+      if (invoice.status === 'sent' && invoice.paymentStatus === 'pending' || invoice.invoiceType === 'purchase' && invoice.paymentStatus === 'pending') {
         actions.push({
           icon: <CheckCircle className="w-4 h-4" />,
           label: 'Quick Paid',
@@ -3271,27 +3258,30 @@ const InvoiceManagement: React.FC = () => {
 
                     <td className="px-4 py-3 text-sm font-medium">
                       <div className="flex items-center space-x-1">
-                        <button
-                          onClick={() => handleViewQuotation(quotation)}
-                          className="text-blue-600 hover:text-blue-900 p-1.5 hover:bg-blue-50 rounded transition-colors duration-200"
-                          title="View"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleEditQuotation(quotation)}
-                          className="text-purple-600 hover:text-purple-900 p-1.5 hover:bg-purple-50 rounded transition-colors duration-200"
-                          title="Edit"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteQuotation(quotation)}
-                          className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded transition-colors duration-200"
-                          title="Delete"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
+                        <Tooltip content="View" position="top">
+                          <button
+                            onClick={() => handleViewQuotation(quotation)}
+                            className="text-blue-600 hover:text-blue-900 p-1.5 hover:bg-blue-50 rounded transition-colors duration-200"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="Edit" position="top">
+                          <button
+                            onClick={() => handleEditQuotation(quotation)}
+                            className="text-purple-600 hover:text-purple-900 p-1.5 hover:bg-purple-50 rounded transition-colors duration-200"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="Delete" position="top">
+                          <button
+                            onClick={() => handleDeleteQuotation(quotation)}
+                            className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded transition-colors duration-200"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
                       </div>
                     </td>
                   </tr>
@@ -3352,14 +3342,14 @@ const InvoiceManagement: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
                         {getAvailableActions(invoice).map((action, index) => (
-                          <button
-                            key={index}
-                            onClick={action.action}
-                            className={`${action.color} p-2 rounded-lg transition-colors hover:shadow-md`}
-                            title={action.label}
-                          >
-                            {action.icon}
-                          </button>
+                          <Tooltip key={index} content={action.label} position="top">
+                            <button
+                              onClick={action.action}
+                              className={`${action.color} p-2 rounded-lg transition-colors hover:shadow-md`}
+                            >
+                              {action.icon}
+                            </button>
+                          </Tooltip>
                         ))}
                       </div>
                     </td>
@@ -3475,7 +3465,7 @@ const InvoiceManagement: React.FC = () => {
               </div>
 
               {/* Company Information */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className={`grid grid-cols-1 gap-6 ${selectedInvoice?.assignedEngineer ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">From:</h4>
                   {selectedInvoice?.invoiceType === 'purchase' ? (

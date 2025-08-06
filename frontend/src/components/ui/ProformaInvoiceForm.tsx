@@ -169,7 +169,13 @@ const ProformaInvoiceForm: React.FC<ProformaInvoiceFormProps> = ({
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('authToken') || ''}`
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify({
+          ...formData,
+          items: formData.items.map((item: any) => {
+            const { _id, ...itemWithoutId } = item;
+            return itemWithoutId;
+          })
+        })
       });
 
       if (!response.ok) {

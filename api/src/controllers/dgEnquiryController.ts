@@ -203,6 +203,9 @@ export const getAllDGEnquiries = async (
       .skip(skip)
       .limit(limit);
 
+    console.log('enquiries123', enquiries);
+    console.log('Sample enquiry pinCode:', enquiries[0]?.pinCode);
+
     // Get total count for pagination
     const total = await DGEnquiry.countDocuments(filter);
 
