@@ -32,6 +32,7 @@ import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
 import PageHeader from '../components/ui/PageHeader';
 import { Tooltip } from '../components/ui/Tooltip';
+import ConfirmationModal from '../components/ui/ConfirmationModal';
 import { apiClient } from '../utils/api';
 import { RootState } from '../redux/store';
 import jsPDF from 'jspdf';
@@ -405,6 +406,13 @@ const InvoiceManagement: React.FC = () => {
   // Quotation-specific state
   const [selectedQuotation, setSelectedQuotation] = useState<any | null>(null);
   const [showQuotationViewModal, setShowQuotationViewModal] = useState(false);
+  const [showConfirmationModal, setShowConfirmationModal] = useState(false);
+  const [confirmationData, setConfirmationData] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type: 'danger' | 'warning' | 'info';
+  } | null>(null);
 
   console.log("selectedInvoice", selectedInvoice);
 
@@ -1043,16 +1051,23 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const handleDeleteQuotation = async (quotation: any) => {
-    if (window.confirm('Are you sure you want to delete this quotation?')) {
-      try {
-        await apiClientQuotation.quotations.delete(quotation._id);
-        toast.success('Quotation deleted successfully');
-        fetchQuotations();
-      } catch (error) {
-        console.error('Error deleting quotation:', error);
-        toast.error('Failed to delete quotation');
-      }
-    }
+    setConfirmationData({
+      title: 'Delete Quotation',
+      message: `Are you sure you want to delete quotation "${quotation.quotationNumber}"? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await apiClientQuotation.quotations.delete(quotation._id);
+          toast.success('Quotation deleted successfully');
+          fetchQuotations();
+          setShowConfirmationModal(false);
+        } catch (error) {
+          console.error('Error deleting quotation:', error);
+          toast.error('Failed to delete quotation');
+        }
+      },
+      type: 'danger'
+    });
+    setShowConfirmationModal(true);
   };
 
   const handleCreateInvoiceFromQuotation = (quotation: any) => {
@@ -1353,9 +1368,16 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const quickCancelInvoice = async (invoice: Invoice) => {
-    if (window.confirm('Are you sure you want to cancel this invoice?')) {
-      await handleUpdateStatusQuick(invoice._id, 'cancelled');
-    }
+    setConfirmationData({
+      title: 'Cancel Invoice',
+      message: `Are you sure you want to cancel invoice "${invoice.invoiceNumber}"? This action cannot be undone.`,
+      onConfirm: async () => {
+        await handleUpdateStatusQuick(invoice._id, 'cancelled');
+        setShowConfirmationModal(false);
+      },
+      type: 'danger'
+    });
+    setShowConfirmationModal(true);
   };
 
   const handleUpdateStatusQuick = async (invoiceId: string, status: string) => {
@@ -3417,7 +3439,7 @@ const InvoiceManagement: React.FC = () => {
                     </td>
                       : <td className="px-4 py-3">
                         <div className="flex items-center space-x-2">
-                          {/* {getStatusIcon(invoice.status)} */}
+                          {getStatusIcon(invoice.status)}
                           <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${((invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2))
                             ? "bg-green-100 text-green-800" : (invoice.externalInvoiceTotal || 0) === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
                             {(invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2) ? "Not Mismatch" : (invoice.externalInvoiceTotal || 0) === 0 ? "Not Mismatch" : "Amount Mismatch"}
@@ -4783,6 +4805,20 @@ const InvoiceManagement: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmationModal && confirmationData && (
+        <ConfirmationModal
+          isOpen={showConfirmationModal}
+          onClose={() => setShowConfirmationModal(false)}
+          onConfirm={confirmationData.onConfirm}
+          title={confirmationData.title}
+          message={confirmationData.message}
+          type={confirmationData.type}
+          confirmText="Confirm"
+          cancelText="Cancel"
+        />
       )}
 
     </div>
