@@ -64,6 +64,7 @@ interface Invoice {
   totalAmount: number;
   paidAmount: number;
   remainingAmount: number;
+  discountAmount?: number;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
   invoiceType: 'quotation' | 'sale' | 'purchase' | 'challan';
@@ -238,7 +239,7 @@ const INVOICE_TYPES = [
 const InvoiceManagement: React.FC = () => {
   // Navigation hook
   const navigate = useNavigate();
-  
+
   // Get current user from Redux
   const currentUser = useSelector((state: RootState) => state.auth.user);
 
@@ -260,6 +261,7 @@ const InvoiceManagement: React.FC = () => {
 
   // Search and filter states
   const [searchTerm, setSearchTerm] = useState('');
+  const [searchQuotationTerm, setSearchQuotationTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [quotations, setQuotations] = useState<any[]>([]);
@@ -369,16 +371,16 @@ const InvoiceManagement: React.FC = () => {
   // Helper function to check if there's a real amount mismatch that allows editing
   const hasAmountMismatch = (invoice: any) => {
     if (!invoice) return false;
-    
+
     const externalTotal = invoice.externalInvoiceTotal ?? 0;
     const calculatedTotal = invoice.totalAmount ?? 0;
-    
+
     // Only allow editing if:
     // 1. External total is not empty/zero
     // 2. External total is different from calculated total
-    return externalTotal !== 0 && 
-           calculatedTotal !== 0 && 
-           externalTotal.toFixed(2) !== calculatedTotal.toFixed(2);
+    return externalTotal !== 0 &&
+      calculatedTotal !== 0 &&
+      externalTotal.toFixed(2) !== calculatedTotal.toFixed(2);
   };
 
   // Auto-exit edit mode when amount mismatch conditions are no longer met
@@ -676,10 +678,10 @@ const InvoiceManagement: React.FC = () => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Only trigger shortcuts when not typing in input fields
       const activeElement = document.activeElement;
-      const isInputField = activeElement?.tagName === 'INPUT' || 
-                          activeElement?.tagName === 'TEXTAREA' || 
-                          activeElement?.tagName === 'SELECT' ||
-                          (activeElement as HTMLElement)?.contentEditable === 'true';
+      const isInputField = activeElement?.tagName === 'INPUT' ||
+        activeElement?.tagName === 'TEXTAREA' ||
+        activeElement?.tagName === 'SELECT' ||
+        (activeElement as HTMLElement)?.contentEditable === 'true';
 
       if (isInputField) return;
 
@@ -799,7 +801,7 @@ const InvoiceManagement: React.FC = () => {
     } else {
       fetchInvoices();
     }
-  }, [currentPage, limit, sort, searchTerm, statusFilter, paymentFilter, invoiceType]);
+  }, [currentPage, limit, sort, searchTerm, statusFilter, paymentFilter, invoiceType, searchQuotationTerm]);
 
   const fetchCustomers = async () => {
     try {
@@ -821,12 +823,12 @@ const InvoiceManagement: React.FC = () => {
         page: currentPage,
         limit,
         sort,
-        search: searchTerm,
+        search: searchQuotationTerm,
       });
 
       const responseData = response.data as any;
-      console.log("responseData:",responseData);
-      
+      console.log("responseData:", responseData);
+
 
       let quotationsData = [];
       if (responseData.pagination) {
@@ -980,16 +982,16 @@ const InvoiceManagement: React.FC = () => {
   const handleCreateInvoice = (specificType?: 'quotation' | 'sale' | 'purchase' | 'challan') => {
     const typeToUse = specificType || invoiceType;
     console.log("typeToUse:", typeToUse);
-  
-    const path = typeToUse === 'quotation' 
-      ? '/billing/quotation/create' 
+
+    const path = typeToUse === 'quotation'
+      ? '/billing/quotation/create'
       : '/billing/create';
-  
-    navigate(path, { 
-      state: { invoiceType: typeToUse } 
+
+    navigate(path, {
+      state: { invoiceType: typeToUse }
     });
   };
-  
+
 
   const handleCreateInvoiceClick = () => {
     handleCreateInvoice();
@@ -1014,24 +1016,24 @@ const InvoiceManagement: React.FC = () => {
     navigate('/purchase-order-management/create');
   };
 
-      const handleViewQuotation = (quotation: any) => {
-      console.log("quotation123:", quotation);
-      console.log("assignedEngineer:", quotation.assignedEngineer);
-      
-      setSelectedQuotation(quotation);
-      setShowQuotationViewModal(true);
-    };
+  const handleViewQuotation = (quotation: any) => {
+    console.log("quotation123:", quotation);
+    console.log("assignedEngineer:", quotation.assignedEngineer);
+
+    setSelectedQuotation(quotation);
+    setShowQuotationViewModal(true);
+  };
 
   const handleEditQuotation = (quotation: any) => {
     console.log('Editing quotation:', quotation);
     console.log('Quotation ID:', quotation._id);
-    
+
     if (!quotation._id) {
       console.error('No _id found in quotation object!');
       toast.error('Cannot edit quotation: ID not found');
       return;
     }
-    
+
     navigate('/billing/quotation/edit', {
       state: {
         quotation: quotation,
@@ -1055,10 +1057,10 @@ const InvoiceManagement: React.FC = () => {
 
   const handleCreateInvoiceFromQuotation = (quotation: any) => {
     console.log('Creating invoice from quotation:', quotation);
-    
+
     // Close the quotation view modal
     setShowQuotationViewModal(false);
-    
+
     // Prepare quotation data with proper structure
     const quotationData = {
       customer: quotation.customer,
@@ -1095,9 +1097,9 @@ const InvoiceManagement: React.FC = () => {
       location: quotation.location?._id || quotation.location,
       dueDate: quotation.validUntil ? new Date(quotation.validUntil).toISOString().split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
     };
-    
+
     console.log('Prepared quotation data:', quotationData);
-    
+
     // Navigate to create invoice page with quotation data
     navigate('/billing/create', {
       state: {
@@ -1417,7 +1419,7 @@ const InvoiceManagement: React.FC = () => {
 
       // Payment Receipt Actions - Available for invoices with payments
       if (invoice.paidAmount > 0) {
-        
+
         actions.push({
           icon: <Printer className="w-4 h-4" />,
           label: 'Print Receipt',
@@ -1900,6 +1902,12 @@ const InvoiceManagement: React.FC = () => {
     const matchesType = invoice.invoiceType === invoiceType;
     return matchesSearch && matchesStatus && matchesPayment && matchesType;
   });
+  const filteredQuotations = quotations.filter(quotation => {
+    const matchesSearch =
+      quotation?.quotationNumber?.toLowerCase().includes(searchQuotationTerm.toLowerCase()) ||
+      quotation?.customer?.name?.toLowerCase().includes(searchQuotationTerm.toLowerCase()) 
+    return matchesSearch;
+  });
 
 
 
@@ -2357,30 +2365,50 @@ const InvoiceManagement: React.FC = () => {
         <div class="from-to-section">
           <div class="from-to-box">
             <h3>From:</h3>
+            ${selectedInvoice.invoiceType === 'purchase' ? 
+              `<div>
+              <strong>${selectedInvoice.customer?.name ? selectedInvoice.customer?.name : selectedInvoice.supplierName || 'N/A'}</strong><br>
+              ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
+              ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
+              ${selectedInvoice.invoiceType === 'purchase' ? 
+                `${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}` : ''}` :
+                `${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}` : ''}`}          
+                </div> `: `
             <div>
               <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
               ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
               ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
               ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
               ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
-            </div>
+            </div>`}
           </div>
           <div class="from-to-box">
-            <h3>Bill To:</h3>
+          <h3>${selectedInvoice.invoiceType === 'purchase' ? 'To' : 'Bill To'}:</h3>
+          ${selectedInvoice.invoiceType === 'purchase' ? `
             <div>
-              <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
+              <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
+              ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
+              ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
+              ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
+              ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
+            </div>` : `
+            <div>
+              <strong>${selectedInvoice.customer?.name ? selectedInvoice.customer?.name : selectedInvoice.supplierName || 'N/A'}</strong><br>
               ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
               ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
-              ${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}` : ''}
-            </div>
+              ${selectedInvoice.invoiceType === 'purchase' ? 
+                `${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}` : ''}` :
+                `${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}` : ''}`}          
+                </div> `} 
           </div>
+          ${selectedInvoice.invoiceType === 'purchase' ? '' : `
           <div class="from-to-box">
             <h3>Ship To:</h3>
             <div>
               <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
               ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.state || 'N/A'}` : ''}
             </div>
-          </div>
+          </div>`}
         </div>
         <table class="items">
           <thead>
@@ -2485,7 +2513,7 @@ const InvoiceManagement: React.FC = () => {
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      printWindow.onload = function() {
+      printWindow.onload = function () {
         setTimeout(() => {
           printWindow.print();
         }, 500);
@@ -2510,7 +2538,7 @@ const InvoiceManagement: React.FC = () => {
     doc.setFontSize(13);
     doc.text(generalSettings?.companyName || 'Sun Power Services', pageWidth / 2, y, { align: 'center' });
     y += 5;
-    
+
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
     doc.text(generalSettings?.companyAddress || '', pageWidth / 2, y, { align: 'center' });
@@ -2631,7 +2659,9 @@ const InvoiceManagement: React.FC = () => {
   };
 
   // Print Payment Receipt Function
-  const printPaymentReceipt = (invoice: Invoice) => {
+  const printPaymentReceipt = (invoice: any) => {
+    console.log("invoice:", invoice);
+
     if (!invoice) return;
 
     const printContent = `
@@ -2691,6 +2721,48 @@ const InvoiceManagement: React.FC = () => {
         </div>
 
         <div class="payment-summary">
+          <h3>Invoice Items</h3>
+          <table class="payment-table">
+            <thead>
+              <tr>
+                <th>Sr. No.</th>
+                <th>Product/Description</th>
+                <th>Part No.</th>
+                <th>HSN Code</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Discount</th>
+                <th>Tax Rate</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${invoice.items?.map((item: any, index: number) => {
+      const subtotal = item.quantity * item.unitPrice;
+      const discountAmount = subtotal * ((item.discount || 0) / 100);
+      const amountAfterDiscount = subtotal - discountAmount;
+      const taxAmount = amountAfterDiscount * ((item.taxRate || 0) / 100);
+      const totalAmount = amountAfterDiscount + taxAmount;
+
+      return `
+                  <tr>
+                    <td>${index + 1}</td>
+                    <td>${item.description || 'N/A'}</td>
+                    <td>${item.product?.partNo || 'N/A'}</td>
+                    <td>${item.product?.hsnNumber || 'N/A'}</td>
+                    <td>${item.quantity}</td>
+                    <td class="amount">₹${item.unitPrice?.toFixed(2)}</td>
+                    <td class="amount">${item.discount ? `${item.discount}% (₹${discountAmount.toFixed(2)})` : 0}</td>
+                    <td>${item.taxRate || 0}%</td>
+                    <td class="amount">₹${totalAmount.toFixed(2)}</td>
+                  </tr>
+                `;
+    }).join('') || '<tr><td colspan="9" style="text-align: center;">No items found</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+
+        <div class="payment-summary">
           <h3>Payment Summary</h3>
           <table class="payment-table">
             <thead>
@@ -2700,6 +2772,20 @@ const InvoiceManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody>
+              <tr>
+                <td>Subtotal</td>
+                <td class="amount">₹${(invoice.items?.reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice), 0).toFixed(2) || 0)}</td>
+              </tr>
+              <tr>
+                <td>Total Tax</td>
+                <td class="amount">₹${(invoice.items)?.reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2) || 0}</td>
+              </tr>
+              ${invoice.overallDiscountAmount && invoice.overallDiscountAmount > 0 ? `
+              <tr>
+                <td>Overall Discount</td>
+                <td class="amount">-${invoice.overallDiscount}% -₹${invoice.overallDiscountAmount?.toFixed(2)}</td>
+              </tr>
+              ` : ''}
               <tr>
                 <td>Invoice Total</td>
                 <td class="amount">₹${invoice.totalAmount?.toFixed(2)}</td>
@@ -2972,7 +3058,7 @@ const InvoiceManagement: React.FC = () => {
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      printWindow.onload = function() {
+      printWindow.onload = function () {
         setTimeout(() => {
           printWindow.print();
         }, 500);
@@ -3019,7 +3105,7 @@ const InvoiceManagement: React.FC = () => {
       </PageHeader>
 
       {/* 🚀 KEYBOARD SHORTCUTS GUIDE */}
-      <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-4 mb-4">
+      {/* <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-4 mb-4">
         <div className="flex items-center mb-2">
           <span className="text-lg">⚡</span>
           <h3 className="text-sm font-semibold text-purple-900 ml-2">Keyboard Shortcuts Available!</h3>
@@ -3045,7 +3131,7 @@ const InvoiceManagement: React.FC = () => {
             <p>• Current type: <span className="font-bold text-purple-900">{getInvoiceTypeLabel(invoiceType)}</span></p>
           </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -3068,7 +3154,7 @@ const InvoiceManagement: React.FC = () => {
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col justify-between md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
           <div className="flex gap-4 ">
-            <div className="relative flex-1 max-w-sm">
+            {invoiceType !== 'quotation' ? <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
@@ -3078,10 +3164,20 @@ const InvoiceManagement: React.FC = () => {
                 data-field="search"
                 className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-            </div>
+            </div> : <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search quotations..."
+                value={searchQuotationTerm}
+                onChange={(e) => setSearchQuotationTerm(e.target.value)}
+                data-field="search"
+                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>}
 
             {/* Status Filter Custom Dropdown */}
-            <div className="relative dropdown-container">
+            {invoiceType !== 'quotation' && <div className="relative dropdown-container">
               <button
                 onClick={() => setShowStatusFilterDropdown(!showStatusFilterDropdown)}
                 className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
@@ -3113,10 +3209,10 @@ const InvoiceManagement: React.FC = () => {
                   ))}
                 </div>
               )}
-            </div>
+            </div>}
 
             {/* Payment Filter Custom Dropdown */}
-            <div className="relative dropdown-container">
+            {invoiceType !== 'quotation' && <div className="relative dropdown-container">
               <button
                 onClick={() => setShowPaymentFilterDropdown(!showPaymentFilterDropdown)}
                 className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
@@ -3147,7 +3243,7 @@ const InvoiceManagement: React.FC = () => {
                   ))}
                 </div>
               )}
-            </div>
+            </div>}
           </div>
           {/* Invoice Type Toggle */}
           <div className="flex bg-gray-100 rounded-lg p-0.5">
@@ -3176,7 +3272,7 @@ const InvoiceManagement: React.FC = () => {
 
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xs text-gray-600">
-            Showing {filteredInvoices.length} of {invoices.length} invoices
+            Showing {invoiceType === 'quotation' ? filteredQuotations.length : filteredInvoices.length} of {invoiceType === 'quotation' ? quotations.length : invoices.length} {invoiceType === 'quotation' ? 'quotations' : 'invoices'}
           </span>
         </div>
       </div>
@@ -3200,7 +3296,7 @@ const InvoiceManagement: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                 {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>}
                 {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>}
-                {(invoiceType === 'sale' || invoiceType === 'quotation') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>}
+                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>}
                 {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -3216,7 +3312,7 @@ const InvoiceManagement: React.FC = () => {
                     </div>
                   </td>
                 </tr>
-              ) : (invoiceType === 'quotation' ? quotations : filteredInvoices).length === 0 ? (
+              ) : (invoiceType === 'quotation' ? filteredQuotations : filteredInvoices).length === 0 ? (
                 <tr>
                   <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
                     <div className="text-center">
@@ -3227,7 +3323,7 @@ const InvoiceManagement: React.FC = () => {
                   </td>
                 </tr>
               ) : invoiceType === 'quotation' ? (
-                quotations.map((quotation) => (
+                filteredQuotations.map((quotation) => (
                   <tr key={quotation._id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 text-sm font-medium text-blue-600">
                       {quotation.quotationNumber}
@@ -3308,26 +3404,26 @@ const InvoiceManagement: React.FC = () => {
                     {(invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3 text-sm font-medium text-green-600">
                       ₹{(invoice.paidAmount || 0).toLocaleString()}
                     </td>}
-                    {(invoiceType === 'sale' || invoiceType === 'purchase')  && <td className="px-4 py-3 text-sm font-medium text-red-600">
-                                              ₹{((invoice.remainingAmount || 0).toFixed(2) || (invoice.totalAmount || 0) - (invoice.paidAmount || 0)).toLocaleString()}
+                    {(invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3 text-sm font-medium text-red-600">
+                      ₹{((invoice.remainingAmount || 0).toFixed(2) || (invoice.totalAmount || 0) - (invoice.paidAmount || 0)).toLocaleString()}
                     </td>}
-                    {(invoice.invoiceType === 'sale') && <td className="px-4 py-3">
+                    {(invoice.invoiceType === 'sale') ? <td className="px-4 py-3">
                       <div className="flex items-center space-x-2">
-                        {getStatusIcon(invoice.status)}
+                        {/* {getStatusIcon(invoice.status)} */}
                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
                           {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
                         </span>
                       </div>
-                    </td> }
-                    {/* // : <td className="px-4 py-3">
-                    //   <div className="flex items-center space-x-2">
-                    //     {getStatusIcon(invoice.status)}
-                    //     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${((invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2))
-                    //       ? "bg-green-100 text-green-800" : (invoice.externalInvoiceTotal || 0) === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                    //       {(invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2) ? "Not Mismatch" : (invoice.externalInvoiceTotal || 0) === 0 ? "Not Mismatch" : "Amount Mismatch"}
-                    //     </span>
-                    //   </div>
-                    // </td>} */}
+                    </td>
+                      : <td className="px-4 py-3">
+                        <div className="flex items-center space-x-2">
+                          {/* {getStatusIcon(invoice.status)} */}
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${((invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2))
+                            ? "bg-green-100 text-green-800" : (invoice.externalInvoiceTotal || 0) === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
+                            {(invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2) ? "Not Mismatch" : (invoice.externalInvoiceTotal || 0) === 0 ? "Not Mismatch" : "Amount Mismatch"}
+                          </span>
+                        </div>
+                      </td>}
                     {(invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(invoice.paymentStatus)}`}>
                         {invoice.paymentStatus.charAt(0).toUpperCase() + invoice.paymentStatus.slice(1)}
@@ -3400,7 +3496,7 @@ const InvoiceManagement: React.FC = () => {
                   </svg>
                   Print
                 </button>
-                
+
                 {/* Payment Receipt Buttons - Show only if there are payments */}
                 {/* {selectedInvoice.paidAmount > 0 && (
                   <>
@@ -3465,7 +3561,7 @@ const InvoiceManagement: React.FC = () => {
               </div>
 
               {/* Company Information */}
-              <div className={`grid grid-cols-1 gap-6 ${selectedInvoice?.assignedEngineer ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+              <div className={`grid grid-cols-1 gap-6 ${selectedInvoice?.assignedEngineer ? 'md:grid-cols-4' : selectedInvoice?.invoiceType === 'purchase' ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">From:</h4>
                   {selectedInvoice?.invoiceType === 'purchase' ? (
@@ -3503,10 +3599,10 @@ const InvoiceManagement: React.FC = () => {
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
                   {selectedInvoice?.invoiceType === 'purchase' ? (
                     // For purchase invoices: Show company
                     <div className="text-sm text-gray-600">
+                      <h4 className="font-medium text-gray-900 mb-2">To:</h4>
                       <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
                       {selectedInvoice?.company?.phone && <p>Phone: {selectedInvoice?.company?.phone}</p>}
                       {selectedInvoice?.company?.email && <p>Email: {selectedInvoice?.company?.email}</p>}
@@ -3522,6 +3618,7 @@ const InvoiceManagement: React.FC = () => {
                   ) : (
                     // For regular invoices: Show customer
                     <div className="text-sm text-gray-600">
+                      <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
                       <p className="font-medium">{selectedInvoice?.customer?.name || 'N/A'}</p>
                       {selectedInvoice?.customer?.email && <p>Email: {selectedInvoice?.customer?.email}</p>}
                       {selectedInvoice?.customer?.phone && <p>Phone: {selectedInvoice?.customer?.phone}</p>}
@@ -3540,22 +3637,24 @@ const InvoiceManagement: React.FC = () => {
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Ship To:</h4>
                   {selectedInvoice?.invoiceType === 'purchase' ? (
+                    <></>
                     // For purchase invoices: Show company
-                    <div className="text-sm text-gray-600">
-                      <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
-                      {selectedInvoice?.location && (
-                        <>
-                          <p className="mt-2 font-medium text-gray-700">Address:</p>
-                          {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name}</p>}
-                          {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
-                        </>
-                      )}
-                    </div>
+                    // <div className="text-sm text-gray-600">
+                    //   <h4 className="font-medium text-gray-900 mb-2">To:</h4>
+                    //   <p className="font-medium">{selectedInvoice?.company?.name || 'Sun Power Services'}</p>
+                    //   {selectedInvoice?.location && (
+                    //     <>
+                    //       <p className="mt-2 font-medium text-gray-700">Address:</p>
+                    //       {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name}</p>}
+                    //       {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
+                    //     </>
+                    //   )}
+                    // </div>
                   ) : (
                     // For regular invoices: Show customer
                     <div className="text-sm text-gray-600">
+                      <h4 className="font-medium text-gray-900 mb-2">Ship To:</h4>
                       <p className="font-medium">{selectedInvoice?.customer?.name || 'N/A'}</p>
                       {selectedInvoice?.shipToAddress && (
                         <>
@@ -3571,7 +3670,7 @@ const InvoiceManagement: React.FC = () => {
                   )}
                 </div>
 
-               { selectedInvoice?.assignedEngineer && <div>
+                {selectedInvoice?.assignedEngineer && <div>
                   <h4 className="font-medium text-gray-900 mb-2">Assigned Engineer:</h4>
                   <div className="text-sm text-gray-600">
                     {selectedInvoice?.assignedEngineer ? (
@@ -3615,11 +3714,10 @@ const InvoiceManagement: React.FC = () => {
                           setEditMode(true);
                         }
                       }}
-                      className={`ml-3 px-3 py-1 rounded-md text-sm transition-colors ${
-                        hasAmountMismatch(selectedInvoice) 
-                          ? 'bg-yellow-600 text-white hover:bg-yellow-700' 
-                          : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                      }`}
+                      className={`ml-3 px-3 py-1 rounded-md text-sm transition-colors ${hasAmountMismatch(selectedInvoice)
+                        ? 'bg-yellow-600 text-white hover:bg-yellow-700'
+                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        }`}
                       disabled={!hasAmountMismatch(selectedInvoice)}
                     >
                       Edit Items
@@ -4461,7 +4559,7 @@ const InvoiceManagement: React.FC = () => {
 
 
 
-      
+
 
       {/* Quotation View Modal */}
       {showQuotationViewModal && selectedQuotation && (
@@ -4575,7 +4673,7 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                 </div>
 
-                { selectedQuotation.assignedEngineer && <div>
+                {selectedQuotation.assignedEngineer && <div>
                   <h4 className="font-medium text-gray-900 mb-2">Assigned Engineer:</h4>
                   <div className="text-sm text-gray-600">
                     {selectedQuotation.assignedEngineer ? (

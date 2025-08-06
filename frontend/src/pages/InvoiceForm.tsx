@@ -1107,7 +1107,7 @@ const InvoiceFormPage: React.FC = () => {
         const newIndex = highlightedLocationIndex > 0 ? highlightedLocationIndex - 1 : filteredLocations.length - 1;
         setHighlightedLocationIndex(newIndex);
       }
-    } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+    } else if (e.key === 'Enter') {
       e.preventDefault();
 
       if (showLocationDropdown && highlightedLocationIndex >= 0 && filteredLocations[highlightedLocationIndex]) {
@@ -1124,8 +1124,35 @@ const InvoiceFormPage: React.FC = () => {
         setTimeout(() => {
           loadAllStockForLocation();
         }, 100);
-      }
 
+        setTimeout(() => {
+          const customerInput = document.querySelector('[data-field="customer"]') as HTMLInputElement;
+          if (customerInput) customerInput.focus();
+        }, 50);
+      }
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      
+      // Always close dropdown on Tab
+      if (showLocationDropdown) {
+        if (highlightedLocationIndex >= 0 && filteredLocations[highlightedLocationIndex]) {
+          const selectedLocation = filteredLocations[highlightedLocationIndex];
+          setFormData({ ...formData, location: selectedLocation._id });
+          // Clear stock cache when location changes
+          setProductStockCache({});
+          setStockValidation({});
+
+          // Load ALL stock for this location
+          setTimeout(() => {
+            loadAllStockForLocation();
+          }, 100);
+        }
+        setShowLocationDropdown(false);
+        setHighlightedLocationIndex(-1);
+        setLocationSearchTerm('');
+      }
+      
+      // Move to next field
       setTimeout(() => {
         const customerInput = document.querySelector('[data-field="customer"]') as HTMLInputElement;
         if (customerInput) customerInput.focus();
@@ -1168,7 +1195,7 @@ const InvoiceFormPage: React.FC = () => {
         const newIndex = highlightedCustomerIndex > 0 ? highlightedCustomerIndex - 1 : filteredCustomers.length - 1;
         setHighlightedCustomerIndex(newIndex);
       }
-    } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+    } else if (e.key === 'Enter') {
       e.preventDefault();
       if (showCustomerDropdown && highlightedCustomerIndex >= 0 && filteredCustomers[highlightedCustomerIndex]) {
         const selectedCustomer = filteredCustomers[highlightedCustomerIndex];
@@ -1191,12 +1218,39 @@ const InvoiceFormPage: React.FC = () => {
           const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
           if (billToAddressInput) billToAddressInput.focus();
         }, 50);
-      } else if (!showCustomerDropdown) {
-        setTimeout(() => {
-          const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
-          if (billToAddressInput) billToAddressInput.focus();
-        }, 50);
       }
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      
+      // Always close dropdown on Tab
+      if (showCustomerDropdown) {
+        if (highlightedCustomerIndex >= 0 && filteredCustomers[highlightedCustomerIndex]) {
+          // If dropdown is open and an item is highlighted, select it first
+          const selectedCustomer = filteredCustomers[highlightedCustomerIndex];
+          setFormData({
+            ...formData,
+            customer: {
+              _id: selectedCustomer._id,
+              name: selectedCustomer.name,
+              email: selectedCustomer.email,
+              phone: selectedCustomer.phone,
+              pan: ''
+            }
+          });
+          setAddresses(selectedCustomer.addresses || []);
+        }
+        setShowCustomerDropdown(false);
+        setHighlightedCustomerIndex(-1);
+        setCustomerSearchTerm('');
+      }
+      
+      // Move to next field
+      setTimeout(() => {
+        const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
+        if (billToAddressInput && !billToAddressInput.disabled) {
+          billToAddressInput.focus();
+        }
+      }, 50);
     } else if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault();
       setTimeout(() => {
@@ -1233,7 +1287,7 @@ const InvoiceFormPage: React.FC = () => {
         const newIndex = highlightedBillToAddressIndex > 0 ? highlightedBillToAddressIndex - 1 : addresses.length - 1;
         setHighlightedBillToAddressIndex(newIndex);
       }
-    } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+    } else if (e.key === 'Enter') {
       e.preventDefault();
       if (showBillToAddressDropdown && highlightedBillToAddressIndex >= 0 && addresses[highlightedBillToAddressIndex]) {
         const selectedAddress = addresses[highlightedBillToAddressIndex];
@@ -1252,14 +1306,41 @@ const InvoiceFormPage: React.FC = () => {
 
         setTimeout(() => {
           const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
-          if (shipToAddressInput) shipToAddressInput.focus();
-        }, 50);
-      } else if (!showBillToAddressDropdown) {
-        setTimeout(() => {
-          const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
-          if (shipToAddressInput) shipToAddressInput.focus();
+          if (shipToAddressInput && !shipToAddressInput.disabled) {
+            shipToAddressInput.focus();
+          }
         }, 50);
       }
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      
+      // Always close dropdown on Tab
+      if (showBillToAddressDropdown) {
+        if (highlightedBillToAddressIndex >= 0 && addresses[highlightedBillToAddressIndex]) {
+          // If dropdown is open and an item is highlighted, select it first
+          const selectedAddress = addresses[highlightedBillToAddressIndex];
+          setFormData({
+            ...formData,
+            billToAddress: {
+              address: selectedAddress.address,
+              state: selectedAddress.state,
+              district: selectedAddress.district,
+              pincode: selectedAddress.pincode,
+              ...(selectedAddress.id && { addressId: selectedAddress.id })
+            } as any
+          });
+        }
+        setShowBillToAddressDropdown(false);
+        setHighlightedBillToAddressIndex(-1);
+      }
+      
+      // Move to next field
+      setTimeout(() => {
+        const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
+        if (shipToAddressInput && !shipToAddressInput.disabled) {
+          shipToAddressInput.focus();
+        }
+      }, 50);
     } else if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault();
       setTimeout(() => {
@@ -1294,7 +1375,7 @@ const InvoiceFormPage: React.FC = () => {
         const newIndex = highlightedShipToAddressIndex > 0 ? highlightedShipToAddressIndex - 1 : addresses.length - 1;
         setHighlightedShipToAddressIndex(newIndex);
       }
-    } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
+    } else if (e.key === 'Enter') {
       e.preventDefault();
       if (showShipToAddressDropdown && highlightedShipToAddressIndex >= 0 && addresses[highlightedShipToAddressIndex]) {
         const selectedAddress = addresses[highlightedShipToAddressIndex];
@@ -1312,15 +1393,38 @@ const InvoiceFormPage: React.FC = () => {
         setHighlightedShipToAddressIndex(-1);
 
         setTimeout(() => {
-          const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
-          if (firstProductInput) firstProductInput.focus();
-        }, 50);
-      } else if (!showShipToAddressDropdown) {
-        setTimeout(() => {
-          const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
-          if (firstProductInput) firstProductInput.focus();
+          const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
+          if (dueDateInput) dueDateInput.focus();
         }, 50);
       }
+    } else if (e.key === 'Tab' && !e.shiftKey) {
+      e.preventDefault();
+      
+      // Always close dropdown on Tab
+      if (showShipToAddressDropdown) {
+        if (highlightedShipToAddressIndex >= 0 && addresses[highlightedShipToAddressIndex]) {
+          // If dropdown is open and an item is highlighted, select it first
+          const selectedAddress = addresses[highlightedShipToAddressIndex];
+          setFormData({
+            ...formData,
+            shipToAddress: {
+              address: selectedAddress.address,
+              state: selectedAddress.state,
+              district: selectedAddress.district,
+              pincode: selectedAddress.pincode,
+              ...(selectedAddress.id && { addressId: selectedAddress.id })
+            } as any
+          });
+        }
+        setShowShipToAddressDropdown(false);
+        setHighlightedShipToAddressIndex(-1);
+      }
+      
+      // Move to next field
+      setTimeout(() => {
+        const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
+        if (dueDateInput) dueDateInput.focus();
+      }, 50);
     } else if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault();
       setTimeout(() => {
@@ -1698,55 +1802,6 @@ const InvoiceFormPage: React.FC = () => {
         </div>
       </PageHeader>
 
-      {/* 🚀 EXCEL-LIKE NAVIGATION GUIDE */}
-      <div className={`bg-gradient-to-r border rounded-lg p-4 ${isDeliveryChallan ? 'from-orange-50 to-amber-50 border-orange-200' :
-        isQuotation ? 'from-blue-50 to-indigo-50 border-blue-200' :
-          isSalesInvoice ? 'from-green-50 to-emerald-50 border-green-200' :
-            'from-purple-50 to-violet-50 border-purple-200'
-        }`}>
-        <div className="flex items-center mb-2">
-          <span className="text-lg">⚡</span>
-          <h3 className={`text-sm font-semibold ml-2 ${isDeliveryChallan ? 'text-orange-900' :
-            isQuotation ? 'text-blue-900' :
-              isSalesInvoice ? 'text-green-900' :
-                'text-purple-900'
-            }`}>
-            Excel-Like {getInvoiceTypeTitle()} Form Enabled!
-          </h3>
-        </div>
-        <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 text-xs ${isDeliveryChallan ? 'text-orange-800' :
-          isQuotation ? 'text-blue-800' :
-            isSalesInvoice ? 'text-green-800' :
-              'text-purple-800'
-          }`}>
-          <div>
-            <p className="font-medium mb-1">🎯 Complete Form Navigation:</p>
-            <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
-              isQuotation ? 'bg-blue-200' :
-                isSalesInvoice ? 'bg-green-200' :
-                  'bg-purple-200'
-              }`}>Tab/Enter</kbd> Move forward</p>
-            {/* <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
-                isQuotation ? 'bg-blue-200' :
-                  isSalesInvoice ? 'bg-green-200' :
-                    'bg-purple-200'
-              }`}>Shift+Tab</kbd> Move backward</p> */}
-            <p><kbd className={`px-1 py-0.5 rounded text-xs ${isDeliveryChallan ? 'bg-orange-200' :
-              isQuotation ? 'bg-blue-200' :
-                isSalesInvoice ? 'bg-green-200' :
-                  'bg-purple-200'
-              }`}>↑↓</kbd> Navigate dropdowns</p>
-          </div>
-          <div>
-            <p className="font-medium mb-1">🔥 Super Fast {getInvoiceTypeTitle()} Flow:</p>
-            <p>Location → Customer → Address → {isDeliveryChallan ? 'Delivery Date' : 'Due Date'} → {getInvoiceTypeTitle()} Items</p>
-            <p><strong>{getInvoiceTypeTitle()} Items:</strong> Search → Select → Quantity → Auto Next Row</p>
-            {isDeliveryChallan && (
-              <p className="text-xs mt-1 font-medium">📦 <strong>Delivery Challan:</strong> No stock reduction, delivery tracking only</p>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Form Content */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -2143,10 +2198,10 @@ const InvoiceFormPage: React.FC = () => {
                 onKeyDown={(e) => {
                   if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
                     e.preventDefault();
-                    // Move to engineer field
+                    // Move to issue date field
                     setTimeout(() => {
-                      const engineerInput = document.querySelector('[data-field="engineer"]') as HTMLInputElement;
-                      if (engineerInput) engineerInput.focus();
+                      const issueDateInput = document.querySelector('[data-field="issue-date"]') as HTMLInputElement;
+                      if (issueDateInput) issueDateInput.focus();
                     }, 50);
                   } else if (e.key === 'Tab' && e.shiftKey) {
                     e.preventDefault();
@@ -2158,6 +2213,47 @@ const InvoiceFormPage: React.FC = () => {
                   }
                 }}
                 data-field="due-date"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Issue Date
+              </label>
+              <input
+                type="date"
+                value={formatDateForInput(formData.issueDate)}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setFormData({ ...formData, issueDate: new Date(e.target.value) });
+                  } else {
+                    setFormData({ ...formData, issueDate: undefined });
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
+                    e.preventDefault();
+                    // Move to engineer field if it exists, otherwise to first product field
+                    setTimeout(() => {
+                      if (isSalesInvoice) {
+                        const engineerInput = document.querySelector('[data-field="engineer"]') as HTMLInputElement;
+                        if (engineerInput) engineerInput.focus();
+                      } else {
+                        const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
+                        if (firstProductInput) firstProductInput.focus();
+                      }
+                    }, 50);
+                  } else if (e.key === 'Tab' && e.shiftKey) {
+                    e.preventDefault();
+                    // Move back to due date field
+                    setTimeout(() => {
+                      const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
+                      if (dueDateInput) dueDateInput.focus();
+                    }, 50);
+                  }
+                }}
+                data-field="issue-date"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
@@ -2215,8 +2311,23 @@ const InvoiceFormPage: React.FC = () => {
                       } else if (e.key === 'Escape') {
                         setShowEngineerDropdown(false);
                         setHighlightedEngineerIndex(-1);
-                      } else if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
+                      } else if (e.key === 'Tab' && !e.shiftKey) {
                         e.preventDefault();
+                        
+                        // Always close dropdown on Tab
+                        if (showEngineerDropdown) {
+                          if (highlightedEngineerIndex >= 0) {
+                            const selectedEngineer = fieldOperators[highlightedEngineerIndex];
+                            setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
+                          } else if (fieldOperators.length === 1) {
+                            const selectedEngineer = fieldOperators[0];
+                            setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
+                          }
+                          setShowEngineerDropdown(false);
+                          setEngineerSearchTerm('');
+                          setHighlightedEngineerIndex(-1);
+                        }
+                        
                         // Move to first product field in the list
                         setTimeout(() => {
                           const firstProductInput = document.querySelector(`[data-row="0"][data-field="product"]`) as HTMLInputElement;
@@ -2224,10 +2335,10 @@ const InvoiceFormPage: React.FC = () => {
                         }, 50);
                       } else if (e.key === 'Tab' && e.shiftKey) {
                         e.preventDefault();
-                        // Move back to Due Date field
+                        // Move back to Issue Date field
                         setTimeout(() => {
-                          const dueDateInput = document.querySelector('[data-field="due-date"]') as HTMLInputElement;
-                          if (dueDateInput) dueDateInput.focus();
+                          const issueDateInput = document.querySelector('[data-field="issue-date"]') as HTMLInputElement;
+                          if (issueDateInput) issueDateInput.focus();
                         }, 50);
                       }
                     }}
@@ -2302,24 +2413,10 @@ const InvoiceFormPage: React.FC = () => {
               </div>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Issue Date
-              </label>
-              <input
-                type="date"
-                value={formatDateForInput(formData.issueDate)}
-                onChange={(e) => {
-                  if (e.target.value) {
-                    setFormData({ ...formData, issueDate: new Date(e.target.value) });
-                  } else {
-                    setFormData({ ...formData, issueDate: undefined });
-                  }
-                }}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
           </div>
+
+
+
 
           {/* Stock Reduction Option - Conditional based on invoice type */}
           {!isDeliveryChallan && (
@@ -2436,7 +2533,7 @@ const InvoiceFormPage: React.FC = () => {
               </div>
 
               {/* Table Body */}
-              <div className="divide-y divide-gray-200 min-w-[1200px]">
+              <div className="divide-y divide-gray-200 min-w-[1200px] mb-60 border-b border-gray-300">
                 {(formData.items || []).map((item, index) => {
                   const stockInfo = stockValidation[index];
                   let rowBg = index % 2 === 0 ? 'bg-white' : 'bg-gray-50';
@@ -2568,10 +2665,10 @@ const InvoiceFormPage: React.FC = () => {
                                         </div>
                                         <div className="text-xs text-gray-600 space-y-0.5">
                                           <div><span className="font-medium">Product Name:</span> {product?.name || 'N/A'}</div>
-                                          <div>
+                                          {/* <div>
                                             <span className="font-medium">Brand:</span> {product?.brand || 'N/A'} •
                                             <span className="font-medium">Category:</span> {product?.category || 'N/A'}
-                                          </div>
+                                          </div> */}
                                           {(() => {
                                             const productStock = productStockCache[product._id];
                                             if (productStock) {
@@ -2825,24 +2922,6 @@ const InvoiceFormPage: React.FC = () => {
                 })}
               </div>
 
-              {/* Navigation Hints */}
-              <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1200px]">
-                <div className="text-sm text-gray-600 mb-1 mt-16">
-                  <strong>🚀 Excel-Like {getInvoiceTypeTitle()} Items:</strong> Search → Select → Set Quantity → Tab/Enter → Auto Next Row
-                </div>
-                <div className="text-xs text-gray-500 mb-1">
-                  <kbd className="px-1 py-0.5 bg-gray-200 rounded">Type</kbd> Search Product →
-                  <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">↑↓</kbd> Navigate List →
-                  <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Enter</kbd> Select →
-                  <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Set</kbd> Quantity →
-                  <kbd className="px-1 py-0.5 bg-gray-200 rounded ml-1">Tab/Enter</kbd> Auto Add Row
-                </div>
-                <div className="text-xs text-gray-400 mb-5">
-                  ⚡ <strong>Complete Excel-like {getInvoiceTypeTitle().toLowerCase()} form navigation!</strong>
-                  {!isDeliveryChallan && ' • Stock validation enabled for accurate invoicing'}
-                  {isDeliveryChallan && ' • Delivery tracking mode - no stock reduction'}
-                </div>
-              </div>
             </div>
           </div>
 
@@ -2863,8 +2942,13 @@ const InvoiceFormPage: React.FC = () => {
                 } else if (e.key === 'Tab' && !e.shiftKey) {
                   e.preventDefault();
                   setTimeout(() => {
-                    const createButton = document.querySelector('[data-action="create"]') as HTMLButtonElement;
-                    if (createButton) createButton.focus();
+                    if (isSalesInvoice) {
+                      const overallDiscountInput = document.querySelector('[data-field="overall-discount"]') as HTMLInputElement;
+                      if (overallDiscountInput) overallDiscountInput.focus();
+                    } else {
+                      const createButton = document.querySelector('[data-action="create"]') as HTMLButtonElement;
+                      if (createButton) createButton.focus();
+                    }
                   }, 50);
                 }
               }}
@@ -2907,9 +2991,25 @@ const InvoiceFormPage: React.FC = () => {
                           return updatedData;
                         });
                       }}
+                      onKeyDown={(e) => {
+                        if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
+                          e.preventDefault();
+                          setTimeout(() => {
+                            const createButton = document.querySelector('[data-action="create"]') as HTMLButtonElement;
+                            if (createButton) createButton.focus();
+                          }, 50);
+                        } else if (e.key === 'Tab' && e.shiftKey) {
+                          e.preventDefault();
+                          setTimeout(() => {
+                            const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                            if (notesInput) notesInput.focus();
+                          }, 50);
+                        }
+                      }}
                       min="0"
                       max="100"
                       step="0.01"
+                      data-field="overall-discount"
                       className="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-right"
                       placeholder="0.00"
                     />
@@ -2973,6 +3073,20 @@ const InvoiceFormPage: React.FC = () => {
               <button
                 onClick={handleSubmit}
                 disabled={submitting}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' && e.shiftKey) {
+                    e.preventDefault();
+                    setTimeout(() => {
+                      if (isSalesInvoice) {
+                        const overallDiscountInput = document.querySelector('[data-field="overall-discount"]') as HTMLInputElement;
+                        if (overallDiscountInput) overallDiscountInput.focus();
+                      } else {
+                        const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                        if (notesInput) notesInput.focus();
+                      }
+                    }, 50);
+                  }
+                }}
                 data-action="create"
                 className={`px-6 py-2 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center space-x-2 ${isDeliveryChallan ? 'bg-orange-600 hover:bg-orange-700' :
                   isQuotation ? 'bg-blue-600 hover:bg-blue-700' :

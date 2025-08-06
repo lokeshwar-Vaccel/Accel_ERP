@@ -1652,7 +1652,7 @@ const CreatePurchaseOrder: React.FC = () => {
             </PageHeader>
 
             {/* 🚀 EXCEL-LIKE NAVIGATION GUIDE */}
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+            {/* <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
                 <div className="flex items-center mb-2">
                     <span className="text-lg">⚡</span>
                     <h3 className="text-sm font-semibold text-blue-900 ml-2">Excel-Like Navigation Enabled!</h3>
@@ -1669,7 +1669,7 @@ const CreatePurchaseOrder: React.FC = () => {
                         <p><strong>Address:</strong> Select supplier → Auto-focus → Search/Select address → Auto-focus Date</p>
                     </div>
                 </div>
-            </div>
+            </div> */}
 
             {/* Form Content */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -2074,7 +2074,7 @@ const CreatePurchaseOrder: React.FC = () => {
                             </div>
 
                             {/* Table Body */}
-                            <div className="divide-y divide-gray-200 min-w-[1200px]">
+                            <div className="divide-y divide-gray-200 min-w-[1200px] mb-60 border-b border-gray-200 rounded-lg">
                                 {(formData.items || []).map((item, index) => (
                                     <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${item.isNewProduct ? 'bg-green-50 border-l-green-500' :
                                         index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
@@ -2552,7 +2552,7 @@ const CreatePurchaseOrder: React.FC = () => {
                             </div>
 
                             {/* Navigation Hints */}
-                            <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1200px]">
+                            {/* <div className="bg-gray-50 border-t border-gray-200 p-3 text-center min-w-[1200px]">
                                 <div className="text-sm text-gray-600 mb-1 mt-16">
                                     <strong>🚀 Excel-Like Purchase Order Items:</strong> Search → Select → Set Quantity → Tab → Next Row | Enter → Notes
                                 </div>
@@ -2571,7 +2571,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                 <div className="text-xs text-gray-400 mb-5">
                                     ⚡ <strong>Complete Excel-like purchase order form navigation!</strong>
                                 </div>
-                            </div>
+                            </div> */}
                         </div>
 
                         {/* Mobile Card View */}

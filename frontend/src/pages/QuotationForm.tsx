@@ -29,6 +29,7 @@ import {
     validateQuotationData
 } from '../utils/quotationUtils';
 import { numberToWords } from '../utils';
+import { createPortal } from 'react-dom';
 
 // Types
 interface Customer {
@@ -130,6 +131,14 @@ const QuotationFormPage: React.FC = () => {
         'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'
     ];
 
+    // Portal dropdown position tracking
+    const [dropdownPosition, setDropdownPosition] = useState<{
+        top: number;
+        left: number;
+        width: number;
+        rowIndex: number;
+    } | null>(null);
+
 
 
     // Initialize data
@@ -160,6 +169,7 @@ const QuotationFormPage: React.FC = () => {
                 setShowBillToAddressDropdown(false);
                 setShowShipToAddressDropdown(false);
                 setShowEngineerDropdown(false);
+                setDropdownPosition(null);
             }
         };
 
@@ -540,6 +550,20 @@ const QuotationFormPage: React.FC = () => {
         setProductSearchTerms(prev => ({ ...prev, [itemIndex]: searchTerm }));
     };
 
+    // Calculate dropdown position for portal rendering
+    const calculateDropdownPosition = (inputElement: HTMLElement, rowIndex: number) => {
+        const rect = inputElement.getBoundingClientRect();
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+        const scrollLeft = window.pageXOffset || document.documentElement.scrollLeft;
+        
+        setDropdownPosition({
+            top: rect.bottom + scrollTop,
+            left: rect.left + scrollLeft,
+            width: rect.width,
+            rowIndex
+        });
+    };
+
     const updateUomSearchTerm = (itemIndex: number, searchTerm: string) => {
         setUomSearchTerms(prev => ({
             ...prev,
@@ -632,6 +656,7 @@ const QuotationFormPage: React.FC = () => {
                 updateProductSearchTerm(rowIndex, '');
                 setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
+                setDropdownPosition(null);
             }
 
             // Move directly to quantity field
@@ -655,6 +680,7 @@ const QuotationFormPage: React.FC = () => {
                 updateProductSearchTerm(rowIndex, '');
                 setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
+                setDropdownPosition(null);
 
                 // Move directly to quantity field in same row
                 setTimeout(() => {
@@ -678,9 +704,9 @@ const QuotationFormPage: React.FC = () => {
                 const newIndex = currentHighlighted < 0 ? 0 : Math.min(currentHighlighted + 1, matchingProducts.length - 1);
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: newIndex });
 
-                // Scroll to highlighted item
+                // Scroll to highlighted item in portal dropdown
                 setTimeout(() => {
-                    const highlightedElement = document.querySelector(`[data-dropdown="${rowIndex}"] [data-product-index="${newIndex}"]`);
+                    const highlightedElement = document.querySelector(`[data-product-index="${newIndex}"]`);
                     if (highlightedElement) {
                         highlightedElement.scrollIntoView({
                             behavior: 'smooth',
@@ -696,9 +722,9 @@ const QuotationFormPage: React.FC = () => {
                 const newIndex = currentHighlighted < 0 ? 0 : Math.max(currentHighlighted - 1, 0);
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: newIndex });
 
-                // Scroll to highlighted item
+                // Scroll to highlighted item in portal dropdown
                 setTimeout(() => {
-                    const highlightedElement = document.querySelector(`[data-dropdown="${rowIndex}"] [data-product-index="${newIndex}"]`);
+                    const highlightedElement = document.querySelector(`[data-product-index="${newIndex}"]`);
                     if (highlightedElement) {
                         highlightedElement.scrollIntoView({
                             behavior: 'smooth',
@@ -712,6 +738,7 @@ const QuotationFormPage: React.FC = () => {
             setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
             updateProductSearchTerm(rowIndex, '');
             setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
+            setDropdownPosition(null);
         }
     };
 
@@ -1542,6 +1569,145 @@ const QuotationFormPage: React.FC = () => {
         }
     };
 
+    // Portal-based Product Dropdown Component
+    const ProductDropdownPortal = () => {
+        if (!dropdownPosition || !showProductDropdowns[dropdownPosition.rowIndex]) {
+            return null;
+        }
+
+        const currentRowIndex = dropdownPosition.rowIndex;
+        const searchTerm = productSearchTerms[currentRowIndex] || '';
+
+        return createPortal(
+            <div
+                className="fixed bg-white border border-gray-300 rounded-md shadow-lg z-[9999] max-h-[400px] overflow-hidden"
+                style={{
+                    top: `${dropdownPosition.top}px`,
+                    left: `${dropdownPosition.left}px`,
+                    width: '450px',
+                    minWidth: '450px'
+                }}
+            >
+                <div className="p-2 border-b border-gray-200 bg-gray-50">
+                    <div className="text-xs text-gray-600">
+                        {getFilteredProducts(searchTerm).length} products found
+                        {searchTerm && (
+                            <span className="ml-2 text-blue-600 font-medium">
+                                for "{searchTerm}"
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                <div className="overflow-y-auto max-h-96">
+                    {getFilteredProducts(searchTerm).length === 0 ? (
+                        <div className="px-3 py-4 text-center text-sm text-gray-500">
+                            <div>No products found</div>
+                            <div className="text-xs mt-1">Try different search terms</div>
+                        </div>
+                    ) : (
+                        getFilteredProducts(searchTerm).map((product, productIndex) => {
+                            const currentItem = formData.items?.[currentRowIndex];
+                            return (
+                                <button
+                                    key={product._id}
+                                    data-product-index={productIndex}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        updateQuotationItem(currentRowIndex, 'product', product._id);
+                                        setShowProductDropdowns({ ...showProductDropdowns, [currentRowIndex]: false });
+                                        updateProductSearchTerm(currentRowIndex, '');
+                                        setHighlightedProductIndex({ ...highlightedProductIndex, [currentRowIndex]: -1 });
+                                        setDropdownPosition(null);
+                                        setTimeout(() => {
+                                            const quantityInput = document.querySelector(`[data-row="${currentRowIndex}"][data-field="quantity"]`) as HTMLInputElement;
+                                            if (quantityInput) {
+                                                quantityInput.focus();
+                                                quantityInput.select();
+                                            }
+                                        }, 50);
+                                    }}
+                                    className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${currentItem?.product === product._id ? 'bg-blue-100 text-blue-800' :
+                                            highlightedProductIndex[currentRowIndex] === productIndex ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                'text-gray-700'
+                                        } ${productIndex === 0 && searchTerm && highlightedProductIndex[currentRowIndex] === -1 ? 'bg-yellow-50 border-l-4 border-l-blue-500' : ''}`}
+                                >
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex-1 min-w-0 pr-4">
+                                            <div className="font-medium text-gray-900 mb-1 flex items-center">
+                                                <div><span className="font-medium">Part No:</span>{product?.partNo}</div>
+                                                {highlightedProductIndex[currentRowIndex] === productIndex && (
+                                                    <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded">
+                                                        Selected - Press Enter
+                                                    </span>
+                                                )}
+                                                {productIndex === 0 && searchTerm && highlightedProductIndex[currentRowIndex] === -1 && (
+                                                    <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+                                                        Best match
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <div className="text-xs text-gray-600 space-y-0.5">
+                                                <div><span className="font-medium">Product Name:</span> {product?.name || 'N/A'}</div>
+                                                <div>
+                                                    <span className="font-medium">Brand:</span> {product?.brand || 'N/A'} •
+                                                    <span className="font-medium">Category:</span> {product?.category || 'N/A'}
+                                                </div>
+                                                
+                                                {/* Stock Display in Product Details */}
+                                                {formData.location && (
+                                                    (() => {
+                                                        const stockInfo = productStockCache[product._id];
+                                                        if (stockInfo) {
+                                                            return (
+                                                                <div className="mt-1 flex items-center">
+                                                                    <span className="font-medium text-gray-700">Stock Available:</span>
+                                                                    <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${stockInfo.available === 0
+                                                                            ? 'bg-red-100 text-red-800 border border-red-300' 
+                                                                            : stockInfo.available <= 5
+                                                                                ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
+                                                                                : 'bg-green-100 text-green-800 border border-green-300'
+                                                                    }`}>
+                                                                        {stockInfo.available === 0 ? '❌ OUT OF STOCK' : `✅ ${stockInfo.available} units`}
+                                                                    </span>
+                                                                </div>
+                                                            );
+                                                        }
+                                                        // Show loading state when stock info is not yet available
+                                                        return (
+                                                            <div className="mt-1 flex items-center">
+                                                                <span className="font-medium text-gray-500">Stock Available:</span>
+                                                                <span className="ml-2 px-2 py-0.5 rounded-md text-xs bg-gray-100 text-gray-600 border border-gray-300">
+                                                                    Loading...
+                                                                </span>
+                                                            </div>
+                                                        );
+                                                    })()
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="text-right flex-shrink-0 ml-4">
+                                            <div className="font-bold text-lg text-green-600">₹{product?.price?.toLocaleString()}</div>
+                                            <div className="text-xs text-gray-500 mt-0.5">per unit</div>
+                                        </div>
+                                    </div>
+                                </button>
+                            );
+                        })
+                    )}
+                </div>
+
+                <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-t border-gray-200">
+                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Tab/Enter</kbd> Select → Set Qty → Tab/Enter Add Row •
+                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Shift+Tab</kbd> Previous •
+                    <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                </div>
+            </div>,
+            document.body
+        );
+    };
+
     if (loading) {
         return (
             <div className="pl-2 pr-6 py-6">
@@ -1555,6 +1721,9 @@ const QuotationFormPage: React.FC = () => {
 
     return (
         <div className="pl-2 pr-6 py-6 space-y-4">
+            {/* Portal-based Product Dropdown */}
+            <ProductDropdownPortal />
+            
             <PageHeader
                 title={isEditMode ? 'Edit Quotation' : 'Create Quotation'}
                 subtitle={isEditMode ? 'Modify quotation details' : 'Create a new customer quotation'}
@@ -2350,7 +2519,7 @@ const QuotationFormPage: React.FC = () => {
                                             {index + 1}
                                         </div>
 
-                                        {/* Product Code - Enhanced with fixed dropdown */}
+                                        {/* Product Code - Enhanced with portal dropdown */}
                                         <div className="p-1 border-r border-gray-200 relative">
                                             <input
                                                 type="text"
@@ -2367,7 +2536,7 @@ const QuotationFormPage: React.FC = () => {
                                                         [index]: -1
                                                     });
                                                 }}
-                                                onFocus={() => {
+                                                onFocus={(e) => {
                                                     if (!productSearchTerms[index] && !item.product) {
                                                         updateProductSearchTerm(index, '');
                                                     }
@@ -2375,6 +2544,9 @@ const QuotationFormPage: React.FC = () => {
                                                         ...showProductDropdowns,
                                                         [index]: true
                                                     });
+
+                                                    // Calculate dropdown position for portal
+                                                    calculateDropdownPosition(e.target, index);
 
                                                     // Load all stock for location if not already loaded
                                                     if (formData.location && Object.keys(productStockCache).length === 0) {
@@ -2387,6 +2559,7 @@ const QuotationFormPage: React.FC = () => {
                                                             ...showProductDropdowns,
                                                             [index]: false
                                                         });
+                                                        setDropdownPosition(null);
                                                     }, 200);
                                                 }}
                                                 onKeyDown={(e) => handleProductKeyDown(e, index)}
@@ -2396,128 +2569,6 @@ const QuotationFormPage: React.FC = () => {
                                                 placeholder="Type to search..."
                                                 autoComplete="off"
                                             />
-                                            {showProductDropdowns[index] && (
-                                                <div
-                                                    className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-[400px] overflow-hidden"
-                                                    data-dropdown={index}
-                                                    style={{ width: '450px', minWidth: '450px' }}
-                                                >
-                                                    <div className="p-2 border-b border-gray-200 bg-gray-50">
-                                                        <div className="text-xs text-gray-600">
-                                                            {getFilteredProducts(productSearchTerms[index] || '').length} products found
-                                                            {productSearchTerms[index] && (
-                                                                <span className="ml-2 text-blue-600 font-medium">
-                                                                    for "{productSearchTerms[index]}"
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="overflow-y-auto max-h-96">
-                                                        {getFilteredProducts(productSearchTerms[index] || '').length === 0 ? (
-                                                            <div className="px-3 py-4 text-center text-sm text-gray-500">
-                                                                <div>No products found</div>
-                                                                <div className="text-xs mt-1">Try different search terms</div>
-                                                            </div>
-                                                        ) : (
-                                                            getFilteredProducts(productSearchTerms[index] || '').map((product, productIndex) => (
-                                                                <button
-                                                                    key={product._id}
-                                                                    data-product-index={productIndex}
-                                                                    onMouseDown={(e) => {
-                                                                        e.preventDefault();
-                                                                        updateQuotationItem(index, 'product', product._id);
-                                                                        setShowProductDropdowns({ ...showProductDropdowns, [index]: false });
-                                                                        updateProductSearchTerm(index, '');
-                                                                        setHighlightedProductIndex({ ...highlightedProductIndex, [index]: -1 });
-                                                                        setTimeout(() => {
-                                                                            const quantityInput = document.querySelector(`[data-row="${index}"][data-field="quantity"]`) as HTMLInputElement;
-                                                                            if (quantityInput) {
-                                                                                quantityInput.focus();
-                                                                                quantityInput.select();
-                                                                            }
-                                                                        }, 50);
-                                                                    }}
-                                                                    className={`w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.product === product._id ? 'bg-blue-100 text-blue-800' :
-                                                                            highlightedProductIndex[index] === productIndex ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
-                                                                                'text-gray-700'
-                                                                        } ${productIndex === 0 && productSearchTerms[index] && highlightedProductIndex[index] === -1 ? 'bg-yellow-50 border-l-4 border-l-blue-500' : ''}`}
-                                                                >
-                                                                    <div className="flex justify-between items-start">
-                                                                        <div className="flex-1 min-w-0 pr-4">
-                                                                            <div className="font-medium text-gray-900 mb-1 flex items-center">
-                                                                                <div><span className="font-medium">Part No:</span>{product?.partNo}</div>
-                                                                                {highlightedProductIndex[index] === productIndex && (
-                                                                                    <span className="ml-2 text-xs bg-blue-600 text-white px-2 py-0.5 rounded">
-                                                                                        Selected - Press Enter
-                                                                                    </span>
-                                                                                )}
-                                                                                {productIndex === 0 && productSearchTerms[index] && highlightedProductIndex[index] === -1 && (
-                                                                                    <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-                                                                                        Best match
-                                                                                    </span>
-                                                                                )}
-                                                                            </div>
-                                                                            <div className="text-xs text-gray-600 space-y-0.5">
-                                                                                <div><span className="font-medium">Product Name:</span> {product?.name || 'N/A'}</div>
-                                                                                <div>
-                                                                                    <span className="font-medium">Brand:</span> {product?.brand || 'N/A'} •
-                                                                                    <span className="font-medium">Category:</span> {product?.category || 'N/A'}
-                                                                                </div>
-                                                                                
-                                                                                {/* Stock Display in Product Details */}
-                                                                                {formData.location && (
-                                                                                    (() => {
-                                                                                        const stockInfo = productStockCache[product._id];
-                                                                                        if (stockInfo) {
-                                                                                            return (
-                                                                                                <div className="mt-1 flex items-center">
-                                                                                                    <span className="font-medium text-gray-700">Stock Available:</span>
-                                                                                                    <span className={`ml-2 px-2 py-0.5 rounded-md text-xs font-bold ${stockInfo.available === 0
-                                                                                                            ? 'bg-red-100 text-red-800 border border-red-300' 
-                                                                                                            : stockInfo.available <= 5
-                                                                                                                ? 'bg-yellow-100 text-yellow-800 border border-yellow-300'
-                                                                                                                : 'bg-green-100 text-green-800 border border-green-300'
-                                                                                                    }`}>
-                                                                                                        {stockInfo.available === 0 ? '❌ OUT OF STOCK' : `✅ ${stockInfo.available} units`}
-                                                                                                    </span>
-                                                                                                </div>
-                                                                                            );
-                                                                                        }
-                                                                                        // Show loading state when stock info is not yet available
-                                                                                        return (
-                                                                                            <div className="mt-1 flex items-center">
-                                                                                                <span className="font-medium text-gray-500">Stock Available:</span>
-                                                                                                <span className="ml-2 px-2 py-0.5 rounded-md text-xs bg-gray-100 text-gray-600 border border-gray-300">
-                                                                                                    Loading...
-                                                                                                </span>
-                                                                                            </div>
-                                                                                        );
-                                                                                    })()
-                                                                                )}
-                                                                            </div>
-                                                                        </div>
-                                                                        <div className="text-right flex-shrink-0 ml-4">
-                                                                            <div className="font-bold text-lg text-green-600">₹{product?.price?.toLocaleString()}</div>
-                                                                            <div className="text-xs text-gray-500 mt-0.5">per unit</div>
-                                                                            
-                                                                            
-
-                                                                        </div>
-                                                                    </div>
-                                                                </button>
-                                                            ))
-                                                        )}
-                                                    </div>
-
-                                                    <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-t border-gray-200">
-                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
-                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Tab/Enter</kbd> Select → Set Qty → Tab/Enter Add Row •
-                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Shift+Tab</kbd> Previous •
-                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
 
                                         {/* Product Name */}
