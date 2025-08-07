@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { ChevronDown, X, Search, Check } from 'lucide-react';
 
 interface Option {
@@ -21,7 +21,13 @@ interface MultiSelectProps {
   searchable?: boolean;
 }
 
-export const MultiSelect: React.FC<MultiSelectProps> = ({
+export interface MultiSelectRef {
+  open: () => void;
+  close: () => void;
+  focus: () => void;
+}
+
+export const MultiSelect = forwardRef<MultiSelectRef, MultiSelectProps>(({
   options,
   value,
   onChange,
@@ -31,12 +37,28 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
   className = "",
   maxHeight = 200,
   searchable = true
-}) => {
+}, ref) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Expose methods through ref
+  useImperativeHandle(ref, () => ({
+    open: () => {
+      setIsOpen(true);
+      setTimeout(() => inputRef.current?.focus(), 0);
+    },
+    close: () => {
+      setIsOpen(false);
+      setSearchTerm("");
+      setHighlightedIndex(-1);
+    },
+    focus: () => {
+      inputRef.current?.focus();
+    }
+  }));
 
   // Filter options based on search term
   const filteredOptions = options.filter(option =>
@@ -83,6 +105,12 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
           if (highlightedIndex >= 0 && highlightedIndex < filteredOptions.length) {
             handleOptionToggle(filteredOptions[highlightedIndex].value);
           }
+          break;
+        case 'Tab':
+          // Allow Tab to work normally for navigation
+          setIsOpen(false);
+          setSearchTerm("");
+          setHighlightedIndex(-1);
           break;
         case 'Escape':
           setIsOpen(false);
@@ -190,6 +218,14 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
                       setSearchTerm(e.target.value);
                       setHighlightedIndex(-1);
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Tab') {
+                        // Allow Tab to work normally for navigation
+                        setIsOpen(false);
+                        setSearchTerm("");
+                        setHighlightedIndex(-1);
+                      }
+                    }}
                     placeholder="Search products..."
                     className="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
@@ -260,4 +296,4 @@ export const MultiSelect: React.FC<MultiSelectProps> = ({
       )}
     </div>
   );
-}; 
+}); 

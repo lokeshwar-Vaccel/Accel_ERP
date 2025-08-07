@@ -15,7 +15,7 @@ interface IServiceTicketSchema extends Document {
   serviceRequestType: string; // SR Type -> Service Request Type (allow any string)
   requestSubmissionDate: Date; // Requested Date -> Request Submission Date
   serviceRequiredDate: Date; // Service Required On Date -> Service Required Date
-  engineSerialNumber: string; // Engine Sr No -> Engine Serial Number
+  engineSerialNumber?: string; // Engine Sr No -> Engine Serial Number
   customerName: string; // Customer Name
   magiecSystemCode: string; // MAGIEC -> MAGIEC (System Code or Identifier)
   magiecCode: string; // MAGIEC Code
@@ -32,6 +32,7 @@ interface IServiceTicketSchema extends Document {
   ticketNumber?: string; // Auto-generated
   customer: mongoose.Types.ObjectId;
   product?: mongoose.Types.ObjectId;
+  products?: mongoose.Types.ObjectId[]; // Multiple products support
   serialNumber?: string;
   description: string;
   priority: TicketPriority;
@@ -90,8 +91,15 @@ const serviceTicketSchema = new Schema({
   engineSerialNumber: {
     type: String,
     trim: true,
-    minlength: [6, 'Engine serial number must be at least 6 characters'],
-    maxlength: [12, 'Engine serial number cannot exceed 12 characters']
+    validate: {
+      validator: function(value: string) {
+        // If no value is provided, it's valid (optional field)
+        if (!value || value.trim() === '') return true;
+        // If value is provided, it must be at least 6 characters and max 12 characters
+        return value.length >= 6 && value.length <= 12;
+      },
+      message: 'Engine serial number must be between 6 and 12 characters when provided'
+    }
   },
   customerName: {
     type: String,
@@ -173,6 +181,10 @@ const serviceTicketSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'Product'
   },
+  products: [{
+    type: Schema.Types.ObjectId,
+    ref: 'Product'
+  }],
   serialNumber: {
     type: String,
     trim: true,

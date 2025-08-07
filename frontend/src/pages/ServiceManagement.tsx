@@ -41,6 +41,8 @@ import { Pagination } from '../components/ui/Pagination';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { exportServiceTicketToPDF, exportMultipleTicketsToPDF, ServiceTicketPDFData } from '../utils/pdfExport';
 import DigitalServiceReport from '../components/DigitalServiceReport';
+import { MultiSelect } from '../components/ui/MultiSelect';
+import { MultiSelectRef } from '../components/ui/MultiSelect';
 
 // Types matching backend structure
 type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'cancelled';
@@ -142,7 +144,7 @@ interface TicketFormData {
   // Standardized fields
   serviceRequestType: string;
   serviceRequiredDate: string;
-  engineSerialNumber: string;
+  engineSerialNumber?: string;
   customerName: string;
   magiecSystemCode: string;
   magiecCode: string;
@@ -157,6 +159,7 @@ interface TicketFormData {
   // Legacy fields for backward compatibility
   customer: string;
   product?: string;
+  products?: string[]; // New field for multiple products
   description: string;
   priority: TicketPriority;
   assignedTo: string;
@@ -315,6 +318,7 @@ const ServiceManagement: React.FC = () => {
   const scheduledDateRef = useRef<HTMLInputElement>(null);
   const serialNumberRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const multiSelectRef = useRef<MultiSelectRef>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -1022,6 +1026,7 @@ const ServiceManagement: React.FC = () => {
       // Legacy fields for backward compatibility
       customer: '',
       product: '',
+      products: [], // Reset products array
       description: '',
       priority: 'medium',
       assignedTo: '',
@@ -1533,87 +1538,30 @@ const ServiceManagement: React.FC = () => {
 
       setUploadProgress(20);
 
-      // Validate field operators (service engineers) against database
-      const errors: Array<{ row: number; error: string; data: any }> = [];
-      const validData: any[] = [];
-
-      for (let i = 0; i < processedData.length; i++) {
-        const row = processedData[i];
-        const rowNumber = i + 2; // Excel row number (1-based + header row)
-
-        // Check if service engineer exists in our database
-        const engineerName = row.serviceRequestEngineer;
-        if (!engineerName) {
-          errors.push({
-            row: rowNumber,
-            error: 'Service Request Engineer is required. Please check if your Excel file has a column with one of these headers: "Service Request Engineer", "SR Engineer", "Engineer", "Technician", "Field Operator"',
-            data: row
-          });
-          continue;
-        }
-
-        // Find engineer in our users list (all users are field operators)
-        const engineer = users.find(user =>
-          (user.firstName + ' ' + user.lastName).toLowerCase().includes(engineerName.toLowerCase()) ||
-          user.email.toLowerCase().includes(engineerName.toLowerCase()) ||
-          user.fullName?.toLowerCase().includes(engineerName.toLowerCase())
-        );
-
-        if (!engineer) {
-          errors.push({
-            row: rowNumber,
-            error: `Field operator "${engineerName}" not found in the application`,
-            data: row
-          });
-          continue;
-        }
-
-        // Check if customer exists or create validation
-        const customerName = row.customerName;
-        if (!customerName) {
-          errors.push({
-            row: rowNumber,
-            error: 'Customer Name is required',
-            data: row
-          });
-          continue;
-        }
-
-        // Find customer in our customers list
-        const customer = customers.find(cust =>
-          cust.name.toLowerCase().includes(customerName.toLowerCase())
-        );
-
-        if (!customer) {
-          errors.push({
-            row: rowNumber,
-            error: `Customer "${customerName}" not found in the application`,
-            data: row
-          });
-          continue;
-        }
-
-        // If all validations pass, add to valid data
-        validData.push({
+      // Process all data without filtering - let backend handle missing customers and service engineers
+      const processedTickets = processedData.map((row, index) => {
+        const rowNumber = index + 2; // Excel row number (1-based + header row)
+        
+        // Return the processed data as is - backend will handle validation and creation
+        return {
           ...row,
-          serviceRequestEngineer: engineer._id,
-          customer: customer._id
-        });
-      }
+          // Keep the original names for backend processing
+          serviceRequestEngineer: row.serviceRequestEngineer || '',
+          customerName: row.customerName || ''
+        };
+      });
 
       setUploadProgress(50);
 
-      // Create tickets using bulk import
+      // Send all processed data to backend for import
       let successCount = 0;
       const creationErrors: Array<{ row: number; error: string; data: any }> = [];
 
-      // Create tickets using bulk import
-
       try {
-        const response = await apiClient.services.bulkImport(validData);
+        const response = await apiClient.services.bulkImport(processedTickets);
 
         if (response.success) {
-          successCount = response.data.importedCount || validData.length;
+          successCount = response.data.importedCount || 0;
           if (response.data.errors && response.data.errors.length > 0) {
             creationErrors.push(...response.data.errors);
           }
@@ -1621,21 +1569,21 @@ const ServiceManagement: React.FC = () => {
           creationErrors.push({
             row: 0,
             error: 'Bulk import failed',
-            data: validData
+            data: processedTickets
           });
         }
       } catch (error: any) {
         creationErrors.push({
           row: 0,
           error: error.message || 'Bulk import failed',
-          data: validData
+          data: processedTickets
         });
       }
 
       setUploadProgress(100);
 
-      // Combine validation errors and creation errors
-      const allErrors = [...errors, ...creationErrors];
+      // Use only creation errors since we removed frontend validation
+      const allErrors = [...creationErrors];
 
       setUploadResults({
         importedCount: successCount,
@@ -1643,11 +1591,28 @@ const ServiceManagement: React.FC = () => {
         errors: allErrors
       });
 
+      // Show combined toast message
+      const duplicateErrors = allErrors.filter(error => 
+        error.error.includes('already exists in the system')
+      );
+      
+      if (successCount > 0 && duplicateErrors.length > 0) {
+        // Both imported and duplicates
+        toast.success(`✅ ${successCount} tickets added successfully | ⚠️ ${duplicateErrors.length} tickets already exist in system`);
+      } else if (successCount > 0) {
+        // Only imported
+        toast.success(`✅ ${successCount} tickets added successfully!`);
+      } else if (duplicateErrors.length > 0) {
+        // Only duplicates
+        toast.error(`⚠️ ${duplicateErrors.length} tickets already exist in system - no new tickets added`);
+      } else if (allErrors.length > 0) {
+        // Other errors
+        toast.error(`❌ ${allErrors.length} tickets had errors during import`);
+      }
+
       if (successCount > 0) {
         // Refresh the tickets list
         await fetchTickets();
-        // Show success toast message
-        toast.success(`Successfully imported ${successCount} tickets!`);
         // Close the dialog box
         setShowExcelUploadModal(false);
         setExcelFile(null);
@@ -1884,11 +1849,9 @@ const ServiceManagement: React.FC = () => {
     switch (currentType) {
       case 'customer':
         setTimeout(() => {
-          setProductDropdown(prev => ({ ...prev, isOpen: true }));
-          // Focus the product input
-          const productInput = document.querySelector('input[placeholder="Search product..."]') as HTMLInputElement;
-          if (productInput) {
-            productInput.focus();
+          // Focus and open the MultiSelect component for products
+          if (multiSelectRef.current) {
+            multiSelectRef.current.open();
           }
         }, 50);
         break;
@@ -2050,6 +2013,8 @@ const ServiceManagement: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
+
+
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
@@ -2531,92 +2496,31 @@ const ServiceManagement: React.FC = () => {
                   )}
                 </div>
 
-                {/* Enhanced Product Dropdown - Spans 2 columns on large screens */}
-                <div className="relative dropdown-container lg:col-span-2" ref={productDropdownRef} id="product-dropdown-container" style={{ zIndex: 1000 }}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Product
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={productDropdown.searchTerm || (ticketFormData.product ? products.find(p => p._id === ticketFormData.product)?.name || '' : '')}
-                      onChange={(e) => {
-                        setProductDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                        handleDropdownSearch('product', e.target.value);
-                        // Clear error when user starts typing
-                        if (formErrors.product) {
-                          setFormErrors(prev => ({ ...prev, product: '' }));
-                        }
-                      }}
-                      onKeyDown={(e) => handleDropdownKeyDown('product', e, productDropdown.filteredOptions, (value) => handleDropdownSelect('product', value))}
-                      onFocus={() => handleDropdownFocus('product')}
-                      onBlur={() => {
-                        // Delay closing to allow for clicks on dropdown items
-                        setTimeout(() => {
-                          setProductDropdown(prev => ({ ...prev, isOpen: false }));
-                        }, 200);
-                      }}
-                      placeholder="Search product..."
-                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.product ? 'border-red-500' : 'border-gray-300'
-                        } ${productDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                    />
-                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  </div>
-
-                  {productDropdown.isOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[1001] max-h-60 overflow-y-auto min-w-full" style={{ minWidth: '100%', maxWidth: 'none' }}>
-                      {productDropdown.filteredOptions.length > 0 ? (
-                        productDropdown.filteredOptions.map((product, index) => {
-                          const isInStock = (product.stockQuantity || 0) > 0;
-                          const stockQuantity = product.stockQuantity || 0;
-
-                          return (
-                            <button
-                              key={product._id}
-                              id={`product-item-${index}`}
-                              type="button"
-                              onClick={() => !isInStock ? null : handleDropdownSelect('product', product._id)}
-                              disabled={!isInStock}
-                              className={`w-full px-3 py-2 text-left transition-colors ${!isInStock
-                                ? 'text-gray-400 cursor-not-allowed bg-gray-50'
-                                : index === productDropdown.selectedIndex
-                                  ? 'bg-blue-100 text-blue-900 hover:bg-blue-50'
-                                  : 'text-gray-700 hover:bg-blue-50'
-                                }`}
-                            >
-                              <div className="flex justify-between items-start gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-medium truncate">{product.name}</div>
-                                  <div className="text-xs text-gray-500 truncate">{product.category}</div>
-                                  {product.brand && (
-                                    <div className="text-xs text-gray-400 truncate">Brand: {product.brand}</div>
-                                  )}
-                                </div>
-                                <div className="flex flex-col items-end space-y-1 flex-shrink-0">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${isInStock
-                                    ? 'bg-green-100 text-green-700 border border-green-200'
-                                    : 'bg-red-100 text-red-700 border border-red-200'
-                                    }`}>
-                                    {isInStock ? `${stockQuantity} in stock` : 'Out of stock'}
-                                  </span>
-                                  {product.price && (
-                                    <span className="text-xs text-gray-600 font-medium whitespace-nowrap">
-                                      ₹{product.price}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })
-                      ) : (
-                        <div className="px-3 py-2 text-gray-500 text-sm">No products found</div>
-                      )}
-                    </div>
-                  )}
-                  {formErrors.product && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.product}</p>
-                  )}
+                {/* Multi-Select Product Dropdown - Spans 2 columns on large screens */}
+                <div className="lg:col-span-2">
+                  <MultiSelect
+                    ref={multiSelectRef}
+                    label="Products (Multi-Select)"
+                    options={products.map(product => ({
+                      value: product._id,
+                      label: product.name,
+                      category: product.category,
+                      brand: product.brand,
+                      modelNumber: product.modelNumber
+                    }))}
+                    value={ticketFormData.products || []}
+                    onChange={(selectedValues) => {
+                      setTicketFormData(prev => ({ ...prev, products: selectedValues }));
+                      // Clear error when user selects
+                      if (formErrors.products) {
+                        setFormErrors(prev => ({ ...prev, products: '' }));
+                      }
+                    }}
+                    placeholder="Search and select products..."
+                    error={formErrors.products}
+                    searchable={true}
+                    maxHeight={200}
+                  />
                 </div>
               </div>
 
@@ -3030,14 +2934,15 @@ const ServiceManagement: React.FC = () => {
               </div>
 
               {/* Cost Summary */}
-              {(ticketFormData.product || ticketFormData.serviceCharge > 0) && (
+              {(ticketFormData.product || (ticketFormData.products && ticketFormData.products.length > 0) || ticketFormData.serviceCharge > 0) && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
                     <TrendingUp className="w-4 h-4 mr-2" />
                     Cost Summary
                   </h3>
                   <div className="space-y-2">
-                    {ticketFormData.product && (
+                    {/* Single product (legacy support) */}
+                    {ticketFormData.product && !ticketFormData.products?.length && (
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-600">
                           {products.find(p => p._id === ticketFormData.product)?.name || 'Selected Product'}
@@ -3047,6 +2952,29 @@ const ServiceManagement: React.FC = () => {
                         </span>
                       </div>
                     )}
+                    
+                    {/* Multiple products */}
+                    {ticketFormData.products && ticketFormData.products.length > 0 && (
+                      <>
+                        {ticketFormData.products.map((productId) => {
+                          const product = products.find(p => p._id === productId);
+                          return product ? (
+                            <div key={productId} className="flex justify-between items-center">
+                              <span className="text-sm text-gray-600">
+                                {product.name}
+                                {product.brand && (
+                                  <span className="text-xs text-gray-400 ml-1">({product.brand})</span>
+                                )}
+                              </span>
+                              <span className="text-sm font-medium text-gray-900">
+                                ₹{product.price || 0}
+                              </span>
+                            </div>
+                          ) : null;
+                        })}
+                      </>
+                    )}
+                    
                     {ticketFormData.serviceCharge > 0 && (
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-600">Service Charge</span>
@@ -3055,12 +2983,36 @@ const ServiceManagement: React.FC = () => {
                         </span>
                       </div>
                     )}
-                    {(ticketFormData.product || ticketFormData.serviceCharge > 0) && (
+                    
+                    {(ticketFormData.product || (ticketFormData.products && ticketFormData.products.length > 0) || ticketFormData.serviceCharge > 0) && (
                       <div className="border-t border-gray-200 pt-2 mt-2">
                         <div className="flex justify-between items-center">
                           <span className="text-sm font-medium text-gray-900">Total</span>
                           <span className="text-sm font-bold text-blue-600">
-                            ₹{((products.find(p => p._id === ticketFormData.product)?.price || 0) + ticketFormData.serviceCharge)}
+                            ₹{(() => {
+                              let total = 0;
+                              
+                              // Add single product cost (legacy support)
+                              if (ticketFormData.product && !ticketFormData.products?.length) {
+                                const product = products.find(p => p._id === ticketFormData.product);
+                                total += product?.price || 0;
+                              }
+                              
+                              // Add multiple products cost
+                              if (ticketFormData.products && ticketFormData.products.length > 0) {
+                                ticketFormData.products.forEach(productId => {
+                                  const product = products.find(p => p._id === productId);
+                                  if (product) {
+                                    total += product.price || 0;
+                                  }
+                                });
+                              }
+                              
+                              // Add service charge
+                              total += ticketFormData.serviceCharge || 0;
+                              
+                              return total;
+                            })()}
                           </span>
                         </div>
                       </div>
@@ -4038,15 +3990,61 @@ const ServiceManagement: React.FC = () => {
                               </p>
                             </div>
                           </div>
+                          
+                          {/* Enhanced error display */}
                           {uploadResults.errors && uploadResults.errors.length > 0 && (
                             <div className="mt-3">
-                              <p className="text-xs font-medium text-red-700 mb-2">Errors:</p>
-                              <div className="max-h-32 overflow-y-auto space-y-1">
-                                {uploadResults.errors.map((error, index) => (
-                                  <div key={index} className="text-xs text-red-600 bg-red-100 p-2 rounded">
-                                    <span className="font-medium">Row {error.row}:</span> {error.error}
-                                  </div>
-                                ))}
+                              {/* Summary of errors */}
+                              <div className="mb-3 p-3 bg-red-100 rounded-lg">
+                                <p className="text-sm font-semibold text-red-800 mb-2">
+                                  ⚠️ Import Summary:
+                                </p>
+                                <div className="text-xs text-red-700 space-y-1">
+                                  {(() => {
+                                    const duplicateErrors = uploadResults.errors.filter(error => 
+                                      error.error.includes('already exists in the system')
+                                    );
+                                    const otherErrors = uploadResults.errors.filter(error => 
+                                      !error.error.includes('already exists in the system')
+                                    );
+                                    
+                                    return (
+                                      <>
+                                        {duplicateErrors.length > 0 && (
+                                          <p>• <strong>{duplicateErrors.length} tickets</strong> were skipped because they already exist in the system</p>
+                                        )}
+                                        {otherErrors.length > 0 && (
+                                          <p>• <strong>{otherErrors.length} tickets</strong> had other errors during import</p>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                                </div>
+                              </div>
+                              
+                              {/* Detailed error list */}
+                              <div>
+                                <p className="text-xs font-medium text-red-700 mb-2">Detailed Errors:</p>
+                                <div className="max-h-40 overflow-y-auto space-y-1">
+                                  {uploadResults.errors.map((error, index) => (
+                                    <div key={index} className="text-xs text-red-600 bg-red-100 p-2 rounded border-l-2 border-red-400">
+                                      <div className="flex items-start justify-between">
+                                        <span className="font-medium">Row {error.row}:</span>
+                                        {error.error.includes('already exists in the system') && (
+                                          <span className="text-xs bg-red-200 text-red-800 px-2 py-1 rounded-full">
+                                            Duplicate
+                                          </span>
+                                        )}
+                                      </div>
+                                      <p className="mt-1">{error.error}</p>
+                                      {error.data?.serviceRequestNumber && (
+                                        <p className="mt-1 text-red-500">
+                                          <strong>Service Request Number:</strong> {error.data.serviceRequestNumber}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                             </div>
                           )}

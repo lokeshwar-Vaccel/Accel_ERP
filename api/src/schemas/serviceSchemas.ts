@@ -219,7 +219,14 @@ const baseServiceTicketFields = {
   serviceRequestType: Joi.string().allow(''), // Remove validation, allow any string
   requestSubmissionDate: Joi.date().iso(),
   serviceRequiredDate: Joi.string().allow(''), // Allow string format for flexibility
-  engineSerialNumber: Joi.string().min(6).max(12).trim().allow(''),
+  engineSerialNumber: Joi.string().trim().allow('').custom((value, helpers) => {
+    if (value && value.trim() !== '') {
+      if (value.length < 6 || value.length > 12) {
+        return helpers.error('any.invalid', { message: 'Engine serial number must be between 6 and 12 characters when provided' });
+      }
+    }
+    return value;
+  }),
   customerName: Joi.string().max(200).trim(),
   magiecSystemCode: Joi.string().max(50).trim().allow(''),
   magiecCode: Joi.string().max(50).trim().allow(''),
@@ -484,7 +491,7 @@ export const bulkServiceImportSchema = Joi.object({
       serviceRequestNumber: Joi.string().allow(''), // Add serviceRequestNumber field
       serviceRequestType: baseServiceTicketFields.serviceRequestType.default('repair'),
       serviceRequiredDate: baseServiceTicketFields.serviceRequiredDate.required(),
-      engineSerialNumber: baseServiceTicketFields.engineSerialNumber,
+      engineSerialNumber: Joi.string().trim().allow(''), // Remove validation, allow any string or empty
       customerName: baseServiceTicketFields.customerName.required(),
       magiecSystemCode: baseServiceTicketFields.magiecSystemCode,
       magiecCode: baseServiceTicketFields.magiecCode,
@@ -507,7 +514,7 @@ export const bulkServiceImportSchema = Joi.object({
       scheduledDate: baseServiceTicketFields.scheduledDate,
       assignedTechnician: Joi.string() // Will be looked up by name
     })
-  ).min(1).max(500).required()
+  ).min(0).max(500).required() // Changed from min(1) to min(0) to allow empty arrays
 });
 
 // Update service status schema

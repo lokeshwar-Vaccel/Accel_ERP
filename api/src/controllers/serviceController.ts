@@ -4,10 +4,142 @@ import { Stock } from '../models/Stock';
 import { User } from '../models/User';
 import { Customer } from '../models/Customer';
 import { Product } from '../models/Product';
-import { AuthenticatedRequest, APIResponse, TicketStatus, TicketPriority, QueryParams } from '../types';
+import { AuthenticatedRequest, APIResponse, TicketStatus, TicketPriority, QueryParams, UserRole, CustomerType, CustomerMainType, LeadStatus, UserStatus } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { sendFeedbackEmail as sendFeedbackEmailUtil } from '../utils/nodemailer';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+
+// Helper function to create a customer if it doesn't exist
+const createCustomerIfNotExists = async (customerName: string, createdBy: string, businessVertical?: string) => {
+  try {
+    // First, try to find existing customer by name
+    let customer = await Customer.findOne({
+      name: { $regex: customerName, $options: 'i' }
+    });
+
+    if (!customer) {
+      // Map businessVertical to customerType
+      let customerType = CustomerType.JENARAL; // Default
+      if (businessVertical) {
+        const vertical = businessVertical.toUpperCase();
+        switch (vertical) {
+          case 'RET':
+          case 'RETAIL':
+            customerType = CustomerType.RETAIL;
+            break;
+          case 'TELECOM':
+          case 'TEL':
+            customerType = CustomerType.TELECOM;
+            break;
+          case 'EV':
+          case 'ELECTRIC_VEHICLE':
+            customerType = CustomerType.EV;
+            break;
+          case 'DG':
+          case 'DIESEL_GENERATOR':
+            customerType = CustomerType.DG;
+            break;
+          case 'JE':
+          case 'JOINT_ENTERPRISE':
+            customerType = CustomerType.JE;
+            break;
+          default:
+            customerType = CustomerType.JENARAL;
+        }
+      }
+
+      // Create new customer with default values
+      const customerData = {
+        name: customerName,
+        email: '', // Default empty email
+        phone: '', // Default empty phone
+        addresses: [{
+          id: 1,
+          address: 'Default Address',
+          state: '',
+          district: '',
+          pincode: '',
+          isPrimary: true
+        }],
+        customerType: customerType,
+        type: CustomerMainType.CUSTOMER,
+        status: LeadStatus.NEW,
+        createdBy: createdBy
+      };
+
+      customer = await Customer.create(customerData);
+      console.log(`Created new customer: ${customerName} with ID: ${customer._id} and type: ${customerType}`);
+    }
+
+    return customer;
+  } catch (error) {
+    console.error(`Error creating customer ${customerName}:`, error);
+    throw new Error(`Failed to create customer: ${customerName}`);
+  }
+};
+
+// Helper function to create a service engineer if it doesn't exist
+const createServiceEngineerIfNotExists = async (engineerName: string, createdBy: string) => {
+  try {
+    // First, try to find existing user by name (check both firstName and lastName)
+    const nameParts = engineerName.trim().split(' ');
+    const firstName = nameParts[0] || engineerName;
+    const lastName = nameParts.slice(1).join(' ') || 'Unknown'; // Use 'Unknown' if no last name
+    
+    let engineer = await User.findOne({
+      $or: [
+        { firstName: { $regex: firstName, $options: 'i' } },
+        { lastName: { $regex: lastName, $options: 'i' } },
+        { firstName: { $regex: engineerName, $options: 'i' } },
+        { lastName: { $regex: engineerName, $options: 'i' } }
+      ]
+    });
+
+    if (!engineer) {
+      // Generate a unique email - ensure it's valid
+      const cleanFirstName = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const baseEmail = `${cleanFirstName || 'user'}@default.com`;
+      let email = baseEmail;
+      let counter = 1;
+      
+      // Check if email already exists and generate a unique one
+      while (await User.findOne({ email })) {
+        email = `${cleanFirstName || 'user'}${counter}@default.com`;
+        counter++;
+      }
+
+      // Hash the default password
+      const hashedPassword = await bcrypt.hash('12345', 12);
+
+      // Create new service engineer with default values
+      const engineerData = {
+        firstName: firstName,
+        lastName: lastName,
+        email: email,
+        password: hashedPassword,
+        role: UserRole.FIELD_OPERATOR,
+        status: UserStatus.ACTIVE,
+        moduleAccess: [
+          { module: 'dashboard', access: true, permission: 'read' },
+          { module: 'service_management', access: true, permission: 'write' },
+          { module: 'amc_management', access: true, permission: 'write' },
+          { module: 'inventory_management', access: true, permission: 'write' },
+          { module: 'product_management', access: true, permission: 'write' }
+        ],
+        createdBy: createdBy
+      };
+
+      engineer = await User.create(engineerData);
+      console.log(`Created new service engineer: ${engineerName} with ID: ${engineer._id} and email: ${email}`);
+    }
+
+    return engineer;
+  } catch (error) {
+    console.error(`Error creating service engineer ${engineerName}:`, error);
+    throw new Error(`Failed to create service engineer: ${engineerName}`);
+  }
+};
 
 // @desc    Get all service tickets
 // @route   GET /api/v1/services
@@ -264,6 +396,7 @@ export const getServiceTickets = async (
       tickets = await ServiceTicket.find(query)
         .populate('customer', 'name email phone customerType addresses')
         .populate('product', 'name category brand modelNumber')
+        .populate('products', 'name category brand modelNumber')
         .populate('assignedTo', 'firstName lastName email')
         .populate('serviceRequestEngineer', 'firstName lastName email')
         .populate('createdBy', 'firstName lastName email')
@@ -318,6 +451,7 @@ export const getServiceTicket = async (
     const ticket = await ServiceTicket.findById(req.params.id)
       .populate('customer', 'name email phone customerType addresses')
       .populate('product', 'name category brand modelNumber specifications')
+      .populate('products', 'name category brand modelNumber specifications')
       .populate('assignedTo', 'firstName lastName email phone')
       .populate('createdBy', 'firstName lastName email')
       .populate('partsUsed.product', 'name category price');
@@ -379,7 +513,7 @@ export const createServiceTicket = async (
       serviceRequestType: req.body.serviceRequestType || req.body.serviceType || 'repair',
       requestSubmissionDate: req.body.requestSubmissionDate ? (typeof req.body.requestSubmissionDate === 'string' ? new Date(req.body.requestSubmissionDate.split('T')[0] + 'T00:00:00.000Z') : new Date(req.body.requestSubmissionDate)) : new Date(),
       serviceRequiredDate: req.body.serviceRequiredDate || req.body.scheduledDate || new Date(),
-      engineSerialNumber: req.body.engineSerialNumber || req.body.serialNumber || '',
+      engineSerialNumber: req.body.engineSerialNumber || req.body.serialNumber || undefined,
       magiecSystemCode: req.body.magiecSystemCode || '',
       magiecCode: req.body.magiecCode || '',
       businessVertical: req.body.businessVertical || '',
@@ -393,6 +527,17 @@ export const createServiceTicket = async (
       ticketNumber: req.body.serviceRequestNumber || undefined
     };
 
+    // Check if ticket with same service request number already exists
+    if (ticketData.serviceRequestNumber) {
+      const existingTicket = await ServiceTicket.findOne({
+        serviceRequestNumber: ticketData.serviceRequestNumber
+      });
+      
+      if (existingTicket) {
+        return next(new AppError(`Ticket with service request number "${ticketData.serviceRequestNumber}" already exists in the system`, 400));
+      }
+    }
+
     console.log('Creating ticket with data:', ticketData);
 
     const ticket = await ServiceTicket.create(ticketData);
@@ -401,6 +546,7 @@ export const createServiceTicket = async (
     const populatedTicket = await ServiceTicket.findById(ticket._id)
       .populate('customer', 'name email phone customerType addresses')
       .populate('product', 'name category brand')
+      .populate('products', 'name category brand')
       .populate('createdBy', 'firstName lastName email')
       .populate('serviceRequestEngineer', 'firstName lastName email');
 
@@ -478,6 +624,7 @@ export const updateServiceTicket = async (
     )
       .populate('customer', 'name email phone customerType addresses')
       .populate('product', 'name category brand')
+      .populate('products', 'name category brand')
       .populate('assignedTo', 'firstName lastName email')
       .populate('serviceRequestEngineer', 'firstName lastName email');
 
@@ -766,10 +913,23 @@ export const bulkImportServiceTickets = async (
   try {
     const { tickets } = req.body;
 
+    if (!Array.isArray(tickets)) {
+      return next(new AppError('Tickets must be an array', 400));
+    }
 
-
-    if (!Array.isArray(tickets) || tickets.length === 0) {
-      return next(new AppError('No tickets provided for import', 400));
+    // Handle empty array case
+    if (tickets.length === 0) {
+      const response: APIResponse = {
+        success: true,
+        message: 'No tickets provided for import',
+        data: {
+          importedCount: 0,
+          errorCount: 0,
+          errors: []
+        }
+      };
+      res.status(200).json(response);
+      return;
     }
 
     const importedTickets = [];
@@ -779,23 +939,30 @@ export const bulkImportServiceTickets = async (
       const ticketData = tickets[i];
       
       try {
-        // Use the serviceRequestEngineer ID directly (frontend already found the correct user)
+        // Handle serviceRequestEngineer - could be ID or name
         let serviceRequestEngineer = ticketData.serviceRequestEngineer;
         
-        // Validate that the serviceRequestEngineer ID exists in our database
         if (serviceRequestEngineer) {
-          const engineer = await User.findById(serviceRequestEngineer);
-          if (!engineer) {
-            throw new Error(`Service Request Engineer with ID ${serviceRequestEngineer} not found`);
+          // First try to find by ID (if it's a valid ObjectId)
+          let engineer = null;
+          
+          // Check if it's a valid ObjectId
+          if (/^[0-9a-fA-F]{24}$/.test(serviceRequestEngineer)) {
+            engineer = await User.findById(serviceRequestEngineer);
           }
+          
+          // If not found by ID or not a valid ObjectId, try to find by name or create new one
+          if (!engineer) {
+            engineer = await createServiceEngineerIfNotExists(serviceRequestEngineer, req.user!.id);
+          }
+          
+          serviceRequestEngineer = engineer._id;
         }
 
         // Find customer by name
         let customer = null;
         if (ticketData.customerName) {
-          customer = await Customer.findOne({
-            name: { $regex: ticketData.customerName, $options: 'i' }
-          });
+          customer = await createCustomerIfNotExists(ticketData.customerName, req.user!.id, ticketData.businessVertical);
         }
 
         // Find product by name
@@ -804,6 +971,22 @@ export const bulkImportServiceTickets = async (
           product = await Product.findOne({
             name: { $regex: ticketData.productName, $options: 'i' }
           });
+        }
+
+        // Check if ticket with same service request number already exists
+        if (ticketData.serviceRequestNumber) {
+          const existingTicket = await ServiceTicket.findOne({
+            serviceRequestNumber: ticketData.serviceRequestNumber
+          });
+          
+          if (existingTicket) {
+            errors.push({
+              row: i + 1,
+              error: `Ticket with service request number "${ticketData.serviceRequestNumber}" already exists in the system`,
+              data: ticketData
+            });
+            continue; // Skip this ticket and move to the next one
+          }
         }
 
         // Map Excel status to application status
@@ -847,7 +1030,7 @@ export const bulkImportServiceTickets = async (
           description: ticketData.complaintDescription || ticketData.description || '',
           complaintDescription: ticketData.complaintDescription || ticketData.description || '',
           customerName: ticketData.customerName || '',
-          engineSerialNumber: ticketData.engineSerialNumber || ticketData.serialNumber || '',
+          engineSerialNumber: ticketData.engineSerialNumber || ticketData.serialNumber || undefined,
           magiecSystemCode: ticketData.magiecSystemCode || '',
           magiecCode: ticketData.magiecCode || '',
           businessVertical: ticketData.businessVertical || '',
