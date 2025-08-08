@@ -218,7 +218,7 @@ const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'co
                         {contract.contractNumber}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {typeof contract.customer === 'object' ? contract.customer.name : getCustomerName(contract.customer)}
+                        {contract.customer && typeof contract.customer === 'object' ? contract.customer.name : getCustomerName(contract.customer)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                         {formatCurrency(contract.contractValue)}
@@ -363,7 +363,7 @@ const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'co
                   <tr key={index}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{contract.contractNumber}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {typeof contract.customer === 'object' ? contract.customer.name : getCustomerName(contract.customer)}
+                      {contract.customer && typeof contract.customer === 'object' ? contract.customer.name : getCustomerName(contract.customer)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contract.scheduledVisits}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{contract.completedVisits}</td>
@@ -428,7 +428,7 @@ const AMCReport: React.FC<AMCReportProps> = ({ isOpen, onClose, reportType = 'co
                 <div>
                   <h4 className="font-medium text-gray-900">{contract.contractNumber}</h4>
                   <p className="text-sm text-gray-600">
-                    {typeof contract.customer === 'object' ? contract.customer.name : getCustomerName(contract.customer)}
+                    {contract.customer && typeof contract.customer === 'object' ? contract.customer.name : getCustomerName(contract.customer)}
                   </p>
                   <p className="text-xs text-orange-700">
                     Expires on {formatDate(contract.endDate)} ({contract.daysUntilExpiry} days left)

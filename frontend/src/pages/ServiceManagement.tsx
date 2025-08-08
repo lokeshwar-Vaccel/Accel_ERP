@@ -120,6 +120,7 @@ interface ServiceTicket {
   ticketNumber: string;
   customer: string | Customer;
   product?: string | Product;
+  products?: string[] | Product[]; // Multiple products support
   serialNumber?: string;
   description: string;
   priority: TicketPriority;
@@ -892,6 +893,7 @@ const ServiceManagement: React.FC = () => {
         // Legacy fields for backward compatibility
         customer: ticketFormData.customer,
         product: ticketFormData.product || undefined,
+        products: ticketFormData.products || undefined, // Add products array
         description: ticketFormData.description,
         priority: ticketFormData.priority,
         serviceCharge: ticketFormData.serviceCharge || 0,
@@ -955,6 +957,7 @@ const ServiceManagement: React.FC = () => {
         // Legacy fields for backward compatibility
         customer: ticketFormData.customer,
         product: ticketFormData.product || undefined,
+        products: ticketFormData.products || undefined, // Add products array
         description: ticketFormData.description,
         priority: ticketFormData.priority,
         serviceCharge: ticketFormData.serviceCharge || 0,
@@ -1910,7 +1913,8 @@ const ServiceManagement: React.FC = () => {
     const filtered = originalOptions.filter((option: any) => {
       const searchText = searchTerm.toLowerCase();
       const optionText = (option.name || option.label || option.fullName || '').toLowerCase();
-      return optionText.includes(searchText);
+      const partNumber = (option.modelNumber || '').toLowerCase();
+      return optionText.includes(searchText) || partNumber.includes(searchText);
     });
 
     setDropdownState(prev => ({
@@ -2506,7 +2510,9 @@ const ServiceManagement: React.FC = () => {
                       label: product.name,
                       category: product.category,
                       brand: product.brand,
-                      modelNumber: product.modelNumber
+                      modelNumber: product.modelNumber,
+                      partNumber: product.modelNumber, // Use modelNumber as partNumber
+                      availableStock: product.stockQuantity || 0 // Use stockQuantity as availableStock
                     }))}
                     value={ticketFormData.products || []}
                     onChange={(selectedValues) => {
@@ -2516,7 +2522,7 @@ const ServiceManagement: React.FC = () => {
                         setFormErrors(prev => ({ ...prev, products: '' }));
                       }
                     }}
-                    placeholder="Search and select products..."
+                    placeholder="Search by name or part number..."
                     error={formErrors.products}
                     searchable={true}
                     maxHeight={200}
@@ -2945,7 +2951,23 @@ const ServiceManagement: React.FC = () => {
                     {ticketFormData.product && !ticketFormData.products?.length && (
                       <div className="flex justify-between items-center">
                         <span className="text-sm text-gray-600">
-                          {products.find(p => p._id === ticketFormData.product)?.name || 'Selected Product'}
+                          {(() => {
+                            const product = products.find(p => p._id === ticketFormData.product);
+                            if (!product) return 'Selected Product';
+                            return (
+                              <>
+                                {product.name}
+                                {product.modelNumber && (
+                                  <span className="text-xs text-gray-400 ml-1">(Part: {product.modelNumber})</span>
+                                )}
+                                {product.stockQuantity !== undefined && (
+                                  <span className={`text-xs ml-1 ${product.stockQuantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    Stock: {product.stockQuantity}
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
                         </span>
                         <span className="text-sm font-medium text-gray-900">
                           ₹{products.find(p => p._id === ticketFormData.product)?.price || 0}
@@ -2962,8 +2984,13 @@ const ServiceManagement: React.FC = () => {
                             <div key={productId} className="flex justify-between items-center">
                               <span className="text-sm text-gray-600">
                                 {product.name}
-                                {product.brand && (
-                                  <span className="text-xs text-gray-400 ml-1">({product.brand})</span>
+                                {product.modelNumber && (
+                                  <span className="text-xs text-gray-400 ml-1">(Part: {product.modelNumber})</span>
+                                )}
+                                {product.stockQuantity !== undefined && (
+                                  <span className={`text-xs ml-1 ${product.stockQuantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    Stock: {product.stockQuantity}
+                                  </span>
                                 )}
                               </span>
                               <span className="text-sm font-medium text-gray-900">
@@ -3146,7 +3173,11 @@ const ServiceManagement: React.FC = () => {
                   <div className="relative">
                     <input
                       type="text"
-                      value={productDropdown.searchTerm || (ticketFormData.product ? products.find(p => p._id === ticketFormData.product)?.name || '' : '')}
+                      value={productDropdown.searchTerm || (ticketFormData.product ? (() => {
+                        const product = products.find(p => p._id === ticketFormData.product);
+                        if (!product) return '';
+                        return product.modelNumber ? `${product.name} (Part: ${product.modelNumber})` : product.name;
+                      })() : '')}
                       onChange={(e) => {
                         setProductDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                         handleDropdownSearch('product', e.target.value);
@@ -3163,7 +3194,7 @@ const ServiceManagement: React.FC = () => {
                           setProductDropdown(prev => ({ ...prev, isOpen: false }));
                         }, 200);
                       }}
-                      placeholder="Search product..."
+                      placeholder="Search by name or part number..."
                       className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.product ? 'border-red-500' : 'border-gray-300'
                         } ${productDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
                     />
@@ -3195,8 +3226,8 @@ const ServiceManagement: React.FC = () => {
                                 <div className="flex-1 min-w-0">
                                   <div className="font-medium truncate">{product.name}</div>
                                   <div className="text-xs text-gray-500 truncate">{product.category}</div>
-                                  {product.brand && (
-                                    <div className="text-xs text-gray-400 truncate">Brand: {product.brand}</div>
+                                  {product.modelNumber && (
+                                    <div className="text-xs text-gray-400 truncate">Part: {product.modelNumber}</div>
                                   )}
                                 </div>
                                 <div className="flex flex-col items-end space-y-1 flex-shrink-0">
@@ -3518,8 +3549,6 @@ const ServiceManagement: React.FC = () => {
                     </div>
                   </div>
                 </div>
-
-
               </div>
 
               <div>
@@ -3636,7 +3665,43 @@ const ServiceManagement: React.FC = () => {
                     <Package className="w-5 h-5 mr-2" />
                     Product Details
                   </h3>
-                  {selectedTicket.product && typeof selectedTicket.product === 'object' ? (
+                  {selectedTicket.products && Array.isArray(selectedTicket.products) && selectedTicket.products.length > 0 ? (
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Products ({selectedTicket.products.length})</h4>
+                      {selectedTicket.products.map((product, index) => {
+                        const productData = typeof product === 'string' 
+                          ? products.find(p => p._id === product)
+                          : product;
+                        
+                        return productData ? (
+                          <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
+                            <div className="flex justify-between items-start">
+                              <div className="flex-1">
+                                <div className="font-medium text-gray-900">{productData.name}</div>
+                                <div className="text-sm text-gray-500 capitalize">{productData.category}</div>
+                                {productData.modelNumber && (
+                                  <div className="text-sm text-blue-600">Part: {productData.modelNumber}</div>
+                                )}
+                                {productData.brand && (
+                                  <div className="text-sm text-gray-500">Brand: {productData.brand}</div>
+                                )}
+                              </div>
+                              <div className="text-right">
+                                {productData.price && (
+                                  <div className="font-medium text-green-600">₹{productData.price}</div>
+                                )}
+                                {productData.stockQuantity !== undefined && (
+                                  <div className={`text-xs ${productData.stockQuantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    Stock: {productData.stockQuantity}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ) : null;
+                      })}
+                    </div>
+                  ) : selectedTicket.product && typeof selectedTicket.product === 'object' ? (
                     <div className="space-y-2">
                       <div>
                         <p className="text-xs text-gray-600">Product</p>
@@ -3646,16 +3711,22 @@ const ServiceManagement: React.FC = () => {
                         <p className="text-xs text-gray-600">Category</p>
                         <p className="font-medium capitalize">{selectedTicket.product.category}</p>
                       </div>
+                      {selectedTicket.product.modelNumber && (
+                        <div>
+                          <p className="text-xs text-gray-600">Part Number</p>
+                          <p className="font-medium">{selectedTicket.product.modelNumber}</p>
+                        </div>
+                      )}
                       {selectedTicket.product.brand && (
                         <div>
                           <p className="text-xs text-gray-600">Brand</p>
                           <p className="font-medium">{selectedTicket.product.brand}</p>
                         </div>
                       )}
-                      {selectedTicket.product.modelNumber && (
+                      {selectedTicket.product.price && (
                         <div>
-                          <p className="text-xs text-gray-600">Model</p>
-                          <p className="font-medium">{selectedTicket.product.modelNumber}</p>
+                          <p className="text-xs text-gray-600">Price</p>
+                          <p className="font-medium text-green-600">₹{selectedTicket.product.price}</p>
                         </div>
                       )}
                       {selectedTicket.serialNumber && (
@@ -3666,7 +3737,7 @@ const ServiceManagement: React.FC = () => {
                       )}
                     </div>
                   ) : (
-                    <p className="text-gray-500">No product assigned</p>
+                    <p className="text-gray-500">No products assigned</p>
                   )}
                 </div>
 

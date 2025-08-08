@@ -22,6 +22,7 @@ export interface CreateServiceTicketInput {
   // Legacy fields for backward compatibility
   customer: string;
   product?: string;
+  products?: string[]; // Add products array field
   serialNumber?: string;
   description: string;
   priority?: TicketPriority;
@@ -72,6 +73,7 @@ export interface UpdateServiceTicketInput {
   serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
   urgencyLevel?: 'low' | 'medium' | 'high' | 'critical';
   serialNumber?: string;
+  products?: string[]; // Add products array field
   resolution?: string;
   workDuration?: number;
   customerFeedback?: {
@@ -250,6 +252,7 @@ const baseServiceTicketFields = {
   // Legacy fields
   customer: Joi.string().hex().length(24),
   product: Joi.string().hex().length(24),
+  products: Joi.array().items(Joi.string().hex().length(24)), // Add products array field
   serialNumber: Joi.string().max(100).trim().allow(''),
   description: Joi.string().custom((value, helpers) => {
     if (value) {
@@ -294,6 +297,7 @@ export const createServiceTicketSchema = Joi.object<CreateServiceTicketInput>({
   // Legacy fields for backward compatibility
   customer: baseServiceTicketFields.customer.required(),
   product: baseServiceTicketFields.product,
+  products: baseServiceTicketFields.products, // Add products field
   serialNumber: baseServiceTicketFields.serialNumber,
   description: baseServiceTicketFields.description.required(),
   priority: baseServiceTicketFields.priority.default(TicketPriority.MEDIUM),
@@ -345,6 +349,7 @@ export const updateServiceTicketSchema = Joi.object<UpdateServiceTicketInput>({
   serviceType: baseServiceTicketFields.serviceType,
   urgencyLevel: baseServiceTicketFields.urgencyLevel,
   serialNumber: baseServiceTicketFields.serialNumber,
+  products: baseServiceTicketFields.products, // Add products field
   resolution: Joi.string().max(2000),
   workDuration: Joi.number().min(0), // in hours
   customerFeedback: Joi.object({

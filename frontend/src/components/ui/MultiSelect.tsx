@@ -7,6 +7,8 @@ interface Option {
   category?: string;
   brand?: string;
   modelNumber?: string;
+  partNumber?: string;
+  availableStock?: number;
 }
 
 interface MultiSelectProps {
@@ -64,7 +66,9 @@ export const MultiSelect = forwardRef<MultiSelectRef, MultiSelectProps>(({
   const filteredOptions = options.filter(option =>
     option.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
     option.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    option.brand?.toLowerCase().includes(searchTerm.toLowerCase())
+    option.brand?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    option.partNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    option.modelNumber?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   // Get selected options
@@ -141,7 +145,10 @@ export const MultiSelect = forwardRef<MultiSelectRef, MultiSelectProps>(({
 
   const getDisplayText = () => {
     if (selectedOptions.length === 0) return placeholder;
-    if (selectedOptions.length === 1) return selectedOptions[0].label;
+    if (selectedOptions.length === 1) {
+      const option = selectedOptions[0];
+      return option.partNumber ? `${option.label} (Part: ${option.partNumber})` : option.label;
+    }
     return `${selectedOptions.length} items selected`;
   };
 
@@ -166,7 +173,14 @@ export const MultiSelect = forwardRef<MultiSelectRef, MultiSelectProps>(({
               key={option.value}
               className="inline-flex items-center gap-1 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded-md"
             >
-              <span className="truncate max-w-[150px]">{option.label}</span>
+              <div className="flex flex-col">
+                <span className="truncate max-w-[150px] font-medium">{option.label}</span>
+                {option.partNumber && (
+                  <span className="truncate max-w-[150px] text-blue-600 text-xs">
+                    Part: {option.partNumber}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
                 onClick={(e) => {
@@ -226,7 +240,7 @@ export const MultiSelect = forwardRef<MultiSelectRef, MultiSelectProps>(({
                         setHighlightedIndex(-1);
                       }
                     }}
-                    placeholder="Search products..."
+                    placeholder="Search by name or part number..."
                     className="w-full pl-8 pr-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                   />
                 </div>
@@ -259,9 +273,14 @@ export const MultiSelect = forwardRef<MultiSelectRef, MultiSelectProps>(({
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="font-medium">{option.label}</div>
-                          {(option.category || option.brand) && (
+                          {(option.partNumber || option.availableStock !== undefined) && (
                             <div className="text-xs text-gray-500">
-                              {option.category} {option.brand && `• ${option.brand}`}
+                              {option.partNumber && `Part: ${option.partNumber}`}
+                              {option.availableStock !== undefined && (
+                                <span className={`ml-2 ${option.availableStock > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  Stock: {option.availableStock}
+                                </span>
+                              )}
                             </div>
                           )}
                         </div>
