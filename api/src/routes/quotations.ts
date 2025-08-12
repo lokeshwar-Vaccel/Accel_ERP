@@ -11,7 +11,8 @@ import {
   updateQuotation,
   deleteQuotation,
   createDGSalesQuotation,
-  listDGSalesQuotations
+  listDGSalesQuotations,
+  updateQuotationAdvancePayment
 } from '../controllers/quotationController';
 
 const router = Router();
@@ -33,6 +34,7 @@ router.get('/:id', checkPermission('read'), getQuotationById);
 router.post('/', checkPermission('write'), createQuotation);
 router.post('/from-image', checkPermission('write'), createQuotationFromImage);
 router.put('/:id', checkPermission('write'), updateQuotation);
+router.put('/:id/advance-payment', checkPermission('write'), updateQuotationAdvancePayment);
 router.delete('/:id', checkPermission('delete'), deleteQuotation);
 
 export default router; 

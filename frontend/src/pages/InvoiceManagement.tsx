@@ -26,7 +26,8 @@ import {
   TrendingDown,
   IndianRupee,
   Printer,
-  Receipt
+  Receipt,
+  Calculator
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -40,6 +41,7 @@ import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';
 import { Pagination } from 'components/ui/Pagination';
 import apiClientQuotation from '../utils/api';
+import UpdatePaymentModal from '../components/UpdatePaymentModal';
 
 
 // Types
@@ -51,6 +53,15 @@ interface Invoice {
     name: string;
     email: string;
     phone: string;
+    addresses?: Array<{
+      id: number;
+      address: string;
+      state: string;
+      district: string;
+      pincode: string;
+      isPrimary: boolean;
+      gstNumber?: string;
+    }>;
   };
   user?: {
     firstName?: string;
@@ -58,7 +69,20 @@ interface Invoice {
   };
   issueDate: string;
   dueDate: string;
-  supplierName: string;
+  supplier: {
+    _id: string;
+    name: string;
+    email: string;
+    addresses: Array<{
+      id: number;
+      address: string;
+      state: string;
+      district: string;
+      pincode: string;
+      isPrimary: boolean;
+      gstNumber?: string;
+    }>;
+  };
   supplierEmail: string;
   externalInvoiceNumber: string;
   externalInvoiceTotal: number;
@@ -92,6 +116,42 @@ interface Invoice {
   bankBranch?: string;
   declaration?: string;
   signature?: string;
+  // New detailed address fields
+  customerAddress?: {
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
+  };
+  billToAddress?: {
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
+  };
+  shipToAddress?: {
+    id: number;
+    address: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
+  };
+  supplierAddress?: {
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
+  };
 }
 
 interface InvoiceItem {
@@ -123,6 +183,7 @@ interface Customer {
     district: string;
     pincode: string;
     isPrimary: boolean;
+    gstNumber?: string;
   }>;
 }
 
@@ -205,6 +266,42 @@ interface NewInvoice {
   bankBranch?: string;
   declaration?: string;
   signature?: string;
+  // New detailed address fields
+  customerAddress?: {
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
+  };
+  billToAddress?: {
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
+  };
+  shipToAddress?: {
+    id: number;
+    address: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
+  };
+  supplierAddress?: {
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
+  };
 }
 
 interface StatusUpdate {
@@ -221,6 +318,48 @@ interface PaymentUpdate {
   useRazorpay?: boolean;
   razorpayOrderId?: string;
   paymentId?: string;
+}
+
+// Add advance payment fields to the quotation interface
+interface Quotation {
+  _id: string;
+  quotationNumber: string;
+  customer: {
+    _id: string;
+    name: string;
+    email: string;
+    phone: string;
+    addresses?: Array<{
+      id: number;
+      address: string;
+      state: string;
+      district: string;
+      pincode: string;
+      isPrimary: boolean;
+      gstNumber?: string;
+    }>;
+  };
+  issueDate: string;
+  validUntil: string;
+  validityPeriod: number;
+  grandTotal: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentMethod?: string;
+  paymentDate?: string;
+  notes?: string;
+  status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
+  items: any[];
+  company?: any;
+  location?: any;
+  assignedEngineer?: any;
+  billToAddress?: any;
+  shipToAddress?: any;
+  terms?: string;
+  subtotal?: number;
+  totalTax?: number;
+  totalDiscount?: number;
 }
 
 // Helper to safely format numbers
@@ -289,6 +428,8 @@ const InvoiceManagement: React.FC = () => {
   const [showPaymentStatusDropdown, setShowPaymentStatusDropdown] = useState(false);
   const [showPaymentMethodDropdown, setShowPaymentMethodDropdown] = useState(false);
 
+
+
   // Modal states
   const [showViewModal, setShowViewModal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -354,6 +495,11 @@ const InvoiceManagement: React.FC = () => {
     bankIFSC: '',
     bankBranch: '',
     declaration: '',
+    // Initialize new detailed address fields
+    customerAddress: undefined,
+    billToAddress: undefined,
+    shipToAddress: undefined,
+    supplierAddress: undefined,
   });
 
   // Stock validation states
@@ -370,6 +516,9 @@ const InvoiceManagement: React.FC = () => {
   const [editModeChanges, setEditModeChanges] = useState(true);
 
   // Helper function to check if there's a real amount mismatch that allows editing
+  const [originalInvoiceData, setOriginalInvoiceData] = useState<any>(null);
+  const [savingChanges, setSavingChanges] = useState(false);
+
   const hasAmountMismatch = (invoice: any) => {
     if (!invoice) return false;
 
@@ -385,16 +534,13 @@ const InvoiceManagement: React.FC = () => {
   };
 
   // Auto-exit edit mode when amount mismatch conditions are no longer met
+  // But only if we're not in the middle of saving changes
   useEffect(() => {
-    if (editMode && selectedInvoice && !hasAmountMismatch(selectedInvoice)) {
-      setEditMode(false);
-      setOriginalInvoiceData(null);
+    if (editMode && selectedInvoice && !hasAmountMismatch(selectedInvoice) && !savingChanges) {
+      // Don't auto-exit if we're saving changes
+      // This allows users to save their corrected amounts
     }
-  }, [editMode, selectedInvoice]);
-  const [originalInvoiceData, setOriginalInvoiceData] = useState<any>(null);
-  const [savingChanges, setSavingChanges] = useState(false);
-
-
+  }, [editMode, selectedInvoice, savingChanges]);
 
   // Add search state for product dropdowns
   const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
@@ -413,6 +559,19 @@ const InvoiceManagement: React.FC = () => {
     onConfirm: () => void;
     type: 'danger' | 'warning' | 'info';
   } | null>(null);
+
+  // Add advance payment states
+  const [showAdvancePaymentModal, setShowAdvancePaymentModal] = useState(false);
+  const [selectedQuotationForPayment, setSelectedQuotationForPayment] = useState<Quotation | null>(null);
+  const [advancePaymentData, setAdvancePaymentData] = useState({
+    amount: 0,
+    paymentMethod: '',
+    paymentDate: '',
+    notes: '',
+    useRazorpay: false
+  });
+
+
 
   console.log("selectedInvoice", selectedInvoice);
 
@@ -612,7 +771,7 @@ const InvoiceManagement: React.FC = () => {
   const handleSaveChanges = async () => {
     setSavingChanges(true);
     try {
-      if (!selectedInvoice) return;
+      if (!selectedInvoice) return false;
 
       const payload = {
         products: selectedInvoice.items.map((item: any) => ({
@@ -649,7 +808,7 @@ const InvoiceManagement: React.FC = () => {
         updatedInvoice.remainingAmount = updatedInvoice.totalAmount - (updatedInvoice.paidAmount || 0);
 
         // Update the selected invoice state
-        // setSelectedInvoice(updatedInvoice);
+        setSelectedInvoice(updatedInvoice);
 
         // Update the invoice in the main invoices list
         setInvoices(prevInvoices =>
@@ -662,14 +821,15 @@ const InvoiceManagement: React.FC = () => {
         await fetchStats();
 
         toast.success('Invoice updated successfully!');
+        return true;
       } else {
         throw new Error('Failed to update invoice');
       }
     } catch (error) {
       console.error('Error updating invoice items:', error);
       toast.error('Failed to update invoice. Please try again.');
+      return false;
     } finally {
-      setEditMode(false);
       setSavingChanges(false);
     }
   };
@@ -790,6 +950,9 @@ const InvoiceManagement: React.FC = () => {
     try {
       const response = await apiClient.invoices.getAll(params);
 
+      console.log("response123:", response);
+
+
       if (response.data.pagination) {
         setCurrentPage(response.data.pagination.page);
         setLimit(response.data.pagination.limit);
@@ -810,6 +973,8 @@ const InvoiceManagement: React.FC = () => {
       fetchInvoices();
     }
   }, [currentPage, limit, sort, searchTerm, statusFilter, paymentFilter, invoiceType, searchQuotationTerm]);
+
+
 
   const fetchCustomers = async () => {
     try {
@@ -887,6 +1052,8 @@ const InvoiceManagement: React.FC = () => {
       setQuotationLoading(false);
     }
   };
+
+
 
   const fetchProducts = async () => {
     try {
@@ -1080,18 +1247,21 @@ const InvoiceManagement: React.FC = () => {
     const quotationData = {
       customer: quotation.customer,
       billToAddress: quotation.billToAddress ? {
+        id: quotation.billToAddress.id || quotation.billToAddress.addressId || 0,
         address: quotation.billToAddress.address || '',
         state: quotation.billToAddress.state || '',
         district: quotation.billToAddress.district || '',
         pincode: quotation.billToAddress.pincode || '',
-        addressId: quotation.billToAddress.addressId || quotation.billToAddress.id
+        isPrimary: quotation.billToAddress.isPrimary || false,
+        gstNumber: quotation.billToAddress.gstNumber || ''
       } : null,
       shipToAddress: quotation.shipToAddress ? {
+        id: quotation.shipToAddress.id || quotation.shipToAddress.addressId || 0,
         address: quotation.shipToAddress.address || '',
-        state: quotation.shipToAddress.state || '',
         district: quotation.shipToAddress.district || '',
         pincode: quotation.shipToAddress.pincode || '',
-        addressId: quotation.shipToAddress.addressId || quotation.shipToAddress.id
+        isPrimary: quotation.shipToAddress.isPrimary || false,
+        gstNumber: quotation.shipToAddress.gstNumber || ''
       } : null,
       assignedEngineer: quotation.assignedEngineer?._id || quotation.assignedEngineer,
       items: quotation.items?.map((item: any) => ({
@@ -1132,38 +1302,45 @@ const InvoiceManagement: React.FC = () => {
     setShowStatusModal(true);
   };
 
-  const handleUpdatePayment = (invoice: Invoice) => {
-    setSelectedInvoice(invoice);
+  const handleUpdatePayment = (item: Invoice | Quotation, itemType: 'invoice' | 'quotation' = 'invoice') => {
+    if (itemType === 'invoice') {
+      const invoice = item as Invoice;
+      setSelectedInvoice(invoice);
 
-    // Clear any existing form errors
-    setFormErrors({});
+      // Clear any existing form errors
+      setFormErrors({});
 
-    // Smart defaults based on current payment status
-    let defaultPaymentStatus = 'paid';
-    let defaultPaidAmount = invoice.remainingAmount;
+      // Smart defaults based on current payment status
+      let defaultPaymentStatus = 'paid';
+      let defaultPaidAmount = invoice.remainingAmount;
 
-    if (invoice.paymentStatus === 'pending') {
-      defaultPaymentStatus = 'partial';
-      defaultPaidAmount = Math.round(invoice.remainingAmount * 0.5); // Default to 50% for partial
-    } else if (invoice.paymentStatus === 'partial') {
-      defaultPaymentStatus = 'paid';
-      // For existing partial payments, suggest paying the remaining amount
-      const remainingAmount = invoice.remainingAmount || (invoice.remainingAmount - (invoice.paidAmount || 0));
-      defaultPaidAmount = invoice.remainingAmount;
+      if (invoice.paymentStatus === 'pending') {
+        defaultPaymentStatus = 'partial';
+        defaultPaidAmount = Math.round(invoice.remainingAmount * 0.5); // Default to 50% for partial
+      } else if (invoice.paymentStatus === 'partial') {
+        defaultPaymentStatus = 'paid';
+        // For existing partial payments, suggest paying the remaining amount
+        const remainingAmount = invoice.remainingAmount || (invoice.remainingAmount - (invoice.paidAmount || 0));
+        defaultPaidAmount = invoice.remainingAmount;
+      }
+
+      setPaymentUpdate({
+        paymentStatus: defaultPaymentStatus,
+        paymentMethod: '',
+        paymentDate: new Date().toISOString().split('T')[0],
+        paidAmount: defaultPaidAmount,
+        notes: '',
+        useRazorpay: false
+      });
+      // Reset dropdown states
+      setShowPaymentStatusDropdown(false);
+      setShowPaymentMethodDropdown(false);
+      setShowPaymentModal(true);
+    } else {
+      const quotation = item as Quotation;
+      setSelectedQuotationForPayment(quotation);
+      setShowAdvancePaymentModal(true);
     }
-
-    setPaymentUpdate({
-      paymentStatus: defaultPaymentStatus,
-      paymentMethod: '',
-      paymentDate: new Date().toISOString().split('T')[0],
-      paidAmount: defaultPaidAmount,
-      notes: '',
-      useRazorpay: false
-    });
-    // Reset dropdown states
-    setShowPaymentStatusDropdown(false);
-    setShowPaymentMethodDropdown(false);
-    setShowPaymentModal(true);
   };
 
   const submitStatusUpdate = async () => {
@@ -1834,11 +2011,18 @@ const InvoiceManagement: React.FC = () => {
         bankBranch: newInvoice.bankBranch || '',
         // Customer address details
         customerAddress: selectedAddress ? {
+          id: selectedAddress.id,
           address: selectedAddress.address,
           state: selectedAddress.state,
           district: selectedAddress.district,
-          pincode: selectedAddress.pincode
+          pincode: selectedAddress.pincode,
+          isPrimary: selectedAddress.isPrimary || false,
+          gstNumber: selectedAddress.gstNumber
         } : null,
+        // New detailed address fields
+        billToAddress: newInvoice.billToAddress || null,
+        shipToAddress: newInvoice.shipToAddress || null,
+        supplierAddress: newInvoice.supplierAddress || null,
         // Additional invoice fields
         referenceNo: newInvoice.referenceNo || '',
         referenceDate: newInvoice.referenceDate || '',
@@ -1918,16 +2102,19 @@ const InvoiceManagement: React.FC = () => {
     const matchesSearch =
       invoice?.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice?.supplierName?.toLowerCase().includes(searchTerm.toLowerCase());
+      invoice?.supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
     const matchesPayment = paymentFilter === 'all' || invoice.paymentStatus === paymentFilter;
     const matchesType = invoice.invoiceType === invoiceType;
     return matchesSearch && matchesStatus && matchesPayment && matchesType;
   });
+
+  console.log("filteredInvoices:", filteredInvoices);
+
   const filteredQuotations = quotations.filter(quotation => {
     const matchesSearch =
       quotation?.quotationNumber?.toLowerCase().includes(searchQuotationTerm.toLowerCase()) ||
-      quotation?.customer?.name?.toLowerCase().includes(searchQuotationTerm.toLowerCase()) 
+      quotation?.customer?.name?.toLowerCase().includes(searchQuotationTerm.toLowerCase())
     return matchesSearch;
   });
 
@@ -2387,14 +2574,14 @@ const InvoiceManagement: React.FC = () => {
         <div class="from-to-section">
           <div class="from-to-box">
             <h3>From:</h3>
-            ${selectedInvoice.invoiceType === 'purchase' ? 
-              `<div>
-              <strong>${selectedInvoice.customer?.name ? selectedInvoice.customer?.name : selectedInvoice.supplierName || 'N/A'}</strong><br>
+            ${selectedInvoice.invoiceType === 'purchase' ?
+        `<div>
+              <strong>${selectedInvoice.customer?.name ? selectedInvoice.customer?.name : selectedInvoice?.supplier?.name || 'N/A'}</strong><br>
               ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
               ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
-              ${selectedInvoice.invoiceType === 'purchase' ? 
-                `${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}` : ''}` :
-                `${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}` : ''}`}          
+              ${selectedInvoice.invoiceType === 'purchase' ?
+          `${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}<br>${selectedInvoice.supplierAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.supplierAddress.gstNumber}<br>` : ''}${selectedInvoice.supplierAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}` :
+          `${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}<br>${selectedInvoice.billToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}<br>` : ''}${selectedInvoice.billToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}`}          
                 </div> `: `
             <div>
               <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
@@ -2415,12 +2602,12 @@ const InvoiceManagement: React.FC = () => {
               ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
             </div>` : `
             <div>
-              <strong>${selectedInvoice.customer?.name ? selectedInvoice.customer?.name : selectedInvoice.supplierName || 'N/A'}</strong><br>
+              <strong>${selectedInvoice.customer?.name ? selectedInvoice.customer?.name : selectedInvoice?.supplier?.name || 'N/A'}</strong><br>
               ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
               ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
-              ${selectedInvoice.invoiceType === 'purchase' ? 
-                `${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}` : ''}` :
-                `${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}` : ''}`}          
+              ${selectedInvoice.invoiceType === 'purchase' ?
+        `${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}<br>${selectedInvoice.supplierAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.supplierAddress.gstNumber}<br>` : ''}${selectedInvoice.supplierAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}` :
+        `${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}<br>${selectedInvoice.billToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}<br>` : ''}${selectedInvoice.billToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}`}          
                 </div> `} 
           </div>
           ${selectedInvoice.invoiceType === 'purchase' ? '' : `
@@ -2428,7 +2615,7 @@ const InvoiceManagement: React.FC = () => {
             <h3>Ship To:</h3>
             <div>
               <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
-              ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.state || 'N/A'}` : ''}
+              ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}<br>` : ''}${selectedInvoice.shipToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}
             </div>
           </div>`}
         </div>
@@ -3088,6 +3275,140 @@ const InvoiceManagement: React.FC = () => {
     }
   };
 
+ 
+
+  // Submit advance payment
+  const submitAdvancePayment = async () => {
+    if (!selectedQuotationForPayment) return;
+
+    // Validate form before submission
+    const errors: Record<string, string> = {};
+
+    if (!advancePaymentData.amount || advancePaymentData.amount <= 0) {
+      errors.amount = 'Payment amount must be greater than 0';
+    }
+
+    if (advancePaymentData.amount > (selectedQuotationForPayment.grandTotal || 0)) {
+      errors.amount = 'Payment amount cannot exceed quotation total';
+    }
+
+    if (!advancePaymentData.paymentMethod) {
+      errors.paymentMethod = 'Payment method is required';
+    }
+
+    if (!advancePaymentData.paymentDate) {
+      errors.paymentDate = 'Payment date is required';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      toast.error('Please fix the errors before submitting');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setFormErrors({}); // Clear any previous errors
+
+      const response = await apiClient.quotations.updateAdvancePayment(selectedQuotationForPayment._id, {
+        advanceAmount: advancePaymentData.amount,
+        advancePaymentMethod: advancePaymentData.paymentMethod,
+        advancePaymentDate: advancePaymentData.paymentDate,
+        advancePaymentNotes: advancePaymentData.notes
+      });
+
+      if (response.success) {
+        toast.success('Advance payment updated successfully');
+        setShowAdvancePaymentModal(false);
+        setSelectedQuotationForPayment(null);
+        setAdvancePaymentData({
+          amount: 0,
+          paymentMethod: '',
+          paymentDate: '',
+          notes: '',
+          useRazorpay: false
+        });
+        fetchQuotations(); // Refresh quotations
+      }
+    } catch (error: any) {
+      console.error('Error updating advance payment:', error);
+
+      // Handle API validation errors
+      if (error.message && error.message.includes('Validation failed')) {
+        toast.error('Please check the payment details and try again');
+      } else {
+        toast.error('Failed to update advance payment');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Update the quotation table structure
+  const getQuotationTableHeaders = () => {
+    return (
+      <thead className="bg-gray-50">
+        <tr>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Quotation No
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Customer
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Total Amount
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Paid Amount
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Remaining
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Payment Status
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Status
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Valid Until
+          </th>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            Actions
+          </th>
+        </tr>
+      </thead>
+    );
+  };
+
+  // Get advance payment status color
+  const getAdvancePaymentStatusColor = (status: string) => {
+    switch (status) {
+      case 'paid':
+        return 'bg-green-100 text-green-800';
+      case 'partial':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'pending':
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  // Get advance payment status label
+  const getAdvancePaymentStatusLabel = (status: string) => {
+    switch (status) {
+      case 'paid':
+        return 'Paid';
+      case 'partial':
+        return 'Partial';
+      case 'pending':
+      default:
+        return 'Pending';
+    }
+  };
+
+
+
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader
@@ -3171,6 +3492,7 @@ const InvoiceManagement: React.FC = () => {
           </div>
         ))}
       </div>
+
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
@@ -3318,16 +3640,24 @@ const InvoiceManagement: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
                 {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>}
                 {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>}
-                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>}
+                {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {invoiceType === 'quotation' ? 'Total Amount' : 'Amount'}
+                </th> */}
+                {invoiceType === 'quotation' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Advance Amount</th>}
+                {invoiceType === 'quotation' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>}
+                {invoiceType === 'quotation' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Advance Status</th>}
+                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase' || invoiceType === 'challan') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>}
                 {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>}
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {invoiceType === 'quotation' ? 'Valid Until' : 'Due Date'}
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {(invoiceType === 'quotation' ? quotationLoading : loading) ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={invoiceType === 'quotation' ? 9 : 9} className="px-6 py-8 text-center text-gray-500">
                     <div className="flex justify-center items-center space-x-2">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                       <span>Loading {invoiceType === 'quotation' ? 'quotations' : 'invoices'}...</span>
@@ -3336,7 +3666,7 @@ const InvoiceManagement: React.FC = () => {
                 </tr>
               ) : (invoiceType === 'quotation' ? filteredQuotations : filteredInvoices).length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={invoiceType === 'quotation' ? 9 : 9} className="px-6 py-8 text-center text-gray-500">
                     <div className="text-center">
                       <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                       <p className="text-lg font-medium text-gray-900 mb-2">No {invoiceType === 'quotation' ? 'quotations' : 'invoices'} found</p>
@@ -3363,9 +3693,20 @@ const InvoiceManagement: React.FC = () => {
                     <td className="px-4 py-3 text-sm font-medium text-gray-900">
                       ₹{quotation.grandTotal?.toFixed(2) || '0.00'}
                     </td>
+                    <td className="px-4 py-3 text-sm font-medium text-green-600">
+                      ₹{(quotation.paidAmount || 0).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-sm font-medium text-red-600">
+                      ₹{(quotation.remainingAmount || 0).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3">
+                                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(quotation.paymentStatus || 'pending')}`}>
+                          {getPaymentStatusLabel(quotation.paymentStatus || 'pending')}
+                        </span>
+                    </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                        Quotation
+                        {quotation.status?.charAt(0).toUpperCase() + quotation.status?.slice(1) || 'Draft'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
@@ -3392,6 +3733,14 @@ const InvoiceManagement: React.FC = () => {
                             <Edit className="w-4 h-4" />
                           </button>
                         </Tooltip>
+                        <Tooltip content="Update Payment" position="top">
+                          <button
+                            onClick={() => handleUpdatePayment(quotation, 'quotation')}
+                            className="text-green-600 hover:text-green-900 p-1.5 hover:bg-green-50 rounded transition-colors duration-200"
+                          >
+                            <IndianRupee className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
                         <Tooltip content="Delete" position="top">
                           <button
                             onClick={() => handleDeleteQuotation(quotation)}
@@ -3413,7 +3762,7 @@ const InvoiceManagement: React.FC = () => {
                     <td className="px-4 py-3">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
-                          {invoiceType === 'purchase' ? invoice.supplierName : invoice.customer?.name}
+                          {invoiceType === 'purchase' ? invoice?.supplier?.name : invoice.customer?.name}
                         </div>
                         <div className="text-xs text-gray-500">
                           {invoiceType === 'purchase' ? invoice.supplierEmail : invoice.customer?.email}
@@ -3589,7 +3938,7 @@ const InvoiceManagement: React.FC = () => {
                   {selectedInvoice?.invoiceType === 'purchase' ? (
                     // For purchase invoices: Show supplier
                     <div className="text-sm text-gray-600">
-                      <p className="font-medium">{selectedInvoice?.supplierName || 'N/A'}</p>
+                      <p className="font-medium">{selectedInvoice?.supplier?.name || 'N/A'}</p>
                       {selectedInvoice?.supplierEmail && <p>Email: {selectedInvoice?.supplierEmail}</p>}
                       {selectedInvoice?.supplierAddress && (
                         <>
@@ -3599,6 +3948,14 @@ const InvoiceManagement: React.FC = () => {
                             <p>{selectedInvoice?.supplierAddress?.district}, {selectedInvoice?.supplierAddress?.pincode}</p>
                           )}
                           {selectedInvoice?.supplierAddress?.state && <p>{selectedInvoice?.supplierAddress?.state}</p>}
+                          {selectedInvoice?.supplierAddress?.gstNumber && (
+                            <p className="text-sm text-gray-600">GST: {selectedInvoice?.supplierAddress?.gstNumber}</p>
+                          )}
+                          {selectedInvoice?.supplierAddress?.isPrimary && (
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 mt-1">
+                              Primary Address
+                            </span>
+                          )}
                         </>
                       )}
                     </div>
@@ -3652,6 +4009,14 @@ const InvoiceManagement: React.FC = () => {
                             <p>{selectedInvoice?.billToAddress?.district}, {selectedInvoice?.billToAddress?.pincode}</p>
                           )}
                           {selectedInvoice?.billToAddress?.state && <p>{selectedInvoice?.billToAddress?.state}</p>}
+                          {selectedInvoice?.billToAddress?.gstNumber && (
+                            <p className="text-sm text-gray-600">GST: {selectedInvoice?.billToAddress?.gstNumber}</p>
+                          )}
+                          {selectedInvoice?.billToAddress?.isPrimary && (
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 mt-1">
+                              Primary Address
+                            </span>
+                          )}
                         </>
                       )}
                     </div>
@@ -3686,6 +4051,14 @@ const InvoiceManagement: React.FC = () => {
                             <p>{selectedInvoice?.shipToAddress?.district}, {selectedInvoice?.shipToAddress?.pincode}</p>
                           )}
                           {selectedInvoice?.shipToAddress?.state && <p>{selectedInvoice?.shipToAddress?.state}</p>}
+                          {selectedInvoice?.shipToAddress?.gstNumber && (
+                            <p className="text-sm text-gray-600">GST: {selectedInvoice?.shipToAddress?.gstNumber}</p>
+                          )}
+                          {selectedInvoice?.shipToAddress?.isPrimary && (
+                            <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 mt-1">
+                              Primary Address
+                            </span>
+                          )}
                         </>
                       )}
                     </div>
@@ -3840,12 +4213,14 @@ const InvoiceManagement: React.FC = () => {
 
 
               {/* Edit Mode Actions */}
-              {editMode && hasAmountMismatch(selectedInvoice) && (
+              {editMode && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-gray-600">
-                      <p>Make adjustments to unit prices and tax rates to match the external total.</p>
-                      <p className="font-medium mt-1">Target Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toFixed(2)}</p>
+                      <p>Make adjustments to unit prices and tax rates.</p>
+                      {hasAmountMismatch(selectedInvoice) && (
+                        <p className="font-medium mt-1">Target Total: ₹{(selectedInvoice?.externalInvoiceTotal ?? 0).toFixed(2)}</p>
+                      )}
                     </div>
                     <div className="flex space-x-2">
                       <button
@@ -3862,10 +4237,13 @@ const InvoiceManagement: React.FC = () => {
                       </button>
                       <button
                         onClick={async () => {
-                          await handleSaveChanges();
-                          // Update the original data after successful save
-                          if (selectedInvoice) {
-                            setOriginalInvoiceData(JSON.parse(JSON.stringify(selectedInvoice)));
+                          const success = await handleSaveChanges();
+                          if (success) {
+                            // Update the original data after successful save
+                            if (selectedInvoice) {
+                              setOriginalInvoiceData(JSON.parse(JSON.stringify(selectedInvoice)));
+                            }
+                            setEditMode(false);
                           }
                         }}
                         disabled={savingChanges}
@@ -4373,7 +4751,7 @@ const InvoiceManagement: React.FC = () => {
                         <div className="relative dropdown-container">
                           <button
                             onClick={() => setShowPaymentStatusDropdown(!showPaymentStatusDropdown)}
-                            className="flex items-center justify-between w-full px-4 py-3 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400 bg-gray-50"
+                            className={`flex items-center justify-between w-full px-4 py-3 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400 bg-gray-50 ${formErrors.paymentStatus ? 'border-red-500' : 'border-gray-300'}`}
                           >
                             <span className="text-gray-700 font-medium">{getPaymentStatusLabel(paymentUpdate.paymentStatus)}</span>
                             <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPaymentStatusDropdown ? 'rotate-180' : ''}`} />
@@ -4429,7 +4807,7 @@ const InvoiceManagement: React.FC = () => {
                         <div className="relative dropdown-container">
                           <button
                             onClick={() => setShowPaymentMethodDropdown(!showPaymentMethodDropdown)}
-                            className="flex items-center justify-between w-full px-4 py-3 text-left border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400 bg-gray-50"
+                            className={`flex items-center justify-between w-full px-4 py-3 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400 bg-gray-50 ${formErrors.paymentMethod ? 'border-red-500' : 'border-gray-300'}`}
                           >
                             <span className="text-gray-700 font-medium">{getPaymentMethodLabel(paymentUpdate.paymentMethod)}</span>
                             <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPaymentMethodDropdown ? 'rotate-180' : ''}`} />
@@ -4578,6 +4956,8 @@ const InvoiceManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+
 
 
 
@@ -4820,6 +5200,38 @@ const InvoiceManagement: React.FC = () => {
           cancelText="Cancel"
         />
       )}
+
+      {/* Unified Update Payment Modal */}
+      <UpdatePaymentModal
+        isOpen={showAdvancePaymentModal}
+        onClose={() => setShowAdvancePaymentModal(false)}
+        item={selectedQuotationForPayment}
+        itemType="quotation"
+        onSubmit={async (paymentData) => {
+          try {
+            setSubmitting(true);
+            const response = await apiClient.quotations.updateAdvancePayment(selectedQuotationForPayment!._id, {
+              advanceAmount: paymentData.paidAmount,
+              advancePaymentMethod: paymentData.paymentMethod,
+              advancePaymentDate: paymentData.paymentDate,
+              advancePaymentNotes: paymentData.notes
+            });
+
+            if (response.success) {
+              toast.success('Payment updated successfully');
+              setShowAdvancePaymentModal(false);
+              setSelectedQuotationForPayment(null);
+              fetchQuotations();
+            }
+          } catch (error: any) {
+            console.error('Error updating payment:', error);
+            toast.error('Failed to update payment');
+          } finally {
+            setSubmitting(false);
+          }
+        }}
+        submitting={submitting}
+      />
 
     </div>
   );

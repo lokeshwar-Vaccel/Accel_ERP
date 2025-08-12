@@ -1154,6 +1154,12 @@ class ApiClient {
         body: JSON.stringify(quotationData),
       }),
 
+    updateAdvancePayment: (id: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any; message: string }>(`/quotations/${id}/advance-payment`, {
+        method: 'PUT',
+        body: JSON.stringify(paymentData),
+      }),
+
     delete: (id: string) =>
       this.makeRequest<{ success: boolean; message: string }>(`/quotations/${id}`, {
         method: 'DELETE',
@@ -1171,7 +1177,7 @@ class ApiClient {
         }
       }).then(res => res.text()),
     download: (invoiceId: string) =>
-      fetch(`${this.baseURL}/quotations/download/${invoiceId}`, {
+      fetch(`${this.baseURL}/api/v1/quotations/download/${invoiceId}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
         }
@@ -1568,11 +1574,7 @@ class ApiClient {
         this.makeRequest<{ success: boolean; data: any }>(`/dg-reports/executive-performance${params ? `?${new URLSearchParams(params)}` : ''}`),
     },
 
-    // DG Sales Customers
-    customers: {
-      getAll: (params?: any) =>
-        this.makeRequest<{ success: boolean; data: any[]; page: number; limit: number; total: number; totalPages: number }>(`/customers/dg-sales${params ? `?${new URLSearchParams(params)}` : ''}`),
-    },
+
 
 
 

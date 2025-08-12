@@ -77,7 +77,51 @@ interface Product {
     availableQuantity?: number;
 }
 
-
+interface PurchaseOrder {
+    _id: string;
+    poNumber: string;
+    supplier: string | Supplier;
+    supplierEmail: string | any;
+    items: Array<{
+        product: string | { 
+            _id: string; 
+            name: string; 
+            partNo?: string;
+            hsnNumber?: string;
+            brand?: string;
+            category?: string;
+            gst?: number;
+            price?: number;
+        };
+        quantity: number;
+        unitPrice: number;
+        totalPrice: number;
+        taxRate: number;
+        receivedQuantity?: number;
+        notes?: string;
+    }>;
+    totalAmount: number;
+    status: PurchaseOrderStatus;
+    orderDate: string;
+    expectedDeliveryDate?: string;
+    actualDeliveryDate?: string;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+    sourceType?: 'manual' | 'amc' | 'service' | 'inventory';
+    sourceId?: string;
+    department?: string;
+    notes?: string;
+    attachments?: string[];
+    approvedBy?: string;
+    createdBy: string | {
+        _id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+    };
+    createdAt: string;
+    updatedAt: string;
+    supplierAddress?: SupplierAddress;
+}
 
 interface POFormData {
     supplier: string;
@@ -95,6 +139,19 @@ interface POFormData {
 const CreatePurchaseOrder: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
+    
+    // Get ID from location state
+    const poId = location.state?.poId;
+    
+    // Check if we're in edit mode
+    const isEditMode = Boolean(poId);
+    
+    // Redirect if trying to edit without PO ID
+    useEffect(() => {
+      if (location.pathname === '/purchase-order-management/edit' && !poId) {
+        navigate('/purchase-order-management');
+      }
+    }, [location.pathname, poId, navigate]);
 
     // State management
     const [formData, setFormData] = useState<POFormData>({
@@ -125,12 +182,16 @@ const CreatePurchaseOrder: React.FC = () => {
         }]
     });
 
+    console.log("formData000:",formData);
+    
+
     const [errors, setErrors] = useState<string[]>([]);
     const [submitting, setSubmitting] = useState(false);
     const [suppliers, setSuppliers] = useState<Supplier[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [addresses, setAddresses] = useState<SupplierAddress[]>([]);
     const [loading, setLoading] = useState(true);
+    const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
 
     // Dropdown states
     const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
@@ -228,6 +289,13 @@ const CreatePurchaseOrder: React.FC = () => {
     useEffect(() => {
         fetchAllData();
     }, []);
+
+        // Fetch PO data if in edit mode
+    useEffect(() => {
+      if (isEditMode && poId) {
+        fetchPOData();
+      }
+    }, [isEditMode, poId]);
 
     // Keyboard navigation handler
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -340,6 +408,92 @@ const CreatePurchaseOrder: React.FC = () => {
         }
     };
 
+    const fetchPOData = async () => {
+        if (!poId) return;
+        
+        try {
+            setLoading(true);
+            const response = await apiClient.purchaseOrders.getById(poId);
+            
+            if (response.success && response.data?.order) {
+                const po = response.data.order as PurchaseOrder;
+                console.log('Fetched PO data:', response.data);
+                setEditingPO(po);
+                
+                // Extract supplier address from the PO
+                let supplierAddress: SupplierAddress | undefined = undefined;
+                if (po.supplierAddress) {
+                    supplierAddress = po.supplierAddress;
+                }
+
+                // Map PO data to form data
+                const mappedFormData: POFormData = {
+                    supplier: typeof po.supplier === 'string' ? po.supplier : po.supplier._id,
+                    supplierEmail: typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)?.email || '',
+                    supplierAddress,
+                    expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : '',
+                    priority: po.priority || 'low',
+                    sourceType: po.sourceType || 'manual',
+                    sourceId: po.sourceId || '',
+                    department: po.department || '',
+                    notes: po.notes || '',
+                    items: po.items.map(item => ({
+                        product: typeof item.product === 'string' ? item.product : item.product._id,
+                        quantity: item.quantity,
+                        gndp: item.unitPrice, // Map unitPrice to gndp
+                        totalPrice: item.totalPrice,
+                        taxRate: item.taxRate,
+                        // Map additional product fields if product is populated
+                        name: typeof item.product === 'string' ? undefined : item.product.name,
+                        hsnNumber: typeof item.product === 'string' ? undefined : item.product.hsnNumber,
+                        uom: typeof item.product === 'string' ? undefined : (item.product as any).uom,
+                        partNo: typeof item.product === 'string' ? undefined : item.product.partNo,
+                        brand: typeof item.product === 'string' ? undefined : item.product.brand,
+                        category: typeof item.product === 'string' ? undefined : item.product.category
+                    }))
+                };
+
+                console.log('Mapped form data:', mappedFormData);
+                console.log('Original PO items:', po.items);
+                setFormData(mappedFormData);
+
+                // Fetch supplier details to get addresses and set search terms
+                if (typeof po.supplier === 'string') {
+                    try {
+                        const supplierResponse = await apiClient.customers.getById(po.supplier);
+                        if (supplierResponse.success && supplierResponse.data?.customer) {
+                            const supplier = supplierResponse.data.customer;
+                            console.log('Fetched supplier data:', supplier);
+                            
+                            // Set supplier search term
+                            setSupplierSearchTerm(supplier.name);
+                            
+                            // Set addresses for dropdown
+                            if (supplier.addresses && Array.isArray(supplier.addresses)) {
+                                setAddresses(supplier.addresses);
+                            }
+                            
+                            // Set address search term if we have supplierAddress
+                            if (supplierAddress) {
+                                setAddressSearchTerm(`${supplierAddress.address}, ${supplierAddress.district}, ${supplierAddress.state} - ${supplierAddress.pincode}`);
+                            }
+                        }
+                    } catch (supplierError) {
+                        console.error('Error fetching supplier data:', supplierError);
+                        // Still set the supplier search term from the PO data
+                        setSupplierSearchTerm(po.supplier);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error fetching PO data:', error);
+            toast.error('Failed to load purchase order data');
+            navigate('/purchase-order-management');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     // Form handlers
     const handleSupplierSelect = (supplierId: string) => {
         const supplier = suppliers.find(s => s._id === supplierId);
@@ -401,12 +555,41 @@ const CreatePurchaseOrder: React.FC = () => {
     };
 
     const removeItem = (index: number) => {
-        if (formData.items.length > 1) {
-            setFormData(prev => ({
-                ...prev,
-                items: prev.items.filter((_, i) => i !== index)
-            }));
+        // Allow deleting even the last row
+        setFormData(prev => ({
+            ...prev,
+            items: prev.items.filter((_, i) => i !== index)
+        }));
+        
+        // If all items are deleted, add a new empty item
+        if (formData.items.length === 1) {
+            setTimeout(() => {
+                addItem();
+            }, 100);
         }
+    };
+
+    const clearProductFields = (index: number) => {
+        setFormData(prev => ({
+            ...prev,
+            items: prev.items.map((item, i) => {
+                if (i === index) {
+                    return {
+                        ...item,
+                        product: '',
+                        name: '',
+                        partNo: '',
+                        gndp: 0,
+                        taxRate: 0,
+                        hsnNumber: '',
+                        uom: '',
+                        totalPrice: 0,
+                        isNewProduct: false
+                    };
+                }
+                return item;
+            })
+        }));
     };
 
     const updateItem = (index: number, field: keyof POItem, value: any) => {
@@ -424,17 +607,18 @@ const CreatePurchaseOrder: React.FC = () => {
                             updatedItem.name = productObj.name;
                             updatedItem.taxRate = productObj.gst || 0;
                             updatedItem.hsnNumber = (productObj as any).hsnNumber || '';
-                            updatedItem.uom = (productObj as any).uom || 'Nos';
+                            updatedItem.uom = (productObj as any).uom || 'nos';
                         }
                     }
 
                     // Auto-calculate total price
-                    if (field === 'quantity' || field === 'gndp' || field === 'taxRate') {
-                        const quantity = field === 'quantity' ? value : item.quantity;
-                        const gndp = field === 'gndp' ? value : item.gndp;
-                        const taxRate = field === 'taxRate' ? value : item.taxRate;
+                    if (field === 'quantity' || field === 'gndp' || field === 'taxRate' || field === 'product') {
+                        const quantity = Number(field === 'quantity' ? value : (updatedItem.quantity || item.quantity)) || 0;
+                        const gndp = Number(field === 'gndp' ? value : (updatedItem.gndp || item.gndp)) || 0;
+                        const taxRate = Number(field === 'taxRate' ? value : (updatedItem.taxRate || item.taxRate)) || 0;
                         const subtotal = quantity * gndp;
-                        updatedItem.totalPrice = subtotal * (1 + (taxRate || 0) / 100);
+                        updatedItem.totalPrice = subtotal * (1 + taxRate / 100);
+                        
                     }
                     return updatedItem;
                 }
@@ -465,11 +649,40 @@ const CreatePurchaseOrder: React.FC = () => {
         return supplier?.name || '';
     };
 
-    const getAddressLabel = (addressId: string) => {
+    // const getAddressLabel = (addressId: string) => {
+    //     const address = addresses.find(a => a.id === addressId);
+    //     if (!address) return '';
+    //     return `${address.address}, ${address.district}, ${address.state} - ${address.pincode}`;
+    // };
+
+    const getAddressLabel = (addressId?: string) => {
+        if (!addressId) return '';
+    
+        // If in edit mode and formData already has full object
+        if (typeof addressId !== 'string' && typeof addressId === 'object') {
+            const addr = addressId;
+            return formatAddressString(addr);
+        }
+    
+        // Otherwise, find by ID from addresses list
         const address = addresses.find(a => a.id === addressId);
         if (!address) return '';
-        return `${address.address}, ${address.district}, ${address.state} - ${address.pincode}`;
+    
+        return formatAddressString(address);
     };
+    
+    // Small helper to avoid repeating string concatenation
+    const formatAddressString = (addr: any) => {
+        const parts = [
+            addr.address,
+            addr.district,
+            addr.state && `- ${addr.state}`,
+            addr.pincode && `${addr.pincode}`
+        ].filter(Boolean);
+    
+        return parts.join(', ');
+    };
+    
 
     const validateForm = (): boolean => {
         const newErrors: string[] = [];
@@ -762,7 +975,6 @@ const CreatePurchaseOrder: React.FC = () => {
 
             console.log("updatedItems:", updatedItems);
 
-
             // Filter out empty items and map our frontend fields to backend expected fields
             const mappedItems = updatedItems
                 .filter(item => {
@@ -776,7 +988,9 @@ const CreatePurchaseOrder: React.FC = () => {
                     totalPrice: item.totalPrice,
                     taxRate: item.taxRate || 0,
                     description: item.name || item.description || '', // Use name as description
-                    receivedQuantity: 0
+                    receivedQuantity: editingPO ? (editingPO.items.find(poItem => 
+                        typeof poItem.product === 'string' ? poItem.product === item.product : poItem.product._id === item.product
+                    )?.receivedQuantity || 0) : 0
                 }));
 
             console.log("mappedItems:", mappedItems);
@@ -786,8 +1000,7 @@ const CreatePurchaseOrder: React.FC = () => {
                 return;
             }
 
-            // Now create the purchase order with mapped items
-            const response = await apiClient.purchaseOrders.create({
+            const poData = {
                 supplier: formData.supplier,
                 supplierEmail: formData.supplierEmail,
                 supplierAddress: formData.supplierAddress,
@@ -799,13 +1012,23 @@ const CreatePurchaseOrder: React.FC = () => {
                 notes: formData.notes,
                 items: mappedItems,
                 totalAmount: calculateTotal()
-            });
+            };
 
-            toast.success('Purchase Order created successfully!');
+            let response;
+            if (isEditMode && editingPO) {
+                // Update existing purchase order
+                response = await apiClient.purchaseOrders.update(editingPO._id, poData);
+                toast.success('Purchase Order updated successfully!');
+            } else {
+                // Create new purchase order
+                response = await apiClient.purchaseOrders.create(poData);
+                toast.success('Purchase Order created successfully!');
+            }
+
             navigate('/purchase-order-management');
         } catch (error: any) {
-            console.error('Error creating purchase order:', error);
-            toast.error(error.message || 'Failed to create purchase order');
+            console.error('Error saving purchase order:', error);
+            toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} purchase order`);
         } finally {
             setSubmitting(false);
         }
@@ -917,16 +1140,31 @@ const CreatePurchaseOrder: React.FC = () => {
                 e.preventDefault();
                 if (e.shiftKey) {
                     // Shift+Tab: Move to previous field (if any)
-                    // For now, just close dropdown
                     setShowSupplierDropdown(false);
                     setSupplierSearchTerm('');
                     setHighlightedSupplierIndex(-1);
                     setTimeout(() => {
-                        addressInputRef.current?.focus();
-                        setShowAddressDropdown(true);
+                        // Check if address field is disabled (no supplier selected)
+                        if (!formData.supplier) {
+                            // Address is disabled, stay in supplier field
+                            supplierInputRef.current?.focus();
+                            setShowSupplierDropdown(true);
+                        } else {
+                            // Address is enabled, check if it has a value
+                            const addressValue = addressInputRef.current?.value?.trim();
+                            console.log("addressValue:", addressValue);
+                            
+                            if (addressValue) {
+                                addressInputRef.current?.focus();
+                                setShowAddressDropdown(true);
+                            } else {
+                                supplierInputRef.current?.focus();
+                                setShowSupplierDropdown(true);
+                            }
+                        }
                     }, 50);
                 } else {
-                    // Tab: Move to next field (Address)
+                    // Tab: Move to next field (Address or Delivery Date if address is disabled)
                     if (highlightedSupplierIndex >= 0 && filteredSuppliers[highlightedSupplierIndex]) {
                         handleSupplierSelect(filteredSuppliers[highlightedSupplierIndex]._id);
                     } else {
@@ -934,8 +1172,15 @@ const CreatePurchaseOrder: React.FC = () => {
                         setSupplierSearchTerm('');
                         setHighlightedSupplierIndex(-1);
                         setTimeout(() => {
-                            deliveryDateInputRef.current?.focus();
-                            // setShowDeliveryDateDropdown(true);
+                            // Check if address field is disabled (no supplier selected)
+                            if (!formData.supplier) {
+                                // Address is disabled, skip to delivery date
+                                deliveryDateInputRef.current?.focus();
+                            } else {
+                                // Address is enabled, go to address field
+                                addressInputRef.current?.focus();
+                                setShowAddressDropdown(true);
+                            }
                         }, 50);
                     }
                 }
@@ -1281,7 +1526,7 @@ const CreatePurchaseOrder: React.FC = () => {
         const currentHighlighted = highlightedProductIndex[rowIndex] ?? -1;
 
         // Ctrl+Delete or Command+Delete: Remove current row
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'Delete' || e.key === 'Backspace')) {
             e.preventDefault();
             removeItem(rowIndex);
             return;
@@ -1298,6 +1543,14 @@ const CreatePurchaseOrder: React.FC = () => {
                         prevQuantityInput.focus();
                         prevQuantityInput.select();
                     }
+                } else {
+                    setTimeout(() => {
+                        const departmentInput = document.querySelector('[data-field="department"]') as HTMLInputElement;
+                        if (departmentInput) {
+                            departmentInput.focus();
+                            setShowDepartmentDropdown(true);
+                        }
+                    }, 50);
                 }
                 // If first row, stay in same field (no previous row)
                 return;
@@ -1310,13 +1563,33 @@ const CreatePurchaseOrder: React.FC = () => {
                 return;
             }
 
-            // Auto-select highlighted product or first match if there's a search term
-            if (matchingProducts.length > 0) {
+            // Check if user has interacted (searched or navigated)
+            const currentItem = formData.items[rowIndex];
+            const hasUserInteracted = searchTerm.trim() || currentHighlighted >= 0;
+            const isProductAlreadySelected = currentItem && currentItem.product && currentItem.product !== `temp-${Date.now()}`;
+            
+            if (hasUserInteracted && matchingProducts.length > 0) {
+                // User has searched or navigated, update to new selection
                 const selectedProduct = currentHighlighted >= 0 && currentHighlighted < matchingProducts.length
                     ? matchingProducts[currentHighlighted]
-                    : matchingProducts[0];
+                    : matchingProducts[0]; // Select first product if no highlighted one
                 updateItem(rowIndex, 'product', selectedProduct._id);
                 updateProductSearchTerm(rowIndex, '');
+                setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
+                setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
+            } else if (isProductAlreadySelected) {
+                // No interaction, keep already selected product
+                setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
+                setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
+            } else if (matchingProducts.length > 0) {
+                // No product selected and no interaction, select first product
+                const selectedProduct = matchingProducts[0];
+                updateItem(rowIndex, 'product', selectedProduct._id);
+                updateProductSearchTerm(rowIndex, '');
+                setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
+                setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
+            } else {
+                // If no products found, just close dropdown and clear search
                 setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
             }
@@ -1340,11 +1613,45 @@ const CreatePurchaseOrder: React.FC = () => {
                 return;
             }
 
-            // Auto-select highlighted product or first match if there's a search term
-            if (matchingProducts.length > 0) {
+            // Check if user has interacted (searched or navigated)
+            const currentItem = formData.items[rowIndex];
+            const hasUserInteracted = searchTerm.trim() || currentHighlighted >= 0;
+            const isProductAlreadySelected = currentItem && currentItem.product && currentItem.product !== `temp-${Date.now()}`;
+            
+            if (hasUserInteracted && matchingProducts.length > 0) {
+                // User has searched or navigated, update to new selection
                 const selectedProduct = currentHighlighted >= 0 && currentHighlighted < matchingProducts.length
                     ? matchingProducts[currentHighlighted]
-                    : matchingProducts[0];
+                    : matchingProducts[0]; // Select first product if no highlighted one
+                updateItem(rowIndex, 'product', selectedProduct._id);
+                updateProductSearchTerm(rowIndex, '');
+                setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
+                setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
+
+                // Move directly to quantity field in same row
+                setTimeout(() => {
+                    const quantityInput = document.querySelector(`[data-row="${rowIndex}"][data-field="quantity"]`) as HTMLInputElement;
+                    if (quantityInput) {
+                        quantityInput.focus();
+                        quantityInput.select();
+                    }
+                }, 100);
+            } else if (isProductAlreadySelected) {
+                // No interaction, keep already selected product
+                setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
+                setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
+                
+                // Move directly to quantity field in same row
+                setTimeout(() => {
+                    const quantityInput = document.querySelector(`[data-row="${rowIndex}"][data-field="quantity"]`) as HTMLInputElement;
+                    if (quantityInput) {
+                        quantityInput.focus();
+                        quantityInput.select();
+                    }
+                }, 100);
+            } else if (matchingProducts.length > 0) {
+                // No product selected and no interaction, select first product
+                const selectedProduct = matchingProducts[0];
                 updateItem(rowIndex, 'product', selectedProduct._id);
                 updateProductSearchTerm(rowIndex, '');
                 setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
@@ -1359,11 +1666,17 @@ const CreatePurchaseOrder: React.FC = () => {
                     }
                 }, 100);
             } else {
+                // If no products found, just close dropdown and clear search
+                setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
+                setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
+                
                 // If no search term, move to Notes field
-                setTimeout(() => {
-                    const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
-                    if (notesInput) notesInput.focus();
-                }, 100);
+                if (!searchTerm.trim()) {
+                    setTimeout(() => {
+                        const notesInput = document.querySelector('[data-field="notes"]') as HTMLTextAreaElement;
+                        if (notesInput) notesInput.focus();
+                    }, 100);
+                }
             }
 
         } else if (e.key === 'ArrowDown') {
@@ -1415,7 +1728,7 @@ const CreatePurchaseOrder: React.FC = () => {
         const currentQuantity = currentItem?.quantity || 1;
 
         // Ctrl+Delete or Command+Delete: Remove current row
-        if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'Delete' || e.key === 'Backspace')) {
             e.preventDefault();
             removeItem(rowIndex);
             return;
@@ -1491,6 +1804,7 @@ const CreatePurchaseOrder: React.FC = () => {
             : ['partNo', 'quantity']; // For existing products, only Part No and Quantity are editable
         
         const currentFieldIndex = fields.indexOf(field);
+        console.log("currentFieldIndex:",currentFieldIndex,rowIndex,field);
 
         // Ctrl+Delete or Command+Delete: Remove current row
         if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
@@ -1501,11 +1815,15 @@ const CreatePurchaseOrder: React.FC = () => {
 
         if (e.key === 'Tab') {
             e.preventDefault();
+            
 
             if (e.shiftKey) {
                 // Shift+Tab: Move to previous field
                 let prevFieldIndex = currentFieldIndex - 1;
                 let targetRow = rowIndex;
+
+                console.log("prevFieldIndex", prevFieldIndex,currentFieldIndex,rowIndex);
+                
 
                 if (prevFieldIndex < 0) {
                     // Move to last field of previous row
@@ -1637,8 +1955,8 @@ const CreatePurchaseOrder: React.FC = () => {
     return (
         <div className="pl-2 pr-6 py-6 space-y-4">
             <PageHeader
-                title="Create Purchase Order"
-                subtitle="Create a new purchase order with Excel-like navigation"
+                title={isEditMode ? `Edit Purchase Order - ${editingPO?.poNumber || ''}` : "Create Purchase Order"}
+                subtitle={isEditMode ? "Edit existing purchase order" : "Create a new purchase order with Excel-like navigation"}
             >
                 <div className="flex space-x-3">
                     <button
@@ -1706,7 +2024,8 @@ const CreatePurchaseOrder: React.FC = () => {
                                     onFocus={() => {
                                         setShowSupplierDropdown(true);
                                         setHighlightedSupplierIndex(-1);
-                                        if (!supplierSearchTerm && formData.supplier) {
+                                        // Don't clear search term in edit mode
+                                        if (!supplierSearchTerm && formData.supplier && !isEditMode) {
                                             setSupplierSearchTerm('');
                                         }
                                     }}
@@ -1761,7 +2080,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                 <input
                                     ref={addressInputRef}
                                     type="text"
-                                    value={addressSearchTerm || (formData.supplierAddress ? getAddressLabel(formData.supplierAddress.id || '') : '')}
+                                    value={addressSearchTerm || (formData.supplier ? (formData.supplierAddress ? `${formData.supplierAddress.address}, ${formData.supplierAddress.district}, ${formData.supplierAddress.state} - ${formData.supplierAddress.pincode}` : '') : '')}
                                     onChange={(e) => {
                                         setAddressSearchTerm(e.target.value);
                                         if (!showAddressDropdown) setShowAddressDropdown(true);
@@ -1774,7 +2093,8 @@ const CreatePurchaseOrder: React.FC = () => {
                                         }
                                         setShowAddressDropdown(true);
                                         setHighlightedAddressIndex(-1);
-                                        if (!addressSearchTerm && formData.supplierAddress) {
+                                        // Don't clear search term in edit mode
+                                        if (!addressSearchTerm && formData.supplierAddress && !isEditMode) {
                                             setAddressSearchTerm('');
                                         }
                                     }}
@@ -1849,10 +2169,18 @@ const CreatePurchaseOrder: React.FC = () => {
                                     if (e.key === 'Tab') {
                                         e.preventDefault();
                                         if (e.shiftKey) {
-                                            // Shift+Tab: Move back to address field
+                                            // Shift+Tab: Move back to address field or supplier if address is disabled
                                             setTimeout(() => {
-                                                addressInputRef.current?.focus();
-                                                setShowAddressDropdown(true);
+                                                // Check if address field is disabled (no supplier selected)
+                                                if (!formData.supplier) {
+                                                    // Address is disabled, go back to supplier field
+                                                    supplierInputRef.current?.focus();
+                                                    setShowSupplierDropdown(true);
+                                                } else {
+                                                    // Address is enabled, go to address field
+                                                    addressInputRef.current?.focus();
+                                                    setShowAddressDropdown(true);
+                                                }
                                             }, 50);
                                         } else {
                                             // Tab: Move to priority field
@@ -2227,8 +2555,8 @@ const CreatePurchaseOrder: React.FC = () => {
                                                                             </div>
                                                                         </div>
                                                                         <div className="text-right flex-shrink-0 ml-4">
-                                                                            <div className="font-bold text-lg text-green-600">₹{product?.price?.toLocaleString()}</div>
-                                                                            <div className="text-xs text-gray-500 mt-0.5">per unit</div>
+                                                                            <div className="font-bold text-lg text-green-600">₹{product?.gndp?.toLocaleString() || 0}</div>
+                                                                            <div className="text-xs text-gray-500 mt-0.5">GNDP</div>
                                                                         </div>
                                                                     </div>
                                                                 </button>
@@ -2347,6 +2675,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                                     onKeyDown={(e) => handleCellKeyDown(e, index, 'category')}
                                                     data-row={index}
                                                     data-field="category"
+                                                    placeholder="Category"
                                                     className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 cursor-pointer"
                                                     disabled
                                                 />
@@ -2540,9 +2869,26 @@ const CreatePurchaseOrder: React.FC = () => {
 
                                         <div className="p-0 h-full">
                                             <button
-                                                onClick={() => removeItem(index)}
+                                                onClick={() => {
+                                                    // If only one row, clear fields. If multiple rows, delete the row
+                                                    if (formData.items.length === 1) {
+                                                        clearProductFields(index);
+                                                    } else {
+                                                        removeItem(index);
+                                                    }
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if ((e.ctrlKey || e.metaKey) && (e.key === 'Delete' || e.key === 'Backspace')) {
+                                                        e.preventDefault();
+                                                        if (formData.items.length === 1) {
+                                                            clearProductFields(index);
+                                                        } else {
+                                                            removeItem(index);
+                                                        }
+                                                    }
+                                                }}
                                                 className="w-full h-full text-red-500 hover:text-red-700 hover:bg-red-50 transition-colors flex items-center justify-center border-0 hover:bg-red-100 bg-transparent"
-                                                title="Remove this item"
+                                                title={formData.items.length === 1 ? "Clear product fields" : "Remove this item"}
                                             >
                                                 <X className="w-4 h-4" />
                                             </button>
@@ -2585,9 +2931,16 @@ const CreatePurchaseOrder: React.FC = () => {
                                             </span>
                                         </div>
                                         <button
-                                            onClick={() => removeItem(index)}
+                                            onClick={() => {
+                                                // If only one row, clear fields. If multiple rows, delete the row
+                                                if (formData.items.length === 1) {
+                                                    clearProductFields(index);
+                                                } else {
+                                                    removeItem(index);
+                                                }
+                                            }}
                                             className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1 rounded"
-                                            title="Remove this item"
+                                            title={formData.items.length === 1 ? "Clear product fields" : "Remove this item"}
                                         >
                                             <X className="w-4 h-4" />
                                         </button>
@@ -2642,7 +2995,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                                             >
                                                                 <div className="font-medium">{product.name}</div>
                                                                 <div className="text-xs text-gray-500">
-                                                                    {product.partNo} • ₹{product.price?.toLocaleString()}
+                                                                    {product.partNo} • ₹{product.gndp?.toLocaleString()}
                                                                 </div>
                                                             </button>
                                                         ))}
@@ -2804,7 +3157,7 @@ const CreatePurchaseOrder: React.FC = () => {
                             className="bg-blue-600 text-white px-6 py-3 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
                         >
                             <Save className="w-5 h-5" />
-                            <span className="font-medium">{submitting ? 'Creating...' : 'Create PO'}</span>
+                            <span className="font-medium">{submitting ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update PO' : 'Create PO')}</span>
                         </button>
                     </div>
                 </div>

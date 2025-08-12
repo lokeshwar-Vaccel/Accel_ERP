@@ -67,6 +67,14 @@ export interface IQuotation extends Document {
   };
   dgEnquiry?: string; // Add reference to DGEnquiry
   assignedEngineer?: string | Types.ObjectId; // Add reference to assigned engineer (Field Operator)
+  // Advance payment fields
+  advanceAmount?: number;
+  remainingAmount?: number;
+  advancePaymentStatus?: 'pending' | 'partial' | 'paid';
+  advancePaymentDate?: Date;
+  advancePaymentMethod?: string;
+  advancePaymentNotes?: string;
+  status?: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
 }
 
 const QuotationSchema = new Schema<IQuotation>({
@@ -139,6 +147,22 @@ const QuotationSchema = new Schema<IQuotation>({
   },
   dgEnquiry: { type: Schema.Types.ObjectId, ref: 'DGEnquiry', required: false },
   assignedEngineer: { type: Schema.Types.ObjectId, ref: 'User', required: false },
+  // Advance payment fields
+  advanceAmount: { type: Number, default: 0 },
+  remainingAmount: { type: Number, default: 0 },
+  advancePaymentStatus: { 
+    type: String, 
+    enum: ['pending', 'partial', 'paid'], 
+    default: 'pending' 
+  },
+  advancePaymentDate: { type: Date },
+  advancePaymentMethod: { type: String },
+  advancePaymentNotes: { type: String },
+  status: { 
+    type: String, 
+    enum: ['draft', 'sent', 'accepted', 'rejected', 'expired'], 
+    default: 'draft' 
+  },
 });
 
 export const Quotation = mongoose.model<IQuotation>('Quotation', QuotationSchema); 

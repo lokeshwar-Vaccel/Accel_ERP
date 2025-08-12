@@ -27,6 +27,7 @@ export const getInvoices = async (
       status,
       paymentStatus,
       customer,
+      supplier,
       dateFrom,
       dateTo,
       invoiceType
@@ -34,6 +35,7 @@ export const getInvoices = async (
       status?: string;
       paymentStatus?: string;
       customer?: string;
+      supplier?: string;
       dateFrom?: string;
       dateTo?: string;
       invoiceType?: 'sale' | 'purchase';
@@ -45,6 +47,7 @@ export const getInvoices = async (
     if (status) query.status = status;
     if (paymentStatus) query.paymentStatus = paymentStatus;
     if (customer) query.customer = customer;
+    if (supplier) query.supplier = supplier;
     if (invoiceType) query.invoiceType = invoiceType;
 
     if (dateFrom || dateTo) {
@@ -67,6 +70,7 @@ export const getInvoices = async (
     const invoices = await Invoice.find(query)
       .populate('user', 'firstName lastName email')
       .populate('customer', 'name email phone address')
+      .populate('supplier', 'name email phone addresses')
       .populate('location', 'name address')
       .populate('createdBy', 'firstName lastName')
       .populate('assignedEngineer', 'firstName lastName email phone')
@@ -76,6 +80,9 @@ export const getInvoices = async (
       .limit(Number(limit));
 
     const total = await Invoice.countDocuments(query);
+
+    console.log("invoices:", invoices);
+    
 
     const response: APIResponse = {
       success: true,
@@ -109,6 +116,7 @@ export const getInvoice = async (
   try {
     const invoice = await Invoice.findById(req.params.id)
       .populate('customer', 'name email phone address customerType')
+      .populate('supplier', 'name email phone addresses')
       .populate('location', 'name address type')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedEngineer', 'firstName lastName email phone')
@@ -141,6 +149,7 @@ export const createInvoice = async (
   try {
     const {
       customer,
+      supplier,
       items,
       dueDate,
       discountAmount = 0,
@@ -162,6 +171,7 @@ export const createInvoice = async (
       customerAddress,
       billToAddress,
       shipToAddress,
+      supplierAddress,
       assignedEngineer,
       overallDiscount = 0,
       overallDiscountAmount = 0,
@@ -225,6 +235,7 @@ export const createInvoice = async (
     const invoice = new Invoice({
       invoiceNumber,
       customer,
+      supplier,
       issueDate: new Date(),
       dueDate: new Date(dueDate),
       items: calculatedItems,
@@ -256,6 +267,7 @@ export const createInvoice = async (
       customerAddress,
       billToAddress,
       shipToAddress,
+      supplierAddress,
       ...(assignedEngineer && assignedEngineer.trim() !== '' && { assignedEngineer }),
       referenceNo,
       referenceDate,
@@ -331,6 +343,7 @@ export const updateInvoice = async (
       externalInvoiceTotal,
       // New fields for comprehensive updates
       customer,
+      supplier,
       items,
       dueDate,
       discountAmount,
@@ -348,6 +361,7 @@ export const updateInvoice = async (
       customerAddress,
       billToAddress,
       shipToAddress,
+      supplierAddress,
       assignedEngineer,
       overallDiscount,
       overallDiscountAmount,
@@ -381,6 +395,7 @@ export const updateInvoice = async (
 
     // Update new fields
     if (customer) invoice.customer = customer;
+    if (supplier) invoice.supplier = supplier;
     if (items) {
       // Recalculate totals if items are updated
       let calculatedItems = [];
@@ -444,6 +459,7 @@ export const updateInvoice = async (
     if (customerAddress) invoice.customerAddress = customerAddress;
     if (billToAddress) invoice.billToAddress = billToAddress;
     if (shipToAddress) invoice.shipToAddress = shipToAddress;
+    if (supplierAddress) invoice.supplierAddress = supplierAddress;
     if (assignedEngineer) invoice.assignedEngineer = assignedEngineer;
     if (overallDiscount !== undefined) {
       invoice.overallDiscount = overallDiscount;
@@ -468,6 +484,7 @@ export const updateInvoice = async (
     // Populate the updated invoice for response
     const updatedInvoice = await Invoice.findById(req.params.id)
       .populate('customer', 'name email phone address customerType')
+      .populate('supplier', 'name email phone addresses')
       .populate('location', 'name address type')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedEngineer', 'firstName lastName email phone')

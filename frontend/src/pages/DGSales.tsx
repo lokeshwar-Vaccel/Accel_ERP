@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import StepProgressBar from '../components/ui/StepProgressBar';
 import { Input } from '../components/ui/Input';
 import { Button } from '../components/ui/Botton';
@@ -52,6 +53,7 @@ import { email } from 'zod/v4';
 import PageHeader from 'components/ui/PageHeader';
 
 export default function DGSales() {
+  const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -935,10 +937,16 @@ export default function DGSales() {
                           >
                             Edit
                           </Button>
-                          {/* {enquiry.customer ?
-                            <Button size="sm">Create Quotation</Button> :
-                            <Button size="sm" variant="outline">Create Customer</Button>
-                          } */}
+                            <Button 
+                              size="sm"
+                              onClick={() => {
+                                navigate('/dg-quotation/create', { 
+                                  state: { enquiry } 
+                                });
+                              }}
+                            >
+                              Create DG Quotation
+                            </Button>
                         </div>
                       )
                     }))}

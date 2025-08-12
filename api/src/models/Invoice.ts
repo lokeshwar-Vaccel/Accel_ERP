@@ -43,7 +43,7 @@ export interface IInvoice extends mongoose.Document {
   createdAt: Date;
   updatedAt: Date;
   poNumber: string;
-  supplierName: string;
+  supplier: mongoose.Types.ObjectId;
   supplierEmail: string;
   externalInvoiceNumber?: string; // External/hardcopy invoice number
   externalInvoiceTotal?: number;  // External/hardcopy invoice total
@@ -55,28 +55,40 @@ export interface IInvoice extends mongoose.Document {
   bankBranch?: string;
   // Customer address details
   customerAddress?: {
+    id: number;
     address: string;
     state: string;
     district: string;
     pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
   };
   billToAddress?: {
+    id: number;
     address: string;
     state: string;
     district: string;
     pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
   };
   shipToAddress?: {
+    id: number;
     address: string;
     state: string;
     district: string;
     pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
   };
   supplierAddress?: {
+    id: number;
     address: string;
     state: string;
     district: string;
     pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
   };
   assignedEngineer?: mongoose.Types.ObjectId; // Reference to User with Field Operator role
   referenceNo?: string;
@@ -262,9 +274,10 @@ const invoiceSchema = new Schema<IInvoice>({
     required: false,
     trim: true
   },
-  supplierName: {
-    type: String,
-    trim: true
+  supplier: {
+    type: Schema.Types.ObjectId,
+    ref: 'Customer',
+    default: null
   },
   supplierEmail: {
     type: String,
@@ -302,42 +315,77 @@ const invoiceSchema = new Schema<IInvoice>({
   },
   // Customer address details
   customerAddress: {
+    id: {
+      type: Number,
+      required: false
+    },
     address: {
       type: String,
       trim: true
     },
     state: {
       type: String,
+      maxlength: [100, 'State cannot exceed 100 characters'],
       trim: true
     },
     district: {
       type: String,
+      maxlength: [100, 'District cannot exceed 100 characters'],
       trim: true
     },
     pincode: {
       type: String,
+      match: [/^\d{6}$/, 'Pincode must be 6 digits'],
       trim: true
+    },
+    isPrimary: {
+      type: Boolean,
+      default: false
+    },
+    gstNumber: {
+      type: String,
+      trim: true,
+      maxlength: [50, 'GST number cannot exceed 50 characters']
     }
   },
   billToAddress: {
+    id: {
+      type: Number,
+      required: false
+    },
     address: {
       type: String,
       trim: true
     },
     state: {
       type: String,
+      maxlength: [100, 'State cannot exceed 100 characters'],
       trim: true
     },
     district: {
       type: String,
+      maxlength: [100, 'District cannot exceed 100 characters'],
       trim: true
     },
     pincode: {
       type: String,
       trim: true
+    },
+    isPrimary: {
+      type: Boolean,
+      default: false
+    },
+    gstNumber: {
+      type: String,
+      trim: true,
+      maxlength: [50, 'GST number cannot exceed 50 characters']
     }
   },
   shipToAddress: {
+    id: {
+      type: Number,
+      required: false
+    },
     address: {
       type: String,
       trim: true
@@ -348,29 +396,54 @@ const invoiceSchema = new Schema<IInvoice>({
     },
     district: {
       type: String,
+      maxlength: [100, 'District cannot exceed 100 characters'],
       trim: true
     },
     pincode: {
       type: String,
       trim: true
+    },
+    isPrimary: {
+      type: Boolean,
+      default: false
+    },
+    gstNumber: {
+      type: String,
+      trim: true,
+      maxlength: [50, 'GST number cannot exceed 50 characters']
     }
   },
   supplierAddress: {
+    id: {
+      type: Number,
+      required: false
+    },
     address: {
       type: String,
       trim: true
     },
     state: {
       type: String,
+      maxlength: [100, 'State cannot exceed 100 characters'],
       trim: true
     },
     district: {
       type: String,
+      maxlength: [100, 'District cannot exceed 100 characters'],
       trim: true
     },
     pincode: {
       type: String,
       trim: true
+    },
+    isPrimary: {
+      type: Boolean,
+      default: false
+    },
+    gstNumber: {
+      type: String,
+      trim: true,
+      maxlength: [50, 'GST number cannot exceed 50 characters']
     }
   },
   referenceNo: {
