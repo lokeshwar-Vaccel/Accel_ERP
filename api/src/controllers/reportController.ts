@@ -6,8 +6,322 @@ import { Stock } from '../models/Stock';
 import { AMC } from '../models/AMC';
 import { PurchaseOrder } from '../models/PurchaseOrder';
 import { User } from '../models/User';
+import { Invoice } from '../models/Invoice';
+import { Quotation } from '../models/Quotation';
+import { DigitalServiceReport } from '../models/DigitalServiceReport';
+import { CustomerFeedback } from '../models/CustomerFeedback';
 import { AuthenticatedRequest, APIResponse, TicketStatus, AMCStatus, LeadStatus } from '../types';
 import { AppError } from '../middleware/errorHandler';
+
+// Helper function to calculate total revenue from invoices
+const calculateTotalRevenue = async (dateQuery: any = {}) => {
+  const revenueResult = await Invoice.aggregate([
+    { $match: dateQuery },
+    { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+  ]);
+  return revenueResult[0]?.total || 0;
+};
+
+// Helper function to calculate revenue by different criteria
+const calculateRevenueBreakdown = async (dateQuery: any = {}) => {
+  const revenueBreakdown = await Invoice.aggregate([
+    { $match: dateQuery },
+    {
+      $group: {
+        _id: {
+          invoiceType: '$invoiceType',
+          paymentStatus: '$paymentStatus',
+          status: '$status'
+        },
+        totalRevenue: { $sum: '$totalAmount' },
+        count: { $sum: 1 }
+      }
+    },
+    { $sort: { totalRevenue: -1 } }
+  ]);
+  return revenueBreakdown;
+};
+
+// @desc    Generate comprehensive dashboard analytics
+// @route   POST /api/v1/reports/dashboard-analytics
+// @access  Private
+export const generateDashboardAnalytics = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      dateFrom, 
+      dateTo, 
+      includeTrends = true,
+      includePredictions = false 
+    } = req.body;
+
+    // Build date query
+    const dateQuery: any = {};
+    if (dateFrom || dateTo) {
+      dateQuery.createdAt = {};
+      if (dateFrom) dateQuery.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) dateQuery.createdAt.$lte = new Date(dateTo);
+    }
+
+    // Core metrics
+    const [
+      totalCustomers,
+      totalTickets,
+      totalAMCs,
+      totalProducts,
+      totalRevenue,
+      totalInvoices,
+      totalQuotations
+    ] = await Promise.all([
+      Customer.countDocuments(dateQuery),
+      ServiceTicket.countDocuments(dateQuery),
+      AMC.countDocuments(dateQuery),
+      Product.countDocuments({ ...dateQuery, isActive: true }),
+      // Use helper function to calculate total revenue
+      calculateTotalRevenue(dateQuery),
+      Invoice.countDocuments(dateQuery),
+      Quotation.countDocuments(dateQuery)
+    ]);
+
+    // Service metrics
+    const [
+      openTickets,
+      inProgressTickets,
+      resolvedTickets,
+      overdueTickets,
+      avgResolutionTime
+    ] = await Promise.all([
+      ServiceTicket.countDocuments({ ...dateQuery, status: TicketStatus.OPEN }),
+      ServiceTicket.countDocuments({ ...dateQuery, status: TicketStatus.IN_PROGRESS }),
+      ServiceTicket.countDocuments({ ...dateQuery, status: TicketStatus.RESOLVED }),
+      ServiceTicket.countDocuments({ 
+        ...dateQuery, 
+        slaDeadline: { $lt: new Date() },
+        status: { $in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] }
+      }),
+      ServiceTicket.aggregate([
+        { $match: { ...dateQuery, status: TicketStatus.RESOLVED, completedDate: { $exists: true } } },
+        {
+          $group: {
+            _id: null,
+            avgTime: {
+              $avg: {
+                $divide: [
+                  { $subtract: ['$completedDate', '$createdAt'] },
+                  1000 * 60 * 60 * 24 // Convert to days
+                ]
+              }
+            }
+          }
+        }
+      ])
+    ]);
+
+    // AMC metrics
+    const [
+      activeAMCs,
+      expiringAMCs,
+      totalAMCValue,
+      visitCompliance
+    ] = await Promise.all([
+      AMC.countDocuments({ ...dateQuery, status: AMCStatus.ACTIVE }),
+      AMC.countDocuments({
+        ...dateQuery,
+        endDate: { $lte: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000) },
+        status: AMCStatus.ACTIVE
+      }),
+      AMC.aggregate([
+        { $match: { ...dateQuery, status: AMCStatus.ACTIVE } },
+        { $group: { _id: null, total: { $sum: '$contractValue' } } }
+      ]),
+      AMC.aggregate([
+        { $match: { ...dateQuery, status: AMCStatus.ACTIVE } },
+        {
+          $group: {
+            _id: null,
+            totalScheduled: { $sum: '$scheduledVisits' },
+            totalCompleted: { $sum: '$completedVisits' }
+          }
+        }
+      ])
+    ]);
+
+    // Inventory metrics
+    const [
+      lowStockItems,
+      totalStockValue,
+      stockMovement
+    ] = await Promise.all([
+      Stock.aggregate([
+        {
+          $lookup: {
+            from: 'products',
+            localField: 'product',
+            foreignField: '_id',
+            as: 'productInfo'
+          }
+        },
+        {
+          $match: {
+            $expr: {
+              $lte: ['$availableQuantity', { $arrayElemAt: ['$productInfo.minStockLevel', 0] }]
+            }
+          }
+        },
+        { $count: 'count' }
+      ]),
+      Stock.aggregate([
+        {
+          $lookup: {
+            from: 'products',
+            localField: 'product',
+            foreignField: '_id',
+            as: 'productInfo'
+          }
+        },
+        {
+          $group: {
+            _id: null,
+            totalValue: {
+              $sum: {
+                $multiply: [
+                  '$availableQuantity',
+                  { $arrayElemAt: ['$productInfo.price', 0] }
+                ]
+              }
+            }
+          }
+        }
+      ]),
+      Stock.aggregate([
+        { $match: dateQuery },
+        {
+          $group: {
+            _id: null,
+            totalInward: { $sum: '$inwardQuantity' },
+            totalOutward: { $sum: '$outwardQuantity' }
+          }
+        }
+      ])
+    ]);
+
+    // Customer metrics
+    const [
+      newLeads,
+      qualifiedLeads,
+      convertedLeads,
+      customerSatisfaction
+    ] = await Promise.all([
+      Customer.countDocuments({ ...dateQuery, status: LeadStatus.NEW }),
+      Customer.countDocuments({ ...dateQuery, status: LeadStatus.QUALIFIED }),
+      Customer.countDocuments({ ...dateQuery, status: LeadStatus.CONVERTED }),
+      CustomerFeedback.aggregate([
+        { $match: dateQuery },
+        {
+          $group: {
+            _id: null,
+            avgRating: { $avg: '$rating' },
+            totalFeedbacks: { $sum: 1 }
+          }
+        }
+      ])
+    ]);
+
+    // Trends data if requested
+    let trends = {};
+    if (includeTrends) {
+      const monthlyData = await ServiceTicket.aggregate([
+        { $match: dateQuery },
+        {
+          $group: {
+            _id: {
+              year: { $year: '$createdAt' },
+              month: { $month: '$createdAt' }
+            },
+            tickets: { $sum: 1 },
+            resolved: {
+              $sum: { $cond: [{ $eq: ['$status', TicketStatus.RESOLVED] }, 1, 0] }
+            }
+          }
+        },
+        { $sort: { '_id.year': 1, '_id.month': 1 } }
+      ]);
+
+      trends = { monthlyData };
+    }
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Dashboard analytics generated successfully',
+      data: {
+        reportType: 'dashboard_analytics',
+        generatedAt: new Date(),
+        filters: req.body,
+        
+        // Core metrics
+        core: {
+          totalCustomers: totalCustomers || 0,
+          totalTickets: totalTickets || 0,
+          totalAMCs: totalAMCs || 0,
+          totalProducts: totalProducts || 0,
+          totalRevenue: totalRevenue || 0,
+          totalInvoices: totalInvoices || 0,
+          totalQuotations: totalQuotations || 0
+        },
+
+        // Service metrics
+        service: {
+          openTickets: openTickets || 0,
+          inProgressTickets: inProgressTickets || 0,
+          resolvedTickets: resolvedTickets || 0,
+          overdueTickets: overdueTickets || 0,
+          avgResolutionTime: avgResolutionTime[0]?.avgTime || 0,
+          slaComplianceRate: totalTickets > 0 ? 
+            Math.round(((totalTickets - (overdueTickets || 0)) / totalTickets) * 100) : 100
+        },
+
+        // AMC metrics
+        amc: {
+          activeContracts: activeAMCs || 0,
+          expiringContracts: expiringAMCs || 0,
+          totalContractValue: totalAMCValue[0]?.total || 0,
+          visitComplianceRate: visitCompliance[0] ? 
+            Math.round((visitCompliance[0].totalCompleted / visitCompliance[0].totalScheduled) * 100) : 0
+        },
+
+        // Inventory metrics
+        inventory: {
+          lowStockItems: lowStockItems[0]?.count || 0,
+          totalStockValue: totalStockValue[0]?.totalValue || 0,
+          stockMovement: {
+            inward: stockMovement[0]?.totalInward || 0,
+            outward: stockMovement[0]?.totalOutward || 0
+          }
+        },
+
+        // Customer metrics
+        customer: {
+          newLeads: newLeads || 0,
+          qualifiedLeads: qualifiedLeads || 0,
+          convertedLeads: convertedLeads || 0,
+          conversionRate: (newLeads + qualifiedLeads) > 0 ? 
+            Math.round((convertedLeads / (newLeads + qualifiedLeads)) * 100) : 0,
+          avgSatisfaction: customerSatisfaction[0]?.avgRating || 0,
+          totalFeedbacks: customerSatisfaction[0]?.totalFeedbacks || 0
+        },
+
+        trends
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
 
 // @desc    Generate service tickets report
 // @route   POST /api/v1/reports/service-tickets
@@ -80,13 +394,30 @@ export const generateServiceReport = async (
         [TicketStatus.OPEN, TicketStatus.IN_PROGRESS].includes(t.status)
       ).length;
 
+      // TAT distribution
+      const tatDistribution = [
+        { range: '0-1 days', count: 0 },
+        { range: '1-3 days', count: 0 },
+        { range: '3-7 days', count: 0 },
+        { range: '7+ days', count: 0 }
+      ];
+
+      resolvedTickets.forEach((ticket: any) => {
+        const tat = (new Date(ticket.completedDate).getTime() - new Date(ticket.createdAt).getTime()) / (1000 * 60 * 60 * 24);
+        if (tat <= 1) tatDistribution[0].count++;
+        else if (tat <= 3) tatDistribution[1].count++;
+        else if (tat <= 7) tatDistribution[2].count++;
+        else tatDistribution[3].count++;
+      });
+
       metrics = {
         totalTickets,
         statusBreakdown,
         priorityBreakdown,
         avgResolutionTimeHours: Math.round(avgResolutionTime * 100) / 100,
         overdueTickets,
-        slaComplianceRate: totalTickets > 0 ? Math.round(((totalTickets - overdueTickets) / totalTickets) * 100) : 100
+        slaComplianceRate: totalTickets > 0 ? Math.round(((totalTickets - overdueTickets) / totalTickets) * 100) : 100,
+        tatDistribution
       };
     }
 
@@ -228,8 +559,11 @@ export const generateRevenueReport = async (
 
     // Build date query
     const dateQuery: any = {};
-    if (dateFrom) dateQuery.$gte = new Date(dateFrom);
-    if (dateTo) dateQuery.$lte = new Date(dateTo);
+    if (dateFrom || dateTo) {
+      dateQuery.createdAt = {};
+      if (dateFrom) dateQuery.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) dateQuery.createdAt.$lte = new Date(dateTo);
+    }
 
     // Get AMC revenue
     const amcQuery: any = { status: AMCStatus.ACTIVE };
@@ -265,6 +599,21 @@ export const generateRevenueReport = async (
       }
     ]);
 
+    // Get invoice revenue - Updated to sum totalAmount from all invoices
+    const invoiceRevenue = await calculateTotalRevenue(dateQuery);
+
+    // Get paid invoice revenue separately for comparison
+    const paidInvoiceRevenue = await Invoice.aggregate([
+      { $match: { ...dateQuery, status: 'paid' } },
+      {
+        $group: {
+          _id: null,
+          totalPaidRevenue: { $sum: '$totalAmount' },
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+
     // Monthly breakdown for AMCs
     const monthlyAMCRevenue = await AMC.aggregate([
       { $match: amcQuery },
@@ -281,28 +630,59 @@ export const generateRevenueReport = async (
       { $sort: { '_id.year': 1, '_id.month': 1 } }
     ]);
 
-    // Monthly breakdown for purchase orders
-    const monthlyPurchases = await PurchaseOrder.aggregate([
-      { $match: poQuery },
+    // Monthly breakdown for invoices - Updated to use totalAmount
+    const monthlyInvoiceRevenue = await Invoice.aggregate([
+      { $match: dateQuery },
       {
         $group: {
           _id: {
-            year: { $year: '$orderDate' },
-            month: { $month: '$orderDate' }
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' }
           },
-          spending: { $sum: '$totalAmount' },
-          orders: { $sum: 1 }
+          revenue: { $sum: '$totalAmount' },
+          invoices: { $sum: 1 }
         }
       },
       { $sort: { '_id.year': 1, '_id.month': 1 } }
     ]);
 
+    // Get revenue breakdown by invoice type
+    const revenueByType = await Invoice.aggregate([
+      { $match: dateQuery },
+      {
+        $group: {
+          _id: '$invoiceType',
+          totalRevenue: { $sum: '$totalAmount' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { totalRevenue: -1 } }
+    ]);
+
+    // Get revenue breakdown by payment status
+    const revenueByPaymentStatus = await Invoice.aggregate([
+      { $match: dateQuery },
+      {
+        $group: {
+          _id: '$paymentStatus',
+          totalRevenue: { $sum: '$totalAmount' },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { totalRevenue: -1 } }
+    ]);
+
     const metrics = {
       totalAMCRevenue: amcRevenue[0]?.totalValue || 0,
       totalAMCContracts: amcRevenue[0]?.count || 0,
+      totalInvoiceRevenue: invoiceRevenue || 0,
+      totalInvoices: await Invoice.countDocuments(dateQuery),
+      totalPaidRevenue: paidInvoiceRevenue[0]?.totalPaidRevenue || 0,
+      totalPaidInvoices: paidInvoiceRevenue[0]?.count || 0,
       totalPurchaseSpending: purchaseSpending[0]?.totalSpent || 0,
       totalPurchaseOrders: purchaseSpending[0]?.count || 0,
-      netRevenue: (amcRevenue[0]?.totalValue || 0) - (purchaseSpending[0]?.totalSpent || 0)
+      netRevenue: (amcRevenue[0]?.totalValue || 0) + (invoiceRevenue || 0) - (purchaseSpending[0]?.totalSpent || 0),
+      outstandingRevenue: (invoiceRevenue || 0) - (paidInvoiceRevenue[0]?.totalPaidRevenue || 0)
     };
 
     const response: APIResponse = {
@@ -314,7 +694,9 @@ export const generateRevenueReport = async (
         filters: req.body,
         metrics,
         monthlyAMCRevenue,
-        monthlyPurchases
+        monthlyInvoiceRevenue,
+        revenueByType,
+        revenueByPaymentStatus
       }
     };
 

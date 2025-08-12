@@ -281,6 +281,54 @@ export const getFeedbackStats = async (
   }
 }; 
 
+// @desc    Get all feedback data for analytics
+// @route   GET /api/v1/feedback/all
+// @access  Private
+export const getAllFeedback = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { dateFrom, dateTo, limit = 100 } = req.query;
+
+    let matchQuery: any = {};
+    
+    // Add date range filter if provided
+    if (dateFrom || dateTo) {
+      matchQuery.createdAt = {};
+      if (dateFrom) {
+        matchQuery.createdAt.$gte = new Date(dateFrom as string);
+      }
+      if (dateTo) {
+        matchQuery.createdAt.$lte = new Date(dateTo as string);
+      }
+    }
+
+    const feedback = await CustomerFeedback.find(matchQuery)
+      .populate({
+        path: 'ticketId',
+        populate: [
+          { path: 'customer', select: 'name email phone' },
+          { path: 'product', select: 'name category' },
+          { path: 'assignedTo', select: 'firstName lastName' }
+        ]
+      })
+      .limit(Number(limit))
+      .sort({ createdAt: -1 });
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Feedback data retrieved successfully',
+      data: { feedback }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get feedback by ticket ID
 // @route   GET /api/v1/feedback/ticket/:ticketId
 // @access  Private

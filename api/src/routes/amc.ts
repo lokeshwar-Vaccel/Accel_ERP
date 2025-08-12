@@ -50,6 +50,18 @@ router.route('/')
   .get(validate(amcQuerySchema, 'query'), checkPermission('read'), getAMCs)
   .post(validate(createAMCSchema), checkPermission('write'), createAMC);
 
+// Special queries (must come before /:id routes)
+router.get('/dashboard', checkPermission('read'), getAMCDashboard);
+router.get('/stats/overview', checkPermission('read'), getAMCStats);
+router.get('/expiring/contracts', checkPermission('read'), getExpiringContracts);
+router.get('/expiring-soon', checkPermission('read'), getExpiringSoon);
+router.get('/visits-due', checkPermission('read'), getVisitsDue);
+router.get('/customer/:customerId', checkPermission('read'), getAMCsByCustomer);
+
+// Enhanced AMC functionality
+router.post('/bulk-renew', checkPermission('write'), bulkRenewContracts);
+router.delete('/bulk-delete', restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), bulkDeleteAMCContracts);
+
 router.route('/:id')
   .get(checkPermission('read'), getAMC)
   .put(validate(updateAMCSchema), checkPermission('write'), updateAMC)
@@ -62,24 +74,12 @@ router.post('/:id/renew', validate(renewAMCSchema), checkPermission('write'), re
 
 // Enhanced AMC functionality
 router.post('/:id/schedule-visit-enhanced', checkPermission('write'), scheduleEnhancedVisit);
-router.post('/bulk-renew', checkPermission('write'), bulkRenewContracts);
 router.get('/:id/performance', checkPermission('read'), getAMCPerformance);
 router.get('/:id/details', checkPermission('read'), getAMCDetails);
 router.put('/:id/status', checkPermission('write'), updateAMCStatus);
 
 // Delete and Archive functionality
-router.delete('/bulk-delete', restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), bulkDeleteAMCContracts);
 router.put('/:id/archive', restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('write'), archiveAMCContract);
-
-// Customer-specific routes
-router.get('/customer/:customerId', checkPermission('read'), getAMCsByCustomer);
-
-// Special queries
-router.get('/expiring/contracts', checkPermission('read'), getExpiringContracts);
-router.get('/expiring-soon', checkPermission('read'), getExpiringSoon);
-router.get('/visits-due', checkPermission('read'), getVisitsDue);
-router.get('/stats/overview', checkPermission('read'), getAMCStats);
-router.get('/dashboard', checkPermission('read'), getAMCDashboard);
 
 // Reports
 router.get('/reports/:type', checkPermission('read'), generateAMCReport);

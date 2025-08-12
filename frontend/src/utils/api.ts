@@ -783,6 +783,12 @@ class ApiClient {
 
   // Reports APIs
   reports = {
+    dashboardAnalytics: (params: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/reports/dashboard-analytics', {
+        method: 'POST',
+        body: JSON.stringify(params),
+      }),
+
     serviceTickets: (params: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/reports/service-tickets', {
         method: 'POST',
@@ -1625,6 +1631,9 @@ class ApiClient {
 
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/feedback/stats'),
+
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { feedback: any[] } }>(`/feedback/all${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     getByTicketId: (ticketId: string) =>
       this.makeRequest<{ success: boolean; data: any }>(`/feedback/ticket/${ticketId}`),
