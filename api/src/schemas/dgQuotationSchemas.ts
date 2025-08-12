@@ -36,6 +36,16 @@ export const createDGQuotationSchema = Joi.object({
   issueDate: Joi.date().required(),
   validUntil: Joi.date().greater(Joi.ref('issueDate')).required(),
   dgEnquiry: Joi.string().optional().trim().allow(''),
+  enquiryDetails: Joi.object({
+    enquiryNo: Joi.string().optional().trim().allow(''),
+    enquiryDate: Joi.date().optional(),
+    enquiryType: Joi.string().optional().trim().allow(''),
+    enquiryStatus: Joi.string().optional().trim().allow(''),
+    enquiryStage: Joi.string().optional().trim().allow(''),
+    assignedEmployeeName: Joi.string().optional().trim().allow(''),
+    plannedFollowUpDate: Joi.date().optional(),
+    numberOfFollowUps: Joi.number().integer().min(0).optional(),
+  }).optional(),
   customer: Joi.object({
     _id: Joi.string().optional(),
     name: Joi.string().required().trim(),
@@ -106,6 +116,16 @@ export const updateDGQuotationSchema = Joi.object({
   issueDate: Joi.date().optional(),
   validUntil: Joi.date().optional(),
   dgEnquiry: Joi.string().optional().trim(),
+  enquiryDetails: Joi.object({
+    enquiryNo: Joi.string().optional().trim().allow(''),
+    enquiryDate: Joi.date().optional(),
+    enquiryType: Joi.string().optional().trim().allow(''),
+    enquiryStatus: Joi.string().optional().trim().allow(''),
+    enquiryStage: Joi.string().optional().trim().allow(''),
+    assignedEmployeeName: Joi.string().optional().trim().allow(''),
+    plannedFollowUpDate: Joi.date().optional(),
+    numberOfFollowUps: Joi.number().integer().min(0).optional(),
+  }).optional(),
   customer: Joi.object({
     _id: Joi.string().optional(),
     name: Joi.string().optional().trim(),

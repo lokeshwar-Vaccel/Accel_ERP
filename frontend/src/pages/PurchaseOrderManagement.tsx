@@ -149,7 +149,7 @@ interface ReceiveItemsData {
   receiptDate: string;
   inspectedBy: string;
   notes?: string;
-  supplierName?: string;
+  supplier?: string;
   supplierEmail?: string;
   supplierAddress?: SupplierAddress;
   externalInvoiceTotal?: number;
@@ -212,13 +212,11 @@ const PurchaseOrderManagement: React.FC = () => {
 
   // Modal states
 
-  const [showEditModal, setShowEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
 
   // Selected data
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
-  const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null);
 
   const [totalPurchaseOrdersCount, setTotalPurchaseOrdersCount] = useState(0);
   const [pendingPurchaseOrdersCount, setPendingPurchaseOrdersCount] = useState(0);
@@ -266,24 +264,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const [detailsSearchTerm, setDetailsSearchTerm] = useState('');
   const [receiveSearchTerm, setReceiveSearchTerm] = useState('');
 
-  // Form data
-  const [formData, setFormData] = useState<POFormData>({
-    supplier: '',
-    supplierEmail: '',
-    supplierAddress: {
-      address: '',
-      state: '',
-      district: '',
-      pincode: ''
-    }, // now undefined or object
-    expectedDeliveryDate: '',
-    priority: 'low',
-    sourceType: 'manual',
-    sourceId: '',
-    department: '',
-    notes: '',
-    items: [{ product: '', quantity: 1, unitPrice: 0, taxRate: 0 }]
-  });
+
 
   const [receiveData, setReceiveData] = useState<ReceiveItemsData>({
     receivedItems: [],
@@ -291,7 +272,7 @@ const PurchaseOrderManagement: React.FC = () => {
     location: '',
     receiptDate: '',
     inspectedBy: '',
-    supplierName: '',
+    supplier: '',
     supplierEmail: '',
     supplierAddress: {
       address: '',
@@ -316,21 +297,18 @@ const PurchaseOrderManagement: React.FC = () => {
 
 
 
-  // Form errors
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Dropdown state
-  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [showSupplierDropdown, setShowSupplierDropdown] = useState(false);
-
-  // Product dropdown state
-  const [productDropdownOpen, setProductDropdownOpen] = useState<Record<number, boolean>>({});
-  const [productSearchTerm, setProductSearchTerm] = useState<Record<number, string>>({});
 
   // Import state
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Status dropdown state (still needed for filtering)
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+
+  // Form errors (still needed for receive modal)
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Preview state
   const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -631,40 +609,8 @@ const PurchaseOrderManagement: React.FC = () => {
   };
 
   const handleEditPO = async (po: PurchaseOrder) => {
-    setEditingPO(po);
-    let supplierAddress: SupplierAddress | undefined = undefined;
-    if (po.supplier && typeof po.supplier !== 'string' && Array.isArray(po.supplier.addresses) && po.supplier.addresses.length > 0) {
-      supplierAddress = po.supplier.addresses[0]; // default to first address, or use logic to match
-    }
-    setFormData({
-      supplier: typeof po.supplier === 'string' ? po.supplier : po.supplier._id,
-      supplierEmail: typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)._id,
-      supplierAddress,
-      expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : '',
-      priority: po.priority || 'low',
-      sourceType: po.sourceType || 'manual',
-      sourceId: po.sourceId || '',
-      department: po.department || '',
-      notes: po.notes || '',
-      items: po.items.map(item => ({
-        product: typeof item.product === 'string' ? item.product : item.product._id,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        taxRate: item.taxRate
-      }))
-    });
-    setFormErrors({});
-    // Ensure suppliers are loaded when editing
-    if (suppliers.length === 0) {
-      await fetchSuppliers();
-    }
-    // Set addresses for dropdown
-    if (po.supplier && typeof po.supplier !== 'string' && Array.isArray(po.supplier.addresses)) {
-      setAddresses(po.supplier.addresses);
-    } else {
-      setAddresses([]);
-    }
-    setShowEditModal(true);
+    // Navigate to the edit page with state instead of query parameter
+    navigate('/purchase-order-management/edit', { state: { poId: po._id } });
   };
 
   const openDetailsModal = (po: PurchaseOrder) => {
@@ -680,8 +626,8 @@ const PurchaseOrderManagement: React.FC = () => {
     setReceiveSearchTerm(''); // Clear search when opening modal
 
     // Extract supplier name from purchase order
-    const extractedSupplierName = typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier).name;
-    const extractedSupplierEmail = typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any);
+    const extractedSupplierName = typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)?.name || 'Unknown Supplier';
+    const extractedSupplierEmail = typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)?.email || 'No Email';
 
     // Prefer the supplierAddress stored in the PO (from creation)
     let extractedSupplierAddress: SupplierAddress = {
@@ -692,8 +638,11 @@ const PurchaseOrderManagement: React.FC = () => {
     };
     if ((po as any).supplierAddress && (po as any).supplierAddress.address) {
       extractedSupplierAddress = (po as any).supplierAddress;
-    } else if (po.supplier && typeof po.supplier !== 'string' && Array.isArray(po.supplier.addresses) && po.supplier.addresses.length > 0) {
-      extractedSupplierAddress = po.supplier.addresses[0];
+    } else if (po.supplier && typeof po.supplier !== 'string') {
+      const supplier = po.supplier as Supplier;
+      if (supplier?.addresses && Array.isArray(supplier.addresses) && supplier.addresses.length > 0) {
+        extractedSupplierAddress = supplier.addresses[0];
+      }
     }
 
     // Use the first available location or a default if none exist
@@ -721,7 +670,7 @@ const PurchaseOrderManagement: React.FC = () => {
       location: defaultLocation,
       receiptDate: new Date().toISOString().split('T')[0],
       inspectedBy: 'Admin',
-      supplierName: extractedSupplierName, // Set supplier name from purchase order
+      supplier: extractedSupplierName, // Set supplier name from purchase order
       supplierEmail: extractedSupplierEmail,
       supplierAddress: extractedSupplierAddress,
       externalInvoiceTotal: 0,
@@ -740,81 +689,11 @@ const PurchaseOrderManagement: React.FC = () => {
     clearGstInvoiceValidation();
   };
 
-  const validatePOForm = (): boolean => {
-    const errors: Record<string, string> = {};
-
-    if (!formData.supplier) {
-      errors.supplier = 'Please select a supplier';
-    }
-    if (!formData.supplierAddress?.address) {
-      errors.supplierAddress = 'Please enter a supplier address';
-    }
-    if (!formData.expectedDeliveryDate) {
-      errors.expectedDeliveryDate = 'Expected delivery date is required';
-    }
-    if (formData.items.length === 0) {
-      errors.items = 'At least one item is required';
-    }
-
-    formData.items.forEach((item, index) => {
-      if (!item.product) {
-        errors[`items.${index}.product`] = 'Product is required';
-      }
-      if (item.quantity <= 0) {
-        errors[`items.${index}.quantity`] = 'Quantity must be greater than 0';
-      }
-      if (item.unitPrice < 0) {
-        errors[`items.${index}.unitPrice`] = 'Unit price cannot be negative';
-      }
-    });
-
-    setFormErrors(errors);
-
-    if (Object.keys(errors).length > 0) {
-      toast.error('Please fix the form errors before submitting');
-    }
-
-    return Object.keys(errors).length === 0;
-  };
 
 
 
-  const handleUpdatePO = async () => {
-    if (!validatePOForm() || !editingPO) return;
 
-    setSubmitting(true);
-    try {
-      setFormErrors({});
 
-      const totalAmount = formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
-
-      const poData = {
-        ...formData,
-        totalAmount,
-        items: formData.items.map(item => ({
-          ...item,
-          totalPrice: item.quantity * item.unitPrice
-        }))
-      };
-
-      const response = await apiClient.purchaseOrders.update(editingPO._id, poData);
-
-      setPurchaseOrders(purchaseOrders.map(po => po._id === editingPO._id ? response.data?.order : po));
-      setShowEditModal(false);
-      setEditingPO(null);
-      toast.success('Purchase Order updated successfully');
-    } catch (error: any) {
-      console.error('Error updating purchase order:', error);
-      if (error.response?.data?.errors) {
-        setFormErrors(error.response.data.errors);
-      } else {
-        setFormErrors({ general: 'Failed to update purchase order' });
-      }
-      toast.error('Failed to update purchase order');
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleStatusUpdate = async (poId: string, newStatus: PurchaseOrderStatus) => {
     try {
@@ -899,7 +778,7 @@ const PurchaseOrderManagement: React.FC = () => {
       errors.items = 'Please select items to receive';
     }
 
-    setFormErrors(errors);
+    // setFormErrors(errors);
 
     if (Object.keys(errors).length > 0) {
       toast.error('Please fill in all required fields');
@@ -937,7 +816,7 @@ const PurchaseOrderManagement: React.FC = () => {
         location: locations.length > 0 ? locations[0]._id : 'loc-main-warehouse',
         receiptDate: new Date().toISOString().split('T')[0],
         inspectedBy: 'Admin',
-        supplierName: '',
+        supplier: '',
         supplierEmail: '',
         supplierAddress: {
           address: '',
@@ -1097,35 +976,19 @@ const PurchaseOrderManagement: React.FC = () => {
 
 
 
-  const addItem = () => {
-    setFormData({
-      ...formData,
-      items: [...formData.items, { product: '', quantity: 1, unitPrice: 0, taxRate: 0 }]
-    });
-  };
 
-  const removeItem = (index: number) => {
-    setFormData({
-      ...formData,
-      items: formData.items.filter((_, i) => i !== index)
-    });
-  };
-
-  const updateItem = (index: number, updates: Record<string, any>) => {
-    const updatedItems = [...formData.items];
-    updatedItems[index] = { ...updatedItems[index], ...updates };
-    setFormData({ ...formData, items: updatedItems });
-  };
 
   const filteredPOs = purchaseOrders.filter(po => {
-    const supplierName = typeof po.supplier === 'string' ? po.supplier : po.supplier?.name;
+    const supplier = typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)?.name || 'Unknown Supplier';
     const matchesSearch = po.poNumber?.toLowerCase().includes(searchTerm?.toLowerCase()) ||
-      supplierName?.toLowerCase().includes(searchTerm?.toLowerCase());
+      supplier?.toLowerCase().includes(searchTerm?.toLowerCase());
     const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
-    const matchesSupplier = !supplierFilter || supplierName?.toLowerCase().includes(supplierFilter?.toLowerCase());
+    const matchesSupplier = !supplierFilter || supplier?.toLowerCase().includes(supplierFilter?.toLowerCase());
 
     return matchesSearch && matchesStatus && matchesSupplier;
   });
+  console.log("filteredPOs:", filteredPOs);
+  
 
   // Filter items for Details Modal
   const filteredDetailsItems = selectedPO ? selectedPO.items.filter(item => {
@@ -1274,16 +1137,14 @@ const PurchaseOrderManagement: React.FC = () => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
       if (!target.closest('.dropdown-container')) {
-        setShowStatusDropdown(false);
-        setShowSupplierDropdown(false);
+
         // setShowAddressDropdown(false);
         setShowCreateSupplierDropdown(false);
         setShowEditSupplierDropdown(false);
         setSupplierSearchTerm('');
 
         // Close all product dropdowns
-        setProductDropdownOpen({});
-        setProductSearchTerm({});
+
       }
     };
 
@@ -1314,33 +1175,7 @@ const PurchaseOrderManagement: React.FC = () => {
     };
   };
 
-  // When a supplier is selected, set addresses to the supplier's address array
-  const handleSupplierSelect = (supplierId: string) => {
-    const supplier = suppliers.find(s => s._id === supplierId);
-    let addrArr: SupplierAddress[] = [];
-    if (Array.isArray(supplier?.addresses)) {
-      addrArr = supplier.addresses as SupplierAddress[];
-    }
-    setFormData({
-      ...formData,
-      supplier: supplierId,
-      supplierEmail: supplier?.email || '',
-      supplierAddress: undefined
-    });
-    setAddresses(addrArr);
-    setShowSupplierDropdown(false);
-    setSupplierSearchTerm('');
-    setShowAddressDropdown(false);
-  };
 
-  const handleAddressSelect = (addressId: string) => {
-    console.log("addressId:", addressId);
-    console.log("addresses-13:", addresses);
-    const address = addresses.find(a => a.id === addressId);
-    console.log("address-14:", address);
-    setFormData(prev => ({ ...prev, supplierAddress: address }));
-    setShowAddressDropdown(false);
-  };
 
   const hasActiveFilters = statusFilter !== ('all' as PurchaseOrderStatus | 'all') || searchTerm !== '';
 
@@ -1440,7 +1275,6 @@ const PurchaseOrderManagement: React.FC = () => {
             <button
               onClick={() => {
                 setShowStatusDropdown(!showStatusDropdown);
-                setShowSupplierDropdown(false);
               }}
               className="flex items-center justify-between w-full px-2 py-2 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
             >
@@ -1575,8 +1409,12 @@ const PurchaseOrderManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-xs font-medium text-gray-900">{typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier).name}</div>
-                      <div className="text-xs font-medium text-gray-500">{typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)}</div>
+                      <div className="text-xs font-medium text-gray-900">
+                        {typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)?.name || 'Unknown Supplier'}
+                      </div>
+                      <div className="text-xs font-medium text-gray-500">
+                        {typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)?.email || 'No Email'}
+                      </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div>
@@ -1683,416 +1521,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
         
 
-      {/* Edit PO Modal */}
-      {showEditModal && editingPO && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[9999]">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Edit Purchase Order - {editingPO.poNumber}</h2>
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleUpdatePO(); }} className="p-4 space-y-3">
-              {formErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-red-600 text-sm">{formErrors.general}</p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Select Supplier *
-                  </label>
-                  <div className="relative dropdown-container">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (suppliers.length === 0) {
-                          fetchSuppliers();
-                        }
-                        setShowSupplierDropdown(!showSupplierDropdown);
-                      }}
-                      className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.supplier ? 'border-red-500' : 'border-gray-300'}`}
-                    >
-                      <span className="text-gray-700 truncate mr-1">
-                        {formData.supplier ?
-                          suppliers.find(s => s._id === formData.supplier)?.name || 'Select Supplier' :
-                          'Select Supplier'
-                        }
-                      </span>
-                      <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showSupplierDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showSupplierDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-60 overflow-y-auto">
-                        {/* Search Input */}
-                        <div className="px-3 py-2 border-b border-gray-200">
-                          <input
-                            type="text"
-                            placeholder="Search suppliers..."
-                            value={supplierSearchTerm}
-                            onChange={(e) => setSupplierSearchTerm(e.target.value)}
-                            className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </div>
-                        {/* Supplier List */}
-                        <div className="max-h-48 overflow-y-auto">
-                          {suppliers.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-gray-500">
-                              {supplierSearchTerm ? 'No suppliers found' : 'Loading suppliers...'}
-                            </div>
-                          ) : (
-                            suppliers
-                              .filter(supplier =>
-                                supplier.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()) ||
-                                supplier.email?.toLowerCase().includes(supplierSearchTerm.toLowerCase())
-                              )
-                              .map(supplier => (
-                                <button
-                                  key={supplier._id}
-                                  type="button"
-                                  onClick={() => handleSupplierSelect(supplier._id)}
-                                  className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
-                                >
-                                  <div className="font-medium text-gray-900">{supplier.name}</div>
-                                  {supplier.email && (
-                                    <div className="text-xs text-gray-500">{supplier.email}</div>
-                                  )}
-                                </button>
-                              ))
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                  {formErrors.supplier && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.supplier}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Expected Delivery Date *
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.expectedDeliveryDate}
-                    onChange={(e) => setFormData({ ...formData, expectedDeliveryDate: e.target.value })}
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.expectedDeliveryDate ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                  />
-                  {formErrors.expectedDeliveryDate && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.expectedDeliveryDate}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Items Section */}
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-medium">Items</h3>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (products.length === 0) {
-                        fetchProducts();
-                      }
-                      addItem();
-                    }}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Add Item</span>
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {formData.items.map((item, index) => (
-                    <div key={index} className="grid grid-cols-12 gap-3 items-start p-4 bg-gray-50 rounded-lg">
-                      <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Product *</label>
-                        {/* <select
-                          value={item.product}
-                          onChange={(e) => {
-                            const selectedProductId = e.target.value;
-                            const selectedProduct = products.find(p => p._id === selectedProductId);
-
-                            const updates = {
-                              product: selectedProductId,
-                              // Auto-populate unit price if product has a default price
-                              ...(selectedProduct?.price && item.unitPrice === 0 && {
-                                unitPrice: selectedProduct.price
-                              })
-                            };
-
-                            updateItem(index, updates);
-                          }}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                        >
-                          <option value="">
-                            {products.length === 0 ? 'Loading products...' : 'Select Product'}
-                          </option>
-                          {products.map(product => (
-                            <option key={product._id} value={product._id}>
-                              {product.name}
-                              {product.partNo && ` - ${product.partNo}`}
-                              {product.brand && ` (${product.brand})`}
-                            </option>
-                          ))}
-                        </select> */}
-                        <div className="relative dropdown-container">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (products.length === 0) {
-                                fetchProducts();
-                              }
-                              setProductDropdownOpen(prev => ({
-                                ...prev,
-                                [index]: !prev[index],
-                              }));
-                            }}
-                            className={`flex items-center justify-between w-full px-3 py-2 text-left bg-white border rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors[`items.${index}.product`] ? 'border-red-500' : 'border-gray-300'}`}
-                          >
-                            <span className="text-gray-700 truncate mr-1">
-                              {item.product
-                                ? products.find(p => p._id === item.product)?.name || 'Select Product'
-                                : 'Select Product'}
-                            </span>
-                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${productDropdownOpen[index] ? 'rotate-180' : ''}`} />
-                          </button>
-
-                          {productDropdownOpen[index] && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1 max-h-60 overflow-y-auto">
-                              <div className="px-3 py-2 border-b border-gray-200">
-                                <input
-                                  type="text"
-                                  placeholder="Search products..."
-                                  value={productSearchTerm[index] || ''}
-                                  onChange={(e) =>
-                                    setProductSearchTerm((prev) => ({
-                                      ...prev,
-                                      [index]: e.target.value,
-                                    }))
-                                  }
-                                  className="w-full px-2 py-1 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400"
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                              </div>
-                              <div className="max-h-48 overflow-y-auto">
-                                {products.length === 0 ? (
-                                  <div className="px-3 py-2 text-sm text-gray-500">
-                                    {productSearchTerm[index] ? 'No products found' : 'Loading products...'}
-                                  </div>
-                                ) : (
-                                  products
-                                    .filter(p =>
-                                      p.name.toLowerCase().includes((productSearchTerm[index] || '').toLowerCase()) ||
-                                      p.partNo?.toLowerCase().includes((productSearchTerm[index] || '').toLowerCase())
-                                    )
-                                    .map((product, productIndex) => (
-                                      <button
-                                        key={`${product._id}-${productIndex}`}
-                                        type="button"
-                                        onClick={() => {
-                                          const updates = {
-                                            product: product._id,
-                                            ...(product?.price && {
-                                              unitPrice: product.price
-                                            }),
-                                            ...(product?.gst !== undefined && {
-                                              taxRate: product.gst
-                                            }),
-                                          };
-                                          updateItem(index, updates);
-                                          setProductDropdownOpen(prev => ({ ...prev, [index]: false }));
-                                          setProductSearchTerm(prev => ({ ...prev, [index]: '' }));
-                                        }}
-                                        className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm"
-                                      >
-                                        <div className="font-medium text-gray-900">{product.name}</div>
-                                        <div className="text-xs text-gray-500">
-                                          {product.partNo && `Part #: ${product.partNo}`}{" "}
-                                          {product.brand && `• Brand: ${product.brand}`}
-                                        </div>
-                                      </button>
-                                    ))
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                        {/* Fixed height container for error message */}
-                        <div className="h-5 mt-1">
-                          {formErrors[`items.${index}.product`] && (
-                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.product`]}</p>
-                          )}
-                        </div>
-                        {products.length === 0 && (
-                          <button
-                            type="button"
-                            onClick={fetchProducts}
-                            className="text-xs text-blue-600 hover:text-blue-700 mt-1"
-                          >
-                            🔄 Refresh Products
-                          </button>
-                        )}
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
-                        {/* <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => {
-                            const quantity = parseInt(e.target.value) || 0;
-                            const updates = {
-                              quantity: quantity
-                            };
-                            updateItem(index, updates);
-                          }}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.quantity`] ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                          min="1"
-                        /> */}
-                        {/* Fixed height container for error message */}
-                        <div className="h-5 mt-1">
-                          {formErrors[`items.${index}.quantity`] && (
-                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.quantity`]}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Unit Price (₹) *</label>
-                        <input
-                          type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => {
-                            const unitPrice = parseFloat(e.target.value) || 0;
-                            const updates = {
-                              unitPrice: unitPrice
-                            };
-                            updateItem(index, updates);
-                          }}
-                          disabled
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                          min="0"
-                          step="0.01"
-                        />
-                        {/* Fixed height container for error message */}
-                        <div className="h-5 mt-1">
-                          {formErrors[`items.${index}.unitPrice`] && (
-                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.unitPrice`]}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Tax *</label>
-                        <input
-                          type="number"
-                          value={item.taxRate}
-                          onChange={(e) => {
-                            const taxRate = parseFloat(e.target.value);
-                            const updates = {
-                              taxRate: taxRate
-                            };
-                            updateItem(index, updates);
-                          }}
-                          disabled
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors[`items.${index}.unitPrice`] ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                          min="0"
-                          placeholder='0'
-                          step="0.01"
-                        />
-                        {/* Fixed height container for error message */}
-                        <div className="h-5 mt-1">
-                          {formErrors[`items.${index}.unitPrice`] && (
-                            <p className="text-red-500 text-xs">{formErrors[`items.${index}.unitPrice`]}</p>
-                          )}
-                        </div>
-                      </div>
-                      <div className="col-span-2">
-                        <div className="text-xs font-medium text-gray-900 mb-1">
-                          Total: {formatCurrency(item.quantity * item.unitPrice)}
-                        </div>
-                        {formData.items.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeItem(index)}
-                            className="text-red-600 hover:text-red-700 text-xs flex items-center space-x-1"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                            <span>Remove</span>
-                          </button>
-                        )}
-                        {/* Fixed height container to match other columns */}
-                        <div className="h-5 mt-1"></div>
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Item Notes</label>
-                        <input
-                          type="text"
-                          value={item.notes || ''}
-                          onChange={(e) => {
-                            const notes = e.target.value;
-                            const updates = {
-                              notes: notes
-                            };
-                            updateItem(index, updates);
-                          }}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-xs"
-                          placeholder="Specifications..."
-                        />
-                        {/* Fixed height container to match other columns */}
-                        <div className="h-5 mt-1"></div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Total Summary */}
-                <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <div className="text-sm text-blue-700">
-                      {formData.items.length} item(s) • {formData.items.reduce((sum, item) => sum + item.quantity, 0)} total quantity
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-blue-700">Subtotal</p>
-                      <p className="text-xl font-bold text-blue-900">
-                        {formatCurrency(formData.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={() => setShowEditModal(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                  {submitting ? 'Updating...' : 'Update Purchase Order'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* PO Details Modal */}
       {showDetailsModal && selectedPO && (
@@ -2118,7 +1547,7 @@ const PurchaseOrderManagement: React.FC = () => {
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Basic Information</h3>
                   <div className="space-y-2">
                     <p><span className="text-xs text-gray-600">PO Number:</span> <span className="font-medium">{selectedPO.poNumber}</span></p>
-                    <p><span className="text-xs text-gray-600">Supplier:</span> <span className="font-medium">{typeof selectedPO.supplier === 'string' ? selectedPO.supplier : (selectedPO.supplier as Supplier).name}</span></p>
+                    <p><span className="text-xs text-gray-600">Supplier:</span> <span className="font-medium">{typeof selectedPO.supplier === 'string' ? selectedPO.supplier : (selectedPO.supplier as Supplier)?.name || 'Unknown Supplier'}</span></p>
                     <p><span className="text-xs text-gray-600">Total Amount:</span> <span className="font-medium">{formatCurrency(selectedPO.totalAmount)}</span></p>
                     <p><span className="text-xs text-gray-600">Status:</span>
                       <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedPO.status)}`}>
@@ -2370,7 +1799,7 @@ const PurchaseOrderManagement: React.FC = () => {
                 onClick={() => {
                   setShowReceiveModal(false);
                   setDebouncedExternalTotal('')
-                  setFormErrors({})
+                  // setFormErrors({})
                   clearGstInvoiceValidation()
                   setReceiveData({
                     location: '',

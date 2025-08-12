@@ -358,7 +358,12 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
       totalTax: calculationResult.totalTax,
       grandTotal: calculationResult.grandTotal,
       roundOff: calculationResult.roundOff,
-      items: calculationResult.items
+      items: calculationResult.items,
+      // Set default advance payment values
+      advanceAmount: sanitizedData.advanceAmount || 0,
+      remainingAmount: calculationResult.grandTotal - (sanitizedData.advanceAmount || 0),
+      advancePaymentStatus: sanitizedData.advanceAmount && sanitizedData.advanceAmount > 0 ? 'partial' : 'pending',
+      status: sanitizedData.status || 'draft'
     };
 
     // Step 8: Save to database
@@ -733,6 +738,29 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
       sanitizedData.items = calculationResult.items;
     }
 
+    // Handle advance payment calculations if advance amount is provided
+    if (sanitizedData.advanceAmount !== undefined) {
+      const totalAmount = sanitizedData.grandTotal || existingQuotation.grandTotal || 0;
+      const advanceAmount = sanitizedData.advanceAmount || 0;
+      
+      // Calculate remaining amount
+      sanitizedData.remainingAmount = Math.max(0, totalAmount - advanceAmount);
+      
+      // Determine advance payment status
+      if (advanceAmount === 0) {
+        sanitizedData.advancePaymentStatus = 'pending';
+      } else if (advanceAmount >= totalAmount) {
+        sanitizedData.advancePaymentStatus = 'paid';
+      } else {
+        sanitizedData.advancePaymentStatus = 'partial';
+      }
+      
+      // Update status to 'sent' if it was 'draft' and advance payment is made
+      if (existingQuotation.status === 'draft' && advanceAmount > 0) {
+        sanitizedData.status = 'sent';
+      }
+    }
+
     // Update the quotation
     const updatedQuotation = await Quotation.findByIdAndUpdate(
       req.params.id,
@@ -763,13 +791,88 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
 // @route   DELETE /api/v1/quotations/:id
 export const deleteQuotation = async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const quotation = await Quotation.findByIdAndDelete(req.params.id);
+    const { id } = req.params;
+
+    const quotation = await Quotation.findById(id);
     if (!quotation) {
-      res.status(404).json({ message: 'Quotation not found' });
-      return;
+      return next(new AppError('Quotation not found', 404));
     }
-    res.json({ message: 'Quotation deleted successfully' });
-    return;
+
+    await Quotation.findByIdAndDelete(id);
+
+    res.status(200).json({
+      success: true,
+      message: 'Quotation deleted successfully'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update quotation advance payment
+// @route   PUT /api/quotations/:id/advance-payment
+// @access  Private
+export const updateQuotationAdvancePayment = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { id } = req.params;
+    const { 
+      advanceAmount, 
+      advancePaymentMethod, 
+      advancePaymentDate, 
+      advancePaymentNotes 
+    } = req.body;
+
+    // Validate required fields
+    if (advanceAmount === undefined || advanceAmount < 0) {
+      return next(new AppError('Valid advance amount is required', 400));
+    }
+
+    // Find the quotation
+    const quotation = await Quotation.findById(id);
+    if (!quotation) {
+      return next(new AppError('Quotation not found', 404));
+    }
+
+    // Calculate remaining amount
+    const totalAmount = quotation.grandTotal || 0;
+    const newRemainingAmount = Math.max(0, totalAmount - advanceAmount);
+
+    // Determine advance payment status
+    let newAdvancePaymentStatus: 'pending' | 'partial' | 'paid';
+    if (advanceAmount === 0) {
+      newAdvancePaymentStatus = 'pending';
+    } else if (advanceAmount >= totalAmount) {
+      newAdvancePaymentStatus = 'paid';
+    } else {
+      newAdvancePaymentStatus = 'partial';
+    }
+
+    // Update the quotation with advance payment information
+    const updatedQuotation = await Quotation.findByIdAndUpdate(
+      id,
+      {
+        advanceAmount,
+        remainingAmount: newRemainingAmount,
+        advancePaymentStatus: newAdvancePaymentStatus,
+        advancePaymentDate: advancePaymentDate ? new Date(advancePaymentDate) : undefined,
+        advancePaymentMethod,
+        advancePaymentNotes,
+        // Update status to 'sent' if it was 'draft' and advance payment is made
+        ...(quotation.status === 'draft' && advanceAmount > 0 && { status: 'sent' })
+      },
+      { new: true, runValidators: true }
+    );
+
+    res.status(200).json({
+      success: true,
+      message: 'Advance payment updated successfully',
+      data: {
+        quotation: updatedQuotation,
+        advanceAmount,
+        remainingAmount: newRemainingAmount,
+        advancePaymentStatus: newAdvancePaymentStatus
+      }
+    });
   } catch (error) {
     next(error);
   }

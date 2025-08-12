@@ -24,10 +24,13 @@ export interface CreatePurchaseOrderInput {
   supplier: string; // Can be ObjectId (from customers collection) or supplier name string
   supplierEmail?: string; // Optional, will be fetched from customer if supplier is ObjectId
   supplierAddress?: {
+    id: number;
     address: string;
     state: string;
     district: string;
     pincode: string;
+    gstNumber: string;
+    isPrimary: boolean;
   };
   items: POItemInput[];
   expectedDeliveryDate?: string;
@@ -60,6 +63,7 @@ export interface CreatePurchaseOrderInput {
   };
   internalNotes?: string;
   supplierNotes?: string;
+  notes?: string;
   attachment?: {
     filename?: string;
     url?: string;
@@ -71,10 +75,13 @@ export interface UpdatePurchaseOrderInput {
   supplier?: string; // Can be ObjectId (from customers collection) or supplier name string
   supplierEmail?: string; // Optional, will be fetched from customer if supplier is ObjectId
   supplierAddress?: {
+    id: number;
     address: string;
     state: string;
     district: string;
     pincode: string;
+    gstNumber: string;
+    isPrimary: boolean;
   };
   items: POItemInput[];
   expectedDeliveryDate?: string;
@@ -108,6 +115,7 @@ export interface UpdatePurchaseOrderInput {
   };
   internalNotes?: string;
   supplierNotes?: string;
+  notes?: string;
 }
 
 export interface UpdatePOItemInput {
@@ -305,7 +313,7 @@ const poItemSchema = Joi.object<POItemInput>({
     value: Joi.number().min(0)
   }),
   expectedDeliveryDate: Joi.date().iso(),
-  notes: Joi.string().max(500)
+  notes: Joi.string().max(500).allow('')
 });
 
 // Create purchase order schema
@@ -313,10 +321,13 @@ export const createPurchaseOrderSchema = Joi.object<CreatePurchaseOrderInput>({
   supplier: basePOFields.supplier.required(),
   supplierEmail: basePOFields.supplierEmail.optional(), // Optional since it can be fetched from customer
   supplierAddress: Joi.object({
+    id: Joi.number().integer().min(1),
     address: Joi.string().max(200).allow(''),
     state: Joi.string().max(100).allow(''),
     district: Joi.string().max(100).allow(''),
-    pincode: Joi.string().max(20).allow('')
+    pincode: Joi.string().max(20).allow(''),
+    gstNumber: Joi.string().max(100).allow(''),
+    isPrimary: Joi.boolean().default(false)
   }),
   items: Joi.array().items(poItemSchema).min(1).max(100).required(),
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
@@ -349,6 +360,7 @@ export const createPurchaseOrderSchema = Joi.object<CreatePurchaseOrderInput>({
   }),
   internalNotes: Joi.string().max(1000),
   supplierNotes: Joi.string().max(1000),
+  notes: Joi.string().max(1000).allow(''),
   attachment: Joi.object({
     filename: Joi.string().max(255),
     url: Joi.string().uri(),
@@ -361,10 +373,13 @@ export const updatePurchaseOrderSchema = Joi.object<UpdatePurchaseOrderInput>({
   supplier: basePOFields.supplier,
   supplierEmail: basePOFields.supplierEmail,
   supplierAddress: Joi.object({
+    id: Joi.number().integer().min(1),
     address: Joi.string().max(200).allow(''),
     state: Joi.string().max(100).allow(''),
     district: Joi.string().max(100).allow(''),
-    pincode: Joi.string().max(20).allow('')
+    pincode: Joi.string().max(20).allow(''),
+    gstNumber: Joi.string().max(100).allow(''),
+    isPrimary: Joi.boolean().default(false)
   }),
   items: Joi.array().items(poItemSchema).min(1).max(100).required(),
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
@@ -397,7 +412,8 @@ export const updatePurchaseOrderSchema = Joi.object<UpdatePurchaseOrderInput>({
     phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/)
   }),
   internalNotes: Joi.string().max(1000),
-  supplierNotes: Joi.string().max(1000)
+  supplierNotes: Joi.string().max(1000),
+  notes: Joi.string().max(1000).allow('')
 });
 
 // Add/Update purchase order item schema
@@ -451,7 +467,7 @@ export const receivePOSchema = Joi.object<ReceivePOInput>({
     checkedBy: Joi.string().hex().length(24),
     checkDate: Joi.date().iso(),
     result: Joi.string().valid('passed', 'failed', 'conditional'),
-    notes: Joi.string().max(1000)
+    notes: Joi.string().max(1000).allow('')
   }),
   discrepancies: Joi.array().items(
     Joi.object({
@@ -500,7 +516,7 @@ export const cancelPOSchema = Joi.object<CancelPOInput>({
     'duplicate_order',
     'other'
   ).required(),
-  notes: Joi.string().max(1000).required(),
+  notes: Joi.string().max(1000).allow(''),
   notifySupplier: Joi.boolean().default(true),
   refundRequired: Joi.boolean().default(false),
   refundAmount: Joi.number().min(0).when('refundRequired', {

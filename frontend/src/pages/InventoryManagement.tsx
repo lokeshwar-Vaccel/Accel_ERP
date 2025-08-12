@@ -2539,7 +2539,7 @@ const InventoryManagement: React.FC = () => {
       {/* Inventory Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-scroll">
         <div
-          className="overflow-x-scroll inventory-scroll"
+          className="overflow-x-scroll inventory-scroll h-[560px]"
           style={{
             scrollbarWidth: 'thin',
             scrollbarGutter: 'stable both-edges',
@@ -2549,7 +2549,7 @@ const InventoryManagement: React.FC = () => {
           }}
         >
           <table className="w-full min-w-[1600px] table-fixed">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 sticky top-0">
               <tr>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Product Details</th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Part No</th>
@@ -2564,7 +2564,7 @@ const InventoryManagement: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-white divide-y divide-gray-200 overflow-y-scroll">
               {loading ? (
                 <tr>
                   <td colSpan={11} className="px-6 py-8 text-center text-gray-500">Loading inventory...</td>

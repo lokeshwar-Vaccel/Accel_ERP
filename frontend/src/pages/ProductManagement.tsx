@@ -973,6 +973,7 @@ const ProductManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Stock</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UOM</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GNDP</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPCB No</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -1010,6 +1011,9 @@ const ProductManagement: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {product?.uom || 'N/A'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                    ₹{product.gndp?.toFixed(2) || 'N/A'}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
                       {product.cpcbNo || 'N/A'}

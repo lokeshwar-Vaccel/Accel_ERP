@@ -13,13 +13,16 @@ interface IPOItemSchema {
 // Main purchase order interface
 interface IPurchaseOrderSchema extends Document {
   poNumber: string;
-  supplier: string;
+  supplier: mongoose.Types.ObjectId;
   supplierEmail: string;
   supplierAddress: {
+    id: number;
     address: string;
     state: string;
     district: string;
     pincode: string;
+    gstNumber: string;
+    isPrimary: boolean;
   };
   items: IPOItemSchema[];
   totalAmount: number;
@@ -83,10 +86,9 @@ const purchaseOrderSchema = new Schema({
     trim: true
   },
   supplier: {
-    type: String,
-    required: [true, 'Supplier is required'],
-    trim: true,
-    maxlength: [200, 'Supplier name cannot exceed 200 characters']
+    type: Schema.Types.ObjectId,
+    ref: 'Customer',
+    // required: [true, 'Supplier is required'],
   },
   supplierEmail: {
     type: String,
@@ -94,10 +96,13 @@ const purchaseOrderSchema = new Schema({
     // maxlength: [100, 'Supplier Email cannot exceed 100 characters']
   },
   supplierAddress: {
+    id: { type: Number, required: true },
     address: { type: String, trim: true },
     state: { type: String, trim: true },
     district: { type: String, trim: true },
-    pincode: { type: String, trim: true }
+    pincode: { type: String, trim: true },
+    gstNumber: { type: String, trim: true },
+    isPrimary: { type: Boolean, default: false }
   },
   items: {
     type: [poItemSchema],
@@ -163,6 +168,10 @@ const purchaseOrderSchema = new Schema({
   department: {
     type: String,
     maxlength: [100, 'Department cannot exceed 100 characters'],
+    trim: true
+  },
+  notes: {
+    type: String,
     trim: true
   },
   createdBy: {

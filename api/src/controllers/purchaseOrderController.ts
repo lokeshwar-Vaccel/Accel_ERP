@@ -104,6 +104,7 @@ export const getPurchaseOrders = async (
     const orders = await PurchaseOrder.find(query)
       .populate('items.product', 'name category brand modelNumber partNo price gst')
       .populate('createdBy', 'firstName lastName email')
+      .populate('supplier', 'name email addresses')
       .sort(sort as string)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
@@ -145,8 +146,9 @@ export const getPurchaseOrder = async (
 ): Promise<void> => {
   try {
     const order = await PurchaseOrder.findById(req.params.id)
-      .populate('items.product', 'name category brand modelNumber partNo specifications price gst')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('items.product', 'name category brand modelNumber partNo specifications price gst hsnNumber')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('supplier', 'name email addresses');
 
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
@@ -178,19 +180,21 @@ export const createPurchaseOrder = async (
     //   return next(new AppError('Supplier address (address, state, district, pincode) is required', 400));
     // }
     // Handle supplier data from customers collection
-    let supplierName = req.body.supplier;
+    let supplier = req.body.supplier;
     let supplierEmail = req.body.supplierEmail;
+    console.log("req.body:",req.body);
+    
 
     // If supplier is an ObjectId, fetch supplier details from customers collection
     if (mongoose.Types.ObjectId.isValid(req.body.supplier)) {
-      const supplier = await Customer.findById(req.body.supplier);
-      if (!supplier) {
+      const supplierResolved = await Customer.findById(req.body.supplier);
+      if (!supplierResolved) {
         return next(new AppError('Supplier not found', 404));
       }
       
       // Use supplier details from customers collection
-      supplierName = supplier.name;
-      supplierEmail = supplier.email || req.body.supplierEmail;
+      supplier = supplierResolved._id;
+      supplierEmail = supplierResolved.email || req.body.supplierEmail;
     }
 
     // Calculate total amount from items (including taxRate)
@@ -208,7 +212,7 @@ export const createPurchaseOrder = async (
     // Prepare order data
     const orderData = {
       ...req.body,
-      supplier: supplierName, // Use the resolved supplier name
+      supplier: supplier, // Use the resolved supplier name
       supplierEmail: supplierEmail, // Use the resolved supplier email
       totalAmount,
       createdBy: req.user!.id,
@@ -230,8 +234,10 @@ export const createPurchaseOrder = async (
     const order = await PurchaseOrder.create(orderData);
     
     const populatedOrder = await PurchaseOrder.findById(order._id)
-      .populate('items.product', 'name category brand modelNumber partNo price gst')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('items.product', 'name category brand modelNumber partNo price gst hsnNumber')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('supplier', 'name email addresses');
+
     
     const response: APIResponse = {
       success: true,
@@ -265,19 +271,21 @@ export const updatePurchaseOrder = async (
     // }
 
     // Handle supplier data from customers collection
-    let supplierName = req.body.supplier;
+    let supplier = req.body.supplier;
     let supplierEmail = req.body.supplierEmail;
+    console.log("req.body:",req.body);
+    
 
     // If supplier is an ObjectId, fetch supplier details from customers collection
     if (req.body.supplier && mongoose.Types.ObjectId.isValid(req.body.supplier)) {
-      const supplier = await Customer.findById(req.body.supplier);
-      if (!supplier) {
+      const supplierResolved = await Customer.findById(req.body.supplier);
+      if (!supplierResolved) {
         return next(new AppError('Supplier not found', 404));
       }
       
       // Use supplier details from customers collection
-      supplierName = supplier.name;
-      supplierEmail = supplier.email || req.body.supplierEmail;
+      supplier = supplierResolved._id;
+      supplierEmail = supplierResolved.email || req.body.supplierEmail;
     }
 
     // Recalculate total if items are updated
@@ -294,8 +302,8 @@ export const updatePurchaseOrder = async (
     }
 
     // Update supplier information
-    if (supplierName) {
-      req.body.supplier = supplierName;
+    if (supplier) {
+      req.body.supplier = supplier;
     }
     if (supplierEmail) {
       req.body.supplierEmail = supplierEmail;
@@ -320,8 +328,9 @@ export const updatePurchaseOrder = async (
       req.body,
       { new: true, runValidators: true }
     )
-      .populate('items.product', 'name category brand partNo')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('items.product', 'name category brand partNo hsnNumber')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('supplier', 'name email addresses');
 
     const response: APIResponse = {
       success: true,
@@ -344,7 +353,10 @@ export const sendPurchaseOrder = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const order = await PurchaseOrder.findById(req.params.id);
+    const order = await PurchaseOrder.findById(req.params.id)
+    .populate('items.product', 'name category brand partNo hsnNumber')
+    .populate('createdBy', 'firstName lastName email')
+    .populate('supplier', 'name email addresses');
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
     }
@@ -428,7 +440,7 @@ export const receiveItems = async (
       inspectedBy, 
       notes, 
       externalInvoiceTotal, 
-      supplierName, 
+      supplier, 
       supplierEmail,
       supplierAddress,
       items,
@@ -443,7 +455,9 @@ export const receiveItems = async (
     } = req.body;
 
     const order = await PurchaseOrder.findById(req.params.id)
-    .populate('items.product', 'name category brand partNo');
+    .populate('items.product', 'name category brand partNo')
+    .populate('createdBy', 'firstName lastName email')
+    .populate('supplier', 'name email addresses');
 
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
@@ -610,7 +624,8 @@ export const receiveItems = async (
     // Populate the order with product details for frontend
     const populatedOrder = await PurchaseOrder.findById(order._id)
       .populate('items.product', 'name category brand modelNumber partNo price gst description ')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('createdBy', 'firstName lastName email')
+      .populate('supplier', 'name email addresses');
 
     const transformedItems = (populatedOrder?.items || []).map((item: any) => ({
       product: item.product._id, // or item.product.id
@@ -623,7 +638,7 @@ export const receiveItems = async (
     const invoice = await createInvoiceFromPO({
       items: items,
       gstInvoiceNumber: gstInvoiceNumber,
-      supplierName: supplierName,
+      supplier: order.supplier,
       supplierEmail: supplierEmail,
       supplierAddress: supplierAddress,
       dueDate: receiptDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
@@ -854,7 +869,7 @@ export const updatePurchaseOrderStatus = async (
 
 const createInvoiceFromPO = async ({
   items,
-  supplierName,
+  supplier,
   gstInvoiceNumber,
   supplierEmail,
   supplierAddress,
@@ -869,7 +884,7 @@ const createInvoiceFromPO = async ({
   externalInvoiceTotal
 }: {
   items: InvoiceItemInput[],
-  supplierName: any,
+  supplier: any,
   supplierEmail: any,
   supplierAddress: any,
   dueDate: string,
@@ -923,7 +938,7 @@ const totalAmount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discou
 
   const invoice = new Invoice({
     invoiceNumber,
-    supplierName,
+    supplier,
     supplierEmail,  
     supplierAddress,
     issueDate: new Date(),

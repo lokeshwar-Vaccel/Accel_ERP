@@ -5,6 +5,16 @@ export interface IDGQuotation extends Document {
   issueDate: Date;
   validUntil: Date;
   dgEnquiry?: Types.ObjectId; // Reference to DGEnquiry
+  enquiryDetails?: {
+    enquiryNo: string;
+    enquiryDate: Date;
+    enquiryType: string;
+    enquiryStatus: string;
+    enquiryStage: string;
+    assignedEmployeeName: string;
+    plannedFollowUpDate: Date;
+    numberOfFollowUps: number;
+  };
   customer: {
     _id?: string; // DGCustomer ID for reference
     name: string;
@@ -95,6 +105,16 @@ const DGQuotationSchema = new Schema<IDGQuotation>({
   issueDate: { type: Date, required: true },
   validUntil: { type: Date, required: true },
   dgEnquiry: { type: Schema.Types.ObjectId, ref: 'DGEnquiry' },
+  enquiryDetails: {
+    enquiryNo: { type: String },
+    enquiryDate: { type: Date },
+    enquiryType: { type: String },
+    enquiryStatus: { type: String },
+    enquiryStage: { type: String },
+    assignedEmployeeName: { type: String },
+    plannedFollowUpDate: { type: Date },
+    numberOfFollowUps: { type: Number, default: 0 },
+  },
   customer: {
     _id: { type: String },
     name: { type: String, required: true },
