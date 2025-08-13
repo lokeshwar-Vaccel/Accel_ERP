@@ -152,6 +152,56 @@ interface Invoice {
     isPrimary: boolean;
     gstNumber?: string;
   };
+  sourceQuotation?: {
+    _id: string;
+    quotationNumber: string;
+    customer: {
+      _id: string;
+      name: string;
+      email: string;
+      phone: string;
+      addresses?: Array<{
+        id: number;
+        address: string;
+        state: string;
+        district: string;
+        pincode: string;
+        isPrimary: boolean;
+        gstNumber?: string;
+      }>;
+    };
+    issueDate: string;
+    validUntil: string;
+    validityPeriod: number;
+    grandTotal: number;
+    paidAmount: number;
+    remainingAmount: number;
+    paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+    paymentMethod?: string;
+    paymentDate?: string;
+    notes?: string;
+    status: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
+    items: any[];
+    company?: any;
+    location?: any;
+    assignedEngineer?: any;
+    billToAddress?: any;
+    shipToAddress?: any;
+    terms?: string;
+    subtotal?: number;
+    totalTax?: number;
+    totalDiscount?: number;
+    overallDiscount?: number;
+    overallDiscountAmount?: number;
+    paymentDetails?: {
+      paidAmount: number;
+      remainingAmount: number;
+    };
+  };
+  quotationPaymentDetails?: {
+    paidAmount: number;
+    remainingAmount: number;
+  };
 }
 
 interface InvoiceItem {
@@ -360,6 +410,8 @@ interface Quotation {
   subtotal?: number;
   totalTax?: number;
   totalDiscount?: number;
+  overallDiscount?: number;
+  overallDiscountAmount?: number;
 }
 
 // Helper to safely format numbers
@@ -560,18 +612,9 @@ const InvoiceManagement: React.FC = () => {
     type: 'danger' | 'warning' | 'info';
   } | null>(null);
 
-  // Add advance payment states
+  // Old advance payment states removed - now using unified UpdatePaymentModal
   const [showAdvancePaymentModal, setShowAdvancePaymentModal] = useState(false);
   const [selectedQuotationForPayment, setSelectedQuotationForPayment] = useState<Quotation | null>(null);
-  const [advancePaymentData, setAdvancePaymentData] = useState({
-    amount: 0,
-    paymentMethod: '',
-    paymentDate: '',
-    notes: '',
-    useRazorpay: false
-  });
-
-
 
   console.log("selectedInvoice", selectedInvoice);
 
@@ -1186,9 +1229,10 @@ const InvoiceManagement: React.FC = () => {
   const handleCreateQuotation = () => {
     navigate('/billing/quotation/create');
   };
-  // Quotation handlers
-  const handleCreatePurchaseOrder = () => {
-    navigate('/purchase-order-management/create');
+
+  // Purchase Invoice handlers
+  const handleCreatePurchaseInvoice = () => {
+    navigate('/billing/create', { state: { invoiceType: 'purchase' } });
   };
 
   const handleViewQuotation = (quotation: any) => {
@@ -1237,61 +1281,106 @@ const InvoiceManagement: React.FC = () => {
     setShowConfirmationModal(true);
   };
 
-  const handleCreateInvoiceFromQuotation = (quotation: any) => {
-    console.log('Creating invoice from quotation:', quotation);
+  const handleCreateInvoiceFromQuotation = async (quotation: any) => {
+    try {
+      console.log('Preparing to create invoice from quotation:', quotation);
 
-    // Close the quotation view modal
-    setShowQuotationViewModal(false);
+      // Close the quotation view modal
+      setShowQuotationViewModal(false);
 
-    // Prepare quotation data with proper structure
-    const quotationData = {
-      customer: quotation.customer,
-      billToAddress: quotation.billToAddress ? {
-        id: quotation.billToAddress.id || quotation.billToAddress.addressId || 0,
-        address: quotation.billToAddress.address || '',
-        state: quotation.billToAddress.state || '',
-        district: quotation.billToAddress.district || '',
-        pincode: quotation.billToAddress.pincode || '',
-        isPrimary: quotation.billToAddress.isPrimary || false,
-        gstNumber: quotation.billToAddress.gstNumber || ''
-      } : null,
-      shipToAddress: quotation.shipToAddress ? {
-        id: quotation.shipToAddress.id || quotation.shipToAddress.addressId || 0,
-        address: quotation.shipToAddress.address || '',
-        district: quotation.shipToAddress.district || '',
-        pincode: quotation.shipToAddress.pincode || '',
-        isPrimary: quotation.shipToAddress.isPrimary || false,
-        gstNumber: quotation.shipToAddress.gstNumber || ''
-      } : null,
-      assignedEngineer: quotation.assignedEngineer?._id || quotation.assignedEngineer,
-      items: quotation.items?.map((item: any) => ({
-        product: item.product?._id || item.product,
-        description: item.description || '',
-        quantity: item.quantity || 0,
-        unitPrice: item.unitPrice || 0,
-        taxRate: item.taxRate || 0,
-        hsnNumber: item.hsnNumber || item.hsnSac || '',
-        partNo: item.partNo || '',
-        uom: item.uom || 'nos',
-        discount: item.discount || 0
-      })) || [],
-      overallDiscount: quotation.overallDiscount || 0,
-      overallDiscountAmount: quotation.overallDiscountAmount || 0,
-      notes: quotation.notes || '',
-      terms: quotation.terms || '',
-      location: quotation.location?._id || quotation.location,
-      dueDate: quotation.validUntil ? new Date(quotation.validUntil).toISOString().split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-    };
+      // Prepare quotation data with proper structure for InvoiceFormPage
+      const quotationData = {
+        customer: quotation.customer,
+        billToAddress: quotation.billToAddress ? {
+          id: quotation.billToAddress.id || quotation.billToAddress.addressId || 0,
+          address: quotation.billToAddress.address || '',
+          state: quotation.billToAddress.state || '',
+          district: quotation.billToAddress.district || '',
+          pincode: quotation.billToAddress.pincode || '',
+          isPrimary: quotation.billToAddress.isPrimary || false,
+          gstNumber: quotation.billToAddress.gstNumber || ''
+        } : null,
+        shipToAddress: quotation.shipToAddress ? {
+          id: quotation.shipToAddress.id || quotation.shipToAddress.addressId || 0,
+          address: quotation.shipToAddress.address || '',
+          district: quotation.shipToAddress.district || '',
+          pincode: quotation.shipToAddress.pincode || '',
+          isPrimary: quotation.shipToAddress.isPrimary || false,
+          gstNumber: quotation.shipToAddress.gstNumber || ''
+        } : null,
+        assignedEngineer: quotation.assignedEngineer?._id || quotation.assignedEngineer,
+        items: quotation.items?.map((item: any) => ({
+          product: item.product?._id || item.product,
+          description: item.description || '',
+          quantity: item.quantity || 0,
+          unitPrice: item.unitPrice || 0,
+          taxRate: item.taxRate || 0,
+          hsnNumber: item.hsnNumber || item.hsnSac || '',
+          partNo: item.partNo || '',
+          uom: item.uom || 'nos',
+          discount: item.discount || 0
+        })) || [],
+        overallDiscount: quotation.overallDiscount || 0,
+        overallDiscountAmount: quotation.overallDiscountAmount || 0,
+        notes: quotation.notes || '',
+        terms: quotation.terms || '',
+        location: quotation.location?._id || quotation.location,
+        dueDate: quotation.validUntil ? new Date(quotation.validUntil).toISOString().split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        // Quotation reference information
+        sourceQuotation: quotation._id,
+        quotationNumber: quotation.quotationNumber,
+        quotationPaymentDetails: {
+          paidAmount: quotation.paidAmount || 0,
+          remainingAmount: quotation.remainingAmount || 0,
+          paymentStatus: quotation.paymentStatus || 'pending'
+        }
+      };
 
-    console.log('Prepared quotation data:', quotationData);
+      console.log('Prepared quotation data for InvoiceFormPage:', quotationData);
 
-    // Navigate to create invoice page with quotation data
-    navigate('/billing/create', {
-      state: {
-        invoiceType: 'sale',
-        quotationData: quotationData
+      // Navigate to create invoice page with quotation data
+      navigate('/billing/create', {
+        state: {
+          invoiceType: 'sale',
+          quotationData: quotationData,
+          fromQuotation: true
+        }
+      });
+    } catch (error: any) {
+      console.error('Error preparing invoice from quotation:', error);
+      toast.error('Failed to prepare invoice from quotation');
+    }
+  };
+
+  // Handle sending quotation email
+  const handleSendQuotationEmail = async (quotation: any) => {
+    try {
+      // Check if customer has email
+      if (!quotation.customer?.email) {
+        toast.error('Customer email not available for this quotation');
+        return;
       }
-    });
+
+      // Draft quotations can be sent via email - this will update their status to 'sent'
+
+      // Show loading state
+      toast.loading('Sending quotation email...', { id: 'quotation-email' });
+
+      // Send the email
+      const response = await apiClient.quotations.sendEmail(quotation._id);
+
+      if (response.success) {
+        toast.success(`Quotation email sent successfully to ${quotation.customer.email}. Status updated to 'sent'.`, { id: 'quotation-email' });
+        
+        // Refresh quotations to get updated status
+        fetchQuotations();
+      } else {
+        toast.error(response.message || 'Failed to send quotation email', { id: 'quotation-email' });
+      }
+    } catch (error: any) {
+      console.error('Error sending quotation email:', error);
+      toast.error('Failed to send quotation email', { id: 'quotation-email' });
+    }
   };
 
   // Status management functions
@@ -2118,6 +2207,7 @@ const InvoiceManagement: React.FC = () => {
     return matchesSearch;
   });
 
+  console.log("filteredQuotations:", filteredQuotations);
 
 
 
@@ -3052,360 +3142,508 @@ const InvoiceManagement: React.FC = () => {
 
   // Print quotation function
   const printQuotation = (quotation: any) => {
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank');
+    
     const printContent = `
-    <html>
+      <!DOCTYPE html>
+      <html>
       <head>
-        <title>Quotation ${quotation.quotationNumber}</title>
+        <title>Service Quotation</title>
         <style>
-          @page { size: A4; margin: 0.5in; }
-          body { font-family: Arial, sans-serif; margin: 0; padding: 0; line-height: 1.4; color: #000; font-size: 12px; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
-          .header h1 { margin: 0 0 8px 0; font-size: 22px; font-weight: bold; color: #000; }
-          .header div { margin: 3px 0; font-size: 11px; }
-          .quotation-details { margin-bottom: 15px; }
-          .quotation-details h2 { margin: 0 0 10px 0; text-align: center; font-size: 20px; font-weight: bold; border: 2px solid #000; padding: 8px; display: inline-block; width: 200px; margin-left: calc(50% - 100px); }
-          .details-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-          .details-table td { padding: 6px 10px; font-size: 11px; border: 1px solid #000; }
-          .details-table td:first-child { font-weight: bold; background-color: #f5f5f5; width: 20%; }
-          .engineer-date-section { display: flex; gap: 15px; margin-bottom: 15px; }
-          .engineer-box, .date-box { flex: 1; border: 1px solid #000; padding: 8px; background-color: #f9f9f9; }
-          .engineer-box h4, .date-box h4 { margin: 0 0 5px 0; font-size: 12px; font-weight: bold; }
-          .from-to-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 15px; }
-          .from-to-box { flex: 1; min-width: 200px; padding: 10px; border: 1px solid #000; }
-          .from-to-box h3 { margin: 0 0 8px 0; font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; }
-          .from-to-box div { font-size: 10px; line-height: 1.3; }
-          .from-to-box strong { color: #000; }
-          table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10px; }
-          table.items th, table.items td { border: 1px solid #000; padding: 5px 4px; text-align: center; vertical-align: middle; }
-          table.items th { background: #f0f0f0; font-weight: bold; font-size: 9px; }
-          table.items .description-col { text-align: left; max-width: 150px; }
-          .summary-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 20px; }
-          .notes-box { flex: 1; padding: 10px; border: 1px solid #000; min-height: 120px; }
-          .notes-box h4 { margin: 0 0 8px 0; font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; }
-          .notes-box div { font-size: 10px; line-height: 1.3; }
-          .summary-box { flex: 1; padding: 10px; border: 1px solid #000; min-height: 120px; }
-          .summary-table { width: 100%; border-collapse: collapse; }
-          .summary-table td { padding: 5px 8px; font-size: 11px; border-bottom: 1px solid #ccc; }
-          .summary-table td:first-child { font-weight: bold; }
-          .summary-table .total-row { font-weight: bold; background-color: #f0f0f0; border-top: 2px solid #000; font-size: 12px; }
-          .summary-table .amount-words { border-top: 1px solid #000; font-size: 9px; line-height: 1.2; word-wrap: break-word; max-width: 180px; }
-          .footer { margin-top: 30px; text-align: center; font-size: 11px; }
-          .footer div { margin: 8px 0; }
-          @media print { body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none; } .quotation-details { border: none !important; background: none !important; } }
+          @media print {
+            @page {
+              margin: 0.5in;
+              size: A4;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+            }
+          }
+          
+          body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.2;
+            margin: 0;
+            padding: 20px;
+            background: white;
+          }
+          
+          .quotation-container {
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto;
+            background: white;
+          }
+          
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          
+          .quotation-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+          }
+          
+          .info-section {
+            display: table;
+            width: 100%;
+            margin-bottom: 20px;
+          }
+          
+          .info-row {
+            display: table-row;
+          }
+          
+          .info-cell {
+            display: table-cell;
+            padding: 3px 5px;
+            vertical-align: top;
+            border: none;
+          }
+          
+          .info-left {
+            width: 50%;
+            padding-right: 20px;
+          }
+          
+          .info-right {
+            width: 50%;
+            padding-left: 20px;
+          }
+          
+          .subject-line {
+            font-weight: bold;
+            margin: 20px 0 10px 0;
+            font-size: 13px;
+          }
+          
+          .greeting {
+            margin: 15px 0 5px 0;
+          }
+          
+          .intro-text {
+            margin: 5px 0 20px 0;
+          }
+          
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 11px;
+          }
+          
+          .items-table th,
+          .items-table td {
+            border: 1px solid #333;
+            padding: 4px 6px;
+            text-align: left;
+          }
+          
+          .items-table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            text-align: center;
+          }
+          
+          .items-table .number-cell {
+            text-align: right;
+          }
+          
+          .items-table .center-cell {
+            text-align: center;
+          }
+          
+          .totals-row {
+            font-weight: bold;
+            background-color: #f9f9f9;
+          }
+          
+          .grand-total-row {
+            font-weight: bold;
+            background-color: #e9e9e9;
+            font-size: 12px;
+          }
+          
+          .terms-section {
+            margin: 20px 0;
+          }
+          
+          .terms-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+          }
+          
+          .terms-table {
+            width: 100%;
+            margin-bottom: 20px;
+          }
+          
+          .terms-table td {
+            padding: 3px 0;
+            vertical-align: top;
+          }
+          
+          .terms-number {
+            width: 20px;
+            text-align: left;
+          }
+          
+          .terms-label {
+            width: 150px;
+            text-align: left;
+          }
+          
+          .terms-colon {
+            width: 15px;
+            text-align: left;
+          }
+          
+          .terms-value {
+            text-align: left;
+          }
+          
+          .closing-text {
+            margin: 15px 0;
+            line-height: 1.4;
+          }
+          
+          .footer-section {
+            display: table;
+            width: 100%;
+            margin-top: 30px;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+          }
+          
+          .footer-left {
+            display: table-cell;
+            width: 40%;
+            vertical-align: top;
+            padding-right: 20px;
+          }
+          
+          .footer-center {
+            display: table-cell;
+            width: 20%;
+            text-align: center;
+            vertical-align: top;
+          }
+          
+          .footer-right {
+            display: table-cell;
+            width: 40%;
+            text-align: center;
+            vertical-align: top;
+          }
+          
+          .signature-line {
+            margin-top: 40px;
+            text-align: center;
+            border-top: 1px solid #333;
+            padding-top: 5px;
+            width: 200px;
+            margin-left: auto;
+            margin-right: auto;
+          }
+          
+          .company-details {
+            font-size: 10px;
+            line-height: 1.3;
+          }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>${quotation.company?.name || 'Sun Power Services'}</h1>
-          ${quotation.company?.address ? `<div>${quotation.company?.address || ''}</div>` : ''}
-          ${quotation.company?.phone ? `<div>Phone: ${quotation.company?.phone || ''} | Email: ${quotation.company?.email || ''}</div>` : ''}
-          ${quotation.company?.pan ? `<div>PAN: ${quotation.company?.pan || ''} | GSTIN: ${quotation.company?.gstin || ''}</div>` : ''}
-        </div>
-        <div class="quotation-details">
-          <h2>QUOTATION</h2>
-          <table class="details-table">
-            <tr>
-              <td>Quotation No:</td>
-              <td>${quotation.quotationNumber}</td>
-              <td><strong>Issue Date:</strong></td>
-              <td>${quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : ''}</td>
-            </tr>
-            <tr>
-              <td><strong>Valid Until:</strong></td>
-              <td>${quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString() : ''}</td>
-              <td>Validity Period:</td>
-              <td>${quotation.validityPeriod || 30} days</td>
-            </tr>
+        <div class="quotation-container">
+          <div class="quotation-title">QUOTATION</div>
+          
+          <div class="info-section">
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>Ref:</strong> ${quotation.quotationNumber || 'N/A'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Date:</strong> ${quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : 'N/A'}
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>Reference:</strong> ${quotation.reference || 'Customer Request'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Engineer Name:</strong> ${quotation.assignedEngineer ? `${quotation.assignedEngineer.firstName || ''} ${quotation.assignedEngineer.lastName || ''}`.trim() : 'N/A'}
+              </div>
+            </div>
+          </div>
+          
+          <div class="info-section">
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>Customer Billing Address:</strong><br>
+                ${quotation.customer?.name || 'N/A'}<br>
+                ${quotation.billToAddress ? `${quotation.billToAddress.address || ''}<br>${quotation.billToAddress.district || ''}, ${quotation.billToAddress.pincode || ''}<br>${quotation.billToAddress.state || ''}` : 'Same as billing address'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Customer Delivery Address:</strong><br>
+                ${quotation.shipToAddress ? `${quotation.shipToAddress.address || ''}<br>${quotation.shipToAddress.district || ''}, ${quotation.shipToAddress.pincode || ''}<br>${quotation.shipToAddress.state || ''}` : 'Same as billing address'}
+              </div>
+            </div>
+          </div>
+          
+          <div class="info-section">
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>ESN:</strong> ${quotation.esn || 'N/A'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Last Service Done Date:</strong> ${quotation.lastServiceDate || 'N/A'}
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>DG Rating:</strong> ${quotation.dgRating || 'N/A'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Last Service Done HMR:</strong> ${quotation.lastServiceHMR || 'N/A'}
+              </div>
+            </div>
+          </div>
+          
+          <div class="subject-line">
+            Sub: ${quotation.subject || 'SPARES QUOTATION FOR DG SET'}
+          </div>
+          
+          <div class="greeting">Dear Sir,</div>
+          <div class="intro-text">
+            With reference to the subject D.G. set we are here by furnishing our offer for Spares
+          </div>
+          
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 6%;">Sr.No</th>
+                <th style="width: 15%;">Part No</th>
+                <th style="width: 25%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 10%;">Basic Amount</th>
+                <th style="width: 8%;">Discount %</th>
+                <th style="width: 9%;">Total Basic</th>
+                <th style="width: 5%;">GST</th>
+                <th style="width: 9%;">GST Amount</th>
+                <th style="width: 10%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(quotation.items || []).map((item: any, idx: number) => {
+                const basicAmount = item.unitPrice || 0;
+                const discountPercent = item.discount || 0;
+                const totalBasic = basicAmount * (1 - discountPercent / 100);
+                const gstRate = item.taxRate || 0;
+                const gstAmount = totalBasic * (gstRate / 100);
+                const totalAmount = totalBasic + gstAmount;
+                
+                return `
+                  <tr>
+                    <td class="center-cell">${idx + 1}</td>
+                    <td>${item.partNo || '-'}</td>
+                    <td>${item.description || ''}</td>
+                    <td class="center-cell">${item.hsnNumber || '-'}</td>
+                    <td class="center-cell">${item.uom || 'NOS'}</td>
+                    <td class="center-cell">${item.quantity || 0}</td>
+                    <td class="number-cell">${basicAmount.toFixed(2)}</td>
+                    <td class="center-cell">${discountPercent}%</td>
+                    <td class="number-cell">${totalBasic.toFixed(2)}</td>
+                    <td class="center-cell">${gstRate}%</td>
+                    <td class="number-cell">${gstAmount.toFixed(2)}</td>
+                    <td class="number-cell">${totalAmount.toFixed(2)}</td>
+                  </tr>
+                `;
+              }).join('')}
+              <tr class="totals-row">
+                <td colspan="8" style="text-align: left; font-weight: bold;">Total Amount</td>
+                <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  return sum + (basicAmount * (1 - discountPercent / 100));
+                }, 0).toFixed(2)}</td>
+                <td></td>
+                <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  const totalBasic = basicAmount * (1 - discountPercent / 100);
+                  const gstRate = item.taxRate || 0;
+                  return sum + (totalBasic * (gstRate / 100));
+                }, 0).toFixed(2)}</td>
+                <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  const totalBasic = basicAmount * (1 - discountPercent / 100);
+                  const gstRate = item.taxRate || 0;
+                  const gstAmount = totalBasic * (gstRate / 100);
+                  return sum + (totalBasic + gstAmount);
+                }, 0).toFixed(2)}</td>
+              </tr>
+              <tr class="grand-total-row">
+                <td colspan="11" style="text-align: right; padding-right: 20px;">Grand Total</td>
+                <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  const totalBasic = basicAmount * (1 - discountPercent / 100);
+                  const gstRate = item.taxRate || 0;
+                  const gstAmount = totalBasic * (gstRate / 100);
+                  return sum + (totalBasic + gstAmount);
+                }, 0).toFixed(2)}</td>
+              </tr>
+            </tbody>
           </table>
-        </div>
-        <div class="engineer-date-section">
-          <div class="engineer-box">
-            <h4>Assigned Engineer:</h4>
-            <div>
-              <strong>Name:</strong> ${quotation.assignedEngineer ? `${quotation.assignedEngineer.firstName || ''} ${quotation.assignedEngineer.lastName || ''}`.trim() : 'Not Assigned'}<br>
-              ${quotation.assignedEngineer?.phone ? `<strong>Phone:</strong> ${quotation.assignedEngineer.phone}<br>` : ''}
-              ${quotation.assignedEngineer?.email ? `<strong>Email:</strong> ${quotation.assignedEngineer.email}` : ''}
-            </div>
-          </div>
-          <div class="date-box">
-            <h4>Important Dates:</h4>
-            <div>
-              <strong>Issue Date:</strong> ${quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : 'Not Set'}<br>
-              <strong>Valid Until:</strong> ${quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString() : 'Not Set'}<br>
-              <strong>Validity:</strong> ${quotation.validityPeriod || 30} days
-            </div>
-          </div>
-        </div>
-        <div class="from-to-section">
-          <div class="from-to-box">
-            <h3>From:</h3>
-            <div>
-              <strong>${quotation.company?.name || 'Sun Power Services'}</strong><br>
-              ${quotation.company?.phone ? `Phone: ${quotation.company?.phone}<br>` : ''}
-              ${quotation.company?.email ? `Email: ${quotation.company?.email}<br>` : ''}
-              ${quotation.company?.pan ? `PAN: ${quotation.company?.pan}<br>` : ''}
-              ${quotation.location ? `<br><strong>Address:</strong><br>${quotation.location.name || 'N/A'}<br>${quotation.location.address || 'N/A'}` : ''}
-            </div>
-          </div>
-          <div class="from-to-box">
-            <h3>Bill To:</h3>
-            <div>
-              <strong>${quotation.customer?.name || 'N/A'}</strong><br>
-              ${quotation.customer?.email ? `Email: ${quotation.customer?.email}<br>` : ''}
-              ${quotation.customer?.phone ? `Phone: ${quotation.customer?.phone}<br>` : ''}
-              ${quotation.billToAddress ? `<br><strong>Address:</strong><br>${quotation.billToAddress.address || 'N/A'}<br>${quotation.billToAddress.district && quotation.billToAddress.pincode ? `${quotation.billToAddress.district}, ${quotation.billToAddress.pincode}<br>` : ''}${quotation.billToAddress.state || 'N/A'}` : ''}
-            </div>
-          </div>
-          <div class="from-to-box">
-            <h3>Ship To:</h3>
-            <div>
-              <strong>${quotation.customer?.name || 'N/A'}</strong><br>
-              ${quotation.shipToAddress ? `<br><strong>Address:</strong><br>${quotation.shipToAddress.address || 'N/A'}<br>${quotation.shipToAddress.district && quotation.shipToAddress.pincode ? `${quotation.shipToAddress.district}, ${quotation.shipToAddress.pincode}<br>` : ''}${quotation.shipToAddress.state || 'N/A'}` : ''}
-            </div>
-          </div>
-        </div>
-        <table class="items">
-          <thead>
-            <tr>
-              <th style="width: 30px;">S.No</th>
-              <th class="description-col">Description</th>
-              <th style="width: 80px;">HSN Number</th>
-              <th style="width: 40px;">Qty</th>
-              <th style="width: 40px;">UOM</th>
-              <th style="width: 80px;">Part No</th>
-              <th style="width: 70px;">Unit Price</th>
-              <th style="width: 50px;">Discount</th>
-              <th style="width: 50px;">Tax Rate</th>
-              <th style="width: 80px;">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(quotation.items || []).map((item: any, idx: number) => `
+          
+          <div class="terms-section">
+            <div class="terms-title">TERMS & CONDITIONS:-</div>
+            <table class="terms-table">
               <tr>
-                <td>${idx + 1}</td>
-                <td class="description-col">${item.description || ''}</td>
-                <td>${item.hsnNumber || 'N/A'}</td>
-                <td>${item.quantity || 0}</td>
-                <td>${item.uom || 'nos'}</td>
-                <td>${item.partNo || 'N/A'}</td>
-                <td>₹${item.unitPrice?.toLocaleString() || '0'}</td>
-                <td>${item.discount || 0}%</td>
-                <td>${item.taxRate || 0}%</td>
-                <td>₹${(item.unitPrice * item.quantity * (1 - item.discount / 100) * (1 + item.taxRate / 100)).toFixed(2)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <div class="summary-section">
-          ${(quotation.notes || quotation.terms) ? `
-          <div class="notes-box">
-            ${quotation.notes ? `
-              <h4>Notes:</h4>
-              <div>${quotation.notes}</div>
-            ` : ''}
-            ${quotation.terms ? `
-              <h4 ${quotation.notes ? 'style="margin-top: 15px;"' : ''}>Terms & Conditions:</h4>
-              <div>${quotation.terms}</div>
-            ` : ''}
-          </div>
-          ` : `
-          <div class="notes-box">
-            <h4>Standard Terms & Conditions:</h4>
-            <div>
-              • Payment: 100% advance payment along with P.O.<br>
-              • Ordering: In Favour of Sun Power Services<br>
-              • Delivery: Within One Month after your P.O.<br>
-              • Prices are subject to change without prior notice<br>
-              • All disputes subject to Chennai jurisdiction
-            </div>
-          </div>
-          `}
-          <div class="summary-box">
-            <table class="summary-table">
-              <tr>
-                <td>Subtotal:</td>
-                <td>₹${quotation.subtotal?.toLocaleString() || '0'}</td>
+                <td class="terms-number">1</td>
+                <td class="terms-label">Payment Terms</td>
+                <td class="terms-colon">:</td>
+                <td class="terms-value">100% advance payment alongwith PO.</td>
               </tr>
               <tr>
-                <td>Total Tax:</td>
-                <td>₹${quotation.totalTax?.toFixed(2) || '0'}</td>
+                <td class="terms-number">2</td>
+                <td class="terms-label">Ordering and Payment</td>
+                <td class="terms-colon">:</td>
+                <td class="terms-value">In Favour of Sun Power Services.</td>
               </tr>
               <tr>
-                <td>Total Discount:</td>
-                <td>-₹${quotation.totalDiscount?.toFixed(2) || '0'}</td>
+                <td class="terms-number">3</td>
+                <td class="terms-label">Delivery</td>
+                <td class="terms-colon">:</td>
+                <td class="terms-value">With in One Month after your P.O.</td>
               </tr>
               <tr>
-                <td>Overall Discount:</td>
-                <td>-${quotation.overallDiscount || 0}% (-₹${quotation.overallDiscountAmount?.toFixed(2) || '0.00'})</td>
-              </tr>
-              <tr class="total-row">
-                <td>Grand Total:</td>
-                <td><strong>₹${quotation.grandTotal?.toFixed(2) || '0'}</strong></td>
+                <td class="terms-number">4</td>
+                <td class="terms-label">Note</td>
+                <td class="terms-colon">:</td>
+                <td class="terms-value">Quality assured spares only</td>
               </tr>
               <tr>
-                <td>Amount in Words:</td>
-                <td class="amount-words">
-                  ${quotation.grandTotal ? numberToWords(quotation.grandTotal) : 'Zero Rupees Only'}
-                </td>
+                <td class="terms-number">5</td>
+                <td class="terms-label">Quote Validity</td>
+                <td class="terms-colon">:</td>
+                <td class="terms-value">30 days from quote date</td>
               </tr>
             </table>
           </div>
-        </div>
-        <div class="footer">
-          <div><strong>For ${quotation.company?.name || 'Sun Power Services'}</strong></div>
-          <br><br>
-          <div><strong>Authorized Signatory</strong></div>
-          <div style="margin-top: 20px; font-size: 9px; border-top: 1px solid #000; padding-top: 10px;">
-            <strong>Address:</strong> Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116<br>
-            <strong>Mobile:</strong> +91 9176660123 | <strong>GSTIN:</strong> 33BLFPS9951M1ZC | <strong>Email:</strong> 24x7powerolservice@gmail.com
+          
+          <div class="closing-text">
+            Hope the above offer will meet your requirement and we will be expecting your valuable order at the earliest.
+          </div>
+          
+          <div class="closing-text">
+            Thanking you and assuring you our best and prompt services at all time.
+          </div>
+          
+          <div class="footer-section">
+            <div class="footer-left">
+              <div style="font-weight: bold;">Sun Power Bank Details: -</div>
+              <div class="company-details">
+                Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116<br>
+                Mobile: +91 9176660123<br>
+                GSTIN: 33BLFPS9951M1ZC<br>
+                Mail Id: sm@sunpowerservices.in / service@sunpowerservices.in
+              </div>
+            </div>
+            <div class="footer-center">
+              <div style="border: 1px solid #333; padding: 20px; margin: 10px;">
+                QR Code<br>
+                Scanner
+              </div>
+            </div>
+            <div class="footer-right">
+              <div style="margin-bottom: 10px; font-weight: bold;">For Sun Power Services</div>
+              <div class="signature-line">Authorised Signature</div>
+            </div>
           </div>
         </div>
       </body>
-    </html>
+      </html>
     `;
-    const printWindow = window.open('', '_blank');
+
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      printWindow.onload = function () {
-        setTimeout(() => {
-          printWindow.print();
-        }, 500);
-      };
-    }
-  };
 
- 
+      // Wait for content to load, then print
+      printWindow.onload = () => {
+      setTimeout(() => {
+        printWindow.print();
+      }, 500);
+    };
+  };
+};
+
+
 
   // Submit advance payment
-  const submitAdvancePayment = async () => {
-    if (!selectedQuotationForPayment) return;
+  // const submitAdvancePayment = async () => {
+  //   if (!selectedQuotationForPayment) return;
 
-    // Validate form before submission
-    const errors: Record<string, string> = {};
+  //   // Validate form before submission
+  //   const errors: Record<string, string> = {};
 
-    if (!advancePaymentData.amount || advancePaymentData.amount <= 0) {
-      errors.amount = 'Payment amount must be greater than 0';
-    }
+  //   if (!advancePaymentData.amount || advancePaymentData.amount <= 0) {
+  //     errors.amount = 'Payment amount must be greater than 0';
+  //   }
 
-    if (advancePaymentData.amount > (selectedQuotationForPayment.grandTotal || 0)) {
-      errors.amount = 'Payment amount cannot exceed quotation total';
-    }
+  //   if (advancePaymentData.amount > (selectedQuotationForPayment.grandTotal || 0)) {
+  //     errors.amount = 'Payment amount cannot exceed quotation total';
+  //   }
 
-    if (!advancePaymentData.paymentMethod) {
-      errors.paymentMethod = 'Payment method is required';
-    }
+  //   if (!advancePaymentData.paymentMethod) {
+  //     errors.paymentMethod = 'Payment method is required';
+  //   }
 
-    if (!advancePaymentData.paymentDate) {
-      errors.paymentDate = 'Payment date is required';
-    }
+  //   if (!advancePaymentData.paymentDate) {
+  //     errors.paymentDate = 'Payment date is required';
+  //   }
 
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
-      toast.error('Please fix the errors before submitting');
-      return;
-    }
+  //   if (Object.keys(errors).length > 0) {
+  //     setFormErrors(errors);
+  //     toast.error('Please fix the errors before submitting');
+  //     return;
+  //   }
 
-    try {
-      setSubmitting(true);
-      setFormErrors({}); // Clear any previous errors
+  //   try {
+  //     setSubmitting(true);
+  //     setFormErrors({}); // Clear any previous errors
 
-      const response = await apiClient.quotations.updateAdvancePayment(selectedQuotationForPayment._id, {
-        advanceAmount: advancePaymentData.amount,
-        advancePaymentMethod: advancePaymentData.paymentMethod,
-        advancePaymentDate: advancePaymentData.paymentDate,
-        advancePaymentNotes: advancePaymentData.notes
-      });
+  //     const response = await apiClient.quotations.updatePayment(selectedQuotationForPayment._id, {
+  //       paidAmount: advancePaymentData.amount,
+  //       paymentMethod: advancePaymentData.paymentMethod,
+  //       paymentDate: advancePaymentData.paymentDate,
+  //       notes: advancePaymentData.notes
+  //     });
 
-      if (response.success) {
-        toast.success('Advance payment updated successfully');
-        setShowAdvancePaymentModal(false);
-        setSelectedQuotationForPayment(null);
-        setAdvancePaymentData({
-          amount: 0,
-          paymentMethod: '',
-          paymentDate: '',
-          notes: '',
-          useRazorpay: false
-        });
-        fetchQuotations(); // Refresh quotations
-      }
-    } catch (error: any) {
-      console.error('Error updating advance payment:', error);
+  //     if (response.success) {
+  //       toast.success('Payment updated successfully');
+  //       setShowAdvancePaymentModal(false);
+  //       setSelectedQuotationForPayment(null);
+  //       fetchQuotations(); // Refresh quotations
+  //     }
+  //   } catch (error: any) {
+  //     console.error('Error updating payment:', error);
+  //     toast.error('Failed to update payment');
+  //   } finally {
+  //     setSubmitting(false);
+  //   }
+  // };
 
-      // Handle API validation errors
-      if (error.message && error.message.includes('Validation failed')) {
-        toast.error('Please check the payment details and try again');
-      } else {
-        toast.error('Failed to update advance payment');
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
-  // Update the quotation table structure
-  const getQuotationTableHeaders = () => {
-    return (
-      <thead className="bg-gray-50">
-        <tr>
-          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Quotation No
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Customer
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Total Amount
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Paid Amount
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Remaining
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Payment Status
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Status
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Valid Until
-          </th>
-          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-            Actions
-          </th>
-        </tr>
-      </thead>
-    );
-  };
-
-  // Get advance payment status color
-  const getAdvancePaymentStatusColor = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return 'bg-green-100 text-green-800';
-      case 'partial':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'pending':
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  // Get advance payment status label
-  const getAdvancePaymentStatusLabel = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return 'Paid';
-      case 'partial':
-        return 'Partial';
-      case 'pending':
-      default:
-        return 'Pending';
-    }
-  };
 
 
 
@@ -3438,11 +3676,11 @@ const InvoiceManagement: React.FC = () => {
         )}
         {invoiceType === 'purchase' && (
           <Button
-            onClick={handleCreatePurchaseOrder}
+            onClick={handleCreatePurchaseInvoice}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Plus className="w-4 h-4" />
-            <span>Create Purchase Order</span>
+            <span>Create Purchase Invoice</span>
           </Button>
         )}
       </PageHeader>
@@ -3634,20 +3872,27 @@ const InvoiceManagement: React.FC = () => {
                     invoiceType === 'challan' ? 'Challan No' :
                       'Invoice No'}
                 </th>
+                {invoiceType === 'sale' && 
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quotation Ref</th>
+                }
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {invoiceType === 'purchase' ? 'Supplier' : 'Customer'}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>}
-                {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>}
-                {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {invoiceType === 'quotation' ? 'Total Amount' : 'Amount'}
-                </th> */}
-                {invoiceType === 'quotation' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Advance Amount</th>}
-                {invoiceType === 'quotation' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>}
-                {invoiceType === 'quotation' && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Advance Status</th>}
-                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase' || invoiceType === 'challan') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>}
-                {(invoiceType === 'sale' || invoiceType === 'purchase') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>}
+                </th>
+                {(invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') && 
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
+                }
+                {(invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') && 
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
+                }
+                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase' || invoiceType === 'challan') && 
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                }
+                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') && 
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
+                }
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {invoiceType === 'quotation' ? 'Valid Until' : 'Due Date'}
                 </th>
@@ -3657,7 +3902,7 @@ const InvoiceManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {(invoiceType === 'quotation' ? quotationLoading : loading) ? (
                 <tr>
-                  <td colSpan={invoiceType === 'quotation' ? 9 : 9} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={invoiceType === 'quotation' ? 9 : 10} className="px-6 py-8 text-center text-gray-500">
                     <div className="flex justify-center items-center space-x-2">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
                       <span>Loading {invoiceType === 'quotation' ? 'quotations' : 'invoices'}...</span>
@@ -3666,7 +3911,7 @@ const InvoiceManagement: React.FC = () => {
                 </tr>
               ) : (invoiceType === 'quotation' ? filteredQuotations : filteredInvoices).length === 0 ? (
                 <tr>
-                  <td colSpan={invoiceType === 'quotation' ? 9 : 9} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={invoiceType === 'quotation' ? 9 : 10} className="px-6 py-8 text-center text-gray-500">
                     <div className="text-center">
                       <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                       <p className="text-lg font-medium text-gray-900 mb-2">No {invoiceType === 'quotation' ? 'quotations' : 'invoices'} found</p>
@@ -3700,14 +3945,34 @@ const InvoiceManagement: React.FC = () => {
                       ₹{(quotation.remainingAmount || 0).toFixed(2)}
                     </td>
                     <td className="px-4 py-3">
-                                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(quotation.paymentStatus || 'pending')}`}>
-                          {getPaymentStatusLabel(quotation.paymentStatus || 'pending')}
+                      <div className="flex flex-col items-start space-y-1">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          quotation.status === 'draft' 
+                            ? 'bg-yellow-100 text-yellow-800' 
+                            : quotation.status === 'sent'
+                            ? 'bg-blue-100 text-blue-800'
+                            : 'bg-gray-100 text-gray-800'
+                        }`}>
+                          {quotation.status?.charAt(0).toUpperCase() + quotation.status?.slice(1) || 'Draft'}
                         </span>
+                        {quotation.status === 'draft' && (
+                          <span className="text-xs text-gray-500">
+                            Send email to enable payments
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
-                        {quotation.status?.charAt(0).toUpperCase() + quotation.status?.slice(1) || 'Draft'}
-                      </span>
+                      <div className="flex flex-col items-start space-y-1">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPaymentStatusColor(quotation.paymentStatus || 'pending')}`}>
+                          {getPaymentStatusLabel(quotation.paymentStatus || 'pending')}
+                        </span>
+                        {quotation.status === 'draft' && (
+                          <span className="text-xs text-gray-500">
+                            Not available for draft
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
                       {quotation.validUntil
@@ -3736,9 +4001,39 @@ const InvoiceManagement: React.FC = () => {
                         <Tooltip content="Update Payment" position="top">
                           <button
                             onClick={() => handleUpdatePayment(quotation, 'quotation')}
-                            className="text-green-600 hover:text-green-900 p-1.5 hover:bg-green-50 rounded transition-colors duration-200"
+                            disabled={quotation.status === 'draft'}
+                            className={`p-1.5 rounded transition-colors duration-200 ${
+                              quotation.status !== 'draft'
+                                ? 'text-green-600 hover:text-green-900 hover:bg-green-50'
+                                : 'text-gray-400 cursor-not-allowed'
+                            }`}
+                            title={
+                              quotation.status === 'draft' 
+                                ? 'Send quotation via email first to enable payments' 
+                                : 'Update payment for this quotation'
+                            }
                           >
                             <IndianRupee className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="Send Email" position="top">
+                          <button
+                            onClick={() => handleSendQuotationEmail(quotation)}
+                            disabled={!quotation.customer?.email}
+                            className={`p-1.5 rounded transition-colors duration-200 ${
+                              quotation.customer?.email
+                                ? 'text-blue-600 hover:text-blue-900 hover:bg-blue-50'
+                                : 'text-gray-400 cursor-not-allowed'
+                            }`}
+                            title={
+                              !quotation.customer?.email 
+                                ? 'Customer email not available' 
+                                : 'Send quotation to customer email (will update status to sent)'
+                            }
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                            </svg>
                           </button>
                         </Tooltip>
                         <Tooltip content="Delete" position="top">
@@ -3759,6 +4054,25 @@ const InvoiceManagement: React.FC = () => {
                     <td className="px-4 py-3 text-sm font-medium text-blue-600">
                       {invoice.invoiceNumber}
                     </td>
+                    {invoiceType === 'sale' && 
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {invoice.sourceQuotation ? (
+                          <div className="flex flex-col">
+                            <span className="text-xs text-blue-600 font-medium">
+                              From: {invoice.quotationPaymentDetails ? 'Quotation' : 'Quotation'}
+                            </span>
+                            {invoice.quotationPaymentDetails && (
+                              <div className="text-xs text-gray-500 mt-1">
+                                <div>Paid: ₹{invoice.quotationPaymentDetails.paidAmount?.toFixed(2) || '0.00'}</div>
+                                <div>Remaining: ₹{invoice.quotationPaymentDetails.remainingAmount?.toFixed(2) || '0.00'}</div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
+                      </td>
+                    }
                     <td className="px-4 py-3">
                       <div>
                         <div className="text-sm font-medium text-gray-900">
@@ -5007,78 +5321,105 @@ const InvoiceManagement: React.FC = () => {
                     </p>
                   </div>
                   <div className="text-right">
-                    <span className="inline-flex px-3 py-1 text-sm font-semibold rounded-full bg-blue-100 text-blue-800">
-                      Quotation
-                    </span>
+                    <div className="flex space-x-2 mb-2">
+                      <span className={`inline-flex px-3 py-1 text-sm font-semibold rounded-full ${
+                        selectedQuotation.status === 'draft' 
+                          ? 'bg-yellow-100 text-yellow-800' 
+                          : selectedQuotation.status === 'sent'
+                          ? 'bg-blue-100 text-blue-800'
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {selectedQuotation.status === 'draft' ? 'Draft' : 
+                         selectedQuotation.status === 'sent' ? 'Sent' : 
+                         selectedQuotation.status}
+                      </span>
+                    </div>
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleCreateInvoiceFromQuotation(selectedQuotation)}
+                        className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                      >
+                        Create Invoice
+                      </button>
+                      <button
+                        onClick={() => handleSendQuotationEmail(selectedQuotation)}
+                        disabled={!selectedQuotation.customer?.email}
+                        className={`flex items-center px-3 py-1 text-sm rounded-md ${
+                          selectedQuotation.customer?.email 
+                            ? 'bg-green-600 text-white hover:bg-green-700' 
+                            : 'bg-gray-400 text-white cursor-not-allowed'
+                        }`}
+                        title={selectedQuotation.customer?.email ? 'Send quotation to customer email (will update status to sent)' : 'Customer email not available'}
+                      >
+                        <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                        Send Email
+                      </button>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => handleCreateInvoiceFromQuotation(selectedQuotation)}
-                    className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                  >
-                    Create Invoice
-                  </button>
                 </div>
               </div>
 
               {/* Company Information */}
-              <div className={`grid grid-cols-1 md:grid-cols-3 gap-6 ${selectedQuotation.assignedEngineer ? 'md:grid-cols-4' : ''}`} >
+              <div className={`grid grid-cols-1 gap-6 ${selectedQuotation?.assignedEngineer ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">From:</h4>
                   <div className="text-sm text-gray-600">
-                    <p className="font-medium">{selectedQuotation.company?.name || 'Sun Power Services'}</p>
-                    {selectedQuotation.company?.phone && <p>Phone: {selectedQuotation.company?.phone || 'N/A'}</p>}
-                    {selectedQuotation.company?.email && <p>Email: {selectedQuotation.company?.email || 'N/A'}</p>}
-                    {selectedQuotation.company?.pan && <p>PAN: {selectedQuotation.company?.pan || 'N/A'}</p>}
-                    {selectedQuotation.location && (
+                    <p className="font-medium">{selectedQuotation?.company?.name || 'Sun Power Services'}</p>
+                    {selectedQuotation?.company?.phone && <p>Phone: {selectedQuotation?.company?.phone}</p>}
+                    {selectedQuotation?.company?.email && <p>Email: {selectedQuotation?.company?.email}</p>}
+                    {selectedQuotation?.company?.pan && <p>PAN: {selectedQuotation?.company?.pan}</p>}
+                    {selectedQuotation?.location && (
                       <>
                         <p className="mt-2 font-medium text-gray-700">Address:</p>
-                        {selectedQuotation.location?.name && <p>{selectedQuotation.location?.name || 'N/A'}</p>}
-                        {selectedQuotation.location?.address && <p>{selectedQuotation.location?.address || 'N/A'}</p>}
+                        {selectedQuotation?.location?.name && <p>{selectedQuotation?.location?.name}</p>}
+                        {selectedQuotation?.location?.address && <p>{selectedQuotation?.location?.address}</p>}
                       </>
                     )}
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
                   <div className="text-sm text-gray-600">
-                    <p className="font-medium">{selectedQuotation.customer?.name || 'N/A'}</p>
-                    {selectedQuotation.customer?.email && <p>Email: {selectedQuotation.customer?.email || 'N/A'}</p>}
-                    {selectedQuotation.customer?.phone && <p>Phone: {selectedQuotation.customer?.phone || 'N/A'}</p>}
-                    {selectedQuotation.billToAddress && (
+                    <h4 className="font-medium text-gray-900 mb-2">Bill To:</h4>
+                    <p className="font-medium">{selectedQuotation?.customer?.name || 'N/A'}</p>
+                    {selectedQuotation?.customer?.email && <p>Email: {selectedQuotation?.customer?.email}</p>}
+                    {selectedQuotation?.customer?.phone && <p>Phone: {selectedQuotation?.customer?.phone}</p>}
+                    {selectedQuotation?.billToAddress && (
                       <>
                         <p className="mt-2 font-medium text-gray-700">Address:</p>
-                        {selectedQuotation.billToAddress?.address && <p>{selectedQuotation.billToAddress?.address}</p>}
-                        {selectedQuotation.billToAddress?.district && selectedQuotation.billToAddress?.pincode && (
-                          <p>{selectedQuotation.billToAddress?.district}, {selectedQuotation.billToAddress?.pincode}</p>
+                        {selectedQuotation?.billToAddress?.address && <p>{selectedQuotation?.billToAddress?.address}</p>}
+                        {selectedQuotation?.billToAddress?.district && selectedQuotation?.billToAddress?.pincode && (
+                          <p>{selectedQuotation?.billToAddress?.district}, {selectedQuotation?.billToAddress?.pincode}</p>
                         )}
-                        {selectedQuotation.billToAddress?.state && <p>{selectedQuotation.billToAddress?.state}</p>}
+                        {selectedQuotation?.billToAddress?.state && <p>{selectedQuotation?.billToAddress?.state}</p>}
                       </>
                     )}
                   </div>
                 </div>
 
                 <div>
-                  <h4 className="font-medium text-gray-900 mb-2">Ship To:</h4>
                   <div className="text-sm text-gray-600">
-                    <p className="font-medium">{selectedQuotation.customer?.name || 'N/A'}</p>
-                    {selectedQuotation.shipToAddress && (
+                    <h4 className="font-medium text-gray-900 mb-2">Ship To:</h4>
+                    <p className="font-medium">{selectedQuotation?.customer?.name || 'N/A'}</p>
+                    {selectedQuotation?.shipToAddress && (
                       <>
                         <p className="mt-2 font-medium text-gray-700">Address:</p>
-                        {selectedQuotation.shipToAddress?.address && <p>{selectedQuotation.shipToAddress?.address}</p>}
-                        {selectedQuotation.shipToAddress?.district && selectedQuotation.shipToAddress?.pincode && (
-                          <p>{selectedQuotation.shipToAddress?.district}, {selectedQuotation.shipToAddress?.pincode}</p>
+                        {selectedQuotation?.shipToAddress?.address && <p>{selectedQuotation?.shipToAddress?.address}</p>}
+                        {selectedQuotation?.shipToAddress?.district && selectedQuotation?.shipToAddress?.pincode && (
+                          <p>{selectedQuotation?.shipToAddress?.district}, {selectedQuotation?.shipToAddress?.pincode}</p>
                         )}
-                        {selectedQuotation.shipToAddress?.state && <p>{selectedQuotation.shipToAddress?.state}</p>}
+                        {selectedQuotation?.shipToAddress?.state && <p>{selectedQuotation?.shipToAddress?.state}</p>}
                       </>
                     )}
                   </div>
                 </div>
 
-                {selectedQuotation.assignedEngineer && <div>
+                {selectedQuotation?.assignedEngineer && <div>
                   <h4 className="font-medium text-gray-900 mb-2">Assigned Engineer:</h4>
                   <div className="text-sm text-gray-600">
-                    {selectedQuotation.assignedEngineer ? (
+                    {selectedQuotation?.assignedEngineer ? (
                       <>
                         <p className="font-medium">{selectedQuotation.assignedEngineer?.firstName} {selectedQuotation.assignedEngineer?.lastName}</p>
                         {selectedQuotation.assignedEngineer?.email && <p>Email: {selectedQuotation.assignedEngineer?.email}</p>}
@@ -5125,7 +5466,7 @@ const InvoiceManagement: React.FC = () => {
                           <td className="px-4 py-2 text-sm text-gray-900">₹{item.unitPrice?.toLocaleString()}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.discount || 0}%</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.taxRate || 0}%</td>
-                          <td className="px-4 py-2 text-sm font-medium text-gray-900"> ₹{(item.unitPrice * item.quantity * (1 - item.discount / 100) * (1 + item.taxRate / 100)).toFixed(2)}</td>
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{(item.unitPrice * item.quantity * (1 - item.discount / 100) * (1 + item.taxRate / 100)).toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -5158,26 +5499,30 @@ const InvoiceManagement: React.FC = () => {
               {/* Quotation Summary */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-end">
-                  <div className="w-64 space-y-2 text-right">
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <div className="flex justify-between">
-                        <span>Subtotal:</span>
-                        <span>₹{selectedQuotation.subtotal?.toLocaleString()}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Total Tax:</span>
-                        <span>₹{selectedQuotation.totalTax?.toFixed(2)}</span>
-                      </div>
+                  <div className="w-80 space-y-3 text-right">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Subtotal:</span>
+                      <span className="font-medium">₹{(selectedQuotation.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between">
-                      <span>Total Discount:</span>
-                      <span className="text-green-600">-₹{selectedQuotation.totalDiscount?.toFixed(2)}</span>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Total Tax:</span>
+                      <span className="font-medium">₹{(selectedQuotation.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</span>
                     </div>
-                    <div className="border-t pt-2">
-                      <div className="flex justify-between text-lg font-bold">
-                        <span>Grand Total:</span>
-                        <span className="text-blue-600">₹{selectedQuotation.grandTotal?.toFixed(2)}</span>
-                      </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Total Discount:</span>
+                      <span className="font-medium text-green-600">-₹{(selectedQuotation.totalDiscount || 0).toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Overall Discount:</span>
+                      <span className="font-medium text-green-600">-{selectedQuotation.overallDiscount || 0}% (-₹{selectedQuotation.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-lg border-t pt-3">
+                      <span>Grand Total:</span>
+                      <span className="text-blue-600">₹{selectedQuotation.grandTotal?.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs pt-2 border-t">
+                      <span className="text-gray-600">Amount in Words:</span>
+                      <span className="font-medium text-gray-700 max-w-xs text-right">{selectedQuotation?.grandTotal ? numberToWords(selectedQuotation.grandTotal) : 'Zero Rupees Only'}</span>
                     </div>
                   </div>
                 </div>
@@ -5210,11 +5555,11 @@ const InvoiceManagement: React.FC = () => {
         onSubmit={async (paymentData) => {
           try {
             setSubmitting(true);
-            const response = await apiClient.quotations.updateAdvancePayment(selectedQuotationForPayment!._id, {
-              advanceAmount: paymentData.paidAmount,
-              advancePaymentMethod: paymentData.paymentMethod,
-              advancePaymentDate: paymentData.paymentDate,
-              advancePaymentNotes: paymentData.notes
+            const response = await apiClient.quotations.updatePayment(selectedQuotationForPayment!._id, {
+              paidAmount: paymentData.paidAmount,
+              paymentMethod: paymentData.paymentMethod,
+              paymentDate: paymentData.paymentDate,
+              notes: paymentData.notes
             });
 
             if (response.success) {
@@ -5237,4 +5582,4 @@ const InvoiceManagement: React.FC = () => {
   );
 };
 
-export default InvoiceManagement; 
+export default InvoiceManagement;

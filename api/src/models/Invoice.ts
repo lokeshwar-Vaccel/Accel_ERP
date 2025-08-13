@@ -38,6 +38,13 @@ export interface IInvoice extends mongoose.Document {
   invoiceType: 'sale' | 'purchase' | 'challan' | 'quotation' ;
   referenceId?: string; // Service ticket, AMC contract, etc.
   dgSalesEnquiry?: mongoose.Types.ObjectId; // Link to DG Sales Enquiry
+  sourceQuotation?: mongoose.Types.ObjectId; // Reference to the quotation this invoice was created from
+  quotationNumber?: string; // Quotation number for display purposes
+  quotationPaymentDetails?: {
+    paidAmount: number; // Amount already paid in quotation
+    remainingAmount: number; // Remaining amount from quotation
+    paymentStatus: string; // Payment status from quotation
+  };
   location: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -259,6 +266,33 @@ const invoiceSchema = new Schema<IInvoice>({
     ref: 'DGSalesEnquiry',
     required: false
   },
+  sourceQuotation: {
+    type: Schema.Types.ObjectId,
+    ref: 'Quotation',
+    required: false
+  },
+  quotationNumber: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  quotationPaymentDetails: {
+    paidAmount: {
+      type: Number,
+      required: false,
+      min: 0
+    },
+    remainingAmount: {
+      type: Number,
+      required: false,
+      min: 0
+    },
+    paymentStatus: {
+      type: String,
+      enum: ['pending', 'partial', 'paid', 'failed'],
+      required: false
+    }
+  },
   location: {
     type: Schema.Types.ObjectId,
     ref: 'StockLocation',
@@ -465,6 +499,14 @@ const invoiceSchema = new Schema<IInvoice>({
 
 // Pre-save middleware to calculate totals
 invoiceSchema.pre('save', function (this: IInvoice, next) {
+  // Skip recalculation for purchase invoices created from POs
+  if ((this as any)._skipAmountRecalculation) {
+    console.log("Skipping amount recalculation for PO-created invoice");
+    // Remove the flag after use
+    delete (this as any)._skipAmountRecalculation;
+    return next();
+  }
+
   const round2 = (n: number): number => Number(n.toFixed(2));
 
   // 1. Recalculate subtotal and taxAmount
@@ -510,6 +552,21 @@ invoiceSchema.pre('save', function (this: IInvoice, next) {
   next();
 });
 
+// Post-save hook to log invoice data for debugging
+invoiceSchema.post('save', function (this: IInvoice) {
+  console.log("Invoice saved successfully:", {
+    invoiceNumber: this.invoiceNumber,
+    poNumber: this.poNumber,
+    invoiceType: this.invoiceType,
+    subtotal: this.subtotal,
+    taxAmount: this.taxAmount,
+    discountAmount: this.discountAmount,
+    totalAmount: this.totalAmount,
+    paidAmount: this.paidAmount,
+    remainingAmount: this.remainingAmount,
+    paymentStatus: this.paymentStatus
+  });
+});
 
 // Index for efficient queries
 invoiceSchema.index({ customer: 1, issueDate: -1 });

@@ -16,6 +16,8 @@ import {
   createPurchaseOrder,
   updatePurchaseOrder,
   updatePurchaseOrderStatus,
+  updatePurchaseOrderPayment,
+  syncPOPaymentStatusFromInvoices,
   sendPurchaseOrder,
   receiveItems,
   cancelPurchaseOrder,
@@ -99,6 +101,10 @@ router.route('/:id')
 
 // Purchase order actions
 router.put('/:id/status', checkPermission('write'), updatePurchaseOrderStatus);
+
+router.put('/:id/payment', checkPermission('write'), updatePurchaseOrderPayment);
+
+router.put('/:id/sync-payment', checkPermission('write'), syncPOPaymentStatusFromInvoices);
 
 router.post('/:id/send', 
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER), 

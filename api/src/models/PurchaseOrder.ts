@@ -39,6 +39,13 @@ interface IPurchaseOrderSchema extends Document {
   documentNumber?: string;
   documentDate?: Date;
   department?: string; // Department for this purchase order
+  notes?: string;
+  // Payment fields - same structure as Invoice and Quotation models
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentMethod?: string;
+  paymentDate?: Date;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -174,6 +181,31 @@ const purchaseOrderSchema = new Schema({
     type: String,
     trim: true
   },
+  // Payment fields - same structure as Invoice and Quotation models
+  paidAmount: {
+    type: Number,
+    default: 0,
+    min: [0, 'Paid amount cannot be negative']
+  },
+  remainingAmount: {
+    type: Number,
+    // required: [true, 'Remaining amount is required'],
+    min: [0, 'Remaining amount cannot be negative']
+  },
+  paymentStatus: {
+    type: String,
+    enum: ['pending', 'partial', 'paid', 'failed'],
+    default: 'pending',
+    required: [true, 'Payment status is required']
+  },
+  paymentMethod: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Payment method cannot exceed 100 characters']
+  },
+  paymentDate: {
+    type: Date
+  },
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',
@@ -288,6 +320,14 @@ purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {
 purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {
   if (this.isModified('status') && this.status === 'received' && !this.actualDeliveryDate) {
     this.actualDeliveryDate = new Date();
+  }
+  next();
+});
+
+// Calculate remaining amount based on totalAmount and paidAmount
+purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {
+  if (this.isModified('totalAmount') || this.isModified('paidAmount')) {
+    this.remainingAmount = Math.max(0, this.totalAmount - (this.paidAmount || 0));
   }
   next();
 });

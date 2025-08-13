@@ -116,6 +116,12 @@ export interface UpdatePurchaseOrderInput {
   internalNotes?: string;
   supplierNotes?: string;
   notes?: string;
+  // Payment fields
+  paidAmount?: number;
+  remainingAmount?: number;
+  paymentStatus?: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentMethod?: string;
+  paymentDate?: string;
 }
 
 export interface UpdatePOItemInput {
@@ -413,7 +419,13 @@ export const updatePurchaseOrderSchema = Joi.object<UpdatePurchaseOrderInput>({
   }),
   internalNotes: Joi.string().max(1000),
   supplierNotes: Joi.string().max(1000),
-  notes: Joi.string().max(1000).allow('')
+  notes: Joi.string().max(1000).allow(''),
+  // Payment fields
+  paidAmount: Joi.number().min(0).precision(2).allow(null),
+  remainingAmount: Joi.number().min(0).precision(2).allow(null),
+  paymentStatus: Joi.string().valid('pending', 'partial', 'paid', 'failed'),
+  paymentMethod: Joi.string().max(100),
+  paymentDate: Joi.date().iso()
 });
 
 // Add/Update purchase order item schema
