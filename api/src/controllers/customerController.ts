@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Customer } from '../models/Customer';
 import { DGCustomer } from '../models/DGCustomer';
+import { OEM } from '../models/OEM';
 import { AuthenticatedRequest, APIResponse, LeadStatus, CustomerType, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { createAssignmentNotification, createStatusChangeNotification, createFollowUpNotification } from './notificationController';
@@ -577,6 +578,93 @@ export const scheduleFollowUp = async (
   }
 };
 
+// @desc    Get all OEM customers
+// @route   GET /api/v1/customers/oem
+// @access  Private
+export const getOEMCustomers = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      sort = 'companyName', 
+      search, 
+      status, 
+      rating
+    } = req.query as any;
+
+    // Build query for OEM customers
+    const query: any = {};
+    
+    if (search) {
+      query.$or = [
+        { companyName: { $regex: search, $options: 'i' } },
+        { contactPerson: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { oemCode: { $regex: search, $options: 'i' } },
+      ];
+    }
+    
+    if (status) {
+      query.status = status;
+    }
+    
+    if (rating) {
+      query.rating = { $gte: parseInt(rating as string) };
+    }
+
+    // Calculate pagination
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build sort object
+    const sortObj: any = {};
+    if (sort === 'companyName') sortObj.companyName = 1;
+    else if (sort === '-companyName') sortObj.companyName = -1;
+    else if (sort === 'createdAt') sortObj.createdAt = 1;
+    else if (sort === '-createdAt') sortObj.createdAt = -1;
+    else if (sort === 'status') sortObj.status = 1;
+    else if (sort === '-status') sortObj.status = -1;
+    else if (sort === 'rating') sortObj.rating = -1;
+    else if (sort === '-rating') sortObj.rating = 1;
+    else sortObj.createdAt = -1; // Default sort
+
+    // Execute query from OEM table
+    const [oems, total] = await Promise.all([
+      OEM.find(query)
+        .populate('createdBy', 'firstName lastName email')
+        .sort(sortObj)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      OEM.countDocuments(query)
+    ]);
+
+    const totalPages = Math.ceil(total / limitNum);
+
+    const response: APIResponse = {
+      success: true,
+      message: 'OEM customers retrieved successfully',
+      data: oems,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: totalPages
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get all DG customers
 // @route   GET /api/v1/customers/dg-sales
 // @access  Private
@@ -668,6 +756,109 @@ export const getDGCustomers = async (
     const response: APIResponse = {
       success: true,
       message: 'DG customers retrieved successfully',
+      data: customers,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: totalPages
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all converted customers
+// @route   GET /api/v1/customers/converted
+// @access  Private
+export const getConvertedCustomers = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      sort = 'name', 
+      search, 
+      customerType, 
+      assignedTo,
+      leadSource,
+      dateFrom,
+      dateTo
+    } = req.query as any;
+
+    // Build query for converted customers
+    const query: any = { status: 'converted' };
+    
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { customerId: { $regex: search, $options: 'i' } },
+      ];
+    }
+    
+    if (customerType) {
+      query.customerType = customerType;
+    }
+    
+    if (assignedTo) {
+      query.assignedTo = assignedTo;
+    }
+    
+    if (leadSource) {
+      query.leadSource = leadSource;
+    }
+
+    // Date range filter
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) {
+        query.createdAt.$gte = new Date(dateFrom);
+      }
+      if (dateTo) {
+        query.createdAt.$lte = new Date(dateTo);
+      }
+    }
+
+    // Calculate pagination
+    const pageNum = parseInt(page as string);
+    const limitNum = parseInt(limit as string);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Build sort object
+    const sortObj: any = {};
+    if (sort === 'name') sortObj.name = 1;
+    else if (sort === '-name') sortObj.name = -1;
+    else if (sort === 'createdAt') sortObj.createdAt = 1;
+    else if (sort === '-createdAt') sortObj.createdAt = -1;
+    else if (sort === 'status') sortObj.status = 1;
+    else if (sort === '-status') sortObj.status = -1;
+    else sortObj.createdAt = -1; // Default sort
+
+    // Execute query
+    const [customers, total] = await Promise.all([
+      Customer.find(query)
+        .populate('assignedTo', 'name email')
+        .populate('createdBy', 'name email')
+        .sort(sortObj)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Customer.countDocuments(query)
+    ]);
+
+    const totalPages = Math.ceil(total / limitNum);
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Converted customers retrieved successfully',
       data: customers,
       pagination: {
         page: pageNum,

@@ -23,6 +23,8 @@ import {
   convertLead,
   scheduleFollowUp,
   getDGCustomers,
+  getOEMCustomers,
+  getConvertedCustomers,
 } from '../controllers/customerController';
 import multer from 'multer';
 import { previewCustomerImport, importCustomers } from '../controllers/customerImportController';
@@ -43,6 +45,12 @@ router.post('/import', upload.single('file'), checkPermission('write'), importCu
 
 // DG Customers route
 router.get('/dg-customers', checkPermission('read'), getDGCustomers);
+
+// OEM Customers route
+router.get('/oem', checkPermission('read'), getOEMCustomers);
+
+// Converted Customers route
+router.get('/converted', checkPermission('read'), getConvertedCustomers);
 
 // Customer routes
 router.route('/')

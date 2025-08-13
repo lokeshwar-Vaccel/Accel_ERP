@@ -1346,8 +1346,19 @@ export default function DGSales() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">DG Sales Management</h1>
-        <p className="text-gray-600 mt-2">Complete Diesel Generator Sales Workflow - 22 Steps</p>
+        <div className="flex justify-between items-start">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-900">DG Sales Management</h1>
+            <p className="text-gray-600 mt-2">Complete Diesel Generator Sales Workflow - 22 Steps</p>
+          </div>
+          <Button
+            onClick={() => navigate('/dg-customers')}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3 rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <User className="w-5 h-5 mr-2" />
+            DG Customers
+          </Button>
+        </div>
       </div>
 
       {/* Dynamic Progress Tracker */}

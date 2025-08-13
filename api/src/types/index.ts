@@ -26,14 +26,16 @@ export enum CustomerType {
   EV = 'ev',
   DG = 'dg',
   JENARAL = 'jenaral',
-  JE = 'je'
+  JE = 'je',
+  OEM = 'oem'
 }
 
 // Customer Main Type (customer or supplier)
 export enum CustomerMainType {
   CUSTOMER = 'customer',
   SUPPLIER = 'supplier',
-  DG_SALES_CUSTOMER = 'dg_sales_customer'
+  DG_SALES_CUSTOMER = 'dg_sales_customer',
+  OEM_CUSTOMER = 'oem_customer'
 }
 
 // Lead Status

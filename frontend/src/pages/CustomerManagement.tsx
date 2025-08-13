@@ -33,7 +33,9 @@ import {
   PhoneIncoming,
   Sparkles,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Zap,
+  Package
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -44,8 +46,8 @@ import toast from 'react-hot-toast';
 
 
 // Customer types matching backend enums
-type CustomerType = 'retail' | 'telecom' | 'ev' | 'dg' | 'jenaral' | 'je';
-type CustomerMainType = 'customer' | 'supplier';
+type CustomerType = 'retail' | 'telecom' | 'ev' | 'dg' | 'jenaral' | 'je' | 'oem';
+type CustomerMainType = 'customer' | 'supplier' | 'dg_customer' | 'oem';
 type LeadStatus = 'new' | 'qualified' | 'contacted' | 'converted' | 'lost';
 type ContactType = 'call' | 'meeting' | 'email' | 'whatsapp';
 
@@ -90,7 +92,13 @@ interface Customer {
   email?: string;
   phone?: string;
   panNumber?: string;
-  address: string;
+  address: string | {
+    street: string;
+    city: string;
+    state: string;
+    pincode: string;
+    country: string;
+  };
   customerType: CustomerType;
   leadSource?: string;
   assignedTo?: string | User;
@@ -103,6 +111,34 @@ interface Customer {
   latestContact?: ContactHistory;
   addresses?: Address[];
   type?: CustomerMainType;
+  // OEM specific properties
+  oemCode?: string;
+  companyName?: string;
+  contactPerson?: string;
+  alternatePhone?: string;
+  rating?: number;
+  products?: Array<{
+    model: string;
+    kva: string;
+    phase: string;
+    fuelType: string;
+    price: number;
+    specifications: string;
+    availability: string;
+    leadTime: number;
+  }>;
+  // OEM bank details
+  bankDetails?: {
+    bankName: string;
+    accountNo: string;
+    ifsc: string;
+    branch: string;
+  };
+  paymentTerms?: string;
+  deliveryTerms?: string;
+  warrantyTerms?: string;
+  creditLimit?: number;
+  creditDays?: number;
 }
 
 // Address type
@@ -263,13 +299,15 @@ const CustomerManagement: React.FC = () => {
   const tabOptions = [
     { label: 'Customer', value: 'customer' },
     { label: 'Supplier', value: 'supplier' },
+    { label: 'DG Customer', value: 'dg_customer' },
+    { label: 'OEM', value: 'oem' },
     // Add more tabs here if needed
   ];
-  const [activeTab, setActiveTab] = useState<'customer' | 'supplier'>('customer');
+  const [activeTab, setActiveTab] = useState<'customer' | 'supplier' | 'dg_customer' | 'oem'>('customer');
 
   const searchParams = new URLSearchParams(location.search);
   // Add at the top, after useState imports
-  const [customerTypeTab, setCustomerTypeTab] = useState<'customer' | 'supplier'>(searchParams.get('action') !== 'create-supplier' ? 'customer' : 'supplier');
+  const [customerTypeTab, setCustomerTypeTab] = useState<'customer' | 'supplier' | 'dg_customer' | 'oem'>(searchParams.get('action') !== 'create-supplier' ? 'customer' : 'supplier');
 
   // Add after other useState hooks for filters
   const [sortField, setSortField] = useState('all');
@@ -282,10 +320,15 @@ const CustomerManagement: React.FC = () => {
     if (sortField === 'all') {
       setSort('-createdAt'); // default sort
     } else {
-      const sortParam = sortOrder === 'asc' ? sortField : `-${sortField}`;
+      // Map frontend field names to API field names
+      let apiField = sortField;
+      if (customerTypeTab === 'oem' && sortField === 'name') {
+        apiField = 'companyName';
+      }
+      const sortParam = sortOrder === 'asc' ? apiField : `-${apiField}`;
       setSort(sortParam);
     }
-  }, [sortField, sortOrder]);
+  }, [sortField, sortOrder, customerTypeTab]);
 
   // Ensure supplier tab is selected if ?action=create is present in the URL
   useEffect(() => {
@@ -527,6 +570,29 @@ const CustomerManagement: React.FC = () => {
       let page = 1;
       let hasMore = true;
 
+      // Special handling for OEM tab - use dedicated OEM API
+      if (customerTypeTab === 'oem') {
+        while (hasMore) {
+          const response: any = await apiClient.customers.oemCustomers.getAll({
+            page,
+            limit: 100
+          });
+          
+          if (response?.data && Array.isArray(response.data)) {
+            allCustomersData = allCustomersData.concat(response.data);
+          }
+
+          // Check if there are more pages
+          if (response?.pagination && response.pagination.pages && page < response.pagination.pages) {
+            page += 1;
+          } else {
+            hasMore = false;
+          }
+        }
+        setAllCustomers(allCustomersData);
+        return;
+      }
+
       while (hasMore) {
         const response: any = await apiClient.customers.getAll({
           page,
@@ -580,12 +646,69 @@ const CustomerManagement: React.FC = () => {
   };
 
   const fetchCustomers = async () => {
+    console.log('fetchCustomers called with customerTypeTab:', customerTypeTab);
     let assignedToParam = assignedToFilter;
     if (user?.role === 'hr' && user?.id) {
       assignedToParam = user.id;
       if (assignedToFilter !== user.id) setAssignedToFilter(user.id);
     }
     if (user?.role === 'hr' && !assignedToParam) return;
+
+    // Special handling for OEM tab - use dedicated OEM API
+    if (customerTypeTab === 'oem') {
+      try {
+        setLoading(true);
+        const params: any = {
+          page: currentPage,
+          limit,
+          sort,
+          search: searchTerm,
+          ...(statusFilter !== 'all' && { status: statusFilter }),
+          ...(assignedToParam && { assignedTo: assignedToParam }),
+        };
+
+        const response = await apiClient.customers.oemCustomers.getAll(params);
+        console.log('OEM API response:', response);
+        console.log('OEM API response.data:', response.data);
+        console.log('OEM API response.data type:', typeof response.data);
+        console.log('OEM API response.data isArray:', Array.isArray(response.data));
+        
+        // Set pagination data
+        setCurrentPage(response.pagination.page);
+        setLimit(response.pagination.limit);
+        setTotalDatas(response.pagination.total);
+        setTotalPages(response.pagination.pages);
+        
+        // Set customers data - ensure it's an array
+        const oemData = Array.isArray(response.data) ? response.data : [];
+        console.log('OEM data to set:', oemData);
+        setCustomers(oemData);
+        
+        // For OEM tab, we don't have the same counts structure, so set defaults
+        setCounts({
+          totalCustomers: response.pagination.total,
+          newLeads: 0,
+          qualified: 0,
+          converted: response.pagination.total, // All OEM customers are considered converted
+          lost: 0,
+          contacted: 0,
+        });
+        
+        setNewLeadStatusCount(0);
+        setQualifiedStatusCount(0);
+        setConvertedStatusCount(response.pagination.total);
+        setLostStatusCount(0);
+        setContactedStatusCount(0);
+        setTotalCustomersCount(response.pagination.total);
+        
+      } catch (error) {
+        console.error('Error fetching OEM customers:', error);
+        setCustomers([]);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     const params: any = {
       page: currentPage,
@@ -613,6 +736,13 @@ const CustomerManagement: React.FC = () => {
     } else if (statusFilter !== 'all') {
       params.status = statusFilter;
     }
+
+    // Special handling for DG Customer tab - show only converted customers
+    if (customerTypeTab === 'dg_customer') {
+      params.status = 'converted';
+      params.type = 'customer'; // DG customers are still of type 'customer'
+    }
+
     console.log('Fetching customers with type:', customerTypeTab);
     console.log('Params sent to API:', params);
     try {
@@ -795,7 +925,11 @@ const CustomerManagement: React.FC = () => {
     setSubmitting(true);
     try {
       setFormErrors({});
-      const submitData = { ...customerFormData, type: customerTypeTab };
+      const submitData = { 
+        ...customerFormData, 
+        type: customerTypeTab === 'oem' ? 'customer' : customerTypeTab,
+        customerType: customerTypeTab === 'oem' ? 'oem' : customerFormData.customerType
+      };
       if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
         delete (submitData as any).assignedTo;
       }
@@ -826,7 +960,10 @@ const CustomerManagement: React.FC = () => {
       setFormErrors({});
 
       // Prepare form data, excluding assignedTo if it's empty to avoid ObjectId validation error
-      const submitData = { ...customerFormData };
+      const submitData = { 
+        ...customerFormData,
+        customerType: customerTypeTab === 'oem' ? 'oem' : customerFormData.customerType
+      };
       if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
         delete (submitData as any).assignedTo;
       }
@@ -913,7 +1050,7 @@ const CustomerManagement: React.FC = () => {
       phone: '',
       panNumber: '',
       address: '',
-      customerType: 'retail',
+      customerType: customerTypeTab === 'oem' ? 'oem' : 'retail',
       leadSource: '',
       assignedTo: '',
       notes: '',
@@ -926,7 +1063,7 @@ const CustomerManagement: React.FC = () => {
         isPrimary: true,
         gstNumber: '',
       }],
-      type: customerTypeTab
+      type: customerTypeTab === 'oem' ? 'customer' : customerTypeTab
     });
     setShowAssignedToDropdown(false);
   };
@@ -953,7 +1090,9 @@ const CustomerManagement: React.FC = () => {
       email: customer.email || '',
       phone: customer.phone || '',
       panNumber: customer.panNumber || '',
-      address: customer.address || '',
+      address: typeof customer.address === 'string' ? customer.address : 
+        (customer.address && typeof customer.address === 'object' ? 
+          `${customer.address.street}, ${customer.address.city}, ${customer.address.state} ${customer.address.pincode}` : ''),
       customerType: customer.customerType || 'retail',
       leadSource: customer.leadSource || '',
       assignedTo: getUserId(customer.assignedTo),
@@ -969,7 +1108,7 @@ const CustomerManagement: React.FC = () => {
           isPrimary: true,
           gstNumber: '',
         }],
-      type: (customer as any).type || customerTypeTab // <-- ensure type is set
+      type: (customer as any).type || (customerTypeTab === 'oem' ? 'customer' : customerTypeTab) // <-- ensure type is set
     });
     setFormErrors({});
     setShowEditModal(true);
@@ -1084,8 +1223,15 @@ const CustomerManagement: React.FC = () => {
 
   const stats = [
     {
-      title: customerTypeTab === 'customer' ? 'Total Customers' : 'Total Suppliers',
-      value: allCustomers.filter(customer => customer.type === customerTypeTab).length,
+      title: customerTypeTab === 'customer' ? 'Total Customers' : 
+             customerTypeTab === 'supplier' ? 'Total Suppliers' : 
+             customerTypeTab === 'dg_customer' ? 'Total DG Customers' :
+             'Total OEM Customers',
+      value: customerTypeTab === 'dg_customer' 
+        ? allCustomers.filter(customer => customer.type === 'customer' && customer.status === 'converted').length
+        : customerTypeTab === 'oem'
+        ? allCustomers.filter(customer => customer.type === 'customer' && customer.customerType === 'oem').length
+        : allCustomers.filter(customer => customer.type === customerTypeTab).length,
       action: () => {
         clearAllFilters();
       },
@@ -1094,27 +1240,35 @@ const CustomerManagement: React.FC = () => {
     },
     {
       title: 'New Leads',
-      value: newLeadStatusCount,
+      value: customerTypeTab === 'dg_customer' || customerTypeTab === 'oem' ? 0 : newLeadStatusCount,
       action: () => {
-        setStatusFilter('new');
+        if (customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem') {
+          setStatusFilter('new');
+        }
       },
       icon: <UserPlus className="w-6 h-6" />,
       color: 'blue'
     },
     {
       title: 'Qualified',
-      value: qualifiedStatusCount,
+      value: customerTypeTab === 'dg_customer' || customerTypeTab === 'oem' ? 0 : qualifiedStatusCount,
       action: () => {
-        setStatusFilter('qualified');
+        if (customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem') {
+          setStatusFilter('qualified');
+        }
       },
       icon: <Target className="w-6 h-6" />,
       color: 'yellow'
     },
     {
       title: 'Converted',
-      value: convertedStatusCount,
+      value: customerTypeTab === 'dg_customer' ? convertedStatusCount : 
+             customerTypeTab === 'oem' ? convertedStatusCount :
+             convertedStatusCount,
       action: () => {
-        setStatusFilter('converted');
+        if (customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem') {
+          setStatusFilter('converted');
+        }
       },
       icon: <CheckCircle className="w-6 h-6" />,
       color: 'green'
@@ -1122,7 +1276,12 @@ const CustomerManagement: React.FC = () => {
   ];
 
   // Status options with labels
-  const statusOptions = [
+  const statusOptions = customerTypeTab === 'oem' ? [
+    { value: 'all', label: 'All Status' },
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' },
+    { value: 'blacklisted', label: 'Blacklisted' }
+  ] : [
     { value: 'all', label: 'All Status' },
     { value: 'new', label: 'New' },
     { value: 'qualified', label: 'Qualified' },
@@ -1132,13 +1291,20 @@ const CustomerManagement: React.FC = () => {
   ];
 
   // Type options with labels
-  const typeOptions = [
+  const typeOptions = customerTypeTab === 'oem' ? [
+    { value: 'all', label: 'All Types' },
+    { value: 'diesel', label: 'Diesel' },
+    { value: 'petrol', label: 'Petrol' },
+    { value: 'gas', label: 'Gas' },
+    { value: 'hybrid', label: 'Hybrid' }
+  ] : [
     { value: 'retail', label: 'Retail' },
     { value: 'telecom', label: 'Telecom' },
     { value: 'ev', label: 'EV' },
     { value: 'dg', label: 'DG' },
     { value: 'jenaral', label: 'Jenaral' },
-    { value: 'je', label: 'JE' }
+    { value: 'je', label: 'JE' },
+    { value: 'oem', label: 'OEM' }
   ];
 
   const handlePageChange = (page: number) => {
@@ -1192,11 +1358,19 @@ const CustomerManagement: React.FC = () => {
   };
 
   // Add filter options for sort
-  const sortFieldOptions = [
+  const sortFieldOptions = customerTypeTab === 'oem' ? [
+    { value: 'all', label: 'Select Field' },
+    { value: 'companyName', label: 'Company Name' },
+    { value: 'oemCode', label: 'OEM Code' },
+    { value: 'contactPerson', label: 'Contact Person' },
+    { value: 'email', label: 'Email' },
+    { value: 'rating', label: 'Rating' },
+    { value: 'createdAt', label: 'Created Date' }
+  ] : [
     { value: 'all', label: 'Select Field' },
     { value: 'name', label: 'Customer Name' },
     { value: 'email', label: 'Email' },
-    { value: 'createdAt', label: 'Created Date' },
+    { value: 'createdAt', label: 'Created Date' }
   ];
   const sortOrderOptions = [
     { value: 'asc', label: 'Ascending (A-Z)' },
@@ -1217,8 +1391,14 @@ const CustomerManagement: React.FC = () => {
     <div className="pl-2 pr-6 py-6 space-y-4">
       {/* Header */}
       <PageHeader
-        title="Lead Management"
-        subtitle="Manage leads, customers, and track interactions"
+        title={customerTypeTab === 'oem' ? 'OEM Management' : 
+               customerTypeTab === 'dg_customer' ? 'DG Customer Management' :
+               customerTypeTab === 'supplier' ? 'Supplier Management' :
+               'Customer Relationship Management'}
+                  subtitle={customerTypeTab === 'oem' ? 'Manage OEM customers, products, and business relationships' :
+                   customerTypeTab === 'dg_customer' ? 'Manage DG customers and track interactions' :
+                   customerTypeTab === 'supplier' ? 'Manage suppliers and track interactions' :
+                   'Manage customer relationships, leads, and track interactions'}
       >
         <div className="flex space-x-3">
           <button
@@ -1235,7 +1415,12 @@ const CustomerManagement: React.FC = () => {
               className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
             >
               <Plus className="w-4 h-4" />
-              <span className="text-sm">{customerTypeTab === 'customer' ? 'Add Customer' : 'Add Supplier'}</span>
+              <span className="text-sm">
+                {customerTypeTab === 'customer' ? 'Add Customer' : 
+                 customerTypeTab === 'supplier' ? 'Add Supplier' : 
+                 customerTypeTab === 'dg_customer' ? 'Add DG Customer' :
+                 'Add OEM Customer'}
+              </span>
             </button>
           }
           <button
@@ -1291,7 +1476,7 @@ const CustomerManagement: React.FC = () => {
         ))}
       </div>
 
-      {/* Filters */}
+      {/* Search and Tabs Section - Always Visible */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
         {/* Header Section - Single Row */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 px-6 py-4 border-b border-gray-100">
@@ -1301,24 +1486,28 @@ const CustomerManagement: React.FC = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
               <input
                 type="text"
-                placeholder="Search customers by name, email, or ID..."
+                placeholder={customerTypeTab === 'oem' ? 
+                  "Search OEMs by company name, contact person, email, OEM code, or products..." :
+                  "Search customers by name, email, or ID..."
+                }
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-3 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white shadow-sm text-sm placeholder-gray-500"
               />
             </div>
             {/* Action Buttons */}
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowFilters(v => !v)}
-                className="px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 border border-gray-300 text-sm font-medium flex items-center gap-2 shadow-sm"
-              >
-                <Filter className="w-4 h-4" />
-                Filters
-                <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
-              </button>
-
-            </div>
+            {customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' && (
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowFilters(v => !v)}
+                  className="px-4 py-3 bg-white text-gray-700 rounded-lg hover:bg-gray-50 transition-all duration-200 border border-gray-300 text-sm font-medium flex items-center gap-2 shadow-sm"
+                >
+                  <Filter className="w-4 h-4" />
+                  Filters
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+                </button>
+              </div>
+            )}
 
             {/* Customer Type Tabs */}
             <div className="flex space-x-1 bg-white p-1 rounded-lg border border-gray-200">
@@ -1333,6 +1522,32 @@ const CustomerManagement: React.FC = () => {
                 <div className="flex items-center space-x-2">
                   <Users className="w-4 h-4" />
                   <span>Customers</span>
+                </div>
+              </button>
+              <button
+                className={`px-4 py-2.5 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'dg_customer'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                onClick={() => setCustomerTypeTab('dg_customer')}
+                type="button"
+              >
+                <div className="flex items-center space-x-2">
+                  <Zap className="w-4 h-4" />
+                  <span>DG Customers</span>
+                </div>
+              </button>
+              <button
+                className={`px-4 py-2.5 rounded-md font-medium text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${customerTypeTab === 'oem'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                onClick={() => setCustomerTypeTab('oem')}
+                type="button"
+              >
+                <div className="flex items-center space-x-2">
+                  <Package className="w-4 h-4" />
+                  <span>OEM</span>
                 </div>
               </button>
               <button
@@ -1354,7 +1569,7 @@ const CustomerManagement: React.FC = () => {
           </div>
         </div>
         {/* Collapsible Filter Panel */}
-        {showFilters && (
+        {customerTypeTab !== 'oem' && showFilters && (
           <div className="px-6 py-6 bg-gray-50">
             <div className="grid grid-cols-4 gap-4 mb-6">
               {/* Sort By */}
@@ -1481,22 +1696,30 @@ const CustomerManagement: React.FC = () => {
                 {customerTypeTab === 'customer' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Customer
                 </th>}
+                {customerTypeTab === 'dg_customer' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  DG Customer
+                </th>}
+                {customerTypeTab === 'oem' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Company & Code
+                </th>}
                 {customerTypeTab === 'supplier' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Supplier
                 </th>}
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Contact Info
+                  {customerTypeTab === 'oem' ? 'Contact & Person' : 'Contact Info'}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type & Status
+                  {customerTypeTab === 'oem' ? 'Status & Rating' : 'Type & Status'}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Last Contact
+                  {customerTypeTab === 'oem' ? 'Products Info' : 'Last Contact'}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Lead Source
+                  {customerTypeTab === 'oem' ? 'Products Count' : 'Lead Source'}
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Designation</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {customerTypeTab === 'oem' ? 'Contact Person' : 'Designation'}
+                </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -1514,22 +1737,39 @@ const CustomerManagement: React.FC = () => {
                   <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
                     <div className="text-center">
                       <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                      <p className="text-lg font-medium text-gray-900 mb-2">{customerTypeTab === 'customer' ? "No Customers found" : "No Customers found"}</p>
+                      <p className="text-lg font-medium text-gray-900 mb-2">
+                        {customerTypeTab === 'customer' ? "No Customers found" : 
+                         customerTypeTab === 'supplier' ? "No Suppliers found" : 
+                         customerTypeTab === 'dg_customer' ? "No DG Customers found" :
+                         "No OEM Customers found"}
+                      </p>
                     </div>
                   </td>
                 </tr>
               ) : (
-                customers.map((customer) => (
+                customers.filter(customer => customer && customer._id).map((customer) => (
                   <tr key={customer._id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div>
                         <div className="text-xs font-medium text-gray-900">
-                          {customer.name}
+                          {customerTypeTab === 'oem' ? 
+                            (customer.companyName || customer.name || 'Unnamed OEM') : 
+                            (customer.name || 'Unnamed Customer')
+                          }
                         </div>
                         <div className="text-xs text-gray-500">
                           {/* ID: {customer._id.slice(-6)} */}
-                          {customer.type === 'customer' && customer.customerId && (
+                          {customerTypeTab === 'customer' && customer.customerId && (
                             <>Customer ID: {customer.customerId}</>
+                          )}
+                          {customerTypeTab === 'dg_customer' && customer.customerId && (
+                            <>DG Customer ID: {customer.customerId}</>
+                          )}
+                          {customerTypeTab === 'oem' && customer.oemCode && (
+                            <>OEM Code: {customer.oemCode}</>
+                          )}
+                          {customerTypeTab === 'oem' && !customer.oemCode && (
+                            <>OEM ID: {customer._id?.slice(-6) || 'N/A'}</>
                           )}
                         </div>
                       </div>
@@ -1546,40 +1786,118 @@ const CustomerManagement: React.FC = () => {
                           <Phone className="w-4 h-4 mr-2" />
                           {customer.phone || "N/A"}
                         </div>
+                        {customerTypeTab === 'oem' && customer.contactPerson && (
+                          <div className="flex items-center text-xs text-gray-600">
+                            <Users className="w-4 h-4 mr-2" />
+                            {customer.contactPerson}
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="space-y-2">
-                        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.status)}`}>
-                          {getStatusIcon(customer.status)}
-                          <span className="ml-1 capitalize">{customer.status}</span>
-                        </span>
-                        <div className="text-xs text-gray-600 capitalize">
-                          {customer.customerType}
-                        </div>
+                        {customerTypeTab === 'oem' ? (
+                          <div className="space-y-1">
+                            <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
+                              (customer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
+                              (customer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                              (customer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
+                              'bg-gray-100 text-gray-800'
+                            }`}>
+                              <span className="ml-1 capitalize">{(customer.status as any) || 'active'}</span>
+                            </span>
+                            {customer.rating && (
+                              <div className="flex items-center text-xs text-gray-600">
+                                <span className="mr-1">Rating:</span>
+                                <span className="text-yellow-600">{customer.rating}/5</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.status)}`}>
+                              {getStatusIcon(customer.status)}
+                              <span className="ml-1 capitalize">{customer.status}</span>
+                            </span>
+                            <div className="text-xs text-gray-600 capitalize">
+                              {customer.customerType}
+                            </div>
+                          </>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      {customer.contactHistory.length > 0 ? (
+                      {customerTypeTab === 'oem' ? (
                         <div className="space-y-1">
-                          <div className="flex items-center text-xs text-gray-600">
-                            {getContactIcon(customer.contactHistory[customer.contactHistory.length - 1].type)}
-                            <span className="ml-1 capitalize">
-                              {customer.contactHistory[customer.contactHistory.length - 1].type}
-                            </span>
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {new Date(customer.contactHistory[customer.contactHistory.length - 1].date).toLocaleDateString()}
-                          </div>
+                          {customer.products && Array.isArray(customer.products) && customer.products.length > 0 ? (
+                            <>
+                              <div className="text-xs text-gray-600">
+                                <span className="font-medium">Top Product:</span>
+                              </div>
+                              <div className="text-xs text-gray-900">
+                                {customer.products[0].model} ({customer.products[0].kva} KVA)
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                ₹{customer.products[0].price.toLocaleString()}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-sm text-gray-400">No products</span>
+                          )}
                         </div>
                       ) : (
-                        <span className="text-sm text-gray-400">No contacts</span>
+                        customer.contactHistory && customer.contactHistory.length > 0 ? (
+                          <div className="space-y-1">
+                            <div className="flex items-center text-xs text-gray-600">
+                              {getContactIcon(customer.contactHistory[customer.contactHistory.length - 1].type)}
+                              <span className="ml-1 capitalize">
+                                {customer.contactHistory[customer.contactHistory.length - 1].type}
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {new Date(customer.contactHistory[customer.contactHistory.length - 1].date).toLocaleDateString()}
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400">No contacts</span>
+                        )
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {customer.leadSource || 'Direct'}
+                      {customerTypeTab === 'oem' ? (
+                        <div className="space-y-1">
+                          {customer.products && Array.isArray(customer.products) && customer.products.length > 0 ? (
+                            <>
+                              <div className="font-medium text-gray-900">{customer.products.length} products</div>
+                              <div className="text-gray-500">
+                                {customer.products.filter(p => p.availability === 'in_stock').length} in stock
+                              </div>
+                              <div className="text-gray-500">
+                                {customer.products.filter(p => p.availability === 'on_order').length} on order
+                              </div>
+                            </>
+                          ) : (
+                            'No products'
+                          )}
+                        </div>
+                      ) : (
+                        customer.leadSource || 'Direct'
+                      )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">{customer.designation || '-'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {customerTypeTab === 'oem' ? (
+                        <div className="space-y-1">
+                          <div className="font-medium text-gray-900">{customer.contactPerson || '-'}</div>
+                          {customer.alternatePhone && (
+                            <div className="text-xs text-gray-500">
+                              Alt: {customer.alternatePhone}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        customer.designation || '-'
+                      )}
+                    </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button
@@ -1589,28 +1907,32 @@ const CustomerManagement: React.FC = () => {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => openContactModal(customer)}
-                          className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
-                          title="Add Contact"
-                        >
-                          <MessageSquare className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => openEditModal(customer)}
-                          className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
-                          title="Edit Customer"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        {user?.role !== 'hr' &&
+                        {customerTypeTab !== 'oem' && (
                           <button
-                            onClick={() => handleDeleteCustomer(customer._id)}
-                            className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                            title="Delete Customer"
+                            onClick={() => openContactModal(customer)}
+                            className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
+                            title="Add Contact"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <MessageSquare className="w-4 h-4" />
                           </button>
+                        )}
+                        {customerTypeTab !== 'oem' && (
+                          <button
+                            onClick={() => openEditModal(customer)}
+                            className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
+                            title="Edit Customer"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        )}
+                        {user?.role !== 'hr' &&
+                                                      <button
+                              onClick={() => handleDeleteCustomer(customer._id)}
+                              className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                              title={customerTypeTab === 'oem' ? 'Delete OEM' : 'Delete Customer'}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                         }
                       </div>
                     </td>
@@ -1648,7 +1970,12 @@ const CustomerManagement: React.FC = () => {
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-blue-600 font-medium">{customerTypeTab === 'customer' ? 'New Customers' : 'New Suppliers'}</p>
+                      <p className="text-sm text-blue-600 font-medium">
+                        {customerTypeTab === 'customer' ? 'New Customers' : 
+                         customerTypeTab === 'supplier' ? 'New Suppliers' : 
+                         customerTypeTab === 'dg_customer' ? 'New DG Customers' :
+                         'New OEM Customers'}
+                      </p>
                       <p className="text-2xl font-bold text-blue-900">{previewData.summary.newCustomers}</p>
                     </div>
                     <Plus className="w-8 h-8 text-blue-600" />
@@ -1657,7 +1984,12 @@ const CustomerManagement: React.FC = () => {
                 <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm text-yellow-600 font-medium">{customerTypeTab === 'customer' ? 'Existing Customers' : 'Existing Suppliers'}</p>
+                      <p className="text-sm text-yellow-600 font-medium">
+                        {customerTypeTab === 'customer' ? 'Existing Customers' : 
+                         customerTypeTab === 'supplier' ? 'Existing Suppliers' : 
+                         customerTypeTab === 'dg_customer' ? 'Existing DG Customers' :
+                         'Existing OEM Customers'}
+                      </p>
                       <p className="text-2xl font-bold text-yellow-900">{previewData.summary.existingCustomers}</p>
                     </div>
                     <CheckCircle className="w-8 h-8 text-yellow-600" />
@@ -1694,7 +2026,10 @@ const CustomerManagement: React.FC = () => {
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                   <h3 className="text-lg font-medium text-green-900 mb-4 flex items-center">
                     <Plus className="w-5 h-5 mr-2" />
-                    {customerTypeTab === 'customer' ? 'Customers to be Created' : 'Suppliers to be Created'} ({previewData.customersToCreate.length})
+                    {customerTypeTab === 'customer' ? 'Customers to be Created' : 
+                     customerTypeTab === 'supplier' ? 'Suppliers to be Created' : 
+                     customerTypeTab === 'dg_customer' ? 'DG Customers to be Created' :
+                     'OEM Customers to be Created'} ({previewData.customersToCreate.length})
                   </h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -1721,7 +2056,12 @@ const CustomerManagement: React.FC = () => {
                     </table>
                     {previewData.customersToCreate.length > 10 && (
                       <p className="text-sm text-green-600 mt-2 text-center">
-                        ... and {previewData.customersToCreate.length - 10} {customerTypeTab === 'customer' ? 'more customers' : 'more suppliers'}
+                        ... and {previewData.customersToCreate.length - 10} {
+                          customerTypeTab === 'customer' ? 'more customers' : 
+                          customerTypeTab === 'supplier' ? 'more suppliers' : 
+                          customerTypeTab === 'dg_customer' ? 'more DG customers' :
+                          'more OEM customers'
+                        }
                       </p>
                     )}
                   </div>
@@ -1731,7 +2071,10 @@ const CustomerManagement: React.FC = () => {
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <h3 className="text-lg font-medium text-yellow-900 mb-4 flex items-center">
                     <CheckCircle className="w-5 h-5 mr-2" />
-                    {customerTypeTab === 'customer' ? 'Existing Customers' : 'Existing Suppliers'} ({previewData.existingCustomers.length})
+                    {customerTypeTab === 'customer' ? 'Existing Customers' : 
+                     customerTypeTab === 'supplier' ? 'Existing Suppliers' : 
+                     customerTypeTab === 'dg_customer' ? 'Existing DG Customers' :
+                     'Existing OEM Customers'} ({previewData.existingCustomers.length})
                   </h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
@@ -1754,7 +2097,12 @@ const CustomerManagement: React.FC = () => {
                     </table>
                     {previewData.existingCustomers.length > 10 && (
                       <p className="text-sm text-yellow-600 mt-2 text-center">
-                        ... and {previewData.existingCustomers.length - 10} more existing customers
+                        ... and {previewData.existingCustomers.length - 10} more existing {
+                          customerTypeTab === 'customer' ? 'customers' : 
+                          customerTypeTab === 'supplier' ? 'suppliers' : 
+                          customerTypeTab === 'dg_customer' ? 'DG customers' :
+                          'OEM customers'
+                        }
                       </p>
                     )}
                   </div>
@@ -1795,7 +2143,12 @@ const CustomerManagement: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Add New {customerTypeTab === 'customer' ? 'Customer' : 'Supplier'}</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Add New {
+                customerTypeTab === 'customer' ? 'Customer' : 
+                customerTypeTab === 'supplier' ? 'Supplier' : 
+                customerTypeTab === 'dg_customer' ? 'DG Customer' :
+                'OEM Customer'
+              }</h2>
               <button
                 onClick={() => {
                   setShowAddModal(false);
@@ -2167,7 +2520,10 @@ const CustomerManagement: React.FC = () => {
                   disabled={submitting}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  {customerTypeTab === 'customer' ? submitting ? 'Creating...' : 'Create Customer' : submitting ? 'Creating...' : 'Create Supplier'}
+                  {customerTypeTab === 'customer' ? (submitting ? 'Creating...' : 'Create Customer') : 
+                   customerTypeTab === 'supplier' ? (submitting ? 'Creating...' : 'Create Supplier') : 
+                   customerTypeTab === 'dg_customer' ? (submitting ? 'Creating...' : 'Create DG Customer') :
+                   (submitting ? 'Creating...' : 'Create OEM Customer')}
                 </button>
               </div>
             </form>
@@ -2180,7 +2536,12 @@ const CustomerManagement: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Edit {customerTypeTab === 'customer' ? 'Customer' : 'Supplier'}</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Edit {
+                customerTypeTab === 'customer' ? 'Customer' : 
+                customerTypeTab === 'supplier' ? 'Supplier' : 
+                customerTypeTab === 'dg_customer' ? 'DG Customer' :
+                'OEM Customer'
+              }</h2>
               <button
                 onClick={() => {
                   setShowEditModal(false);
@@ -2552,7 +2913,12 @@ const CustomerManagement: React.FC = () => {
                   disabled={submitting}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  {submitting ? 'Updating...' : 'Update Customer'}
+                  {submitting ? 'Updating...' : `Update ${
+                    customerTypeTab === 'customer' ? 'Customer' : 
+                    customerTypeTab === 'supplier' ? 'Supplier' : 
+                    customerTypeTab === 'dg_customer' ? 'DG Customer' :
+                    'OEM Customer'
+                  }`}
                 </button>
               </div>
             </form>
@@ -2566,11 +2932,27 @@ const CustomerManagement: React.FC = () => {
           <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div className="flex items-center space-x-3">
-                <h2 className="text-xl font-semibold text-gray-900">{selectedCustomer.name}</h2>
-                <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedCustomer.status)}`}>
-                  {getStatusIcon(selectedCustomer.status)}
-                  <span className="ml-1 capitalize">{selectedCustomer.status}</span>
-                </span>
+                <h2 className="text-xl font-semibold text-gray-900">
+                  {customerTypeTab === 'oem' ? 
+                    (selectedCustomer.companyName || selectedCustomer.name || 'Unnamed OEM') : 
+                    (selectedCustomer.name || 'Unnamed Customer')
+                  }
+                </h2>
+                {customerTypeTab === 'oem' ? (
+                  <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
+                    (selectedCustomer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
+                    (selectedCustomer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                    (selectedCustomer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
+                    'bg-gray-100 text-gray-800'
+                  }`}>
+                    <span className="ml-1 capitalize">{(selectedCustomer.status as any) || 'active'}</span>
+                  </span>
+                ) : (
+                  <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedCustomer.status)}`}>
+                    {getStatusIcon(selectedCustomer.status)}
+                    <span className="ml-1 capitalize">{selectedCustomer.status}</span>
+                  </span>
+                )}
               </div>
               <button
                 onClick={() => setShowDetailsModal(false)}
@@ -2585,10 +2967,24 @@ const CustomerManagement: React.FC = () => {
               <div className="space-y-6 mb-6">
                 {/* Customer Information */}
                 <div className="space-y-3">
-                  <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Customer Information</h3>
+                  <h3 className="text-lg font-medium text-gray-900 border-b pb-2">
+                    {customerTypeTab === 'oem' ? 'OEM Information' : 'Customer Information'}
+                  </h3>
                   {/* Status Dropdown as Tag - moved here above the grid */}
 
                   <div className="grid grid-cols-2 gap-4">
+                    {customerTypeTab === 'oem' && selectedCustomer.oemCode && (
+                      <div>
+                        <p className="text-xs text-gray-500">OEM Code</p>
+                        <p className="font-medium">{selectedCustomer.oemCode}</p>
+                      </div>
+                    )}
+                    {customerTypeTab === 'oem' && selectedCustomer.companyName && (
+                      <div>
+                        <p className="text-xs text-gray-500">Company Name</p>
+                        <p className="font-medium">{selectedCustomer.companyName}</p>
+                      </div>
+                    )}
                     {selectedCustomer.type === 'customer' && selectedCustomer.customerId && (
                       <div>
                         <p className="text-xs text-gray-500">Customer ID</p>
@@ -2596,54 +2992,80 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     )}
                     <div>
-                      <p className="text-xs text-gray-500">Customer Type</p>
-                      <p className="font-medium capitalize">{selectedCustomer.customerType}</p>
+                      <p className="text-xs text-gray-500">{customerTypeTab === 'oem' ? 'OEM Type' : 'Customer Type'}</p>
+                      <p className="font-medium capitalize">{customerTypeTab === 'oem' ? 'OEM' : selectedCustomer.customerType}</p>
                     </div>
-                    <div className="mb-2">
-                      <div className="relative dropdown-container inline-block">
-                        <button
-                          type="button"
-                          onClick={() => setShowStatusDropdown((v) => !v)}
-                          className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(selectedCustomer.status)} ${showStatusDropdown ? 'ring-2 ring-blue-400 border-blue-300' : 'border-transparent'}`}
-                        >
-                          {getStatusIcon(selectedCustomer.status)}
-                          <span className="ml-2 capitalize">{getStatusLabel(selectedCustomer.status)}</span>
-                          <ChevronDown className={`w-4 h-4 ml-2 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showStatusDropdown && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white p-2 border border-gray-200 rounded-md shadow-lg z-50 py-1 min-w-[160px] flex flex-col">
-                            {statusOptions
-                              .filter(opt => opt.value !== 'all' && opt.value !== selectedCustomer.status)
-                              .map((option) => (
-                                <button
-                                  key={option.value}
-                                  type="button"
-                                  onClick={async () => {
-                                    await handleStatusChange(selectedCustomer._id, option.value as LeadStatus);
-                                    setSelectedCustomer(prev => prev ? { ...prev, status: option.value as LeadStatus } : prev);
-                                    setShowStatusDropdown(false);
-                                  }}
-                                  className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full w-full mb-2 focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(option.value as LeadStatus)} border-transparent hover:opacity-80 hover:scale-105`}
-                                >
-                                  {getStatusIcon(option.value as LeadStatus)}
-                                  <span className="ml-2 capitalize">{option.label}</span>
-                                </button>
-                              ))}
-                          </div>
-                        )}
+                    {customerTypeTab === 'oem' ? (
+                      <div>
+                        <p className="text-xs text-gray-500">Status</p>
+                        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
+                          (selectedCustomer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
+                          (selectedCustomer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                          (selectedCustomer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          <span className="ml-1 capitalize">{(selectedCustomer.status as any) || 'active'}</span>
+                        </span>
                       </div>
-                    </div>
+                    ) : (
+                      <div className="mb-2">
+                        <div className="relative dropdown-container inline-block">
+                          <button
+                            type="button"
+                            onClick={() => setShowStatusDropdown((v) => !v)}
+                            className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(selectedCustomer.status)} ${showStatusDropdown ? 'ring-2 ring-blue-400 border-blue-300' : 'border-transparent'}`}
+                          >
+                            {getStatusIcon(selectedCustomer.status)}
+                            <span className="ml-2 capitalize">{getStatusLabel(selectedCustomer.status)}</span>
+                            <ChevronDown className={`w-4 h-4 ml-2 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                          </button>
+                          {showStatusDropdown && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white p-2 border border-gray-200 rounded-md shadow-lg z-50 py-1 min-w-[160px] flex flex-col">
+                              {statusOptions
+                                .filter(opt => opt.value !== 'all' && opt.value !== selectedCustomer.status)
+                                .map((option) => (
+                                  <button
+                                    key={option.value}
+                                    type="button"
+                                    onClick={async () => {
+                                      await handleStatusChange(selectedCustomer._id, option.value as LeadStatus);
+                                      setSelectedCustomer(prev => prev ? { ...prev, status: option.value as LeadStatus } : prev);
+                                      setShowStatusDropdown(false);
+                                    }}
+                                    className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full w-full mb-2 focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(option.value as LeadStatus)} border-transparent hover:opacity-80 hover:scale-105`}
+                                  >
+                                    {getStatusIcon(option.value as LeadStatus)}
+                                    <span className="ml-2 capitalize">{option.label}</span>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     <div>
-                      <p className="text-xs text-gray-500">Lead Source</p>
-                      <p className="font-medium">{selectedCustomer.leadSource || 'Direct'}</p>
+                      <p className="text-xs text-gray-500">{customerTypeTab === 'oem' ? 'Products' : 'Lead Source'}</p>
+                      <p className="font-medium">
+                        {customerTypeTab === 'oem' ? 
+                          (selectedCustomer.products && Array.isArray(selectedCustomer.products) && selectedCustomer.products.length > 0 ? 
+                            `${selectedCustomer.products.length} products` : 'No products') :
+                          (selectedCustomer.leadSource || 'Direct')
+                        }
+                      </p>
                     </div>
-                    {selectedCustomer.designation && (
+                    {customerTypeTab === 'oem' && selectedCustomer.contactPerson && (
+                      <div>
+                        <p className="text-xs text-gray-500">Contact Person</p>
+                        <p className="font-medium text-sm">{selectedCustomer.contactPerson}</p>
+                      </div>
+                    )}
+                    {customerTypeTab !== 'oem' && selectedCustomer.designation && (
                       <div>
                         <p className="text-xs text-gray-500">Designation</p>
                         <p className="font-medium text-sm">{selectedCustomer.designation}</p>
                       </div>
                     )}
-                    {selectedCustomer.contactPersonName && (
+                    {customerTypeTab !== 'oem' && selectedCustomer.contactPersonName && (
                       <div>
                         <p className="text-xs text-gray-500">Contact Person</p>
                         <p className="font-medium text-sm">{selectedCustomer.contactPersonName}</p>
@@ -2665,6 +3087,57 @@ const CustomerManagement: React.FC = () => {
                       <p className="text-xs text-gray-500">Phone</p>
                       <p className="font-medium">{selectedCustomer.phone}</p>
                     </div>
+                    {customerTypeTab === 'oem' && selectedCustomer.rating && (
+                      <div>
+                        <p className="text-xs text-gray-500">Rating</p>
+                        <div className="flex items-center">
+                          <span className="text-yellow-600 font-medium mr-2">{selectedCustomer.rating}/5</span>
+                          <div className="flex">
+                            {[1, 2, 3, 4, 5].map((star) => (
+                              <span key={star} className={`text-lg ${star <= selectedCustomer.rating! ? 'text-yellow-400' : 'text-gray-300'}`}>
+                                ★
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {customerTypeTab === 'oem' && selectedCustomer.alternatePhone && (
+                      <div>
+                        <p className="text-xs text-gray-500">Alternate Phone</p>
+                        <p className="font-medium text-sm">{selectedCustomer.alternatePhone}</p>
+                      </div>
+                    )}
+                    {customerTypeTab === 'oem' && selectedCustomer.paymentTerms && (
+                      <div>
+                        <p className="text-xs text-gray-500">Payment Terms</p>
+                        <p className="font-medium text-sm">{selectedCustomer.paymentTerms}</p>
+                      </div>
+                    )}
+                    {customerTypeTab === 'oem' && selectedCustomer.deliveryTerms && (
+                      <div>
+                        <p className="text-xs text-gray-500">Delivery Terms</p>
+                        <p className="font-medium text-sm">{selectedCustomer.deliveryTerms}</p>
+                      </div>
+                    )}
+                    {customerTypeTab === 'oem' && selectedCustomer.warrantyTerms && (
+                      <div>
+                        <p className="text-xs text-gray-500">Warranty Terms</p>
+                        <p className="font-medium text-sm">{selectedCustomer.warrantyTerms}</p>
+                      </div>
+                    )}
+                    {customerTypeTab === 'oem' && selectedCustomer.creditLimit && (
+                      <div>
+                        <p className="text-xs text-gray-500">Credit Limit</p>
+                        <p className="font-medium text-sm">₹{selectedCustomer.creditLimit.toLocaleString()}</p>
+                      </div>
+                    )}
+                    {customerTypeTab === 'oem' && selectedCustomer.creditDays && (
+                      <div>
+                        <p className="text-xs text-gray-500">Credit Days</p>
+                        <p className="font-medium text-sm">{selectedCustomer.creditDays} days</p>
+                      </div>
+                    )}
                     <div>
                       <p className="text-xs text-gray-500">Assigned To</p>
                       <p className="font-medium">{getUserName(selectedCustomer.assignedTo) || 'Unassigned'}</p>
@@ -2676,10 +3149,12 @@ const CustomerManagement: React.FC = () => {
                     <div className="col-span-2">
                       <p className="text-xs text-gray-500">Address</p>
                       <p className="font-medium text-sm">
-                        {selectedCustomer.addresses && selectedCustomer.addresses.length > 0
-                          ? selectedCustomer.addresses.find(addr => addr.isPrimary)?.address || selectedCustomer.addresses[0].address
-                          : selectedCustomer.address || 'No address provided'
-                        }
+                                            {customerTypeTab === 'oem' && selectedCustomer.address && typeof selectedCustomer.address === 'object' ? 
+                      `${selectedCustomer.address.street}, ${selectedCustomer.address.city}, ${selectedCustomer.address.state} ${selectedCustomer.address.pincode}` :
+                      selectedCustomer.addresses && selectedCustomer.addresses.length > 0
+                        ? selectedCustomer.addresses.find(addr => addr.isPrimary)?.address || selectedCustomer.addresses[0].address
+                        : (typeof selectedCustomer.address === 'string' ? selectedCustomer.address : 'No address provided')
+                    }
                       </p>
                     </div>
                   </div>
@@ -2720,7 +3195,12 @@ const CustomerManagement: React.FC = () => {
                     </div>
                   ) : (
                     <div className="text-sm text-gray-500">
-                      <p className="font-medium text-sm">{selectedCustomer.address}</p>
+                                              <p className="font-medium text-sm">
+                          {customerTypeTab === 'oem' && selectedCustomer.address && typeof selectedCustomer.address === 'object' ? 
+                            `${selectedCustomer.address.street}, ${selectedCustomer.address.city}, ${selectedCustomer.address.state} ${selectedCustomer.address.pincode}` :
+                            (typeof selectedCustomer.address === 'string' ? selectedCustomer.address : 'No address provided')
+                          }
+                        </p>
                       <p className="text-xs text-gray-400 mt-1">(Legacy address format)</p>
                     </div>
                   )}
@@ -2733,27 +3213,123 @@ const CustomerManagement: React.FC = () => {
                 )}
               </div>
 
+              {/* OEM Bank Details */}
+              {customerTypeTab === 'oem' && selectedCustomer.bankDetails && (
+                <div className="space-y-6 mb-6">
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Bank Details</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-gray-500">Bank Name</p>
+                        <p className="font-medium text-sm">{selectedCustomer.bankDetails.bankName}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Account Number</p>
+                        <p className="font-medium text-sm">{selectedCustomer.bankDetails.accountNo}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">IFSC Code</p>
+                        <p className="font-medium text-sm">{selectedCustomer.bankDetails.ifsc}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Branch</p>
+                        <p className="font-medium text-sm">{selectedCustomer.bankDetails.branch}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* OEM Products */}
+              {customerTypeTab === 'oem' && selectedCustomer.products && Array.isArray(selectedCustomer.products) && selectedCustomer.products.length > 0 && (
+                <div className="space-y-6 mb-6">
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Products ({selectedCustomer.products.length})</h3>
+                    <div className="space-y-3">
+                      {selectedCustomer.products.map((product, index) => (
+                        <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs text-gray-500">Model</p>
+                              <p className="font-medium text-sm">{product.model}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">KVA</p>
+                              <p className="font-medium text-sm">{product.kva}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Phase</p>
+                              <p className="font-medium text-sm capitalize">{product.phase}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Fuel Type</p>
+                              <p className="font-medium text-sm capitalize">{product.fuelType}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Price</p>
+                              <p className="font-medium text-sm">₹{product.price.toLocaleString()}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Availability</p>
+                              <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
+                                product.availability === 'in_stock' ? 'bg-green-100 text-green-800' :
+                                product.availability === 'on_order' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-red-100 text-red-800'
+                              }`}>
+                                {product.availability.replace('_', ' ')}
+                              </span>
+                            </div>
+                            {product.specifications && (
+                              <div className="col-span-2">
+                                <p className="text-xs text-gray-500">Specifications</p>
+                                <p className="font-medium text-sm">{product.specifications}</p>
+                              </div>
+                            )}
+                            {product.leadTime > 0 && (
+                              <div>
+                                <p className="text-xs text-gray-500">Lead Time</p>
+                                <p className="font-medium text-sm">{product.leadTime} days</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Contact History */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">Contact History</h3>
-                  <button
-                    onClick={() => {
-                      openContactModal(selectedCustomer);
-                      setShowDetailsModal(false);
-                    }}
-                    className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700 transition-colors"
-                  >
-                    Add Contact
-                  </button>
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {customerTypeTab === 'oem' ? 'OEM Details' : 'Contact History'}
+                  </h3>
+                  {customerTypeTab !== 'oem' && (
+                    <button
+                      onClick={() => {
+                        openContactModal(selectedCustomer);
+                        setShowDetailsModal(false);
+                      }}
+                      className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                    >
+                      Add Contact
+                    </button>
+                  )}
                 </div>
-                {selectedCustomer.contactHistory.length === 0 ? (
+                {customerTypeTab === 'oem' ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>OEM customers don't have contact history</p>
+                    <p className="text-sm">Contact management is not applicable for OEM customers</p>
+                  </div>
+                ) : selectedCustomer.contactHistory && selectedCustomer.contactHistory.length === 0 ? (
                   <div className="text-center py-8 text-gray-500">
                     <MessageSquare className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p>No contact history yet</p>
                     <p className="text-sm">Add the first contact interaction</p>
                   </div>
-                ) : (
+                ) : selectedCustomer.contactHistory && selectedCustomer.contactHistory.length > 0 ? (
                   <div className="space-y-3">
                     {selectedCustomer.contactHistory.map((contact, index) => (
                       <div key={index} className="bg-gray-50 rounded-lg p-4 flex items-start space-x-3">
@@ -2775,6 +3351,12 @@ const CustomerManagement: React.FC = () => {
                         </div>
                       </div>
                     ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <MessageSquare className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                    <p>No contact history available</p>
+                    <p className="text-sm">Contact history data is not accessible</p>
                   </div>
                 )}
               </div>

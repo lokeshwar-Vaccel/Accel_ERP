@@ -166,6 +166,14 @@ class ApiClient {
       getAll: (params?: any) =>
         this.makeRequest<{ success: boolean; data: any[]; page: number; limit: number; total: number; totalPages: number }>(`/customers/dg-customers${params ? `?${new URLSearchParams(params)}` : ''}`),
     },
+    oemCustomers: {
+      getAll: (params?: any) =>
+        this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/customers/oem${params ? `?${new URLSearchParams(params)}` : ''}`),
+    },
+    convertedCustomers: {
+      getAll: (params?: any) =>
+        this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/customers/converted${params ? `?${new URLSearchParams(params)}` : ''}`),
+    },
 
     create: (customerData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/customers', {
