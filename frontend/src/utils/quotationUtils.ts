@@ -79,6 +79,13 @@ export interface QuotationData {
     addressId?: number;
   };
   assignedEngineer?: string; // Add assigned engineer field
+  // Quotation reference fields for invoices created from quotations
+  sourceQuotation?: string;
+  quotationPaymentDetails?: {
+    paidAmount: number;
+    remainingAmount: number;
+    paymentStatus: string;
+  };
 }
 
 export interface ValidationError {

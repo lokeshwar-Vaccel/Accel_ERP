@@ -109,6 +109,12 @@ interface PurchaseOrder {
   notes?: string;
   attachments?: string[];
   approvedBy?: string;
+  // Payment fields
+  paidAmount?: number;
+  remainingAmount?: number;
+  paymentStatus?: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentMethod?: string;
+  paymentDate?: string;
   createdBy: string | {
     _id: string;
     firstName: string;
@@ -211,12 +217,20 @@ const PurchaseOrderManagement: React.FC = () => {
   const [sort, setSort] = useState('-createdAt');
 
   // Modal states
-
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showReceiveModal, setShowReceiveModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   // Selected data
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+
+  // Payment update state
+  const [paymentUpdate, setPaymentUpdate] = useState({
+    paidAmount: 0,
+    paymentMethod: '',
+    paymentDate: new Date().toISOString().split('T')[0],
+    notes: ''
+  });
 
   const [totalPurchaseOrdersCount, setTotalPurchaseOrdersCount] = useState(0);
   const [pendingPurchaseOrdersCount, setPendingPurchaseOrdersCount] = useState(0);
@@ -689,11 +703,83 @@ const PurchaseOrderManagement: React.FC = () => {
     clearGstInvoiceValidation();
   };
 
+  const openPaymentModal = (po: PurchaseOrder) => {
+    setSelectedPO(po);
+    setPaymentUpdate({
+      paidAmount: 0,
+      paymentMethod: '',
+      paymentDate: new Date().toISOString().split('T')[0],
+      notes: ''
+    });
+    setShowPaymentModal(true);
+  };
 
+  const validatePaymentForm = (): boolean => {
+    const errors: Record<string, string> = {};
 
+    if (!paymentUpdate.paidAmount || paymentUpdate.paidAmount <= 0) {
+      errors.paidAmount = 'Payment amount must be greater than 0';
+    }
 
+    const remainingAmount = selectedPO?.remainingAmount || (selectedPO?.totalAmount || 0) - (selectedPO?.paidAmount || 0);
+    if (paymentUpdate.paidAmount > remainingAmount) {
+      errors.paidAmount = 'Payment amount cannot exceed remaining amount';
+    }
 
+    if (!paymentUpdate.paymentMethod) {
+      errors.paymentMethod = 'Payment method is required';
+    }
 
+    if (!paymentUpdate.paymentDate) {
+      errors.paymentDate = 'Payment date is required';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return false;
+    }
+
+    return true;
+  };
+
+  const submitPaymentUpdate = async () => {
+    if (!selectedPO) return;
+
+    // Validate form before submission
+    if (!validatePaymentForm()) {
+      toast.error('Please fix the form errors before submitting');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      // Calculate new paid amount (current + new payment)
+      const currentPaidAmount = selectedPO.paidAmount || 0;
+      const newTotalPaidAmount = currentPaidAmount + paymentUpdate.paidAmount;
+
+      // Use the payment update method
+      await apiClient.purchaseOrders.updatePayment(selectedPO._id, {
+        paidAmount: paymentUpdate.paidAmount,
+        paymentMethod: paymentUpdate.paymentMethod,
+        paymentDate: paymentUpdate.paymentDate,
+        notes: paymentUpdate.notes
+      });
+      
+      await fetchPurchaseOrders();
+      setShowPaymentModal(false);
+      
+      // Clear form errors
+      setFormErrors({});
+      
+      toast.success('Payment status updated successfully!');
+    } catch (error) {
+      console.error('Error updating payment status:', error);
+      setFormErrors({ general: 'Failed to update payment status. Please try again.' });
+      toast.error('Failed to update payment status');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleStatusUpdate = async (poId: string, newStatus: PurchaseOrderStatus) => {
     try {
@@ -838,7 +924,13 @@ const PurchaseOrderManagement: React.FC = () => {
 
       setShowReceiveModal(false);
       clearGstInvoiceValidation();
-      toast.success('Items received successfully');
+      
+      // Enhanced success message with invoice information
+      if (response.data.invoice) {
+        toast.success(`Items received successfully! Purchase invoice ${response.data.invoice.invoiceNumber} created with ${response.data.invoice.paymentStatus} payment status.`);
+      } else {
+        toast.success('Items received successfully');
+      }
     } catch (error: any) {
       console.error('Error receiving items:', error);
 
@@ -1108,6 +1200,15 @@ const PurchaseOrderManagement: React.FC = () => {
       value: formatCurrency(purchaseOrders.reduce((sum, po) => sum + po.totalAmount, 0)),
       icon: <IndianRupee className="w-6 h-6" />,
       color: 'purple'
+    },
+    {
+      title: 'Payment Status',
+      value: `${purchaseOrders.filter(po => po.paymentStatus === 'paid').length} Paid / ${purchaseOrders.filter(po => po.paymentStatus === 'partial').length} Partial`,
+      action: () => {
+        // Could add payment status filter in the future
+      },
+      icon: <DollarSign className="w-6 h-6" />,
+      color: 'emerald'
     }
   ];
 
@@ -1240,7 +1341,7 @@ const PurchaseOrderManagement: React.FC = () => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {stats.map((stat, index) => (
           <div key={index} onClick={stat.action} className={`bg-white p-4 hover:bg-gray-50 rounded-xl shadow-sm border border-gray-100 ${stat.title === 'Total Value' ? 'cursor-not-allowed' : 'cursor-pointer transform transition-transform duration-200 hover:scale-105 active:scale-95'}`}>
             <div className="flex items-center justify-between">
@@ -1378,6 +1479,9 @@ const PurchaseOrderManagement: React.FC = () => {
                   Status
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Payment
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Delivery
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -1388,11 +1492,11 @@ const PurchaseOrderManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">Loading purchase orders...</td>
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">Loading purchase orders...</td>
                 </tr>
               ) : filteredPOs.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">No purchase orders found</td>
+                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No purchase orders found</td>
                 </tr>
               ) : (
                 filteredPOs.map((po) => (
@@ -1426,6 +1530,22 @@ const PurchaseOrderManagement: React.FC = () => {
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(po.status)}`}>
                         {po.status.charAt(0).toUpperCase() + po.status.slice(1)}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div>
+                        <div className="text-xs font-medium text-gray-900">
+                          {formatCurrency(po.paidAmount || 0)} / {formatCurrency(po.totalAmount)}
+                        </div>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          po.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                          po.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {(po.paymentStatus
+                            ? po.paymentStatus.charAt(0).toUpperCase() + po.paymentStatus.slice(1)
+                            : 'Pending')}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div>
@@ -1500,6 +1620,31 @@ const PurchaseOrderManagement: React.FC = () => {
                             {/* <span>Cancel PO</span> */}
                           </button>
                         )}
+                        {/* Payment Update Button */}
+                        <button
+                          onClick={() => openPaymentModal(po)}
+                          className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
+                          title="Update Payment"
+                        >
+                          <DollarSign className="w-4 h-4" />
+                        </button>
+                        {/* Sync Payment Status Button */}
+                        <button
+                          onClick={async () => {
+                            try {
+                              await apiClient.purchaseOrders.syncPaymentStatus(po._id);
+                              await fetchPurchaseOrders();
+                              toast.success('Payment status synced from invoices');
+                            } catch (error) {
+                              console.error('Error syncing payment status:', error);
+                              toast.error('Failed to sync payment status');
+                            }
+                          }}
+                          className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
+                          title="Sync Payment Status from Invoices"
+                        >
+                          <RefreshCw className="w-4 h-4" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1542,7 +1687,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
             <div className="p-4 space-y-3">
               {/* Header Information */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-gray-50 p-4 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Basic Information</h3>
                   <div className="space-y-2">
@@ -1586,6 +1731,72 @@ const PurchaseOrderManagement: React.FC = () => {
                     <p><span className="text-xs text-gray-600">Name:</span> <span className="font-medium">{getCreatedByName(selectedPO.createdBy)}</span></p>
                     <p><span className="text-xs text-gray-600">Created:</span> <span className="font-medium">{formatDateTime(selectedPO.createdAt)}</span></p>
                     <p><span className="text-xs text-gray-600">Last Updated:</span> <span className="font-medium">{formatDateTime(selectedPO.updatedAt)}</span></p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">Payment Information</h3>
+                  <div className="space-y-2">
+                    <p><span className="text-xs text-gray-600">Paid Amount:</span> <span className="font-medium text-green-600">{formatCurrency(selectedPO.paidAmount || 0)}</span></p>
+                    <p><span className="text-xs text-gray-600">Remaining Amount:</span> <span className="font-medium text-orange-600">{formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}</span></p>
+                    <p><span className="text-xs text-gray-600">Payment Status:</span>
+                      <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                        selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {(selectedPO.paymentStatus
+                          ? selectedPO.paymentStatus.charAt(0).toUpperCase() + selectedPO.paymentStatus.slice(1)
+                          : 'Pending')}
+                      </span>
+                    </p>
+                    {selectedPO.paymentMethod && (
+                      <p><span className="text-xs text-gray-600">Payment Method:</span> <span className="font-medium">{selectedPO.paymentMethod}</span></p>
+                    )}
+                    {selectedPO.paymentDate && (
+                      <p><span className="text-xs text-gray-600">Payment Date:</span> <span className="font-medium">{formatDate(selectedPO.paymentDate)}</span></p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Related Invoices */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Related Invoices</h3>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await apiClient.purchaseOrders.syncPaymentStatus(selectedPO._id);
+                        await fetchPurchaseOrders();
+                        toast.success('Payment status synced from invoices');
+                      } catch (error) {
+                        console.error('Error syncing payment status:', error);
+                        toast.error('Failed to sync payment status');
+                      }
+                    }}
+                    className="px-3 py-1 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-2"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    <span>Sync Payment Status</span>
+                  </button>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-sm text-gray-600">
+                    Purchase invoices are automatically created when items are received. 
+                    Payment status is synchronized between PO and invoices.
+                  </p>
+                  <div className="mt-3 text-sm">
+                    <span className="font-medium">Current PO Payment Status:</span>
+                    <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                      selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {(selectedPO.paymentStatus
+                        ? selectedPO.paymentStatus.charAt(0).toUpperCase() + selectedPO.paymentStatus.slice(1)
+                        : 'Pending')}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1764,6 +1975,31 @@ const PurchaseOrderManagement: React.FC = () => {
                       <span>Cancel PO</span>
                     </button>
                   )}
+                  {/* Payment Update Button */}
+                  <button
+                    onClick={() => openPaymentModal(selectedPO)}
+                    className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-purple-700 transition-colors"
+                  >
+                    <DollarSign className="w-4 h-4" />
+                    <span>Update Payment</span>
+                  </button>
+                  {/* Sync Payment Status Button */}
+                  <button
+                    onClick={async () => {
+                      try {
+                        await apiClient.purchaseOrders.syncPaymentStatus(selectedPO._id);
+                        await fetchPurchaseOrders();
+                        toast.success('Payment status synced from invoices');
+                      } catch (error) {
+                        console.error('Error syncing payment status:', error);
+                        toast.error('Failed to sync payment status');
+                      }
+                    }}
+                    className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
+                    title="Sync Payment Status from Invoices"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </button>
                 </div>
                 <button
                   onClick={() => setShowDetailsModal(false)}
@@ -2355,6 +2591,41 @@ const PurchaseOrderManagement: React.FC = () => {
                 })()}
               </div>
 
+              {/* Invoice Creation Information */}
+              {receiveData.gstInvoiceNumber && (
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-100 border border-blue-200 rounded-lg p-6 shadow-sm">
+                  <h4 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+                    <FileText className="w-5 h-5 mr-2 text-blue-600" />
+                    Purchase Invoice Creation
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-blue-700 font-medium">GST Invoice Number:</span>
+                      <span className="font-semibold text-blue-900">{receiveData.gstInvoiceNumber}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-blue-700 font-medium">Invoice Date:</span>
+                      <span className="font-semibold text-blue-900">{receiveData.invoiceDate}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-blue-700 font-medium">Status:</span>
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                        Will be created automatically
+                      </span>
+                    </div>
+                    <div className="text-sm text-blue-600 mt-3 p-3 bg-blue-50 rounded-lg">
+                      <strong>Note:</strong> A purchase invoice will be automatically created when you receive these items. 
+                      The payment status will be synchronized with the PO payment status.
+                    </div>
+                    <div className="text-sm text-green-600 mt-2 p-3 bg-green-50 rounded-lg">
+                      <strong>Payment Logic:</strong> The paid amount will reflect the actual amount you have already paid to the supplier 
+                      (₹{selectedPO?.paidAmount || 0}), not a proportional amount based on items received. This ensures accurate 
+                      financial tracking across partial receipts.
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Enhanced Summary Cards */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Items Ordered Card (Left Side) */}
@@ -2636,6 +2907,166 @@ const PurchaseOrderManagement: React.FC = () => {
                   className="flex-1 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                   {submitting ? 'Receiving...' : 'Confirm Receipt'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Update Modal */}
+      {showPaymentModal && selectedPO && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Update Payment</h2>
+                <p className="text-gray-600 mt-1">
+                  PO: <span className="font-semibold">{selectedPO.poNumber}</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Payment Summary */}
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">Payment Summary</h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Total Amount:</span>
+                    <span className="ml-2 font-semibold text-gray-900">{formatCurrency(selectedPO.totalAmount)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Paid Amount:</span>
+                    <span className="ml-2 font-semibold text-green-600">{formatCurrency(selectedPO.paidAmount || 0)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Remaining Amount:</span>
+                    <span className="ml-2 font-semibold text-orange-600">{formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Payment Status:</span>
+                    <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                      selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {(selectedPO.paymentStatus
+                        ? selectedPO.paymentStatus.charAt(0).toUpperCase() + selectedPO.paymentStatus.slice(1)
+                        : 'Pending')}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Form */}
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Amount (₹) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-3 text-gray-500">₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max={selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))}
+                      step="1"
+                      value={paymentUpdate.paidAmount}
+                      onChange={(e) => {
+                        const amount = parseFloat(e.target.value) || 0;
+                        setPaymentUpdate({ ...paymentUpdate, paidAmount: amount });
+                        
+                        if (formErrors.paidAmount && amount > 0 && amount <= (selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))) {
+                          setFormErrors(prev => ({ ...prev, paidAmount: '' }));
+                        }
+                      }}
+                      className={`w-full pl-8 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                        formErrors.paidAmount ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter payment amount"
+                    />
+                  </div>
+                  {formErrors.paidAmount && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.paidAmount}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Method <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={paymentUpdate.paymentMethod}
+                    onChange={(e) => setPaymentUpdate({ ...paymentUpdate, paymentMethod: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      formErrors.paymentMethod ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  >
+                    <option value="">Select payment method</option>
+                    <option value="cash">Cash</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="upi">UPI</option>
+                    <option value="card">Credit/Debit Card</option>
+                    <option value="other">Other</option>
+                  </select>
+                  {formErrors.paymentMethod && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.paymentMethod}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Payment Date <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={paymentUpdate.paymentDate}
+                    onChange={(e) => setPaymentUpdate({ ...paymentUpdate, paymentDate: e.target.value })}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                      formErrors.paymentDate ? 'border-red-500' : 'border-gray-300'
+                    }`}
+                  />
+                  {formErrors.paymentDate && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.paymentDate}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Notes
+                  </label>
+                  <textarea
+                    value={paymentUpdate.notes}
+                    onChange={(e) => setPaymentUpdate({ ...paymentUpdate, notes: e.target.value })}
+                    rows={3}
+                    placeholder="Any additional notes about the payment..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
+                  />
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-4 pt-6 border-t border-gray-200">
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={submitPaymentUpdate}
+                  disabled={submitting}
+                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {submitting ? 'Updating...' : 'Update Payment'}
                 </button>
               </div>
             </div>

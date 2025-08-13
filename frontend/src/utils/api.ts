@@ -355,6 +355,12 @@ class ApiClient {
         body: JSON.stringify(invoiceData),
       }),
 
+    createFromQuotation: (quotationId: string) =>
+      this.makeRequest<{ success: boolean; data: any }>('/invoices/create-from-quotation', {
+        method: 'POST',
+        body: JSON.stringify({ quotationId }),
+      }),
+
     update: (id: string, data: any) =>
       this.makeRequest<{ success: boolean; data: any }>(`/invoices/${id}`, {
         method: 'PUT',
@@ -710,6 +716,17 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: any }>(`/purchase-orders/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
+      }),
+
+    updatePayment: (id: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/purchase-orders/${id}/payment`, {
+        method: 'PUT',
+        body: JSON.stringify(paymentData),
+      }),
+
+    syncPaymentStatus: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/purchase-orders/${id}/sync-payment`, {
+        method: 'PUT',
       }),
 
     delete: (id: string) =>
@@ -1154,10 +1171,15 @@ class ApiClient {
         body: JSON.stringify(quotationData),
       }),
 
-    updateAdvancePayment: (id: string, paymentData: any) =>
-      this.makeRequest<{ success: boolean; data: any; message: string }>(`/quotations/${id}/advance-payment`, {
+    updatePayment: (id: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any; message: string }>(`/quotations/${id}/payment`, {
         method: 'PUT',
         body: JSON.stringify(paymentData),
+      }),
+
+    sendEmail: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string; data: any }>(`/quotations/${id}/send-email`, {
+        method: 'POST',
       }),
 
     delete: (id: string) =>

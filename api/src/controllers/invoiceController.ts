@@ -9,6 +9,7 @@ import { AppError } from '../middleware/errorHandler';
 import { generateReferenceId } from '../utils/generateReferenceId';
 import { PurchaseOrder } from '../models/PurchaseOrder';
 import { InvoiceEmailService } from '../services/invoiceEmailService';
+import { Quotation } from '../models/Quotation';
 
 // @desc    Get all invoices
 // @route   GET /api/v1/invoices
@@ -177,6 +178,10 @@ export const createInvoice = async (
       overallDiscountAmount = 0,
       referenceNo,
       referenceDate,
+      // Quotation reference fields
+      sourceQuotation,
+      quotationNumber,
+      quotationPaymentDetails,
     } = req.body;
 
     // Generate invoice number
@@ -209,7 +214,8 @@ export const createInvoice = async (
         discount: item.discount || 0,
         uom: item.uom || 'nos',
         partNo: item.partNo || '',
-        hsnSac: item.hsnSac || ''
+        hsnNumber: item.hsnSac || item.hsnNumber || '',
+        hsnSac: item.hsnSac || item.hsnNumber || ''
       });
 
       subtotal += discountedTotal;
@@ -228,9 +234,39 @@ export const createInvoice = async (
     const grandTotalBeforeOverallDiscount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discountAmount;
     const finalTotalAmount = Number((grandTotalBeforeOverallDiscount - finalOverallDiscountAmount).toFixed(2));
     
-
+    // Handle payment details from quotation if this invoice is created from a quotation
+    let paidAmount = 0;
+    let remainingAmount = finalTotalAmount;
+    let paymentStatus = 'pending';
     
-
+    if (sourceQuotation && quotationPaymentDetails) {
+      console.log('Creating invoice from quotation:', {
+        sourceQuotation,
+        quotationNumber,
+        quotationPaymentDetails
+      });
+      
+      // If this invoice is from a quotation, use the payment details
+      paidAmount = quotationPaymentDetails.paidAmount || 0;
+      remainingAmount = Math.max(0, finalTotalAmount - paidAmount);
+      
+      // Determine payment status based on paid amount
+      if (paidAmount >= finalTotalAmount) {
+        paymentStatus = 'paid';
+        remainingAmount = 0;
+      } else if (paidAmount > 0) {
+        paymentStatus = 'partial';
+      } else {
+        paymentStatus = 'pending';
+      }
+      
+      console.log('Payment details from quotation:', {
+        paidAmount,
+        remainingAmount,
+        paymentStatus,
+        finalTotalAmount
+      });
+    }
     
     const invoice = new Invoice({
       invoiceNumber,
@@ -245,10 +281,10 @@ export const createInvoice = async (
       overallDiscount: overallDiscount || 0,
       overallDiscountAmount: finalOverallDiscountAmount,
       totalAmount: finalTotalAmount,
-      paidAmount: 0,
-      remainingAmount: finalTotalAmount,
+      paidAmount,
+      remainingAmount,
       status: 'draft',
-      paymentStatus: 'pending',
+      paymentStatus,
       notes,
       terms,
       invoiceType,
@@ -271,11 +307,26 @@ export const createInvoice = async (
       ...(assignedEngineer && assignedEngineer.trim() !== '' && { assignedEngineer }),
       referenceNo,
       referenceDate,
+      // Quotation reference fields
+      ...(sourceQuotation && {
+        sourceQuotation,
+        quotationNumber,
+        quotationPaymentDetails
+      }),
     });
 
     await invoice.save();
 
-
+    // Log the created invoice details
+    console.log('Invoice created successfully:', {
+      invoiceNumber: invoice.invoiceNumber,
+      totalAmount: invoice.totalAmount,
+      paidAmount: invoice.paidAmount,
+      remainingAmount: invoice.remainingAmount,
+      paymentStatus: invoice.paymentStatus,
+      sourceQuotation: invoice.sourceQuotation,
+      quotationNumber: invoice.quotationNumber
+    });
 
     // Reduce stock if requested
     if (reduceStock) {
@@ -762,6 +813,170 @@ export const sendPaymentReminder = async (
   } catch (error) {
     console.error('Error sending payment reminder:', error);
     next(new AppError('Failed to send payment reminder', 500));
+  }
+};
+
+// @desc    Create invoice from quotation
+// @route   POST /api/v1/invoices/create-from-quotation
+// @access  Private
+export const createInvoiceFromQuotation = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { quotationId } = req.body;
+
+    if (!quotationId) {
+      return next(new AppError('Quotation ID is required', 400));
+    }
+
+    console.log('Creating invoice from quotation ID:', quotationId);
+
+    // Find the quotation and populate necessary fields
+    const quotation = await Quotation.findById(quotationId)
+      .populate('customer', 'name email phone addresses')
+      .populate('location', 'name address')
+      .populate('assignedEngineer', 'firstName lastName email phone')
+      .populate('items.product', 'name category brand partNo hsnNumber');
+
+    if (!quotation) {
+      return next(new AppError('Quotation not found', 404));
+    }
+
+    console.log('Found quotation:', {
+      id: quotation._id,
+      number: quotation.quotationNumber,
+      customer: quotation.customer,
+      location: quotation.location,
+      itemsCount: quotation.items?.length,
+      grandTotal: quotation.grandTotal
+    });
+
+    // Validate quotation has required fields
+    if (!quotation.customer || !quotation.location) {
+      return next(new AppError('Quotation is missing required customer or location information', 400));
+    }
+
+    // Validate quotation has items
+    if (!quotation.items || quotation.items.length === 0) {
+      return next(new AppError('Quotation must have at least one item', 400));
+    }
+
+    // Validate quotation has valid totals
+    if (!quotation.grandTotal || quotation.grandTotal <= 0) {
+      return next(new AppError('Quotation must have a valid grand total', 400));
+    }
+
+    // Generate invoice number
+    const invoiceNumber = await generateReferenceId('INV');
+
+    // Calculate totals properly
+    const subtotal = quotation.subtotal || 0;
+    const totalTax = quotation.totalTax || 0;
+    const totalDiscount = quotation.totalDiscount || 0;
+    const grandTotal = quotation.grandTotal || 0;
+    const paidAmount = quotation.paidAmount || 0;
+    const remainingAmount = Math.max(0, grandTotal - paidAmount);
+
+    // Create invoice data from quotation
+    const invoiceData = {
+      invoiceNumber,
+      user: req.user?.id,
+      customer: typeof quotation.customer === 'object' ? quotation.customer._id : quotation.customer,
+      issueDate: new Date(),
+      dueDate: quotation.validUntil ? new Date(quotation.validUntil) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      items: quotation.items.map((item: any) => ({
+        product: item.product?._id || item.product,
+        description: item.description || '',
+        quantity: item.quantity || 0,
+        unitPrice: item.unitPrice || 0,
+        totalPrice: (item.unitPrice || 0) * (item.quantity || 0),
+        taxRate: item.taxRate || 0,
+        taxAmount: ((item.unitPrice || 0) * (item.quantity || 0) * (item.taxRate || 0)) / 100,
+        uom: item.uom || 'nos',
+        discount: item.discount || 0,
+        hsnNumber: item.hsnNumber || ''
+      })),
+      subtotal,
+      taxAmount: totalTax,
+      discountAmount: totalDiscount,
+      overallDiscount: quotation.overallDiscount || 0,
+      totalAmount: grandTotal,
+      paidAmount,
+      remainingAmount,
+      status: 'draft',
+      paymentStatus: quotation.paymentStatus || 'pending',
+      paymentMethod: quotation.paymentMethod,
+      paymentDate: quotation.paymentDate,
+      notes: quotation.notes || '',
+      terms: quotation.terms || '',
+      invoiceType: 'sale' as const,
+      location: typeof quotation.location === 'object' ? quotation.location._id : quotation.location,
+      createdBy: req.user?.id,
+      assignedEngineer: typeof quotation.assignedEngineer === 'object' ? quotation.assignedEngineer._id : quotation.assignedEngineer,
+      billToAddress: quotation.billToAddress,
+      shipToAddress: quotation.shipToAddress,
+      // Quotation reference fields
+      sourceQuotation: quotation._id,
+      quotationNumber: quotation.quotationNumber,
+      quotationPaymentDetails: {
+        paidAmount,
+        remainingAmount,
+        paymentStatus: quotation.paymentStatus || 'pending'
+      }
+    };
+
+    console.log('Creating invoice with data:', JSON.stringify(invoiceData, null, 2));
+
+    // Create the invoice
+    const invoice = new Invoice(invoiceData);
+    
+    // Validate the invoice before saving
+    const validationError = invoice.validateSync();
+    if (validationError) {
+      console.error('Invoice validation error:', validationError);
+      return next(new AppError(`Invoice validation failed: ${validationError.message}`, 400));
+    }
+    
+    await invoice.save();
+
+    // Populate references for response
+    await invoice.populate([
+      'customer',
+      'location',
+      'createdBy',
+      'assignedEngineer',
+      'items.product'
+    ]);
+
+    console.log('Invoice created successfully:', {
+      invoiceId: invoice._id,
+      invoiceNumber: invoice.invoiceNumber,
+      customer: invoice.customer,
+      totalAmount: invoice.totalAmount,
+      sourceQuotation: invoice.sourceQuotation
+    });
+
+    res.status(201).json({
+      success: true,
+      message: 'Invoice created successfully from quotation',
+      data: {
+        invoice,
+        quotationReference: {
+          quotationId: quotation._id,
+          quotationNumber: quotation.quotationNumber,
+          paymentDetails: {
+            paidAmount,
+            remainingAmount,
+            paymentStatus: quotation.paymentStatus || 'pending'
+          }
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error creating invoice from quotation:', error);
+    next(new AppError('Failed to create invoice from quotation', 500));
   }
 };
 

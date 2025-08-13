@@ -7,7 +7,8 @@ import {
   getInvoiceStats, 
   updateInvoiceProductPriceAndGST,
   sendInvoiceEmail,
-  sendPaymentReminder
+  sendPaymentReminder,
+  createInvoiceFromQuotation
 } from '../controllers/invoiceController';
 
 const router = Router();
@@ -20,6 +21,9 @@ router.use(checkModuleAccess('billing'));
 router.route('/')
   .get(checkPermission('read'), getInvoices)
   .post(checkPermission('write'), createInvoice);
+
+router.route('/create-from-quotation')
+  .post(checkPermission('write'), createInvoiceFromQuotation);
 
 router.route('/stats')
   .get(checkPermission('read'), getInvoiceStats);

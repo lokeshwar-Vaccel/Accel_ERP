@@ -109,6 +109,9 @@ const InvoiceFormPage: React.FC = () => {
   // 🎯 HANDLE QUOTATION DATA FROM LOCATION STATE
   const quotationData = location.state?.quotationData;
 
+  console.log("quotationData:",quotationData);
+  
+
   // 🎯 GET INVOICE TYPE TITLE FOR DISPLAY
   const getInvoiceTypeTitle = (): string => {
     switch (invoiceType) {
@@ -189,6 +192,9 @@ const InvoiceFormPage: React.FC = () => {
     message: string;
   }>>({});
 
+  // Stock loading state
+  const [stockLoading, setStockLoading] = useState(false);
+
   // Field operators (engineers) for sales invoices
   const [fieldOperators, setFieldOperators] = useState<any[]>([]);
 
@@ -238,13 +244,57 @@ const InvoiceFormPage: React.FC = () => {
     }
   }, [loading]);
 
-    // Handle quotation data initialization
+    // Helper function to map quotation addresses to customer addresses
+  const mapQuotationAddressesToCustomerAddresses = (quotationData: any, customerAddresses: any[]) => {
+    if (!quotationData.billToAddress || !quotationData.shipToAddress) return {};
+
+    const billToAddress = quotationData.billToAddress;
+    const shipToAddress = quotationData.shipToAddress;
+
+    // Find matching addresses in customer addresses
+    const billToMatch = customerAddresses.find(addr => 
+      addr.address === billToAddress.address &&
+      addr.district === billToAddress.district &&
+      addr.pincode === billToAddress.pincode
+    );
+
+    const shipToMatch = customerAddresses.find(addr => 
+      addr.address === shipToAddress.address &&
+      addr.district === shipToAddress.district &&
+      addr.pincode === shipToAddress.pincode
+    );
+
+    return {
+      billToAddress: billToMatch ? {
+        address: billToMatch.address,
+        state: billToMatch.state,
+        district: billToMatch.district,
+        pincode: billToMatch.pincode,
+        addressId: billToMatch.id
+      } : billToAddress,
+      shipToAddress: shipToMatch ? {
+        address: shipToMatch.address,
+        state: shipToMatch.state,
+        district: shipToMatch.district,
+        pincode: shipToMatch.pincode,
+        addressId: shipToMatch.id
+      } : shipToAddress
+    };
+  };
+
+  // Handle quotation data initialization
   useEffect(() => {
     if (quotationData && !loading) {
       console.log('InvoiceForm: Received quotation data:', quotationData);
       
+      // Check if this is from a quotation (has sourceQuotation field)
+      const isFromQuotation = quotationData.sourceQuotation;
+      
       // Recalculate totals when quotation data is loaded
       const recalculatedData = calculateQuotationTotals(quotationData.items || [], quotationData.overallDiscount || 0);
+      
+      console.log('InvoiceForm: Original quotation items:', quotationData.items);
+      console.log('InvoiceForm: Recalculated data:', recalculatedData);
       
       setFormData(prev => {
         const updatedData = {
@@ -264,9 +314,9 @@ const InvoiceFormPage: React.FC = () => {
           billToAddress: quotationData.billToAddress,
           shipToAddress: quotationData.shipToAddress,
           assignedEngineer: quotationData.assignedEngineer,
-          items: quotationData.items || [],
+          items: recalculatedData.items, // Use recalculated items with proper totals
           overallDiscount: quotationData.overallDiscount || 0,
-          overallDiscountAmount: quotationData.overallDiscountAmount || 0,
+          overallDiscountAmount: recalculatedData.overallDiscountAmount || 0,
           notes: quotationData.notes || '',
           terms: quotationData.terms || '',
           location: quotationData.location,
@@ -275,7 +325,13 @@ const InvoiceFormPage: React.FC = () => {
           totalDiscount: recalculatedData.totalDiscount,
           totalTax: recalculatedData.totalTax,
           grandTotal: recalculatedData.grandTotal,
-          roundOff: recalculatedData.roundOff
+          roundOff: recalculatedData.roundOff,
+          // Add quotation reference fields if this is from a quotation
+          ...(isFromQuotation && {
+            sourceQuotation: quotationData.sourceQuotation,
+            quotationNumber: quotationData.quotationNumber,
+            quotationPaymentDetails: quotationData.quotationPaymentDetails
+          })
         };
         
         console.log('InvoiceForm: Updated form data:', updatedData);
@@ -290,8 +346,16 @@ const InvoiceFormPage: React.FC = () => {
           loadCustomerAddresses(customerId);
         }
       }
+
+      // Load stock data if location is available
+      if (quotationData.location) {
+        console.log('InvoiceForm: Loading stock for location from quotation data:', quotationData.location);
+        setTimeout(() => {
+          loadAllStockForLocation();
+        }, 500);
+      }
     }
-  }, [quotationData, loading, customers]);
+  }, [quotationData, loading, customers, addresses]);
 
   // Load addresses when customers are loaded and we have quotation data
   useEffect(() => {
@@ -303,6 +367,62 @@ const InvoiceFormPage: React.FC = () => {
       }
     }
   }, [customers, quotationData, loading]);
+
+  // Map quotation addresses to customer addresses after addresses are loaded
+  useEffect(() => {
+    if (quotationData && addresses.length > 0 && !loading) {
+      console.log('InvoiceForm: Mapping quotation addresses to customer addresses');
+      
+      const mappedAddresses = mapQuotationAddressesToCustomerAddresses(quotationData, addresses);
+      
+      if (Object.keys(mappedAddresses).length > 0) {
+        setFormData(prev => ({
+          ...prev,
+          billToAddress: mappedAddresses.billToAddress || prev.billToAddress,
+          shipToAddress: mappedAddresses.shipToAddress || prev.shipToAddress
+        }));
+        
+        console.log('InvoiceForm: Addresses mapped successfully:', mappedAddresses);
+      }
+    }
+  }, [addresses, quotationData, loading]);
+
+  // Ensure totals are properly calculated when form data changes
+  useEffect(() => {
+    if (formData.items && formData.items.length > 0 && !loading) {
+      console.log('InvoiceForm: Recalculating totals for current items:', formData.items);
+      
+      const recalculatedData = calculateQuotationTotals(formData.items, formData.overallDiscount || 0);
+      
+      // Only update if there are significant differences to avoid infinite loops
+      if (
+        Math.abs((recalculatedData.subtotal || 0) - (formData.subtotal || 0)) > 0.01 ||
+        Math.abs((recalculatedData.totalTax || 0) - (formData.totalTax || 0)) > 0.01 ||
+        Math.abs((recalculatedData.grandTotal || 0) - (formData.grandTotal || 0)) > 0.01
+      ) {
+        console.log('InvoiceForm: Updating totals with recalculated data:', recalculatedData);
+        setFormData(prev => ({
+          ...prev,
+          subtotal: recalculatedData.subtotal,
+          totalDiscount: recalculatedData.totalDiscount,
+          totalTax: recalculatedData.totalTax,
+          grandTotal: recalculatedData.grandTotal,
+          overallDiscountAmount: recalculatedData.overallDiscountAmount,
+          roundOff: recalculatedData.roundOff
+        }));
+      }
+    }
+  }, [formData.items, formData.overallDiscount, loading]);
+
+  // Load stock data when location is available and products are loaded
+  useEffect(() => {
+    if (formData.location && products.length > 0 && !loading && Object.keys(productStockCache).length === 0) {
+      console.log('InvoiceForm: Auto-loading stock for location:', formData.location);
+      setTimeout(() => {
+        loadAllStockForLocation();
+      }, 300);
+    }
+  }, [formData.location, products, loading, productStockCache]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -425,6 +545,12 @@ const InvoiceFormPage: React.FC = () => {
         const mainOffice = locationsData.find(loc => loc.name === "Main Office");
         if (mainOffice) {
           setFormData(prev => ({ ...prev, location: mainOffice._id }));
+          
+          // Auto-load stock for the default location after a short delay
+          setTimeout(() => {
+            console.log('InvoiceForm: Auto-loading stock for default location:', mainOffice._id);
+            loadAllStockForLocation();
+          }, 500);
         }
       }
     } catch (error) {
@@ -576,12 +702,36 @@ const InvoiceFormPage: React.FC = () => {
   };
 
   const getAddressLabel = (value: string | undefined) => {
-
-    console.log("value123:",value,addresses);
+    console.log("getAddressLabel called with value:", value);
+    console.log("Current addresses:", addresses);
+    console.log("Current formData.billToAddress:", formData.billToAddress);
+    console.log("Current formData.shipToAddress:", formData.shipToAddress);
     
-    if (!value) return 'Select address';
+    if (!value) {
+      // Check if we have direct address objects from quotation data
+      if (formData.billToAddress && formData.billToAddress.address) {
+        return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
+      }
+      if (formData.shipToAddress && formData.shipToAddress.address) {
+        return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
+      }
+      return 'Select address';
+    }
+    
     const address = addresses.find(a => a.id === parseInt(value));
-    return address ? `${address.address} (${address.district}, ${address.pincode})` : 'Unknown address';
+    if (address) {
+      return `${address.address} (${address.district}, ${address.pincode})`;
+    }
+    
+    // Fallback to direct address objects
+    if (formData.billToAddress && formData.billToAddress.address) {
+      return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
+    }
+    if (formData.shipToAddress && formData.shipToAddress.address) {
+      return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
+    }
+    
+    return 'Unknown address';
   };
 
   const getProductPartNo = (productId: string) => {
@@ -618,6 +768,17 @@ const InvoiceFormPage: React.FC = () => {
         }
       ]
     }));
+
+    // Initialize stock validation for the new item if stock data is available
+    setTimeout(() => {
+      const newItemIndex = (formData.items || []).length;
+      if (formData.location && Object.keys(productStockCache).length > 0) {
+        setStockValidation(prev => ({
+          ...prev,
+          [newItemIndex]: { available: 0, isValid: true, message: '' }
+        }));
+      }
+    }, 100);
   };
 
   const removeInvoiceItem = (index: number) => {
@@ -821,6 +982,7 @@ const InvoiceFormPage: React.FC = () => {
   const loadAllStockForLocation = async () => {
     if (!formData.location) return;
 
+    setStockLoading(true);
     try {
       // Get ALL stock data for this location in ONE API call - no limits
       const response = await apiClient.stock.getStock({
@@ -873,6 +1035,33 @@ const InvoiceFormPage: React.FC = () => {
       setProductStockCache(newStockCache);
       console.log('✅ Stock cache updated for', Object.keys(newStockCache).length, 'products');
 
+      // Also update stockValidation for all existing items to ensure consistency
+      setStockValidation(prev => {
+        const newValidation = { ...prev };
+        (formData.items || []).forEach((item, index) => {
+          if (item.product && newStockCache[item.product]) {
+            const stockInfo = newStockCache[item.product];
+            const quantity = item.quantity || 0;
+            
+            newValidation[index] = {
+              available: stockInfo.available,
+              isValid: quantity <= stockInfo.available && stockInfo.available > 0,
+              message: stockInfo.available === 0 
+                ? 'Out of stock' 
+                : quantity > stockInfo.available 
+                  ? `Only ${stockInfo.available} units available`
+                  : `${stockInfo.available} units available`
+            };
+          }
+        });
+        return newValidation;
+      });
+
+      // Refresh stock validation for all items to ensure consistency
+      setTimeout(() => {
+        refreshStockValidationForAllItems();
+      }, 100);
+
     } catch (error) {
       console.error('❌ Error loading stock for location:', error);
 
@@ -888,6 +1077,8 @@ const InvoiceFormPage: React.FC = () => {
         };
       });
       setProductStockCache(errorStockCache);
+    } finally {
+      setStockLoading(false);
     }
   };
 
@@ -905,6 +1096,32 @@ const InvoiceFormPage: React.FC = () => {
       await loadAllStockForLocation();
     }
     return productStockCache[productId] || { available: 0, isValid: false, message: 'Unable to check stock' };
+  };
+
+  // Helper function to refresh stock validation for all items
+  const refreshStockValidationForAllItems = () => {
+    if (!formData.items || formData.items.length === 0) return;
+
+    setStockValidation(prev => {
+      const newValidation = { ...prev };
+      (formData.items || []).forEach((item, index) => {
+        if (item.product && productStockCache[item.product]) {
+          const stockInfo = productStockCache[item.product];
+          const quantity = item.quantity || 0;
+          
+          newValidation[index] = {
+            available: stockInfo.available,
+            isValid: quantity <= stockInfo.available && stockInfo.available > 0,
+            message: stockInfo.available === 0 
+              ? 'Out of stock' 
+              : quantity > stockInfo.available 
+                ? `Only ${stockInfo.available} units available`
+                : `${stockInfo.available} units available`
+          };
+        }
+      });
+      return newValidation;
+    });
   };
 
   const validateForm = (): boolean => {
@@ -1038,7 +1255,13 @@ const InvoiceFormPage: React.FC = () => {
         ...(sanitizedData.assignedEngineer && sanitizedData.assignedEngineer.trim() !== '' && { assignedEngineer: sanitizedData.assignedEngineer }),
         overallDiscount: sanitizedData.overallDiscount || 0,
         overallDiscountAmount: sanitizedData.overallDiscountAmount || 0,
-        reduceStock: reduceStock
+        reduceStock: reduceStock,
+        // Include quotation reference fields if this is from a quotation
+        ...(sanitizedData.sourceQuotation && {
+          sourceQuotation: sanitizedData.sourceQuotation,
+          quotationNumber: sanitizedData.quotationNumber,
+          quotationPaymentDetails: sanitizedData.quotationPaymentDetails
+        })
       };
 
       console.log('Submitting invoice data:', invoiceData);
@@ -1802,6 +2025,36 @@ const InvoiceFormPage: React.FC = () => {
         </div>
       </PageHeader>
 
+      {/* Quotation Reference Banner */}
+      {formData.sourceQuotation && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                <FileText className="w-4 h-4 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-blue-900">
+                  Creating Invoice from Quotation
+                </h3>
+                <p className="text-xs text-blue-700">
+                  Quotation: {formData.quotationNumber} • 
+                  {formData.quotationPaymentDetails && (
+                    <span className="ml-2">
+                      Payment Status: {formData.quotationPaymentDetails.paymentStatus} • 
+                      Paid: ₹{formData.quotationPaymentDetails.paidAmount?.toFixed(2) || '0.00'} • 
+                      Remaining: ₹{formData.quotationPaymentDetails.remainingAmount?.toFixed(2) || '0.00'}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+              Pre-filled from Quotation
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Form Content */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
@@ -1906,7 +2159,7 @@ const InvoiceFormPage: React.FC = () => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Customer *
+                {isPurchaseInvoice ? 'Supplier *' : 'Customer *'}
               </label>
               <div className="relative dropdown-container">
                 <input
@@ -1922,7 +2175,7 @@ const InvoiceFormPage: React.FC = () => {
                     setHighlightedCustomerIndex(-1);
                   }}
                   onKeyDown={handleCustomerKeyDown}
-                  placeholder="Search customer or press ↓ to open"
+                  placeholder={isPurchaseInvoice ? "Search supplier or press ↓ to open" : "Search customer or press ↓ to open"}
                   data-field="customer"
                   className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 />
@@ -1951,11 +2204,11 @@ const InvoiceFormPage: React.FC = () => {
                       }}
                       className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.customer?._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                     >
-                      Select customer
+                      {isPurchaseInvoice ? 'Select supplier' : 'Select customer'}
                     </button>
 
                     {customers.filter(customer =>
-                      customer.type === 'customer' && (
+                      (isPurchaseInvoice ? customer.type === 'supplier' : customer.type === 'customer') && (
                         customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
                         customer.email?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
                         customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase())
@@ -2000,7 +2253,7 @@ const InvoiceFormPage: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Bill To Address *
+                  {isPurchaseInvoice ? 'Supplier Address *' : 'Bill To Address *'}
                 </label>
                 <div className="relative dropdown-container">
                   <input
@@ -2015,7 +2268,7 @@ const InvoiceFormPage: React.FC = () => {
                       }
                     }}
                     onKeyDown={handleBillToAddressKeyDown}
-                    placeholder={!formData.customer?._id ? "Select customer first" : "Press ↓ to open address list"}
+                    placeholder={!formData.customer?._id ? (isPurchaseInvoice ? "Select supplier first" : "Select customer first") : "Press ↓ to open address list"}
                     data-field="bill-to-address"
                     className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -2043,7 +2296,7 @@ const InvoiceFormPage: React.FC = () => {
                         }}
                         className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.billToAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                       >
-                        Select bill to address
+                        {isPurchaseInvoice ? 'Select supplier address' : 'Select bill to address'}
                       </button>
 
                       {addresses.map((address, index) => (
@@ -2081,7 +2334,7 @@ const InvoiceFormPage: React.FC = () => {
 
                       {addresses.length === 0 && (
                         <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                          No addresses found for this customer
+                          {isPurchaseInvoice ? 'No addresses found for this supplier' : 'No addresses found for this customer'}
                         </div>
                       )}
                     </div>
@@ -2091,7 +2344,7 @@ const InvoiceFormPage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Ship To Address *
+                  {isPurchaseInvoice ? 'Company Address' : 'Ship To Address *'}
                 </label>
                 <div className="relative dropdown-container">
                   <input
@@ -2106,7 +2359,7 @@ const InvoiceFormPage: React.FC = () => {
                       }
                     }}
                     onKeyDown={handleShipToAddressKeyDown}
-                    placeholder={!formData.customer?._id ? "Select customer first" : "Press ↓ to open address list"}
+                    placeholder={!formData.customer?._id ? (isPurchaseInvoice ? "Select supplier first" : "Select customer first") : "Press ↓ to open address list"}
                     data-field="ship-to-address"
                     className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -2134,7 +2387,7 @@ const InvoiceFormPage: React.FC = () => {
                         }}
                         className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.shipToAddress?.address ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                       >
-                        Select ship to address
+                        {isPurchaseInvoice ? 'Select company address' : 'Select ship to address'}
                       </button>
 
                       {addresses.map((address, index) => (
@@ -2172,7 +2425,7 @@ const InvoiceFormPage: React.FC = () => {
 
                       {addresses.length === 0 && (
                         <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                          No addresses found for this customer
+                          {isPurchaseInvoice ? 'No addresses found for this supplier' : 'No addresses found for this customer'}
                         </div>
                       )}
                     </div>
@@ -2512,6 +2765,16 @@ const InvoiceFormPage: React.FC = () => {
               </button>
             </div>
 
+            {/* Stock Loading Indicator */}
+            {stockLoading && (
+              <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center space-x-2">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span className="text-sm text-blue-700">Loading stock information for selected location...</span>
+                </div>
+              </div>
+            )}
+
             {/* Excel-style Table */}
             <div className="hidden lg:block border border-gray-300 rounded-lg bg-white shadow-sm overflow-x-auto">
               {/* Table Header */}
@@ -2671,6 +2934,13 @@ const InvoiceFormPage: React.FC = () => {
                                           </div> */}
                                           {(() => {
                                             const productStock = productStockCache[product._id];
+                                            if (stockLoading && !productStock) {
+                                              return (
+                                                <div className="text-xs mt-1 text-blue-600">
+                                                  <span className="animate-pulse">Loading stock...</span>
+                                                </div>
+                                              );
+                                            }
                                             if (productStock) {
                                               return (
                                                 <div className="text-xs mt-1">
@@ -2680,8 +2950,12 @@ const InvoiceFormPage: React.FC = () => {
                                                 </div>
                                               );
                                             }
-                                            // No loading indicator - stock loads quickly now
-                                            return null;
+                                            // No stock info available yet
+                                            return (
+                                              <div className="text-xs mt-1 text-gray-500">
+                                                <span>Stock: Checking...</span>
+                                              </div>
+                                            );
                                           })()}
                                         </div>
                                       </div>
@@ -2923,6 +3197,57 @@ const InvoiceFormPage: React.FC = () => {
               </div>
 
             </div>
+
+            {/* Stock Status Summary */}
+            {formData.location && Object.keys(productStockCache).length > 0 && !stockLoading && (
+              <div className="mb-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-4">
+                    <span className="text-sm font-medium text-gray-700">Stock Status:</span>
+                    {(() => {
+                      const totalProducts = Object.keys(productStockCache).length;
+                      const inStock = Object.values(productStockCache).filter(stock => stock.available > 0).length;
+                      const outOfStock = Object.values(productStockCache).filter(stock => stock.available === 0).length;
+                      
+                      return (
+                        <div className="flex items-center space-x-3 text-xs">
+                          <span className="flex items-center space-x-1">
+                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                            <span className="text-green-700">{inStock} in stock</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                            <span className="text-red-700">{outOfStock} out of stock</span>
+                          </span>
+                          <span className="text-gray-500">• Total: {totalProducts} products</span>
+                          {Object.keys(stockValidation).length > 0 && (
+                            <span className="text-blue-600">• {Object.keys(stockValidation).length} items validated</span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={refreshStockValidationForAllItems}
+                      className="text-xs text-blue-600 hover:text-blue-800 underline"
+                      title="Refresh stock validation for all items"
+                    >
+                      Refresh Validation
+                    </button>
+                    <button
+                      onClick={loadAllStockForLocation}
+                      className="text-xs text-blue-600 hover:text-blue-800 underline"
+                      title="Refresh stock information"
+                    >
+                      Refresh Stock
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Excel-style Table */}
           </div>
 
           {/* Notes */}

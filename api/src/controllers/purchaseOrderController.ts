@@ -627,46 +627,130 @@ export const receiveItems = async (
       .populate('createdBy', 'firstName lastName email')
       .populate('supplier', 'name email addresses');
 
-    const transformedItems = (populatedOrder?.items || []).map((item: any) => ({
-      product: item.product._id, // or item.product.id
-      quantity: item.receivedQuantity ?? item.quantity, // use receivedQuantity if available
-      unitPrice: item.unitPrice,
-      description: item.product.name,
-      taxRate: item.product.gst ?? 0
-    }));
+    // Calculate the total value of items being received in this receipt
+    const receiptTotalValue = receivedItems.reduce((sum: number, receivedItem: any) => {
+      const actualProductId = receivedItem.productId || receivedItem.product;
+      const actualQuantityReceived = receivedItem.quantityReceived || receivedItem.receivedQuantity;
+      
+      const poItem = order.items.find(poItem => {
+        const poProductId = typeof poItem.product === 'string' ? poItem.product : poItem.product._id;
+        return poProductId.toString() === actualProductId.toString();
+      });
+      
+      if (poItem) {
+        const itemTotal = actualQuantityReceived * poItem.unitPrice;
+        const taxAmount = (poItem.taxRate || 0) * itemTotal / 100;
+        return sum + itemTotal + taxAmount;
+      }
+      return sum;
+    }, 0);
 
-    const invoice = await createInvoiceFromPO({
-      items: items,
-      gstInvoiceNumber: gstInvoiceNumber,
-      supplier: order.supplier,
-      supplierEmail: supplierEmail,
-      supplierAddress: supplierAddress,
-      dueDate: receiptDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-      discountAmount: req.body.discountAmount || 0,
-      notes: req.body.notes || "",
-      terms: req.body.terms || "",
-      invoiceType: 'purchase',
-      location: location,
-      poNumber: order.poNumber,
-      externalInvoiceTotal: externalInvoiceTotal
-    });
+    // Determine if this is a partial or full receipt
+    const isPartialReceipt = totalReceivedQuantity < totalOrderedQuantity;
+    const isFullReceipt = totalReceivedQuantity >= totalOrderedQuantity;
 
+    // Create invoice for the received items
+    let invoice = null;
+    if (gstInvoiceNumber) {
+      console.log("Creating invoice for PO:", order.poNumber);
+      console.log("PO Payment Status:", order.paymentStatus);
+      console.log("PO Paid Amount:", order.paidAmount);
+      console.log("PO Remaining Amount:", order.remainingAmount);
+      console.log("External Invoice Total:", externalInvoiceTotal);
+      console.log("Received Items:", receivedItems);
+      console.log("Order Items:", order.items);
+      
+      const transformedItems = receivedItems.map((receivedItem: any) => {
+        const actualProductId = receivedItem.productId || receivedItem.product;
+        const actualQuantityReceived = receivedItem.quantityReceived || receivedItem.receivedQuantity;
+        
+        // Find the corresponding PO item to get unit price and tax rate
+        const poItem = order.items.find(poItem => {
+          const poProductId = typeof poItem.product === 'string' ? poItem.product : poItem.product._id;
+          return poProductId.toString() === actualProductId.toString();
+        });
+        
+        if (!poItem) {
+          console.warn(`PO item not found for product ${actualProductId}`);
+          return null;
+        }
+        
+        const unitPrice = poItem.unitPrice || 0;
+        const taxRate = poItem.taxRate || 0;
+        
+        console.log("Transforming received item:", {
+          product: actualProductId,
+          quantity: actualQuantityReceived,
+          unitPrice,
+          taxRate,
+          itemTotal: actualQuantityReceived * unitPrice,
+          taxAmount: (actualQuantityReceived * unitPrice * taxRate) / 100
+        });
+        
+        return {
+          product: actualProductId,
+          quantity: actualQuantityReceived,
+          unitPrice,
+          description: (typeof poItem.product === 'object' && 'name' in poItem.product ? poItem.product.name : '') || '',
+          taxRate
+        };
+      }).filter(Boolean); // Remove any null items
 
-    //  const invoice = await createInvoiceFromPO({
-    //   items: populatedOrder?.items,
-    //   customer: populatedOrder?.createdBy?.id,  // ensure customer field is passed
-    //   dueDate: receiptDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // default 7 days
-    //   discountAmount: req.body.discountAmount  || 0,
-    //   notes: req.body.notes || "",
-    //   terms: req.body.terms || "",
-    //   invoiceType: 'purchase',
-    //   location: location,
-    // });
+      console.log("Transformed items for invoice:", transformedItems);
+
+      if (transformedItems.length === 0) {
+        console.warn("No valid items to create invoice for");
+      } else {
+        // Calculate the total value of items being received in this receipt
+        const receiptTotalValue = transformedItems.reduce((sum: number, item: any) => {
+          return sum + (item.quantity * item.unitPrice) + ((item.quantity * item.unitPrice * item.taxRate) / 100);
+        }, 0);
+
+        console.log("Receipt total value for invoice:", receiptTotalValue);
+        console.log("PO paid amount:", order.paidAmount);
+        console.log("Note: Paid amount will reflect actual amount paid to supplier, not proportional to received items");
+
+        invoice = await createInvoiceFromPO({
+          items: transformedItems,
+          gstInvoiceNumber: gstInvoiceNumber,
+          supplier: order.supplier,
+          supplierEmail: supplierEmail,
+          supplierAddress: supplierAddress,
+          dueDate: receiptDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          discountAmount: req.body.discountAmount || 0,
+          notes: req.body.notes || "",
+          terms: req.body.terms || "",
+          invoiceType: 'purchase',
+          location: location,
+          poNumber: order.poNumber,
+          externalInvoiceTotal: externalInvoiceTotal,
+          poPaymentInfo: {
+            poPaidAmount: order.paidAmount || 0,
+            poRemainingAmount: order.remainingAmount || 0,
+            poPaymentStatus: order.paymentStatus || 'pending'
+          }
+        });
+
+        console.log("Invoice created successfully:", {
+          invoiceNumber: invoice.invoiceNumber,
+          totalAmount: invoice.totalAmount,
+          paidAmount: invoice.paidAmount,
+          remainingAmount: invoice.remainingAmount,
+          paymentStatus: invoice.paymentStatus,
+          note: `Invoice amount: ₹${invoice.totalAmount}, Paid amount: ₹${invoice.paidAmount} (actual amount paid to supplier)`
+        });
+      }
+    }
 
     // Check if we had any validation errors but still processed some items
     let message = `Items received successfully. ${order.status === 'received' ? 'Purchase order completed.' : `Partial receipt: ${totalReceivedQuantity}/${totalOrderedQuantity} items received.`}`;
     if (results.errors.length > 0) {
       message += ` Note: Some items had errors: ${results.errors.join('; ')}`;
+    }
+
+    // Add invoice information to the message
+    if (invoice) {
+      message += ` Purchase invoice ${invoice.invoiceNumber} created with ${invoice.paymentStatus} payment status.`;
     }
 
     const response: APIResponse = {
@@ -680,7 +764,14 @@ export const receiveItems = async (
         status: populatedOrder!.status,
         message: 'Stock levels and ledger have been updated',
         errors: results.errors.length > 0 ? results.errors : undefined,
-        invoice
+        invoice,
+        receiptSummary: {
+          totalValue: receiptTotalValue,
+          isPartialReceipt,
+          isFullReceipt,
+          receiptDate: receiptDate || new Date(),
+          gstInvoiceNumber
+        }
       }
     };
 
@@ -864,6 +955,183 @@ export const updatePurchaseOrderStatus = async (
   }
 };
 
+// @desc    Update purchase order payment
+// @route   PUT /api/v1/purchase-orders/:id/payment
+// @access  Private
+export const updatePurchaseOrderPayment = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { 
+      paidAmount, 
+      paymentMethod, 
+      paymentDate, 
+      notes 
+    } = req.body;
+
+    // Validate required fields
+    if (paidAmount === undefined || paidAmount < 0) {
+      return next(new AppError('Valid payment amount is required', 400));
+    }
+
+    // Find the purchase order
+    const purchaseOrder = await PurchaseOrder.findById(id);
+    if (!purchaseOrder) {
+      return next(new AppError('Purchase order not found', 404));
+    }
+
+    // Calculate new total paid amount (existing + new payment)
+    const existingPaidAmount = purchaseOrder.paidAmount || 0;
+    const newTotalPaidAmount = existingPaidAmount + paidAmount;
+    
+    // Calculate remaining amount
+    const totalAmount = purchaseOrder.totalAmount || 0;
+    const newRemainingAmount = Math.max(0, totalAmount - newTotalPaidAmount);
+
+    // Determine payment status
+    let newPaymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+    if (newTotalPaidAmount === 0) {
+      newPaymentStatus = 'pending';
+    } else if (newTotalPaidAmount >= totalAmount) {
+      newPaymentStatus = 'paid';
+    } else {
+      newPaymentStatus = 'partial';
+    }
+
+    // Update the purchase order
+    const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
+      id,
+      {
+        paidAmount: newTotalPaidAmount,
+        remainingAmount: newRemainingAmount,
+        paymentStatus: newPaymentStatus,
+        paymentDate: paymentDate ? new Date(paymentDate) : undefined,
+        paymentMethod,
+        notes: notes || purchaseOrder.notes,
+        ...(purchaseOrder.status === 'draft' && newTotalPaidAmount > 0 && { status: 'sent' })
+      },
+      { new: true, runValidators: true }
+    )
+      .populate('items.product', 'name category brand partNo hsnNumber')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('supplier', 'name email addresses');
+
+    // Update related invoices if they exist
+    if (updatedPurchaseOrder) {
+      await updateRelatedInvoicesPaymentStatus(updatedPurchaseOrder.poNumber, newTotalPaidAmount, totalAmount);
+    }
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Purchase order payment updated successfully',
+      data: { order: updatedPurchaseOrder }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Helper function to update related invoices payment status
+const updateRelatedInvoicesPaymentStatus = async (poNumber: string, poPaidAmount: number, poTotalAmount: number) => {
+  try {
+    // Find all invoices related to this PO
+    const relatedInvoices = await Invoice.find({ poNumber, invoiceType: 'purchase' });
+    
+    if (relatedInvoices.length === 0) return;
+
+    console.log(`Updating payment status for ${relatedInvoices.length} invoices related to PO: ${poNumber}`);
+    console.log(`PO Paid Amount: ₹${poPaidAmount}, PO Total Amount: ₹${poTotalAmount}`);
+
+    // Use actual paid amount, not proportional distribution
+    // This reflects what was actually paid to the supplier
+    for (const invoice of relatedInvoices) {
+      let newPaidAmount = 0;
+      let newRemainingAmount = invoice.totalAmount;
+      let newPaymentStatus = 'pending';
+
+      if (poPaidAmount > 0) {
+        // If PO has any payment, use that as paid amount for this invoice
+        // But don't exceed the invoice total amount
+        newPaidAmount = Math.min(poPaidAmount, invoice.totalAmount);
+        newRemainingAmount = invoice.totalAmount - newPaidAmount;
+        
+        // Determine payment status based on this invoice's amounts
+        if (newPaidAmount >= invoice.totalAmount) {
+          newPaymentStatus = 'paid';
+          newRemainingAmount = 0;
+        } else if (newPaidAmount > 0) {
+          newPaymentStatus = 'partial';
+        } else {
+          newPaymentStatus = 'pending';
+        }
+      } else {
+        // No payment made yet
+        newPaidAmount = 0;
+        newRemainingAmount = invoice.totalAmount;
+        newPaymentStatus = 'pending';
+      }
+
+      console.log(`Invoice ${invoice.invoiceNumber}: Amount: ₹${invoice.totalAmount}, Paid: ₹${newPaidAmount}, Remaining: ₹${newRemainingAmount}, Status: ${newPaymentStatus}`);
+
+      // Update invoice payment status
+      await Invoice.findByIdAndUpdate(invoice._id, {
+        paidAmount: newPaidAmount,
+        remainingAmount: newRemainingAmount,
+        paymentStatus: newPaymentStatus
+      });
+    }
+
+    console.log(`Successfully updated payment status for all invoices related to PO: ${poNumber}`);
+  } catch (error) {
+    console.error('Error updating related invoices payment status:', error);
+  }
+};
+
+// Helper function to sync PO payment status from invoice payments
+export const syncPOPaymentStatusFromInvoices = async (poNumber: string) => {
+  try {
+    // Find all invoices related to this PO
+    const relatedInvoices = await Invoice.find({ poNumber, invoiceType: 'purchase' });
+    
+    if (relatedInvoices.length === 0) return;
+
+    // Calculate total paid amount across all invoices
+    const totalInvoicePaidAmount = relatedInvoices.reduce((sum, invoice) => sum + (invoice.paidAmount || 0), 0);
+    const totalInvoiceAmount = relatedInvoices.reduce((sum, invoice) => sum + invoice.totalAmount, 0);
+
+    // Find the PO
+    const purchaseOrder = await PurchaseOrder.findOne({ poNumber });
+    if (!purchaseOrder) return;
+
+    // Update PO payment status based on invoice payments
+    let newPaymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+    if (totalInvoicePaidAmount >= totalInvoiceAmount) {
+      newPaymentStatus = 'paid';
+    } else if (totalInvoicePaidAmount > 0) {
+      newPaymentStatus = 'partial';
+    } else {
+      newPaymentStatus = 'pending';
+    }
+
+    // Update PO payment status
+    await PurchaseOrder.findByIdAndUpdate(purchaseOrder._id, {
+      paidAmount: totalInvoicePaidAmount,
+      remainingAmount: Math.max(0, totalInvoiceAmount - totalInvoicePaidAmount),
+      paymentStatus: newPaymentStatus
+    });
+
+    return { success: true, message: 'PO payment status synced from invoices' };
+  } catch (error) {
+    console.error('Error syncing PO payment status from invoices:', error);
+    return { success: false, message: 'Failed to sync PO payment status' };
+  }
+};
+
 // helper functions to create invoice
 
 
@@ -881,10 +1149,12 @@ const createInvoiceFromPO = async ({
   location,
   poNumber,
   reduceStock = true,
-  externalInvoiceTotal
+  externalInvoiceTotal,
+  poPaymentInfo
 }: {
   items: InvoiceItemInput[],
   supplier: any,
+  gstInvoiceNumber: string,
   supplierEmail: any,
   supplierAddress: any,
   dueDate: string,
@@ -896,16 +1166,21 @@ const createInvoiceFromPO = async ({
   poNumber: string,
   reduceStock?: boolean,
   externalInvoiceTotal?: number,
-  gstInvoiceNumber: string
+  poPaymentInfo?: {
+    poPaidAmount: number;
+    poRemainingAmount: number;
+    poPaymentStatus: string;
+  }
 }) => {
   const invoiceNumber = gstInvoiceNumber;
 
-  console.log("supplierAddress-99992:", supplierAddress);
+  console.log("Creating invoice from PO:", { poNumber, gstInvoiceNumber, externalInvoiceTotal });
 
   let calculatedItems = [];
   let subtotal = 0;
   let totalTax = 0;
 
+  // Calculate items and totals
   for (const item of items) {
     const product = await Product.findById(item.product);
     if (!product) {
@@ -913,7 +1188,7 @@ const createInvoiceFromPO = async ({
     }
 
     const itemTotal = item.quantity * item.unitPrice;
-    const taxAmount = (item.taxRate || 0) * itemTotal / 100;
+    const taxAmount = ((item.taxRate || 0) * itemTotal) / 100;
 
     calculatedItems.push({
       product: item.product,
@@ -929,14 +1204,88 @@ const createInvoiceFromPO = async ({
     totalTax += taxAmount;
   }
 
-  function roundTo2(n: number) {
-  return Math.round(n * 100) / 100;
-}
-let ans = roundTo2(totalTax)
+  // Use external invoice total if provided, otherwise calculate from items
+  let finalTotalAmount: number;
+  let finalSubtotal: number;
+  let finalTaxAmount: number;
 
-const totalAmount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discountAmount;
+  if (externalInvoiceTotal && externalInvoiceTotal > 0) {
+    // Use external invoice total
+    finalTotalAmount = externalInvoiceTotal;
+    finalSubtotal = subtotal;
+    finalTaxAmount = totalTax;
+    
+    // Adjust discount if needed to match external total
+    const calculatedTotal = subtotal + totalTax - discountAmount;
+    if (Math.abs(calculatedTotal - externalInvoiceTotal) > 0.01) {
+      // Adjust discount to match external total
+      const newDiscountAmount = (subtotal + totalTax) - externalInvoiceTotal;
+      discountAmount = Math.max(0, newDiscountAmount);
+    }
+  } else {
+    // Calculate from items
+    finalSubtotal = subtotal;
+    finalTaxAmount = totalTax;
+    finalTotalAmount = subtotal + totalTax - discountAmount;
+  }
 
-  const invoice = new Invoice({
+  // Ensure amounts are properly rounded
+  finalTotalAmount = Math.round(finalTotalAmount * 100) / 100;
+  finalSubtotal = Math.round(finalSubtotal * 100) / 100;
+  finalTaxAmount = Math.round(finalTaxAmount * 100) / 100;
+  discountAmount = Math.round(discountAmount * 100) / 100;
+
+  console.log("Calculated amounts:", {
+    subtotal: finalSubtotal,
+    taxAmount: finalTaxAmount,
+    discountAmount,
+    totalAmount: finalTotalAmount
+  });
+
+  // Calculate payment amounts based on PO payment status
+  let paidAmount = 0;
+  let remainingAmount = finalTotalAmount;
+  let paymentStatus = 'pending';
+
+  if (poPaymentInfo) {
+    const { poPaidAmount, poRemainingAmount, poPaymentStatus } = poPaymentInfo;
+    
+    console.log("PO Payment Info:", { poPaidAmount, poRemainingAmount, poPaymentStatus });
+    
+    // Use the actual paid amount from PO, not proportional calculation
+    // This reflects what was actually paid to the supplier
+    if (poPaidAmount > 0) {
+      // If PO has any payment, use that as paid amount for this invoice
+      // But don't exceed the invoice total amount
+      paidAmount = Math.min(poPaidAmount, finalTotalAmount);
+      remainingAmount = finalTotalAmount - paidAmount;
+      
+      // Determine payment status based on this invoice's amounts
+      if (paidAmount >= finalTotalAmount) {
+        paymentStatus = 'paid';
+        remainingAmount = 0;
+      } else if (paidAmount > 0) {
+        paymentStatus = 'partial';
+      } else {
+        paymentStatus = 'pending';
+      }
+    } else {
+      // No payment made yet
+      paidAmount = 0;
+      remainingAmount = finalTotalAmount;
+      paymentStatus = 'pending';
+    }
+  }
+
+  console.log("Final payment amounts:", {
+    paidAmount,
+    remainingAmount,
+    paymentStatus,
+    note: "Paid amount reflects actual amount paid to supplier, not proportional to received items"
+  });
+
+  // Create invoice object with all required fields
+  const invoiceData: any = {
     invoiceNumber,
     supplier,
     supplierEmail,  
@@ -944,23 +1293,36 @@ const totalAmount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discou
     issueDate: new Date(),
     dueDate: new Date(dueDate),
     items: calculatedItems,
-    subtotal,
-    taxAmount: totalTax.toFixed(2),
+    subtotal: finalSubtotal,
+    taxAmount: finalTaxAmount,
     discountAmount,
-    totalAmount:totalAmount,
-    paidAmount: 0,
-    remainingAmount: totalAmount,
+    totalAmount: finalTotalAmount,
+    paidAmount: paidAmount,
+    remainingAmount: remainingAmount,
     status: 'draft',
-    paymentStatus: 'pending',
-    notes,
+    paymentStatus: paymentStatus,
+    notes: notes ? `${notes}\n\nCreated from PO: ${poNumber}` : `Created from PO: ${poNumber}`,
     terms,
-    invoiceType,
+    invoiceType: invoiceType || 'purchase',
     location,
     poNumber,
-    externalInvoiceTotal
-  });
+    externalInvoiceTotal,
+    // Flag to prevent pre-save middleware from recalculating amounts for purchase invoices
+    _skipAmountRecalculation: true
+  };
 
- let myInvoice = await invoice.save();
+  // Add required fields for Invoice model
+  if (supplier && typeof supplier === 'object' && supplier._id) {
+    invoiceData.user = supplier._id; // Use supplier as user for purchase invoices
+    invoiceData.customer = supplier._id; // Use supplier as customer for purchase invoices
+  }
+
+  console.log("Creating invoice with data:", invoiceData);
+
+  const invoice = new Invoice(invoiceData);
+  const savedInvoice = await invoice.save();
+
+  console.log("Invoice created successfully:", savedInvoice._id);
 
   if (reduceStock) {
     for (const item of calculatedItems) {
@@ -987,5 +1349,5 @@ const totalAmount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discou
     }
   }
 
-  return invoice;
+  return savedInvoice;
 };

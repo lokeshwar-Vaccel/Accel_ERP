@@ -44,13 +44,13 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
   useEffect(() => {
     if (item) {
       if (itemType === 'quotation') {
-        // For quotations, use advance payment fields if they exist
+        // For quotations, use payment fields (same as invoices now)
         setPaymentData({
-          paymentStatus: item.advancePaymentStatus || 'pending',
-          paymentMethod: item.advancePaymentMethod || '',
-          paymentDate: item.advancePaymentDate ? new Date(item.advancePaymentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          paidAmount: item.advanceAmount || 0,
-          notes: item.advancePaymentNotes || '',
+          paymentStatus: item.paymentStatus || 'pending',
+          paymentMethod: item.paymentMethod || '',
+          paymentDate: item.paymentDate ? new Date(item.paymentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+          paidAmount: item.paidAmount || 0,
+          notes: item.notes || '',
           useRazorpay: false
         });
       } else {
@@ -77,7 +77,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
 
   const getPaidAmount = () => {
     if (itemType === 'quotation') {
-      return item.advanceAmount || 0;
+      return item.paidAmount || 0;
     } else {
       return item.paidAmount || 0;
     }
