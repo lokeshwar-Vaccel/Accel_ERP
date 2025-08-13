@@ -54,7 +54,7 @@ const menuItems = [
   },
   {
     id: 2,
-    name: 'Lead Management',
+    name: 'CRM',
     icon: <Users className="w-4 h-4" />,
     path: '/lead-management',
     key: 'lead_management',

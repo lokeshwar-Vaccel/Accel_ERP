@@ -19,7 +19,7 @@ import toast from 'react-hot-toast';
 // Module key-label map
 const moduleMap = {
   dashboard: 'Dashboard',
-  lead_management: 'Lead Management',
+          lead_management: 'CRM',
   user_management: 'User Management',
   product_management: 'Product Management',
   inventory_management: 'Inventory Management',

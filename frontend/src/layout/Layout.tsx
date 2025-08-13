@@ -30,7 +30,7 @@ function Layout({ children, moduleAccess }: LayoutProps) {
     const breadcrumbs = segments.map(segment => {
       switch (segment) {
         case 'dashboard': return 'Dashboard';
-        case 'customer-management': return 'Lead Management';
+        case 'customer-management': return 'CRM';
         case 'user-management': return 'User  Management';
         case 'product-management': return 'Product Management';
         case 'inventory-management': return 'Inventory Management';

@@ -50,7 +50,12 @@ export interface Customer {
 
 export enum CustomerType {
   TELECOM = 'telecom',
-  RETAIL = 'retail'
+  RETAIL = 'retail',
+  EV = 'ev',
+  DG = 'dg',
+  JENARAL = 'jenaral',
+  JE = 'je',
+  OEM = 'oem'
 }
 
 export enum LeadStatus {
