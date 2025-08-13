@@ -1,0 +1,161 @@
+import nodemailer from 'nodemailer';
+import dotenv from 'dotenv';
+dotenv.config();
+
+
+/**
+ * Sends a feedback request email to customers
+ * @param toEmail - The customer's email address
+ * @param customerName - The customer's name
+ * @param ticketNumber - The service ticket number
+ * @param feedbackUrl - The feedback form URL
+ * @param ticketDetails - Additional ticket details
+ */
+export async function sendFeedbackEmail(
+  toEmail: string, 
+  customerName: string, 
+  ticketNumber: string, 
+  feedbackUrl: string, 
+  ticketDetails: any
+): Promise<void> {
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_PORT === '465',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  const mailOptions = {
+    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
+    to: toEmail,
+    subject: `Service Ticket #${ticketNumber} - Feedback Request`,
+    html: `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Service Ticket Feedback Request</title>
+  </head>
+  <body style="font-family: Arial, sans-serif; background-color: #f6f6f6; margin: 0; padding: 0;">
+    <table width="100%" bgcolor="#f6f6f6" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td>
+          <table style="max-width: 600px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 32px;" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0; font-size: 28px;">Service Ticket Resolved</h1>
+                <p style="margin: 10px 0 0 0; font-size: 16px;">Your service request has been completed successfully!</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 30px; background: #f9f9f9;">
+                <h2 style="color: #333; margin-bottom: 20px;">Ticket Details</h2>
+                <div style="background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+                  <p><strong>Ticket Number:</strong> ${ticketNumber}</p>
+                  <p><strong>Service Type:</strong> ${ticketDetails.serviceRequestType || 'N/A'}</p>
+                  <p><strong>Description:</strong> ${ticketDetails.description}</p>
+                  <p><strong>Completed Date:</strong> ${new Date(ticketDetails.completedDate || Date.now()).toLocaleDateString()}</p>
+                  ${ticketDetails.product ? `<p><strong>Product:</strong> ${ticketDetails.product.name}</p>` : ''}
+                  ${ticketDetails.assignedTo ? `<p><strong>Technician:</strong> ${ticketDetails.assignedTo.firstName} ${ticketDetails.assignedTo.lastName}</p>` : ''}
+                </div>
+                
+                <div style="text-align: center; margin: 30px 0;">
+                  <p style="color: #666; margin-bottom: 20px;">We value your feedback! Please take a moment to rate our service.</p>
+                  <a href="${feedbackUrl}" style="background: #4CAF50; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                    Provide Feedback
+                  </a>
+                </div>
+                
+                <div style="background: #e8f5e8; padding: 15px; border-radius: 5px; margin-top: 20px;">
+                  <p style="margin: 0; color: #2e7d32; font-size: 14px;">
+                    <strong>Note:</strong> This feedback link will expire in 7 days for security purposes.
+                  </p>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="background: #333; color: white; padding: 20px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px;">
+                <p style="margin: 0;">Thank you for choosing our services!</p>
+                <p style="margin: 5px 0 0 0;">If you have any questions, please contact our support team.</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+  };
+
+  try {
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Feedback email sent successfully:', result);
+  } catch (error) {
+    console.error('Error sending feedback email:', error);
+    throw error;
+  }
+}
+
+/**
+ * Sends a thank you email after feedback submission
+ * @param toEmail - The customer's email address
+ */
+export async function sendThankYouEmail(toEmail: string): Promise<void> {
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_PORT === '465',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
+    },
+  });
+
+  const mailOptions = {
+    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
+    to: toEmail,
+    subject: 'Thank You for Your Feedback',
+    html: `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <title>Thank You for Your Feedback</title>
+  </head>
+  <body style="font-family: Arial, sans-serif; background-color: #f6f6f6; margin: 0; padding: 0;">
+    <table width="100%" bgcolor="#f6f6f6" cellpadding="0" cellspacing="0" border="0">
+      <tr>
+        <td>
+          <table style="max-width: 600px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); padding: 32px;" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td style="text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; border-radius: 8px 8px 0 0;">
+                <h1 style="margin: 0; font-size: 28px;">Thank You!</h1>
+                <p style="margin: 10px 0 0 0; font-size: 16px;">Your feedback has been received</p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding: 30px; background: #f9f9f9;">
+                <h2 style="color: #333; margin-bottom: 20px;">Feedback Submitted Successfully</h2>
+                <div style="background: white; padding: 20px; border-radius: 8px;">
+                  <p>Thank you for taking the time to provide your feedback. Your input helps us improve our services and provide better customer experiences.</p>
+                  <p>We appreciate your business and look forward to serving you again!</p>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td style="background: #333; color: white; padding: 20px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px;">
+                <p style="margin: 0;">Thank you for choosing our services!</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+  };
+
+  const result = await transporter.sendMail(mailOptions);
+  console.log('Thank you email sent:', result);
+}

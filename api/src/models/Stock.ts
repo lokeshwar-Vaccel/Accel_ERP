@@ -1,7 +1,7 @@
 import mongoose, { Schema } from 'mongoose';
-import { IStock, IStockLocation } from '../types';
+import { IRack, IRoom, IStock, IStockLocation } from '../types';
 
-// Stock Location Schema
+// --- Stock Location Schema ---
 const stockLocationSchema = new Schema({
   name: {
     type: String,
@@ -25,17 +25,73 @@ const stockLocationSchema = new Schema({
   },
   phone: {
     type: String,
-    match: [/^\+?[1-9]\d{1,14}$/, 'Please provide a valid phone number']
+    // match: [/^\+?[1-9]\d{1,14}$/, 'Please provide a valid phone number']
   },
   isActive: {
     type: Boolean,
     default: true
   }
-}, {
-  timestamps: true
-});
+}, { timestamps: true });
 
-// Stock Schema
+// --- Room Schema ---
+const roomSchema = new Schema({
+  name: {
+    type: String,
+    required: [true, 'Room name is required'],
+    trim: true,
+    maxlength: [100, 'Room name cannot exceed 100 characters'],
+  },
+  location: {
+    type: Schema.Types.ObjectId,
+    ref: 'StockLocation',
+    required: [true, 'Location is required'],
+  },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Description cannot exceed 500 characters'],
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+}, { timestamps: true });
+
+roomSchema.index({ location: 1 });
+
+// --- Rack Schema ---
+const rackSchema = new Schema({
+  name: {
+    type: String,
+    required: [true, 'Rack name is required'],
+    trim: true,
+    maxlength: [100, 'Rack name cannot exceed 100 characters'],
+  },
+  location: {
+    type: Schema.Types.ObjectId,
+    ref: 'StockLocation',
+    required: [true, 'Location is required'],
+  },
+  room: {
+    type: Schema.Types.ObjectId,
+    ref: 'Room',
+    required: [true, 'Room is required'],
+  },
+  description: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Description cannot exceed 500 characters'],
+  },
+  isActive: {
+    type: Boolean,
+    default: true,
+  },
+}, { timestamps: true });
+
+rackSchema.index({ location: 1 });
+rackSchema.index({ room: 1 });
+
+// --- Stock Schema ---
 const stockSchema = new Schema({
   product: {
     type: Schema.Types.ObjectId,
@@ -46,6 +102,16 @@ const stockSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'StockLocation',
     required: [true, 'Location is required']
+  },
+  room: {
+    type: Schema.Types.ObjectId,
+    ref: 'Room',
+    default: null
+  },
+  rack: {
+    type: Schema.Types.ObjectId,
+    ref: 'Rack',
+    default: null
   },
   quantity: {
     type: Number,
@@ -67,30 +133,32 @@ const stockSchema = new Schema({
     type: Date,
     default: Date.now
   }
-}, {
-  timestamps: true
-});
+}, { timestamps: true });
 
-// Compound index for product and location
-stockSchema.index({ product: 1, location: 1 }, { unique: true });
+// ✅ Compound unique index: product + location + room + rack
+stockSchema.index(
+  { product: 1, location: 1, room: 1, rack: 1 },
+  { unique: true }
+);
+
+// Other helpful indexes
 stockSchema.index({ product: 1 });
 stockSchema.index({ location: 1 });
 
-// Pre-save middleware to calculate available quantity
-stockSchema.pre('save', function(this: any, next) {
+// --- Pre-save Middleware ---
+stockSchema.pre('save', function (this: any, next) {
   this.availableQuantity = this.quantity - this.reservedQuantity;
   this.lastUpdated = new Date();
-  
-  // Validate that reserved quantity doesn't exceed total quantity
+
   if (this.reservedQuantity > this.quantity) {
     throw new Error('Reserved quantity cannot exceed total quantity');
   }
-  
+
   next();
 });
 
-// Static method to get total stock for a product across all locations
-stockSchema.statics.getTotalStock = async function(productId: string) {
+// --- Static Methods ---
+stockSchema.statics.getTotalStock = async function (productId: string) {
   const stocks = await this.find({ product: productId });
   return stocks.reduce((total: any, stock: any) => ({
     totalQuantity: total.totalQuantity + stock.quantity,
@@ -99,8 +167,7 @@ stockSchema.statics.getTotalStock = async function(productId: string) {
   }), { totalQuantity: 0, totalReserved: 0, totalAvailable: 0 });
 };
 
-// Static method to check low stock items
-stockSchema.statics.getLowStockItems = async function(locationId?: string) {
+stockSchema.statics.getLowStockItems = async function (locationId?: string) {
   const pipeline: any[] = [
     {
       $lookup: {
@@ -110,9 +177,7 @@ stockSchema.statics.getLowStockItems = async function(locationId?: string) {
         as: 'productInfo'
       }
     },
-    {
-      $unwind: '$productInfo'
-    },
+    { $unwind: '$productInfo' },
     {
       $match: {
         $expr: {
@@ -131,36 +196,37 @@ stockSchema.statics.getLowStockItems = async function(locationId?: string) {
   return this.aggregate(pipeline);
 };
 
-// Instance method to reserve stock
-stockSchema.methods.reserveStock = function(quantity: number) {
+// --- Instance Methods ---
+stockSchema.methods.reserveStock = function (quantity: number) {
   if (quantity > this.availableQuantity) {
     throw new Error('Insufficient available stock');
   }
-  
+
   this.reservedQuantity += quantity;
   return this.save();
 };
 
-// Instance method to release reserved stock
-stockSchema.methods.releaseReservedStock = function(quantity: number) {
+stockSchema.methods.releaseReservedStock = function (quantity: number) {
   if (quantity > this.reservedQuantity) {
     throw new Error('Cannot release more than reserved quantity');
   }
-  
+
   this.reservedQuantity -= quantity;
   return this.save();
 };
 
-// Instance method to consume stock (reduce both quantity and reserved)
-stockSchema.methods.consumeStock = function(quantity: number) {
+stockSchema.methods.consumeStock = function (quantity: number) {
   if (quantity > this.reservedQuantity) {
     throw new Error('Cannot consume more than reserved quantity');
   }
-  
+
   this.quantity -= quantity;
   this.reservedQuantity -= quantity;
   return this.save();
 };
 
+// --- Export Models ---
 export const StockLocation = mongoose.model<IStockLocation>('StockLocation', stockLocationSchema);
-export const Stock = mongoose.model<IStock>('Stock', stockSchema); 
+export const Room = mongoose.model<IRoom>('Room', roomSchema);
+export const Rack = mongoose.model<IRack>('Rack', rackSchema);
+export const Stock = mongoose.model<IStock>('Stock', stockSchema);

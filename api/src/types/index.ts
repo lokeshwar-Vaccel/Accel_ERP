@@ -1,5 +1,5 @@
 import { Request } from 'express';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 
 // User Roles
 export enum UserRole {
@@ -7,6 +7,7 @@ export enum UserRole {
   ADMIN = 'admin',
   HR = 'hr',
   MANAGER = 'manager',
+  FIELD_OPERATOR = 'field_operator',
   VIEWER = 'viewer'
 }
 
@@ -21,7 +22,20 @@ export enum UserStatus {
 // Customer Types
 export enum CustomerType {
   RETAIL = 'retail',
-  TELECOM = 'telecom'
+  TELECOM = 'telecom',
+  EV = 'ev',
+  DG = 'dg',
+  JENARAL = 'jenaral',
+  JE = 'je',
+  OEM = 'oem'
+}
+
+// Customer Main Type (customer or supplier)
+export enum CustomerMainType {
+  CUSTOMER = 'customer',
+  SUPPLIER = 'supplier',
+  DG_SALES_CUSTOMER = 'dg_sales_customer',
+  OEM_CUSTOMER = 'oem_customer'
 }
 
 // Lead Status
@@ -63,7 +77,9 @@ export enum StockTransactionType {
   INWARD = 'inward',
   OUTWARD = 'outward',
   ADJUSTMENT = 'adjustment',
-  TRANSFER = 'transfer'
+  TRANSFER = 'transfer',
+  RESERVATION = 'reservation',
+  RELEASE = 'release'
 }
 
 // Product Categories
@@ -72,6 +88,19 @@ export enum ProductCategory {
   SPARE_PART = 'spare_part',
   ACCESSORY = 'accessory'
 }
+
+// Stock Unit Type
+export type StockUnit =
+  | 'nos'
+  | 'kg'
+  | 'litre'
+  | 'meter'
+  | 'sq.ft'
+  | 'hour'
+  | 'set'
+  | 'box'
+  | 'can'
+  | 'roll';
 
 // User Interface
 export interface IUser extends Document {
@@ -83,7 +112,11 @@ export interface IUser extends Document {
   status: UserStatus;
   phone?: string;
   address?: string;
-  moduleAccess: string[];
+    moduleAccess: {
+    module: string;
+    access: boolean;
+    permission: 'read' | 'write' | 'admin';
+  }[];
   createdBy?: string;
   lastLoginAt?: Date;
   profileImage?: string;
@@ -96,20 +129,68 @@ export interface IUser extends Document {
   comparePassword(candidatePassword: string): Promise<boolean>;
   generateJWT(): string;
 }
+// Interface for StockLedger document
+export interface IStockLedger extends Document {
+  product: Types.ObjectId;
+  location: Types.ObjectId;
+  transactionType: StockTransactionType;
+  quantity: number;
+  reason?: string;
+  notes?: string;
+  performedBy: Types.ObjectId;
+  transactionDate?: Date;
+  resultingQuantity: number;
+  previousQuantity: number;
+  referenceId: string;
+  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'sale' | 'reservation';
+  unitCost?: number;
+  totalCost?: number;
+  batchNumber?: string;
+  serialNumbers?: string[];
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+// Address Interface
+export interface Address {
+  id: number;
+  address: string;
+  state?: string;
+  district?: string;
+  pincode?: string;
+  isPrimary: boolean;
+  gstNumber?: string;
+}
+// DG Requirements Interface
+export interface DGRequirements {
+  kva?: string;
+  phase?: string;
+  quantity?: number;
+  segment?: string;
+  subSegment?: string;
+  currentPowerSource?: string;
+  backupHours?: number;
+  installationLocation?: string;
+}
 
 // Customer Interface
 export interface ICustomer extends Document {
   name: string;
   email?: string;
   phone: string;
-  address: string;
+  panNumber?: string;
+  addresses: Address[];
   customerType: CustomerType;
+  type: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
   assignedTo?: string;
   status: LeadStatus;
   notes?: string;
   contactHistory: IContactHistory[];
   createdBy: string;
+  customerId?: string;
+  isDGSalesCustomer?: boolean;
+  dgRequirements?: DGRequirements;
 }
 
 // Contact History Interface
@@ -128,11 +209,16 @@ export interface IProduct extends Document {
   category: ProductCategory;
   brand?: string;
   modelNumber?: string;
+  partNo?: string;
+  hsnNumber?: string;
   specifications?: Record<string, any>;
   price: number;
+  gst: number;
   minStockLevel: number;
+  maxStockLevel?: number;
   isActive: boolean;
   createdBy: string;
+  stockUnit?: StockUnit;
 }
 
 // Stock Location Interface
@@ -145,15 +231,35 @@ export interface IStockLocation extends Document {
   isActive: boolean;
 }
 
+// Room Interface
+export interface IRoom extends Document {
+  name: string;
+  description?: string;
+  location: string;
+  isActive: boolean;
+}
+
+// Rack Interface
+export interface IRack extends Document {
+  name: string;
+  description?: string;
+  location: string;
+  room: string;
+  isActive: boolean;
+}
+
 // Stock Interface
 export interface IStock extends Document {
   product: string;
   location: string;
+  room?: string;
+  rack?: string;
   quantity: number;
   reservedQuantity: number;
   availableQuantity: number;
   lastUpdated: Date;
 }
+
 
 // Service Ticket Interface
 export interface IServiceTicket extends Document {
@@ -236,7 +342,7 @@ export interface IStockTransaction extends Document {
   toLocation?: string;
   quantity: number;
   reference?: string;
-  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer';
+  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'reservation';
   notes?: string;
   createdBy: string;
 }
@@ -247,16 +353,29 @@ export interface AuthenticatedRequest extends Request {
     id: string;
     email: string;
     role: UserRole;
-    moduleAccess: string[];
+    moduleAccess: {
+      module: string;
+      access: boolean;
+      permission: 'read' | 'write' | 'admin';
+    }[];
   };
 }
+
 
 // API Response Interface
 export interface APIResponse<T = any> {
   success: boolean;
   message: string;
   data?: T;
+  totalPurchaseOrdersCount?: number;
+  pendingPurchaseOrdersCount?: number;
+  confirmedPurchaseOrdersCount?: number;
   error?: string;
+  totalStock?: number;
+  totalLowStock?: number;
+  totalOutOfStock?: number;
+  totalOverStocked?: number;
+  totalInStock?: number;
   pagination?: {
     page: number;
     limit: number;

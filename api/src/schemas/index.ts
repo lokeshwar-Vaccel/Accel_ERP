@@ -10,6 +10,9 @@ export * from './productSchemas';
 // Stock/Inventory validation schemas
 export * from './stockSchemas';
 
+// Inventory import validation schemas
+export * from './inventorySchemas';
+
 // Service ticket validation schemas
 export * from './serviceSchemas';
 
@@ -183,4 +186,73 @@ export const errorResponseSchema = Joi.object({
     details: Joi.any()
   }),
   stack: Joi.string() // Only in development
+}); 
+
+// Company validation schema
+export const companySchema = Joi.object({
+  companyName: Joi.string().max(200).required(),
+  companyAddress: addressSchema.required(),
+  companyPan: Joi.string().max(20),
+  companyBankDetails: Joi.object({
+    accountNumber: Joi.string().max(30),
+    ifsc: Joi.string().max(20),
+    bankName: Joi.string().max(100),
+    branch: Joi.string().max(100)
+  }),
+  contactInfo: contactInfoSchema,
+}); 
+
+// DG Quotation validation schemas
+export * from './dgQuotationSchemas';
+
+// DG Purchase Order validation schemas
+export * from './dgPurchaseOrderSchemas';
+
+// DG Enquiry import schema (stub)
+export const dgEnquiryImportSchema = Joi.object({
+  zone: Joi.string().allow('').optional(),
+  state: Joi.string().allow('').optional(),
+  areaOffice: Joi.string().allow('').optional(),
+  dealer: Joi.string().allow('').optional(),
+  branch: Joi.string().allow('').optional(),
+  location: Joi.string().allow('').optional(),
+  assignedEmployeeCode: Joi.string().allow('').optional(),
+  assignedEmployeeName: Joi.string().allow('').optional(),
+  employeeStatus: Joi.string().allow('').optional(),
+  enquiryNo: Joi.string().required(),
+  enquiryDate: Joi.date().optional(),
+  customerType: Joi.string().allow('').optional(),
+  corporateName: Joi.string().allow('').optional(),
+  customerName: Joi.string().allow('').optional(),
+  phoneNumber: Joi.string().allow('').optional(),
+  email: Joi.string().email().allow('').optional(),
+  address: Joi.string().allow('').optional(),
+  pinCode: Joi.string().allow('').optional(),
+  tehsil: Joi.string().allow('').optional(),
+  district: Joi.string().allow('').optional(),
+  kva: Joi.string().allow('').optional(),
+  phase: Joi.string().allow('').optional(),
+  quantity: Joi.number().optional(),
+  remarks: Joi.string().allow('').optional(),
+  enquiryStatus: Joi.string().allow('').optional(),
+  enquiryType: Joi.string().allow('').optional(),
+  enquiryStage: Joi.string().allow('').optional(),
+  eoPoDate: Joi.date().optional(),
+  plannedFollowUpDate: Joi.date().optional(),
+  source: Joi.string().allow('').optional(),
+  referenceEmployeeName: Joi.string().allow('').optional(),
+  referenceEmployeeMobileNumber: Joi.string().allow('').optional(),
+  sourceFrom: Joi.string().allow('').optional(),
+  events: Joi.string().allow('').optional(),
+  numberOfFollowUps: Joi.number().optional(),
+  segment: Joi.string().allow('').optional(),
+  subSegment: Joi.string().allow('').optional(),
+  dgOwnership: Joi.string().allow('').optional(),
+  createdBy: Joi.string().allow('').optional(),
+  panNumber: Joi.string().allow('').optional(),
+  lastFollowUpDate: Joi.date().optional(),
+  enquiryClosureDate: Joi.date().optional(),
+  financeRequired: Joi.string().allow('').optional(),
+  financeCompany: Joi.string().allow('').optional(),
+  referredBy: Joi.string().allow('').optional()
 }); 

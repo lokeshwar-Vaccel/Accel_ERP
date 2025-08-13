@@ -70,12 +70,20 @@ export const registerUserSchema = Joi.object<RegisterUserInput>({
   address: baseUserFields.address,
   moduleAccess: Joi.array().items(
     Joi.string().valid(
+      'dashboard',
       'user_management',
-      'customer_management', 
+      'lead_management',
+      'quotation_management',
+      'product_management', 
       'inventory_management',
       'service_management',
       'amc_management',
+      'purchase_orders',
+      'billing',
+      'dg_sales',
       'reports_analytics',
+      'file_management',
+      'communications',
       'admin_settings',
       'finance'
     )
@@ -106,12 +114,20 @@ export const updateUserSchema = Joi.object<UpdateUserInput>({
   status: Joi.string().valid(...Object.values(UserStatus)),
   moduleAccess: Joi.array().items(
     Joi.string().valid(
+      'dashboard',
       'user_management',
-      'customer_management',
-      'inventory_management', 
+      'lead_management',
+      'quotation_management',
+      'product_management', 
+      'inventory_management',
       'service_management',
       'amc_management',
+      'purchase_orders',
+      'billing',
+      'dg_sales',
       'reports_analytics',
+      'file_management',
+      'communications',
       'admin_settings',
       'finance'
     )

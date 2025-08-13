@@ -6,18 +6,39 @@ interface IPOItemSchema {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
+  taxRate: number;
+  receivedQuantity?: number;
 }
 
 // Main purchase order interface
 interface IPurchaseOrderSchema extends Document {
   poNumber: string;
-  supplier: string;
+  supplier: mongoose.Types.ObjectId;
+  supplierEmail: string;
+  supplierAddress: {
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    gstNumber: string;
+    isPrimary: boolean;
+  };
   items: IPOItemSchema[];
   totalAmount: number;
-  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
   orderDate: Date;
   expectedDeliveryDate?: Date;
   actualDeliveryDate?: Date;
+  // New fields for shipping and documentation
+  shipDate?: Date;
+  docketNumber?: string;
+  noOfPackages?: number;
+  gstInvoiceNumber?: string;
+  invoiceDate?: Date;
+  documentNumber?: string;
+  documentDate?: Date;
+  department?: string; // Department for this purchase order
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -39,32 +60,55 @@ const poItemSchema = new Schema({
     required: [true, 'Unit price is required'],
     min: [0, 'Unit price cannot be negative']
   },
+  taxRate: {
+    type: Number,
+    default: 0,
+    min: [0, 'GST cannot be negative'],
+    max: [100, 'GST cannot exceed 100']
+  },
   totalPrice: {
     type: Number,
     required: [true, 'Total price is required'],
     min: [0, 'Total price cannot be negative']
+  },
+  receivedQuantity: {
+    type: Number,
+    default: 0,
+    min: [0, 'Received quantity cannot be negative']
   }
 }, { _id: false });
 
 const purchaseOrderSchema = new Schema({
   poNumber: {
     type: String,
-    required: [true, 'PO number is required'],
     unique: true,
     uppercase: true,
     trim: true
   },
   supplier: {
+    type: Schema.Types.ObjectId,
+    ref: 'Customer',
+    // required: [true, 'Supplier is required'],
+  },
+  supplierEmail: {
     type: String,
-    required: [true, 'Supplier is required'],
     trim: true,
-    maxlength: [200, 'Supplier name cannot exceed 200 characters']
+    // maxlength: [100, 'Supplier Email cannot exceed 100 characters']
+  },
+  supplierAddress: {
+    id: { type: Number, required: true },
+    address: { type: String, trim: true },
+    state: { type: String, trim: true },
+    district: { type: String, trim: true },
+    pincode: { type: String, trim: true },
+    gstNumber: { type: String, trim: true },
+    isPrimary: { type: Boolean, default: false }
   },
   items: {
     type: [poItemSchema],
     required: [true, 'At least one item is required'],
     validate: {
-      validator: function(items: IPOItemSchema[]) {
+      validator: function (items: IPOItemSchema[]) {
         return items && items.length > 0;
       },
       message: 'Purchase order must have at least one item'
@@ -77,7 +121,7 @@ const purchaseOrderSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['draft', 'sent', 'confirmed', 'received', 'cancelled'],
+    enum: ['draft', 'sent', 'confirmed', 'received', 'cancelled', 'partially_received'],
     default: 'draft',
     required: [true, 'Status is required']
   },
@@ -91,6 +135,44 @@ const purchaseOrderSchema = new Schema({
   },
   actualDeliveryDate: {
     type: Date
+  },
+  // New fields for shipping and documentation
+  shipDate: {
+    type: Date
+  },
+  docketNumber: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Docket number cannot exceed 100 characters']
+  },
+  noOfPackages: {
+    type: Number,
+    min: [0, 'Number of packages cannot be negative']
+  },
+  gstInvoiceNumber: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'GST invoice number cannot exceed 100 characters']
+  },
+  invoiceDate: {
+    type: Date
+  },
+  documentNumber: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Document number cannot exceed 100 characters']
+  },
+  documentDate: {
+    type: Date
+  },
+  department: {
+    type: String,
+    maxlength: [100, 'Department cannot exceed 100 characters'],
+    trim: true
+  },
+  notes: {
+    type: String,
+    trim: true
   },
   createdBy: {
     type: Schema.Types.ObjectId,
@@ -111,71 +193,88 @@ purchaseOrderSchema.index({ orderDate: -1 });
 purchaseOrderSchema.index({ expectedDeliveryDate: 1 });
 
 // Virtual for delivery status
-purchaseOrderSchema.virtual('deliveryStatus').get(function(this: IPurchaseOrderSchema) {
+purchaseOrderSchema.virtual('deliveryStatus').get(function (this: IPurchaseOrderSchema) {
   if (this.status === 'received') return 'delivered';
   if (this.status === 'cancelled') return 'cancelled';
   if (!this.expectedDeliveryDate) return 'no_delivery_date';
-  
+
   const now = new Date();
   const expected = new Date(this.expectedDeliveryDate);
-  
+
   if (now > expected) return 'overdue';
   if (now <= expected) return 'on_time';
-  
+
   return 'pending';
 });
 
 // Virtual for days until delivery
-purchaseOrderSchema.virtual('daysUntilDelivery').get(function(this: IPurchaseOrderSchema) {
+purchaseOrderSchema.virtual('daysUntilDelivery').get(function (this: IPurchaseOrderSchema) {
   if (!this.expectedDeliveryDate || this.status === 'received' || this.status === 'cancelled') {
     return null;
   }
-  
+
   const now = new Date();
   const expected = new Date(this.expectedDeliveryDate);
   const diff = expected.getTime() - now.getTime();
-  
+
   return Math.ceil(diff / (1000 * 60 * 60 * 24));
 });
 
 // Generate unique PO number
-purchaseOrderSchema.pre('save', async function(this: IPurchaseOrderSchema, next) {
+purchaseOrderSchema.pre('save', async function (this: IPurchaseOrderSchema, next) {
   if (this.isNew && !this.poNumber) {
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    
-    // Find the last PO number for this month
-    const PurchaseOrderModel = this.constructor as mongoose.Model<IPurchaseOrderSchema>;
-    const lastPO = await PurchaseOrderModel.findOne({
-      poNumber: { $regex: `^PO-${year}${month}` }
-    }).sort({ poNumber: -1 });
-    
-    let sequence = 1;
-    if (lastPO) {
-      const lastSequence = parseInt(lastPO.poNumber.split('-')[2]);
-      sequence = lastSequence + 1;
+    try {
+      const year = new Date().getFullYear();
+      const month = String(new Date().getMonth() + 1).padStart(2, '0');
+
+      // Find the last PO number for this month
+      const PurchaseOrderModel = this.constructor as mongoose.Model<IPurchaseOrderSchema>;
+      const lastPO = await PurchaseOrderModel.findOne({
+        poNumber: { $regex: `^PO-${year}${month}` }
+      }).sort({ poNumber: -1 });
+
+      let sequence = 1;
+      if (lastPO && lastPO.poNumber) {
+        const poNumberParts = lastPO.poNumber.split('-');
+        if (poNumberParts.length >= 3) {
+          const lastSequence = parseInt(poNumberParts[2]);
+          if (!isNaN(lastSequence)) {
+            sequence = lastSequence + 1;
+          }
+        }
+      }
+
+      this.poNumber = `PO-${year}${month}-${String(sequence).padStart(4, '0')}`;
+    } catch (error) {
+      console.error('Error generating PO number:', error);
+      return next(error as Error);
     }
-    
-    this.poNumber = `PO-${year}${month}-${String(sequence).padStart(4, '0')}`;
   }
   next();
 });
 
-// Calculate total amount from items
-purchaseOrderSchema.pre('save', function(this: IPurchaseOrderSchema, next) {
+purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {
   if (this.items && this.items.length > 0) {
-    this.totalAmount = this.items.reduce((total: number, item: IPOItemSchema) => total + item.totalPrice, 0);
-    
-    // Ensure each item's total price is correct
+    // First: calculate and update each item's totalPrice with tax
     this.items.forEach((item: IPOItemSchema) => {
-      item.totalPrice = item.quantity * item.unitPrice;
+      const quantity = item.quantity || 0;
+      const unitPrice = item.unitPrice || 0;
+      const taxRate = item.taxRate || 0;
+      item.totalPrice = quantity * unitPrice * (1 + taxRate / 100);
     });
+
+    // Then: sum up totalAmount from updated item.totalPrice
+    this.totalAmount = this.items.reduce(
+      (total: number, item: IPOItemSchema) => total + (item.totalPrice || 0),
+      0
+    );
   }
   next();
 });
+
 
 // Validate that delivery date is not in the past for new orders
-purchaseOrderSchema.pre('save', function(this: IPurchaseOrderSchema, next) {
+purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {
   if (this.expectedDeliveryDate && this.isNew) {
     const now = new Date();
     if (this.expectedDeliveryDate < now) {
@@ -186,7 +285,7 @@ purchaseOrderSchema.pre('save', function(this: IPurchaseOrderSchema, next) {
 });
 
 // Set actual delivery date when status changes to received
-purchaseOrderSchema.pre('save', function(this: IPurchaseOrderSchema, next) {
+purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {
   if (this.isModified('status') && this.status === 'received' && !this.actualDeliveryDate) {
     this.actualDeliveryDate = new Date();
   }
@@ -194,62 +293,62 @@ purchaseOrderSchema.pre('save', function(this: IPurchaseOrderSchema, next) {
 });
 
 // Method to add item to PO
-purchaseOrderSchema.methods.addItem = function(this: IPurchaseOrderSchema, itemData: Omit<IPOItemSchema, 'totalPrice'>) {
+purchaseOrderSchema.methods.addItem = function (this: IPurchaseOrderSchema, itemData: Omit<IPOItemSchema, 'totalPrice'>) {
   const totalPrice = itemData.quantity * itemData.unitPrice;
-  
+
   this.items.push({
     ...itemData,
     totalPrice
   } as IPOItemSchema);
-  
+
   return this.save();
 };
 
 // Method to remove item from PO
-purchaseOrderSchema.methods.removeItem = function(this: IPurchaseOrderSchema, productId: string) {
+purchaseOrderSchema.methods.removeItem = function (this: IPurchaseOrderSchema, productId: string) {
   this.items = this.items.filter((item: IPOItemSchema) => item.product.toString() !== productId);
   return this.save();
 };
 
 // Method to update item quantity
-purchaseOrderSchema.methods.updateItemQuantity = function(this: IPurchaseOrderSchema, productId: string, newQuantity: number) {
+purchaseOrderSchema.methods.updateItemQuantity = function (this: IPurchaseOrderSchema, productId: string, newQuantity: number) {
   const item = this.items.find((item: IPOItemSchema) => item.product.toString() === productId);
   if (!item) {
     throw new Error('Item not found in purchase order');
   }
-  
+
   item.quantity = newQuantity;
   item.totalPrice = item.quantity * item.unitPrice;
-  
+
   return this.save();
 };
 
 // Method to confirm PO
-purchaseOrderSchema.methods.confirm = function(this: IPurchaseOrderSchema) {
+purchaseOrderSchema.methods.confirm = function (this: IPurchaseOrderSchema) {
   if (this.status !== 'sent') {
     throw new Error('Only sent purchase orders can be confirmed');
   }
-  
+
   this.status = 'confirmed';
   return this.save();
 };
 
 // Method to receive PO
-purchaseOrderSchema.methods.receive = function(this: IPurchaseOrderSchema) {
+purchaseOrderSchema.methods.receive = function (this: IPurchaseOrderSchema) {
   if (this.status !== 'confirmed') {
     throw new Error('Only confirmed purchase orders can be received');
   }
-  
+
   this.status = 'received';
   this.actualDeliveryDate = new Date();
-  
+
   return this.save();
 };
 
 // Static method to get overdue purchase orders
-purchaseOrderSchema.statics.getOverduePOs = async function() {
+purchaseOrderSchema.statics.getOverduePOs = async function () {
   const now = new Date();
-  
+
   return this.find({
     expectedDeliveryDate: { $lt: now },
     status: { $in: ['sent', 'confirmed'] }
@@ -257,7 +356,7 @@ purchaseOrderSchema.statics.getOverduePOs = async function() {
 };
 
 // Static method to get POs by status
-purchaseOrderSchema.statics.getPOsByStatus = async function(status: string) {
+purchaseOrderSchema.statics.getPOsByStatus = async function (status: string) {
   return this.find({ status }).populate('items.product').populate('createdBy');
 };
 

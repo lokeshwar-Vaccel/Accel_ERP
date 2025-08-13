@@ -12,6 +12,25 @@ import dashboardRoutes from './dashboard';
 import fileRoutes from './files';
 import adminRoutes from './admin';
 import communicationRoutes from './communications';
+import ledgerRoutes from './stockLedgerRoutes';
+import invoiceRoutes from './invoices';
+import paymentRoutes from './payments';
+import paymentLinkRoutes from './paymentLinks';
+import notificationRoutes from './notifications';
+import generalSettingsRoutes from './generalSettings';
+import quotationsRouter from './quotations';
+import inventoryRoutes from './inventory';
+import digitalServiceReportRoutes from './digitalServiceReports';
+import feedbackRoutes from './feedback';
+import dgEnquiriesRoutes from './dgEnquiries';
+import dgPurchaseOrdersRoutes from './dgPurchaseOrders';
+import proformaInvoicesRoutes from './proformaInvoices';
+import dgInvoicesRoutes from './dgInvoices';
+import dgPaymentsRoutes from './dgPayments';
+import oemsRoutes from './oems';
+import oemOrdersRoutes from './oemOrders';
+import dgReportsRoutes from './dgReports';
+import dgQuotationsRoutes from './dgQuotations';
 
 const router = Router();
 
@@ -34,7 +53,12 @@ router.get('/', (req, res) => {
       dashboard: '/dashboard',
       files: '/files',
       admin: '/admin',
-      communications: '/communications'
+      communications: '/communications',
+      ledger: '/ledger',
+      invoices: '/invoices',
+      payments: '/payments',
+      paymentLinks: '/payment-links',
+      inventory: '/inventory',
     }
   });
 });
@@ -53,5 +77,24 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/files', fileRoutes);
 router.use('/admin', adminRoutes);
 router.use('/communications', communicationRoutes);
+router.use('/ledger', ledgerRoutes);
+router.use('/invoices', invoiceRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/notifications', notificationRoutes);
+router.use('/generalSettings', generalSettingsRoutes);
+router.use('/payment-links', paymentLinkRoutes);
+router.use('/quotations', quotationsRouter);
+router.use('/inventory', inventoryRoutes);
+router.use('/digital-service-reports', digitalServiceReportRoutes);
+router.use('/feedback', feedbackRoutes);
+router.use('/dg-enquiries', dgEnquiriesRoutes);
+router.use('/dg-purchase-orders', dgPurchaseOrdersRoutes);
+router.use('/proforma-invoices', proformaInvoicesRoutes);
+router.use('/dg-invoices', dgInvoicesRoutes);
+router.use('/dg-payments', dgPaymentsRoutes);
+router.use('/oems', oemsRoutes);
+router.use('/oem-orders', oemOrdersRoutes);
+router.use('/dg-reports', dgReportsRoutes);
+router.use('/dg-quotations', dgQuotationsRoutes);
 
-export default router; 
+export default router;

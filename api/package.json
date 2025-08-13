@@ -11,9 +11,14 @@
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "setup": "ts-node src/scripts/setup.ts",
-    "seed": "ts-node --transpile-only src/scripts/seed.ts"
+    "seed": "ts-node --transpile-only src/scripts/seed.ts",
+    "seed:fix-stock-only": "ts-node --transpile-only src/scripts/seed.ts --fix-stock-only",
+    "fix-stock": "ts-node --transpile-only src/scripts/fix-stock-available-quantity.ts",
+    "fix-stockledger-indexes": "ts-node --transpile-only src/scripts/fix-stockledger-indexes.ts",
+    "update-admin-access": "ts-node --transpile-only src/scripts/update-admin-access.ts"
   },
   "dependencies": {
+    "@types/handlebars": "^4.0.40",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "cron": "^3.1.6",
@@ -21,6 +26,7 @@
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "express-rate-limit": "^7.1.5",
+    "handlebars": "^4.7.8",
     "helmet": "^7.1.0",
     "joi": "^17.11.0",
     "jsonwebtoken": "^9.0.2",
@@ -28,7 +34,9 @@
     "mongoose": "^8.0.3",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
-    "nodemailer": "^6.9.7",
+    "nodemailer": "^6.10.1",
+    "puppeteer": "^24.12.1",
+    "razorpay": "^2.9.6",
     "sharp": "^0.33.1",
     "xlsx": "^0.18.5"
   },
@@ -43,6 +51,7 @@
     "@types/multer": "^1.4.13",
     "@types/node": "^20.10.4",
     "@types/nodemailer": "^6.4.14",
+    "@types/puppeteer": "^5.4.7",
     "@typescript-eslint/eslint-plugin": "^6.13.1",
     "@typescript-eslint/parser": "^6.13.1",
     "eslint": "^8.55.0",

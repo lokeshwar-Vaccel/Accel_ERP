@@ -21,16 +21,36 @@ import {
   updateContactHistory,
   deleteContactHistory,
   convertLead,
-  scheduleFollowUp
+  scheduleFollowUp,
+  getDGCustomers,
+  getOEMCustomers,
+  getConvertedCustomers,
 } from '../controllers/customerController';
+import multer from 'multer';
+import { previewCustomerImport, importCustomers } from '../controllers/customerImportController';
 
 const router = Router();
 
 // All routes are protected
 router.use(protect);
 
-// Check module access for customer management
-router.use(checkModuleAccess('customer_management'));
+// Check module access for lead management
+router.use(checkModuleAccess('lead_management'));
+
+const upload = multer();
+
+// Customer Excel import routes
+router.post('/preview-import', upload.single('file'), checkPermission('write'), previewCustomerImport);
+router.post('/import', upload.single('file'), checkPermission('write'), importCustomers);
+
+// DG Customers route
+router.get('/dg-customers', checkPermission('read'), getDGCustomers);
+
+// OEM Customers route
+router.get('/oem', checkPermission('read'), getOEMCustomers);
+
+// Converted Customers route
+router.get('/converted', checkPermission('read'), getConvertedCustomers);
 
 // Customer routes
 router.route('/')
@@ -73,5 +93,7 @@ router.post('/:id/follow-up',
   checkPermission('write'),
   scheduleFollowUp
 );
+
+
 
 export default router; 

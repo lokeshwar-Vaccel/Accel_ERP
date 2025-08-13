@@ -146,9 +146,9 @@ router.get('/metrics/revenue',
   getRevenueMetrics
 );
 
-// Customer metrics (requires customer_management access)
+// Customer metrics (requires lead_management access)
 router.get('/metrics/customers', 
-  checkModuleAccess('customer_management'), 
+  checkModuleAccess('lead_management'), 
   checkPermission('read'), 
   getCustomerMetrics
 );

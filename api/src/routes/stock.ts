@@ -2,11 +2,22 @@ import { Router } from 'express';
 import { protect, restrictTo, checkModuleAccess, checkPermission } from '../middleware/auth';
 import { validate } from '../utils/validation';
 import { 
+  getStockLocations,
+  createStockLocation,
+  updateStockLocation,
+  deleteStockLocation,
+  toggleStockLocationStatus
+} from '../controllers/stockLocationController';
+import { 
   stockQuerySchema,
   stockAdjustmentSchema,
   stockTransferSchema,
   createStockLocationSchema,
-  updateStockLocationSchema
+  updateStockLocationSchema,
+  createRoomSchema,
+  updateRoomSchema,
+  createRackSchema,
+  updateRackSchema
 } from '../schemas';
 import { UserRole } from '../types';
 import {
@@ -14,6 +25,8 @@ import {
   adjustStock,
   transferStock
 } from '../controllers/stockController';
+import { createRoom, deleteRoom, getRooms, toggleRoomStatus, updateRoom } from '../controllers/stockRoomController';
+import { createRack, deleteRack, getRacks, toggleRackStatus, updateRack } from '../controllers/stockRackController';
 
 const router = Router();
 
@@ -23,36 +36,12 @@ router.use(protect);
 // Check module access for inventory management
 router.use(checkModuleAccess('inventory_management'));
 
-// Placeholder controller functions for stock locations (to be implemented)
-const getStockLocations = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Get stock locations endpoint',
-    data: []
-  });
-};
-
-const createStockLocation = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Create stock location endpoint',
-    data: { ...req.body, id: 'temp-id' }
-  });
-};
-
-const updateStockLocation = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Update stock location endpoint',
-    data: { id: req.params.id, ...req.body }
-  });
-};
 
 // Use getStock for low stock items too (it supports lowStock=true parameter)
 const getLowStockItems = getStock;
 
 // Stock routes
-router.get('/', validate(stockQuerySchema, 'query'), checkPermission('read'), getStock);
+router.get('/', checkPermission('read'), getStock);
 router.get('/low-stock', checkPermission('read'), getLowStockItems);
 
 // Stock adjustments
@@ -71,5 +60,40 @@ router.put('/locations/:id',
   checkPermission('write'), 
   updateStockLocation
 );
+
+router.delete('/locations/:id', 
+  checkPermission('delete'), 
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), 
+  deleteStockLocation
+);
+
+router.patch('/locations/:id/toggle', 
+  checkPermission('write'), 
+  toggleStockLocationStatus
+);
+
+// Room Routes
+router.route('/rooms')
+  .get(checkPermission('read'), getRooms)
+  .post(validate(createRoomSchema), checkPermission('write'), createRoom);
+
+router.route('/rooms/:id')
+  .put(validate(updateRoomSchema), checkPermission('write'), updateRoom)
+  .delete(checkPermission('delete'), restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), deleteRoom);
+
+router.patch('/rooms/:id/toggle', 
+  checkPermission('write'), 
+  toggleRoomStatus
+);
+
+// Rack Routes
+router.route('/racks')
+  .get(checkPermission('read'), getRacks)
+  .post(validate(createRackSchema), checkPermission('write'), createRack);
+
+router.route('/racks/:id')
+  .put(validate(updateRackSchema), checkPermission('write'), updateRack)
+  // .patch('/racks/:id/toggle', checkPermission('write'), toggleRackStatus)
+  .delete(checkPermission('delete'), restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), deleteRack);
 
 export default router; 

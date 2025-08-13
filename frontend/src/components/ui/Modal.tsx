@@ -4,9 +4,9 @@ import { X } from 'lucide-react';
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
-  title: string;
+  title?: string;
   children: React.ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '6xl';
   showCloseButton?: boolean;
 }
 
@@ -24,7 +24,8 @@ export const Modal: React.FC<ModalProps> = ({
     sm: 'max-w-md',
     md: 'max-w-lg',
     lg: 'max-w-2xl',
-    xl: 'max-w-4xl'
+    xl: 'max-w-4xl',
+    '6xl': 'max-w-6xl'
   };
 
   return (
@@ -39,17 +40,19 @@ export const Modal: React.FC<ModalProps> = ({
         {/* Modal panel */}
         <div className={`inline-block w-full ${sizeClasses[size]} transform overflow-hidden rounded-lg bg-white text-left align-bottom shadow-xl transition-all sm:my-8 sm:align-middle`}>
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-            <h3 className="text-lg font-medium text-gray-900">{title}</h3>
-            {showCloseButton && (
-              <button
-                onClick={onClose}
-                className="rounded-md bg-white text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            )}
-          </div>
+          {title && (
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900">{title}</h3>
+              {showCloseButton && (
+                <button
+                  onClick={onClose}
+                  className="rounded-md bg-white text-gray-400 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <X className="h-6 w-6" />
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Content */}
           <div className="px-6 py-4">

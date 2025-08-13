@@ -14,6 +14,7 @@ import {
 } from '../schemas';
 import { UserRole } from '../types';
 import {
+  generateDashboardAnalytics,
   generateServiceReport,
   generateInventoryReport,
   generateRevenueReport,
@@ -33,6 +34,9 @@ router.use(protect);
 
 // Check module access for reports and analytics
 router.use(checkModuleAccess('reports_analytics'));
+
+// Dashboard analytics
+router.post('/dashboard-analytics', validate(dashboardMetricsSchema), checkPermission('read'), generateDashboardAnalytics);
 
 // Service reports
 router.post('/service-tickets', validate(ticketAnalyticsSchema), checkPermission('read'), generateServiceReport);

@@ -24,21 +24,61 @@ export interface UpdateStockLocationInput {
   description?: string;
 }
 
+export interface CreateRoomInput {
+  name: string;
+  location: string; // ObjectId as string
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateRoomInput {
+  name?: string;
+  location?: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface CreateRackInput {
+  name: string;
+  location: string; // ObjectId
+  room: string;     // ObjectId
+  description?: string;
+  isActive?: boolean;
+}
+
+export interface UpdateRackInput {
+  name?: string;
+  location?: string;
+  room?: string;
+  description?: string;
+  isActive?: boolean;
+}
+
+
 export interface StockAdjustmentInput {
+  stockId: string;
   product: string;
   location: string;
-  adjustmentType: 'add' | 'subtract' | 'set';
+  adjustmentType: 'add' | 'subtract' | 'set' | 'reserve' | 'release';
   quantity: number;
-  reason: 'damaged' | 'expired' | 'stolen' | 'found' | 'correction' | 'return' | 'other';
+  reason: string; // Made flexible to allow custom reasons for reservations
   notes?: string;
   batchNumber?: string;
   serialNumbers?: string[];
+  // Reservation-specific fields
+  reservationType?: 'service' | 'sale' | 'transfer' | 'other';
+  referenceId?: string;
+  reservedUntil?: string;
 }
 
 export interface StockTransferInput {
   product: string;
   fromLocation: string;
+  fromRoom?: string;
+  fromRack?: string;
   toLocation: string;
+  toRoom?: string;
+  toRack?: string;
   quantity: number;
   transferReason?: 'restock' | 'customer_request' | 'maintenance' | 'redistribution' | 'other';
   notes?: string;
@@ -148,7 +188,7 @@ const baseStockLocationFields = {
   address: Joi.string().max(500).trim(),
   type: Joi.string().valid('main_office', 'warehouse', 'service_center'),
   contactPerson: Joi.string().max(100).trim().allow(''),
-  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
+  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).max(15).allow(''),
   isActive: Joi.boolean(),
   capacity: Joi.number().min(0), // Storage capacity
   description: Joi.string().max(500).allow('')
@@ -178,31 +218,81 @@ export const updateStockLocationSchema = Joi.object<UpdateStockLocationInput>({
   description: baseStockLocationFields.description
 });
 
+const baseRoomFields = {
+  name: Joi.string().min(2).max(100).trim(),
+  location: Joi.string().length(24).hex(), // MongoDB ObjectId
+  description: Joi.string().max(500).trim().allow(''),
+  isActive: Joi.boolean()
+};
+
+export const createRoomSchema = Joi.object<CreateRoomInput>({
+  name: baseRoomFields.name.required(),
+  location: baseRoomFields.location.required(),
+  description: baseRoomFields.description,
+  isActive: baseRoomFields.isActive.default(true)
+});
+
+export const updateRoomSchema = Joi.object<UpdateRoomInput>({
+  name: baseRoomFields.name,
+  location: baseRoomFields.location,
+  description: baseRoomFields.description,
+  isActive: baseRoomFields.isActive
+});
+
+const baseRackFields = {
+  name: Joi.string().min(2).max(100).trim(),
+  location: Joi.string().length(24).hex(),
+  room: Joi.string().length(24).hex(),
+  description: Joi.string().max(500).trim().allow(''),
+  isActive: Joi.boolean()
+};
+
+export const createRackSchema = Joi.object<CreateRackInput>({
+  name: baseRackFields.name.required(),
+  location: baseRackFields.location.required(),
+  room: baseRackFields.room.required(),
+  description: baseRackFields.description,
+  isActive: baseRackFields.isActive.default(true)
+});
+
+export const updateRackSchema = Joi.object<UpdateRackInput>({
+  name: baseRackFields.name,
+  location: baseRackFields.location,
+  room: baseRackFields.room,
+  description: baseRackFields.description,
+  isActive: baseRackFields.isActive
+});
+
 // Stock adjustment schema
 export const stockAdjustmentSchema = Joi.object<StockAdjustmentInput>({
+  stockId: Joi.string().hex().length(24).required(),
   product: Joi.string().hex().length(24).required(),
   location: Joi.string().hex().length(24).required(),
-  adjustmentType: Joi.string().valid('add', 'subtract', 'set').required(),
+  adjustmentType: Joi.string().valid('add', 'subtract', 'set', 'reserve', 'release').required(),
   quantity: Joi.number().min(0).required(),
-  reason: Joi.string().valid(
-    'damaged',
-    'expired',
-    'stolen',
-    'found',
-    'correction',
-    'return',
-    'other'
-  ).required(),
+  reason: Joi.string().min(1).max(200).required(), // Made flexible for custom reasons
   notes: Joi.string().max(500).allow(''),
   batchNumber: Joi.string().max(50),
-  serialNumbers: Joi.array().items(Joi.string().max(100))
+  serialNumbers: Joi.array().items(Joi.string().max(100)),
+  // Reservation-specific fields (required when adjustmentType is 'reserve')
+  reservationType: Joi.when('adjustmentType', {
+    is: 'reserve',
+    then: Joi.string().valid('service', 'sale', 'transfer', 'other').required(),
+    otherwise: Joi.string().valid('service', 'sale', 'transfer', 'other').optional()
+  }),
+  referenceId: Joi.string().max(100).allow(''),
+  reservedUntil: Joi.date().iso().greater('now').allow('')
 });
 
 // Stock transfer schema
 export const stockTransferSchema = Joi.object<StockTransferInput>({
   product: Joi.string().hex().length(24).required(),
   fromLocation: Joi.string().hex().length(24).required(),
+  fromRoom: Joi.string().hex().length(24).allow('', null),
+  fromRack: Joi.string().hex().length(24).allow('', null),
   toLocation: Joi.string().hex().length(24).required(),
+  toRoom: Joi.string().hex().length(24).allow('', null),
+  toRack: Joi.string().hex().length(24).allow('', null),
   quantity: Joi.number().min(1).required(),
   transferReason: Joi.string().valid(
     'restock',

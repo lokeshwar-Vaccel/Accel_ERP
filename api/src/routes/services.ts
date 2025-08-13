@@ -6,7 +6,9 @@ import {
   updateServiceTicketSchema,
   serviceTicketQuerySchema,
   completeServiceSchema,
-  assignServiceSchema
+  assignServiceSchema,
+  updateServiceStatusSchema,
+  bulkServiceImportSchema
 } from '../schemas';
 import { UserRole } from '../types';
 import {
@@ -17,7 +19,10 @@ import {
   assignServiceTicket,
   completeServiceTicket,
   addPartsUsed,
-  getServiceStats
+  getServiceStats,
+  updateServiceTicketStatus,
+  bulkImportServiceTickets,
+  exportServiceTickets
 } from '../controllers/serviceController';
 
 const router = Router();
@@ -42,6 +47,10 @@ router.route('/')
   .get(validate(serviceTicketQuerySchema, 'query'), checkPermission('read'), getServiceTickets)
   .post(validate(createServiceTicketSchema), checkPermission('write'), createServiceTicket);
 
+// Bulk operations (must come before /:id routes)
+router.post('/bulk-import', validate(bulkServiceImportSchema), checkPermission('write'), bulkImportServiceTickets);
+router.get('/export', checkPermission('read'), exportServiceTickets);
+
 router.route('/:id')
   .get(checkPermission('read'), getServiceTicket)
   .put(validate(updateServiceTicketSchema), checkPermission('write'), updateServiceTicket)
@@ -50,6 +59,7 @@ router.route('/:id')
 // Service ticket actions
 router.post('/:id/assign', validate(assignServiceSchema), checkPermission('write'), assignServiceTicket);
 router.post('/:id/complete', validate(completeServiceSchema), checkPermission('write'), completeServiceTicket);
+router.put('/:id/status', validate(updateServiceStatusSchema), checkPermission('write'), updateServiceTicketStatus);
 
 // Statistics
 router.get('/stats/overview', checkPermission('read'), getServiceStats);

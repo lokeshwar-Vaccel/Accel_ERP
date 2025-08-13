@@ -7,7 +7,8 @@ import {
   deleteUser,
   restoreUser,
   resetPassword,
-  getUserStats
+  getUserStats,
+  getFieldOperators
 } from '../controllers/userController';
 import { protect, restrictTo, checkModuleAccess, checkPermission } from '../middleware/auth';
 import { UserRole } from '../types';
@@ -23,7 +24,13 @@ router.use(checkModuleAccess('user_management'));
 // User statistics (Admin only)
 router.get('/stats', 
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), 
-  getUserStats
+  getUserStats  
+);
+
+// Get field operators for dropdown
+router.get('/field-operators', 
+  checkPermission('read'), 
+  getFieldOperators
 );
 
 // CRUD operations
@@ -38,7 +45,7 @@ router.route('/')
 router.route('/:id')
   .get(checkPermission('read'), getUser)
   .put(
-    restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), 
+    restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER, UserRole.HR), 
     checkPermission('write'), 
     updateUser
   )

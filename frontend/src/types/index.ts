@@ -20,6 +20,16 @@ export enum UserRole {
   VIEWER = 'viewer'
 }
 
+export interface Address {
+  id: number;
+  address: string;
+  state?: string;
+  district?: string;
+  pincode?: string;
+  isPrimary?: boolean;
+  gstNumber?: string; // Add GST number per address, optional
+}
+
 export interface Customer {
   _id: string;
   name: string;
@@ -35,11 +45,17 @@ export interface Customer {
   contactHistory: ContactHistory[];
   createdAt: string;
   updatedAt: string;
+  addresses: Address[];
 }
 
 export enum CustomerType {
   TELECOM = 'telecom',
-  RETAIL = 'retail'
+  RETAIL = 'retail',
+  EV = 'ev',
+  DG = 'dg',
+  JENARAL = 'jenaral',
+  JE = 'je',
+  OEM = 'oem'
 }
 
 export enum LeadStatus {
@@ -121,7 +137,9 @@ export enum StockTransactionType {
   INWARD = 'inward',
   OUTWARD = 'outward',
   TRANSFER = 'transfer',
-  ADJUSTMENT = 'adjustment'
+  ADJUSTMENT = 'adjustment',
+  RESERVATION = 'reservation',
+  RELEASE = 'release'
 }
 
 export interface ServiceTicket {
@@ -213,6 +231,7 @@ export interface PurchaseOrder {
   actualDeliveryDate?: string;
   deliveryLocation: string | StockLocation;
   paymentTerms: string;
+  department?: string; // Department for this purchase order
   supplierContact: SupplierContact;
   createdBy: string;
   createdAt: string;

@@ -12,23 +12,25 @@ import {
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Form } from '../components/ui/Form';
-import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
+import { useDispatch, useSelector } from 'react-redux';
+import { RootState, AppDispatch } from '../redux/store';
+import { Navigate } from 'react-router-dom';
+import { 
+  fetchSettings, 
+  updateMultipleSettings, 
+  clearError, 
+  clearSuccess,
+  setFormData,
+  SystemSetting,
+  fetchCompanyData,
+  createCompanyData,
+  updateCompanyData,
+  setCompanyFormData,
+  CompanyData
+} from '../redux/settings/settingsSlice';
 
 // Define interfaces locally to avoid conflicts
-interface SystemSetting {
-  id: string;
-  category: 'general' | 'email' | 'sms' | 'whatsapp' | 'notifications' | 'security' | 'business';
-  key: string;
-  value: any;
-  displayName: string;
-  description?: string;
-  dataType: 'string' | 'number' | 'boolean' | 'json' | 'password';
-  isPublic: boolean;
-  updatedBy: string;
-  updatedAt: Date;
-}
-
 interface FormField {
   name: string;
   label: string;
@@ -39,158 +41,93 @@ interface FormField {
 }
 
 const AdminSettings: React.FC = () => {
-  const [settings, setSettings] = useState<SystemSetting[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
+  const dispatch = useDispatch<AppDispatch>();
+  const settingsState = useSelector((state: RootState) => state.settings);
+  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+  console.log('Settings State:', settingsState); // Debug log
+  console.log('Auth State:', { isAuthenticated, user }); // Debug auth state
+  const { settings = [], companyData, loading = false, saving = false, error = null, success = null } = settingsState || {};
   const [activeTab, setActiveTab] = useState('general');
-  const [formData, setFormData] = useState<any>({});
-  const [error, setError] = useState<string | null>(null);
+  const [formData, setFormData] = useState<{ [key: string]: any }>({});
+  const [companyFormData, setCompanyFormData] = useState<Partial<CompanyData>>({});
+
+  // Redirect if not authenticated
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
 
   useEffect(() => {
-    fetchSettings();
-  }, []);
+    console.log('Dispatching fetchSettings'); // Debug log
+    console.log('Auth token:', localStorage.getItem('authToken')); // Debug auth token
+    dispatch(fetchSettings());
+    dispatch(fetchCompanyData());
+  }, [dispatch]);
 
-  const fetchSettings = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await apiClient.admin.getSettings();
-      console.log('Settings API Response:', response);
-      
-      // Handle the correct response structure: response.data.settings
-      const settingsData = response.data?.settings || [];
-      
-      if (!Array.isArray(settingsData)) {
-        throw new Error('Invalid response format: settings should be an array');
-      }
-      
-      setSettings(settingsData);
-      
-      // Transform settings into form data
-      const data: any = {};
-      settingsData.forEach((setting: SystemSetting) => {
-        // Handle password fields differently
+  // Update form data when settings change
+  useEffect(() => {
+    console.log('Settings changed:', settings); // Debug log
+    if (settings && settings.length > 0) {
+      const data: { [key: string]: any } = {};
+      settings.forEach((setting: SystemSetting) => {
         data[setting.key] = setting.dataType === 'password' ? '' : setting.value;
       });
       setFormData(data);
-      
-    } catch (error: any) {
-      console.error('Error fetching settings:', error);
-      setError(error.message || 'Failed to fetch settings');
-      
-      // Set fallback demo data for testing
-      const fallbackSettings: SystemSetting[] = [
-        {
-          id: '1',
-          category: 'general',
-          key: 'company_name',
-          value: 'Sun Power Services',
-          displayName: 'Company Name',
-          description: 'Official company name displayed in the system',
-          dataType: 'string',
-          isPublic: true,
-          updatedBy: 'system',
-          updatedAt: new Date()
-        },
-        {
-          id: '2',
-          category: 'general',
-          key: 'contact_phone',
-          value: '+91-9876543210',
-          displayName: 'Contact Phone',
-          description: 'Primary contact phone number',
-          dataType: 'string',
-          isPublic: true,
-          updatedBy: 'system',
-          updatedAt: new Date()
-        },
-        {
-          id: '3',
-          category: 'email',
-          key: 'smtp_host',
-          value: 'smtp.gmail.com',
-          displayName: 'SMTP Host',
-          description: 'Email server hostname',
-          dataType: 'string',
-          isPublic: false,
-          updatedBy: 'system',
-          updatedAt: new Date()
-        },
-        {
-          id: '4',
-          category: 'email',
-          key: 'smtp_port',
-          value: 587,
-          displayName: 'SMTP Port',
-          description: 'Email server port',
-          dataType: 'number',
-          isPublic: false,
-          updatedBy: 'system',
-          updatedAt: new Date()
-        },
-        {
-          id: '5',
-          category: 'security',
-          key: 'session_timeout',
-          value: 60,
-          displayName: 'Session Timeout (minutes)',
-          description: 'User session timeout duration',
-          dataType: 'number',
-          isPublic: false,
-          updatedBy: 'system',
-          updatedAt: new Date()
-        },
-        {
-          id: '6',
-          category: 'security',
-          key: 'require_password_change',
-          value: true,
-          displayName: 'Require Password Change',
-          description: 'Force password change on first login',
-          dataType: 'boolean',
-          isPublic: false,
-          updatedBy: 'system',
-          updatedAt: new Date()
-        }
-      ];
-      
-      setSettings(fallbackSettings);
-      const fallbackData: any = {};
-      fallbackSettings.forEach(setting => {
-        fallbackData[setting.key] = setting.dataType === 'password' ? '' : setting.value;
-      });
-      setFormData(fallbackData);
-      
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [settings]);
+
+  // Update company form data when company data changes
+  useEffect(() => {
+    console.log('Company data changed:', companyData); // Debug log
+    if (companyData) {
+      setCompanyFormData({
+        companyName: companyData.companyName || '',
+        companyAddress: companyData.companyAddress || '',
+        contactPhone: companyData.contactPhone || '',
+        contactEmail: companyData.contactEmail || '',
+        companyPan: companyData.companyPan || '',
+        companyBankDetails: {
+          accNo: companyData.companyBankDetails?.accNo || '',
+          bankName: companyData.companyBankDetails?.bankName || '',
+          ifscCode: companyData.companyBankDetails?.ifscCode || '',
+        }
+      });
+    }
+  }, [companyData]);
+
+  // Clear error/success messages
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => dispatch(clearError()), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [error, dispatch]);
+
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => dispatch(clearSuccess()), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [success, dispatch]);
 
   const handleSave = async (category: string) => {
-    try {
-      setSaving(true);
-      setError(null);
+    if (category === 'general') {
+      // Handle company data save
+      if (companyData?._id) {
+        // Update existing company
+        dispatch(updateCompanyData({ id: companyData._id, companyData: companyFormData }));
+      } else {
+        // Create new company
+        dispatch(createCompanyData(companyFormData as Omit<CompanyData, '_id'>));
+      }
+    } else {
+      // Handle other settings
+      const categorySettings = settings?.filter(s => s.category === category) || [];
+      const settingsToUpdate = categorySettings.map(setting => ({
+        key: setting.key,
+        value: formData[setting.key]
+      }));
       
-      const categorySettings = settings.filter(s => s.category === category);
-      
-      await Promise.all(
-        categorySettings.map(setting => 
-          apiClient.admin.updateSetting(setting.key, formData[setting.key])
-        )
-      );
-      
-      // Show success message
-      alert('Settings saved successfully!');
-      
-      // Refresh settings
-      await fetchSettings();
-      
-    } catch (error: any) {
-      console.error('Error saving settings:', error);
-      setError(error.message || 'Failed to save settings');
-    } finally {
-      setSaving(false);
+      dispatch(updateMultipleSettings(settingsToUpdate));
     }
   };
 
@@ -204,10 +141,10 @@ const AdminSettings: React.FC = () => {
   ];
 
   const getFieldsForCategory = (category: string): FormField[] => {
-    if (!Array.isArray(settings)) {
+    if (!settings || !Array.isArray(settings)) {
       return [];
     }
-    
+    if (category !== 'general') {
     return settings
       .filter(setting => setting.category === category)
       .map(setting => ({
@@ -215,13 +152,62 @@ const AdminSettings: React.FC = () => {
         label: setting.displayName || setting.key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
         type: setting.dataType === 'boolean' ? 'checkbox' : 
               setting.dataType === 'number' ? 'number' : 
-              setting.dataType === 'password' ? 'password' : 'text',
+            setting.dataType === 'password' ? 'password' :
+            setting.dataType === 'textarea' ? 'textarea' :
+            setting.dataType === 'email' ? 'email' :
+            'text',
         required: false,
         placeholder: setting.description
       }));
+    }
+    // For general, return company fields matching backend model
+    const generalFields: FormField[] = [
+      { name: 'companyName', label: 'Company Name', type: 'text', required: true },
+      { name: 'companyAddress', label: 'Company Address', type: 'textarea', required: true },
+      { name: 'companyPan', label: 'Company PAN', type: 'text', required: true },
+      { name: 'contactPhone', label: 'Contact Phone', type: 'text', required: true },
+      { name: 'contactEmail', label: 'Contact Email', type: 'email', required: true },
+      { name: 'accNo', label: 'Bank Account Number', type: 'text', required: true },
+      { name: 'bankName', label: 'Bank Name', type: 'text', required: true },
+      { name: 'ifscCode', label: 'Bank IFSC Code', type: 'text', required: true },
+    ];
+    return generalFields;
   };
 
-  if (loading) {
+  // Create flattened values for form (bank details need to be flattened)
+  const getFlattenedCompanyValues = () => {
+    return {
+      companyName: companyFormData.companyName || '',
+      companyAddress: companyFormData.companyAddress || '',
+      companyPan: companyFormData.companyPan || '',
+      contactPhone: companyFormData.contactPhone || '',
+      contactEmail: companyFormData.contactEmail || '',
+      accNo: companyFormData.companyBankDetails?.accNo || '',
+      bankName: companyFormData.companyBankDetails?.bankName || '',
+      ifscCode: companyFormData.companyBankDetails?.ifscCode || '',
+    };
+  };
+
+  // Handle form field changes
+  const handleCompanyFieldChange = (name: string, value: any) => {
+    if (name === 'accNo' || name === 'bankName' || name === 'ifscCode') {
+      // Handle bank details
+      setCompanyFormData({
+        ...companyFormData,
+        companyBankDetails: {
+          accNo: companyFormData.companyBankDetails?.accNo || '',
+          bankName: companyFormData.companyBankDetails?.bankName || '',
+          ifscCode: companyFormData.companyBankDetails?.ifscCode || '',
+          [name]: value
+        }
+      });
+    } else {
+      // Handle regular fields
+      setCompanyFormData({ ...companyFormData, [name]: value });
+    }
+  };
+
+  if (loading || !settingsState) {
     return (
       <div className="p-4 flex items-center justify-center">
         <div className="text-center">
@@ -241,14 +227,26 @@ const AdminSettings: React.FC = () => {
       />
 
       {/* Error Alert */}
-      {error && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+      {(error || success) && (
+        <div className={`border rounded-lg p-4 ${
+          error ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
+        }`}>
           <div className="flex">
-            <AlertCircle className="w-5 h-5 text-yellow-400 mr-2 mt-0.5" />
+            {error ? (
+              <AlertCircle className="w-5 h-5 text-red-400 mr-2 mt-0.5" />
+            ) : (
+              <div className="w-5 h-5 text-green-400 mr-2 mt-0.5">✓</div>
+            )}
             <div>
-              <h3 className="text-sm font-medium text-yellow-800">Connection Issue</h3>
-              <p className="text-sm text-yellow-700 mt-1">
-                {error}. Showing demo data for testing purposes.
+              <h3 className={`text-sm font-medium ${
+                error ? 'text-red-800' : 'text-green-800'
+              }`}>
+                {error ? 'Error' : 'Success'}
+              </h3>
+              <p className={`text-sm mt-1 ${
+                error ? 'text-red-700' : 'text-green-700'
+              }`}>
+                {error || success}
               </p>
             </div>
           </div>
@@ -290,11 +288,40 @@ const AdminSettings: React.FC = () => {
             <div className="p-4">
               {getFieldsForCategory(activeTab).length > 0 ? (
                 <>
+                  {activeTab === 'general' ? (
+                    <>
+                      <div className="mb-6">
+                        <h3 className="text-md font-semibold mb-2">Company Information</h3>
+                        <Form
+                          fields={getFieldsForCategory('general').slice(0, 3)}
+                          values={getFlattenedCompanyValues()}
+                          onChange={handleCompanyFieldChange}
+                        />
+                      </div>
+                      <div className="mb-6">
+                        <h3 className="text-md font-semibold mb-2">Contact Information</h3>
+                        <Form
+                          fields={getFieldsForCategory('general').slice(3, 5)}
+                          values={getFlattenedCompanyValues()}
+                          onChange={handleCompanyFieldChange}
+                        />
+                      </div>
+                      <div className="mb-6">
+                        <h3 className="text-md font-semibold mb-2">Bank Details</h3>
+                        <Form
+                          fields={getFieldsForCategory('general').slice(5, 8)}
+                          values={getFlattenedCompanyValues()}
+                          onChange={handleCompanyFieldChange}
+                        />
+                      </div>
+                    </>
+                  ) : (
                   <Form
                     fields={getFieldsForCategory(activeTab)}
                     values={formData}
                     onChange={(name, value) => setFormData({ ...formData, [name]: value })}
                   />
+                  )}
                   <div className="flex justify-end mt-6">
                     <Button 
                       onClick={() => handleSave(activeTab)}

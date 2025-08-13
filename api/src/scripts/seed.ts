@@ -12,6 +12,7 @@ import { PurchaseOrder } from '../models/PurchaseOrder';
 import { 
   UserRole, 
   CustomerType, 
+  CustomerMainType,
   LeadStatus, 
   ProductCategory, 
   TicketStatus, 
@@ -29,7 +30,24 @@ const sampleUsers = [
     password: 'admin123',
     role: UserRole.SUPER_ADMIN,
     status: 'active',
-    moduleAccess: ['user_management', 'customer_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics', 'admin_settings']
+    moduleAccess: [
+      { module: 'dashboard', access: true, permission: 'admin' },
+      { module: 'lead_management', access: true, permission: 'admin' },
+      { module: 'user_management', access: true, permission: 'admin' },
+      { module: 'quotation_management', access: true, permission: 'admin' },
+      { module: 'product_management', access: true, permission: 'admin' },
+      { module: 'inventory_management', access: true, permission: 'admin' },
+      { module: 'billing', access: true, permission: 'admin' },
+      { module: 'service_management', access: true, permission: 'admin' },
+      { module: 'amc_management', access: true, permission: 'admin' },
+      { module: 'purchase_orders', access: true, permission: 'admin' },
+      { module: 'billing', access: true, permission: 'admin' },
+      { module: 'dg_sales', access: true, permission: 'admin' },
+      { module: 'reports_analytics', access: true, permission: 'admin' },
+      { module: 'file_management', access: true, permission: 'admin' },
+      { module: 'communications', access: true, permission: 'admin' },
+      { module: 'admin_settings', access: true, permission: 'admin' }
+    ]
   },
   {
     firstName: 'John',
@@ -38,7 +56,22 @@ const sampleUsers = [
     password: 'manager123',
     role: UserRole.MANAGER,
     status: 'active',
-    moduleAccess: ['customer_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics']
+    moduleAccess: [
+      { module: 'dashboard', access: true, permission: 'write' },
+      { module: 'lead_management', access: true, permission: 'write' },
+      { module: 'user_management', access: true, permission: 'read' },
+      { module: 'quotation_management', access: true, permission: 'read' },
+      { module: 'product_management', access: true, permission: 'write' },
+      { module: 'inventory_management', access: true, permission: 'write' },
+      { module: 'service_management', access: true, permission: 'write' },
+      { module: 'amc_management', access: true, permission: 'write' },
+      { module: 'purchase_orders', access: true, permission: 'write' },
+      { module: 'billing', access: true, permission: 'write' },
+      { module: 'dg_sales', access: true, permission: 'write' },
+      { module: 'reports_analytics', access: true, permission: 'read' },
+      { module: 'file_management', access: true, permission: 'write' },
+      { module: 'communications', access: true, permission: 'write' }
+    ]
   },
   {
     firstName: 'Sarah',
@@ -47,7 +80,13 @@ const sampleUsers = [
     password: 'tech123',
     role: UserRole.VIEWER,
     status: 'active',
-    moduleAccess: ['service_management', 'inventory_management']
+    moduleAccess: [
+      { module: 'dashboard', access: true, permission: 'read' },
+      { module: 'service_management', access: true, permission: 'write' },
+      { module: 'inventory_management', access: true, permission: 'read' },
+      { module: 'product_management', access: true, permission: 'read' },
+      { module: 'communications', access: true, permission: 'read' }
+    ]
   },
   {
     firstName: 'Mike',
@@ -56,7 +95,28 @@ const sampleUsers = [
     password: 'sales123',
     role: UserRole.VIEWER,
     status: 'active',
-    moduleAccess: ['customer_management', 'amc_management', 'reports_analytics']
+    moduleAccess: [
+      { module: 'dashboard', access: true, permission: 'read' },
+      { module: 'lead_management', access: true, permission: 'write' },
+      { module: 'amc_management', access: true, permission: 'write' },
+      { module: 'reports_analytics', access: true, permission: 'read' },
+      { module: 'communications', access: true, permission: 'read' }
+    ]
+  },
+  {
+    firstName: 'Alex',
+    lastName: 'Field',
+    email: 'alex.field@sunpowerservices.com',
+    password: 'field123',
+    role: UserRole.FIELD_OPERATOR,
+    status: 'active',
+    moduleAccess: [
+      { module: 'dashboard', access: true, permission: 'read' },
+      { module: 'service_management', access: true, permission: 'write' },
+      { module: 'amc_management', access: true, permission: 'write' },
+      { module: 'inventory_management', access: true, permission: 'write' },
+      { module: 'product_management', access: true, permission: 'write' }
+    ]
   },
   {
     firstName: 'Lisa',
@@ -65,9 +125,64 @@ const sampleUsers = [
     password: 'hr123',
     role: UserRole.HR,
     status: 'active',
-    moduleAccess: ['user_management', 'inventory_management', 'reports_analytics']
+    moduleAccess: [
+      { module: 'dashboard', access: true, permission: 'read' },
+      { module: 'user_management', access: true, permission: 'write' },
+      { module: 'quotation_management', access: true, permission: 'write' },
+      { module: 'inventory_management', access: true, permission: 'read' },
+      { module: 'purchase_orders', access: true, permission: 'read' },
+      { module: 'reports_analytics', access: true, permission: 'read' },
+      { module: 'communications', access: true, permission: 'read' }
+    ]
   }
 ];
+// const sampleUsers = [
+//   {
+//     firstName: 'Admin',
+//     lastName: 'User',
+//     email: 'admin@sunpowerservices.com',
+//     password: 'admin123',
+//     role: UserRole.SUPER_ADMIN,
+//     status: 'active',
+//     moduleAccess: ['user_management', 'lead_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics', 'admin_settings']
+//   },
+//   {
+//     firstName: 'John',
+//     lastName: 'Manager',
+//     email: 'john.manager@sunpowerservices.com',
+//     password: 'manager123',
+//     role: UserRole.MANAGER,
+//     status: 'active',
+//     moduleAccess: ['lead_management', 'inventory_management', 'service_management', 'amc_management', 'reports_analytics']
+//   },
+//   {
+//     firstName: 'Sarah',
+//     lastName: 'Technician',
+//     email: 'sarah.tech@sunpowerservices.com',
+//     password: 'tech123',
+//     role: UserRole.VIEWER,
+//     status: 'active',
+//     moduleAccess: ['service_management', 'inventory_management']
+//   },
+//   {
+//     firstName: 'Mike',
+//     lastName: 'Sales',
+//     email: 'mike.sales@sunpowerservices.com',
+//     password: 'sales123',
+//     role: UserRole.VIEWER,
+//     status: 'active',
+//     moduleAccess: ['lead_management', 'amc_management', 'reports_analytics']
+//   },
+//   {
+//     firstName: 'Lisa',
+//     lastName: 'HR',
+//     email: 'lisa.hr@sunpowerservices.com',
+//     password: 'hr123',
+//     role: UserRole.HR,
+//     status: 'active',
+//     moduleAccess: ['user_management', 'inventory_management', 'reports_analytics']
+//   }
+// ];
 
 const sampleStockLocations = [
   {
@@ -115,6 +230,8 @@ const sampleProducts = [
     category: ProductCategory.GENSET,
     brand: 'Mahindra',
     modelNumber: 'MDG-100',
+    partNo: 'MDG-100-001',
+    quantity: 0,
     specifications: {
       power: '100KVA',
       fuel: 'Diesel',
@@ -134,6 +251,8 @@ const sampleProducts = [
     category: ProductCategory.GENSET,
     brand: 'Cummins',
     modelNumber: 'CDG-250',
+    partNo: 'CDG-250-001',
+    quantity: 0,
     specifications: {
       power: '250KVA',
       fuel: 'Diesel',
@@ -153,6 +272,8 @@ const sampleProducts = [
     category: ProductCategory.SPARE_PART,
     brand: 'Mann Filter',
     modelNumber: 'W950/26',
+    partNo: 'W950-26-001',
+    quantity: 0,
     specifications: {
       compatibility: 'Multiple generator models',
       material: 'Cellulose',
@@ -168,6 +289,8 @@ const sampleProducts = [
     category: ProductCategory.SPARE_PART,
     brand: 'Donaldson',
     modelNumber: 'P181064',
+    partNo: 'P181064-001',
+    quantity: 0,
     specifications: {
       compatibility: 'Cummins engines',
       material: 'Paper element',
@@ -183,6 +306,8 @@ const sampleProducts = [
     category: ProductCategory.ACCESSORY,
     brand: 'Exide',
     modelNumber: 'BC-24-10A',
+    partNo: 'BC-24-10A-001',
+    quantity: 0,
     specifications: {
       voltage: '24V',
       current: '10A',
@@ -199,6 +324,8 @@ const sampleProducts = [
     category: ProductCategory.ACCESSORY,
     brand: 'Deep Sea',
     modelNumber: 'DSE7320',
+    partNo: 'DSE7320-001',
+    quantity: 0,
     specifications: {
       display: 'LCD',
       functions: 'Auto start/stop, monitoring, alarms',
@@ -214,6 +341,8 @@ const sampleProducts = [
     category: ProductCategory.SPARE_PART,
     brand: 'Bosch',
     modelNumber: 'FP-12V-40L',
+    partNo: 'FP-12V-40L-001',
+    quantity: 0,
     specifications: {
       voltage: '12V',
       flowRate: '40L/min',
@@ -230,7 +359,17 @@ const sampleCustomers = [
     name: 'Tech Solutions Pvt Ltd',
     email: 'info@techsolutions.com',
     phone: '+919876543220',
-    address: '15th Floor, IT Tower, Gurgaon, Haryana 122001',
+    type: CustomerMainType.CUSTOMER,
+    addresses: [
+      {
+        id: 1,
+        address: '15th Floor, IT Tower, Gurgaon, Haryana 122001',
+        state: 'Haryana',
+        district: 'Gurgaon',
+        pincode: '122001',
+        isPrimary: true
+      }
+    ],
     customerType: CustomerType.TELECOM,
     leadSource: 'Website',
     status: LeadStatus.CONVERTED,
@@ -240,7 +379,17 @@ const sampleCustomers = [
     name: 'Mumbai Manufacturing Co',
     email: 'purchase@mumbaimanufacturing.com',
     phone: '+919876543221',
-    address: 'Plot 45, Industrial Estate, Mumbai, Maharashtra 400001',
+    type: CustomerMainType.CUSTOMER,
+    addresses: [
+      {
+        id: 1,
+        address: 'Plot 45, Industrial Estate, Mumbai, Maharashtra 400001',
+        state: 'Maharashtra',
+        district: 'Mumbai',
+        pincode: '400001',
+        isPrimary: true
+      }
+    ],
     customerType: CustomerType.RETAIL,
     leadSource: 'Referral',
     status: LeadStatus.CONVERTED,
@@ -250,7 +399,17 @@ const sampleCustomers = [
     name: 'Delhi Data Center',
     email: 'ops@delhidatacenter.com',
     phone: '+919876543222',
-    address: 'Sector 62, Noida, Uttar Pradesh 201301',
+    type: CustomerMainType.CUSTOMER,
+    addresses: [
+      {
+        id: 1,
+        address: 'Sector 62, Noida, Uttar Pradesh 201301',
+        state: 'Uttar Pradesh',
+        district: 'Noida',
+        pincode: '201301',
+        isPrimary: true
+      }
+    ],
     customerType: CustomerType.TELECOM,
     leadSource: 'Cold Call',
     status: LeadStatus.CONVERTED,
@@ -260,7 +419,17 @@ const sampleCustomers = [
     name: 'Retail Chain Stores',
     email: 'facilities@retailchain.com',
     phone: '+919876543223',
-    address: 'Corporate Office, Bangalore, Karnataka 560001',
+    type: CustomerMainType.CUSTOMER,
+    addresses: [
+      {
+        id: 1,
+        address: 'Corporate Office, Bangalore, Karnataka 560001',
+        state: 'Karnataka',
+        district: 'Bangalore',
+        pincode: '560001',
+        isPrimary: true
+      }
+    ],
     customerType: CustomerType.RETAIL,
     leadSource: 'Exhibition',
     status: LeadStatus.QUALIFIED,
@@ -270,7 +439,17 @@ const sampleCustomers = [
     name: 'Hospital Complex',
     email: 'admin@hospitalcomplex.com',
     phone: '+919876543224',
-    address: 'Medical District, Chennai, Tamil Nadu 600001',
+    type: CustomerMainType.CUSTOMER,
+    addresses: [
+      {
+        id: 1,
+        address: 'Medical District, Chennai, Tamil Nadu 600001',
+        state: 'Tamil Nadu',
+        district: 'Chennai',
+        pincode: '600001',
+        isPrimary: true
+      }
+    ],
     customerType: CustomerType.RETAIL,
     leadSource: 'Website',
     status: LeadStatus.CONVERTED,
@@ -278,15 +457,48 @@ const sampleCustomers = [
   }
 ];
 
+// Function to fix existing stock availableQuantity data
+const fixExistingStockData = async () => {
+  
+  try {
+    const result = await Stock.updateMany(
+      {},
+      [
+        {
+          $set: {
+            availableQuantity: { 
+              $max: [0, { $subtract: ["$quantity", { $ifNull: ["$reservedQuantity", 0] }] }] 
+            },
+            lastUpdated: new Date()
+          }
+        }
+      ]
+    );
+    
+    
+    // Show some sample fixed records
+    const sampleFixedRecords = await Stock.find({}, {
+      quantity: 1, 
+      reservedQuantity: 1, 
+      availableQuantity: 1
+    }).limit(3);
+    
+  } catch (error) {
+    console.error('❌ Error fixing stock data:', error);
+    throw error;
+  }
+};
+
 const createSampleData = async () => {
   try {
-    console.log('🌱 Starting database seeding...');
 
     // Connect to database
     await connectDB();
 
+    // Fix existing stock data before clearing (in case user wants to preserve some data)
+    await fixExistingStockData();
+
     // Clear existing data
-    console.log('🗑️  Clearing existing data...');
     await Promise.all([
       User.deleteMany({}),
       Customer.deleteMany({}),
@@ -299,7 +511,6 @@ const createSampleData = async () => {
     ]);
 
     // Create Users
-    console.log('👥 Creating users...');
     const hashedUsers = await Promise.all(
       sampleUsers.map(async (user) => ({
         ...user,
@@ -307,33 +518,31 @@ const createSampleData = async () => {
       }))
     );
     const createdUsers = await User.insertMany(hashedUsers);
-    console.log(`✅ Created ${createdUsers.length} users`);
 
     // Create Stock Locations
-    console.log('🏢 Creating stock locations...');
     const createdLocations = await StockLocation.insertMany(sampleStockLocations);
-    console.log(`✅ Created ${createdLocations.length} stock locations`);
 
     // Create Products
-    console.log('📦 Creating products...');
     const productsWithCreator = sampleProducts.map(product => ({
       ...product,
       createdBy: createdUsers[0]._id // Admin user
     }));
     const createdProducts = await Product.insertMany(productsWithCreator);
-    console.log(`✅ Created ${createdProducts.length} products`);
 
     // Create Stock entries
-    console.log('📊 Creating stock entries...');
     const stockEntries = [];
     for (const product of createdProducts) {
       for (const location of createdLocations) {
         const quantity = Math.floor(Math.random() * 50) + 10; // Random quantity between 10-60
+        const reservedQuantity = Math.floor(quantity * 0.1); // 10% reserved
+        const availableQuantity = Math.max(0, quantity - reservedQuantity); // Calculate available quantity
+        
         stockEntries.push({
           product: product._id,
           location: location._id,
           quantity,
-          reservedQuantity: Math.floor(quantity * 0.1), // 10% reserved
+          reservedQuantity,
+          availableQuantity, // ✅ Now properly calculated
           lastUpdated: new Date(),
           transactions: [
             {
@@ -348,10 +557,8 @@ const createSampleData = async () => {
       }
     }
     const createdStock = await Stock.insertMany(stockEntries);
-    console.log(`✅ Created ${createdStock.length} stock entries`);
 
     // Create Customers
-    console.log('👔 Creating customers...');
     const customersWithUsers = sampleCustomers.map((customer, index) => ({
       ...customer,
       assignedTo: createdUsers[Math.floor(Math.random() * createdUsers.length)]._id,
@@ -366,10 +573,8 @@ const createSampleData = async () => {
       ]
     }));
     const createdCustomers = await Customer.insertMany(customersWithUsers);
-    console.log(`✅ Created ${createdCustomers.length} customers`);
 
     // Create Service Tickets
-    console.log('🎫 Creating service tickets...');
     const currentDate = new Date();
     const year = currentDate.getFullYear();
     const month = String(currentDate.getMonth() + 1).padStart(2, '0');
@@ -435,10 +640,8 @@ const createSampleData = async () => {
       }
     ];
     const createdTickets = await ServiceTicket.insertMany(serviceTickets);
-    console.log(`✅ Created ${createdTickets.length} service tickets`);
 
     // Create AMC Contracts
-    console.log('📋 Creating AMC contracts...');
     const amcContracts = [
       {
         contractNumber: `AMC-${year}${month}-0001`,
@@ -490,10 +693,8 @@ const createSampleData = async () => {
       }
     ];
     const createdAMCs = await AMC.insertMany(amcContracts);
-    console.log(`✅ Created ${createdAMCs.length} AMC contracts`);
 
     // Create Purchase Orders
-    console.log('🛒 Creating purchase orders...');
     const purchaseOrders = [
       {
         poNumber: `PO-${year}${month}-0001`,
@@ -552,46 +753,71 @@ const createSampleData = async () => {
       }
     ];
     const createdPOs = await PurchaseOrder.insertMany(purchaseOrders);
-    console.log(`✅ Created ${createdPOs.length} purchase orders`);
+    // console.log(`✅ Created ${createdPOs.length} purchase orders`);
 
-    console.log('\n🎉 Database seeding completed successfully!');
-    console.log('\n📊 Summary:');
-    console.log(`👥 Users: ${createdUsers.length}`);
-    console.log(`🏢 Stock Locations: ${createdLocations.length}`);
-    console.log(`📦 Products: ${createdProducts.length}`);
-    console.log(`📊 Stock Entries: ${createdStock.length}`);
-    console.log(`👔 Customers: ${createdCustomers.length}`);
-    console.log(`🎫 Service Tickets: ${createdTickets.length}`);
-    console.log(`📋 AMC Contracts: ${createdAMCs.length}`);
-    console.log(`🛒 Purchase Orders: ${createdPOs.length}`);
+    // console.log('\n🎉 Database seeding completed successfully!');
+    // console.log('\n📊 Summary:');
+    // console.log(`👥 Users: ${createdUsers.length}`);
+    // console.log(`🏢 Stock Locations: ${createdLocations.length}`);
+    // console.log(`📦 Products: ${createdProducts.length}`);
+    // console.log(`📊 Stock Entries: ${createdStock.length}`);
+    // console.log(`👔 Customers: ${createdCustomers.length}`);
+    // console.log(`🎫 Service Tickets: ${createdTickets.length}`);
+    // console.log(`📋 AMC Contracts: ${createdAMCs.length}`);
+    // console.log(`🛒 Purchase Orders: ${createdPOs.length}`);
 
-    console.log('\n🔑 Default Login Credentials:');
-    console.log('Admin: admin@sunpowerservices.com / admin123');
-    console.log('Manager: john.manager@sunpowerservices.com / manager123');
-    console.log('Technician: sarah.tech@sunpowerservices.com / tech123');
-    console.log('Sales: mike.sales@sunpowerservices.com / sales123');
-    console.log('HR: lisa.hr@sunpowerservices.com / hr123');
+    // console.log('\n🔑 Default Login Credentials:');
+    // console.log('Admin: admin@sunpowerservices.com / admin123');
+    // console.log('Manager: john.manager@sunpowerservices.com / manager123');
+    // console.log('Technician: sarah.tech@sunpowerservices.com / tech123');
+    // console.log('Sales: mike.sales@sunpowerservices.com / sales123');
+    // console.log('HR: lisa.hr@sunpowerservices.com / hr123');
 
   } catch (error) {
     console.error('❌ Error seeding database:', error);
     throw error;
   } finally {
     await mongoose.connection.close();
-    console.log('🔌 Database connection closed');
+  }
+};
+
+// Standalone function to fix existing stock data without clearing database
+const fixStockDataOnly = async () => {
+  try {
+    await connectDB();
+    await fixExistingStockData();
+  } catch (error) {
+    console.error('❌ Stock data fix failed:', error);
+    throw error;
+  } finally {
+    await mongoose.connection.close();
   }
 };
 
 // Run if called directly
 if (require.main === module) {
-  createSampleData()
-    .then(() => {
-      console.log('✅ Seeding completed successfully');
-      process.exit(0);
-    })
-    .catch((error) => {
-      console.error('❌ Seeding failed:', error);
-      process.exit(1);
-    });
+  // Check if user wants to run only the fix
+  if (process.argv.includes('--fix-stock-only')) {
+    fixStockDataOnly()
+      .then(() => {
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error('❌ Stock fix failed:', error);
+        process.exit(1);
+      });
+  } else {
+    // Run full seeding
+    createSampleData()
+      .then(() => {
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error('❌ Seeding failed:', error);
+        process.exit(1);
+      });
+  }
 }
 
-export default createSampleData; 
+export default createSampleData;
+export { fixStockDataOnly }; 

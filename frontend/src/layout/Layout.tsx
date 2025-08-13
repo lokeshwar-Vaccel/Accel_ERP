@@ -3,11 +3,22 @@ import { useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
 
-function Layout({ children }: { children: React.ReactNode }) {
+interface LayoutProps {
+  children: React.ReactNode;
+  moduleAccess: {
+    module: string;
+    access: boolean;
+    permission: 'read' | 'write' | 'admin';
+  }[];
+}
+
+function Layout({ children, moduleAccess }: LayoutProps) {
   const [currentPanel, setCurrentPanel] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const location = useLocation();
+
+  
 
   const getBreadcrumbs = (path: string) => {
     const segments = path.split('/').filter(segment => segment);
@@ -19,8 +30,8 @@ function Layout({ children }: { children: React.ReactNode }) {
     const breadcrumbs = segments.map(segment => {
       switch (segment) {
         case 'dashboard': return 'Dashboard';
-        case 'customer-management': return 'Customer Management';
-        case 'user-management': return 'User Management';
+        case 'customer-management': return 'CRM';
+        case 'user-management': return 'User  Management';
         case 'product-management': return 'Product Management';
         case 'inventory-management': return 'Inventory Management';
         case 'service-management': return 'Service Management';
@@ -47,6 +58,7 @@ function Layout({ children }: { children: React.ReactNode }) {
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         isCollapsed={sidebarCollapsed}
         onCollapseToggle={() => setSidebarCollapsed(!sidebarCollapsed)}
+        moduleAccess={moduleAccess} // Pass the moduleAccess prop
       />
 
       {/* Main Content */}

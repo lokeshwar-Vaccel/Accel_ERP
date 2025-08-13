@@ -13,13 +13,11 @@ const setup = async () => {
     // Connect to MongoDB
     const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/sun-power-services-erp';
     await mongoose.connect(mongoURI);
-    console.log('Connected to MongoDB');
 
     // Create Super Admin user if it doesn't exist
     const existingSuperAdmin = await User.findOne({ role: UserRole.SUPER_ADMIN });
     
     if (!existingSuperAdmin) {
-      console.log('Creating Super Admin user...');
       
       const superAdmin = await User.create({
         firstName: 'Super',
@@ -29,16 +27,28 @@ const setup = async () => {
         role: UserRole.SUPER_ADMIN,
         status: UserStatus.ACTIVE,
         phone: '+911234567890',
-        address: 'Sun Power Services Head Office'
+        address: 'Sun Power Services Head Office',
+        moduleAccess: [
+          { module: 'dashboard', access: true, permission: 'admin' },
+          { module: 'lead_management', access: true, permission: 'admin' },
+          { module: 'user_management', access: true, permission: 'admin' },
+          { module: 'quotation_management', access: true, permission: 'admin' },
+          { module: 'product_management', access: true, permission: 'admin' },
+          { module: 'inventory_management', access: true, permission: 'admin' },
+          { module: 'service_management', access: true, permission: 'admin' },
+          { module: 'amc_management', access: true, permission: 'admin' },
+          { module: 'purchase_orders', access: true, permission: 'admin' },
+          { module: 'billing', access: true, permission: 'admin' },
+          { module: 'dg_sales', access: true, permission: 'admin' },
+          { module: 'reports_analytics', access: true, permission: 'admin' },
+          { module: 'file_management', access: true, permission: 'admin' },
+          { module: 'communications', access: true, permission: 'admin' },
+          { module: 'admin_settings', access: true, permission: 'admin' }
+        ]
       });
 
-      console.log('Super Admin created:', {
-        email: superAdmin.email,
-        password: 'admin123',
-        role: superAdmin.role
-      });
     } else {
-      console.log('Super Admin already exists');
+      console.error('Super Admin already exists');
     }
 
     // Create default stock locations
@@ -70,7 +80,6 @@ const setup = async () => {
       const existingLocation = await StockLocation.findOne({ name: locationData.name });
       if (!existingLocation) {
         await StockLocation.create(locationData);
-        console.log(`Created stock location: ${locationData.name}`);
       }
     }
 
@@ -91,7 +100,7 @@ const setup = async () => {
         },
         price: 150000,
         minStockLevel: 5,
-        createdBy: null // Will be set to super admin ID
+        createdBy: null as string | null // Will be set to super admin ID
       },
       {
         name: 'Engine Oil Filter',
@@ -106,7 +115,7 @@ const setup = async () => {
         },
         price: 500,
         minStockLevel: 50,
-        createdBy: null
+        createdBy: null as string | null
       },
       {
         name: 'Battery Charger',
@@ -122,7 +131,7 @@ const setup = async () => {
         },
         price: 5000,
         minStockLevel: 20,
-        createdBy: null
+        createdBy: null as string | null
       }
     ];
 
@@ -131,23 +140,15 @@ const setup = async () => {
     for (const productData of sampleProducts) {
       const existingProduct = await Product.findOne({ name: productData.name });
       if (!existingProduct && superAdminUser) {
-        productData.createdBy = superAdminUser._id.toString();
+        productData.createdBy = (superAdminUser._id as mongoose.Types.ObjectId).toString();
         await Product.create(productData);
-        console.log(`Created sample product: ${productData.name}`);
       }
     }
-
-    console.log('\n🎉 Database setup completed successfully!');
-    console.log('\n📝 Default credentials:');
-    console.log('   Email: admin@sunpowerservices.com');
-    console.log('   Password: admin123');
-    console.log('\n🚀 You can now start the server with: npm run dev');
 
   } catch (error) {
     console.error('Setup failed:', error);
   } finally {
     await mongoose.disconnect();
-    console.log('Disconnected from MongoDB');
     process.exit(0);
   }
 };

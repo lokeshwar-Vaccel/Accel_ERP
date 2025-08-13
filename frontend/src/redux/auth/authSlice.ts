@@ -1,6 +1,7 @@
 // features/auth/authSlice.ts
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../../utils/api';
+import toast from 'react-hot-toast';
 
 interface User {
   id: string;
@@ -12,7 +13,11 @@ interface User {
   status: string;
   phone?: string;
   address?: string;
-  moduleAccess: string[];
+moduleAccess: {
+    module: string;
+    access: boolean;
+    permission: 'read' | 'write' | 'admin';
+  }[];
   profileImage?: string;
   lastLoginAt?: string;
 }
@@ -23,15 +28,39 @@ interface AuthState {
   error: string | null;
   user: User | null;
   token: string | null;
+  passwordResetState: {
+    emailSent: boolean;
+    lastEmailSent: number | null;
+    isLoading: boolean;
+    error: string | null;
+  };
+   passwordResetConfirm: {
+    isSuccess: boolean;
+    isLoading: boolean;
+    error: string | null;
+  };
 }
+
 
 const initialState: AuthState = {
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: !!localStorage.getItem('authToken'), // Start loading if token exists
   error: null,
   user: null,
   token: localStorage.getItem('authToken'),
+  passwordResetState: {
+    emailSent: false,
+    lastEmailSent: null,
+    isLoading: false,
+    error: null,
+  },
+  passwordResetConfirm: {
+    isSuccess: false,
+    isLoading: false,
+    error: null,
+  },
 };
+
 
 // Check if user is already authenticated on app start
 export const checkAuthStatus = createAsyncThunk(
@@ -62,8 +91,8 @@ export const login = createAsyncThunk(
   'auth/login',
   async (credentials: { email: string; password: string }, { rejectWithValue }) => {
     try {
-      const response = await api.auth.login(credentials);
-      
+      const response:any = await api.auth.login(credentials);
+      toast.success(response.message)
       // Store token in localStorage
       localStorage.setItem('authToken', response.data.token);
       
@@ -88,7 +117,8 @@ export const logout = createAsyncThunk(
       
       // Try to notify the server about logout, but don't fail if it doesn't work
       try {
-        await api.auth.logout();
+        const response = await api.auth.logout(); // <- Get message from here
+        return response; 
       } catch (serverError) {
         // Server logout failed, but we've already cleared local storage
         console.warn('Server logout failed, but local logout successful:', serverError);
@@ -112,6 +142,32 @@ export const updateProfile = createAsyncThunk(
       return response.data;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Profile update failed');
+    }
+  }
+);
+
+// Forgot Password async thunk
+export const forgotPassword = createAsyncThunk(
+  'auth/forgotPassword',
+  async (passwordData: { email: string}, { rejectWithValue }) => {
+    try {
+      const res = await api.auth.forgotPassword(passwordData);
+      return res;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'forgot Password failed');
+    }
+  }
+);
+
+// Change password async thunk
+export const resetPassword = createAsyncThunk(
+  'auth/resetPassword',
+  async (passwordData: { token: string; newPassword: string }, { rejectWithValue }) => {
+    try {
+      await api.auth.resetPassword(passwordData);
+      return null;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'reset Password failed');
     }
   }
 );
@@ -147,6 +203,23 @@ const authSlice = createSlice({
       state.token = null;
       localStorage.removeItem('authToken');
     },
+    clearPasswordResetState: (state) => {
+  state.passwordResetState = {
+    emailSent: false,
+    lastEmailSent: null,
+    isLoading: false,
+    error: null,
+  };
+},
+resetPasswordConfirmState: (state) => {
+  state.passwordResetConfirm = {
+    isSuccess: false,
+    isLoading: false,
+    error: null,
+  };
+},
+
+
   },
   extraReducers: (builder) => {
     // Check auth status
@@ -243,8 +316,43 @@ const authSlice = createSlice({
         state.isLoading = false;
         state.error = action.payload as string;
       });
+
+      // Forgot password
+builder
+.addCase(forgotPassword.pending, (state) => {
+  state.passwordResetState.isLoading = true;
+  state.passwordResetState.error = null;
+  state.passwordResetState.emailSent = false;
+})
+.addCase(forgotPassword.fulfilled, (state) => {
+  state.passwordResetState.isLoading = false;
+  state.passwordResetState.emailSent = true;
+  state.passwordResetState.lastEmailSent = Date.now();
+})
+.addCase(forgotPassword.rejected, (state, action) => {
+  state.passwordResetState.isLoading = false;
+  state.passwordResetState.emailSent = false;
+  state.passwordResetState.error = action.payload as string;
+});
+
+// Reset password (via token)
+builder
+  .addCase(resetPassword.pending, (state) => {
+    state.passwordResetConfirm.isLoading = true;
+    state.passwordResetConfirm.error = null;
+    state.passwordResetConfirm.isSuccess = false;
+  })
+  .addCase(resetPassword.fulfilled, (state) => {
+    state.passwordResetConfirm.isLoading = false;
+    state.passwordResetConfirm.isSuccess = true;
+  })
+  .addCase(resetPassword.rejected, (state, action) => {
+    state.passwordResetConfirm.isLoading = false;
+    state.passwordResetConfirm.error = action.payload as string;
+  });
+
   },
 });
 
-export const { clearError, setAuthenticated, forceLogout } = authSlice.actions;
+export const { clearError, setAuthenticated, forceLogout,clearPasswordResetState,resetPasswordConfirmState } = authSlice.actions;
 export default authSlice.reducer;

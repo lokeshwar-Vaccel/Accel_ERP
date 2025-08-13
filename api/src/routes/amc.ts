@@ -19,7 +19,20 @@ import {
   completeAMCVisit as completeVisit,
   renewAMCContract as renewAMC,
   getExpiringContracts,
-  getAMCStats
+  getAMCStats,
+  generateAMCReport,
+  scheduleEnhancedVisit,
+  bulkRenewContracts,
+  getAMCPerformance,
+  getAMCDetails,
+  updateAMCStatus,
+  getAMCsByCustomer,
+  getExpiringSoon,
+  getVisitsDue,
+  getAMCDashboard,
+  deleteAMCContract,
+  bulkDeleteAMCContracts,
+  archiveAMCContract
 } from '../controllers/amcController';
 
 const router = Router();
@@ -30,32 +43,45 @@ router.use(protect);
 // Check module access for AMC management
 router.use(checkModuleAccess('amc_management'));
 
-// Placeholder for delete function
-const deleteAMC = async (req: any, res: any) => {
-  res.json({
-    success: true,
-    message: 'Delete AMC endpoint',
-    data: { id: req.params.id }
-  });
-};
+
 
 // AMC routes
 router.route('/')
   .get(validate(amcQuerySchema, 'query'), checkPermission('read'), getAMCs)
   .post(validate(createAMCSchema), checkPermission('write'), createAMC);
 
+// Special queries (must come before /:id routes)
+router.get('/dashboard', checkPermission('read'), getAMCDashboard);
+router.get('/stats/overview', checkPermission('read'), getAMCStats);
+router.get('/expiring/contracts', checkPermission('read'), getExpiringContracts);
+router.get('/expiring-soon', checkPermission('read'), getExpiringSoon);
+router.get('/visits-due', checkPermission('read'), getVisitsDue);
+router.get('/customer/:customerId', checkPermission('read'), getAMCsByCustomer);
+
+// Enhanced AMC functionality
+router.post('/bulk-renew', checkPermission('write'), bulkRenewContracts);
+router.delete('/bulk-delete', restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), bulkDeleteAMCContracts);
+
 router.route('/:id')
   .get(checkPermission('read'), getAMC)
   .put(validate(updateAMCSchema), checkPermission('write'), updateAMC)
-  .delete(restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), deleteAMC);
+  .delete(restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), deleteAMCContract);
 
 // AMC actions
 router.post('/:id/schedule-visit', validate(scheduleVisitSchema), checkPermission('write'), scheduleVisit);
 router.post('/visits/:visitId/complete', validate(completeVisitSchema), checkPermission('write'), completeVisit);
 router.post('/:id/renew', validate(renewAMCSchema), checkPermission('write'), renewAMC);
 
-// Special queries
-router.get('/expiring/contracts', checkPermission('read'), getExpiringContracts);
-router.get('/stats/overview', checkPermission('read'), getAMCStats);
+// Enhanced AMC functionality
+router.post('/:id/schedule-visit-enhanced', checkPermission('write'), scheduleEnhancedVisit);
+router.get('/:id/performance', checkPermission('read'), getAMCPerformance);
+router.get('/:id/details', checkPermission('read'), getAMCDetails);
+router.put('/:id/status', checkPermission('write'), updateAMCStatus);
+
+// Delete and Archive functionality
+router.put('/:id/archive', restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('write'), archiveAMCContract);
+
+// Reports
+router.get('/reports/:type', checkPermission('read'), generateAMCReport);
 
 export default router; 

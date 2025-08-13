@@ -25,24 +25,103 @@ const productSchema = new Schema({
     type: String,
     maxlength: [100, 'Model number cannot exceed 100 characters']
   },
-  specifications: {
-    type: Schema.Types.Mixed,
-    default: {}
-  },
-  price: {
-    type: Number,
-    required: [true, 'Product price is required'],
-    min: [0, 'Price cannot be negative']
-  },
   minStockLevel: {
     type: Number,
     required: [true, 'Minimum stock level is required'],
     min: [0, 'Minimum stock level cannot be negative'],
     default: 0
   },
+  maxStockLevel: {
+    type: Number,
+    min: [0, 'Maximum stock level cannot be negative'],
+    default: 0,
+    validate: {
+      validator: function(this: any, value: number) {
+        // Only validate if both min and max are set
+        if (value && this.minStockLevel && value < this.minStockLevel) {
+          return false;
+        }
+        return true;
+      },
+      message: 'Maximum stock level must be greater than or equal to minimum stock level'
+    }
+  },
   isActive: {
     type: Boolean,
     default: true
+  },
+  partNo: {
+    type: String,
+    required: [true, 'Part number is required'],
+    trim: true,
+    maxlength: [100, 'Part number cannot exceed 100 characters'],
+    unique: true
+  },
+  quantity: {
+    type: Number,
+    required: [true, 'Quantity is required'],
+    min: [0, 'Quantity cannot be negative'],
+  },
+  location: {
+    type: Schema.Types.ObjectId,
+    ref: 'StockLocation',
+    required: false,
+  },
+  room: {
+    type: Schema.Types.ObjectId,
+    ref: 'Room',
+    required: false,
+  },
+  rack: {
+    type: Schema.Types.ObjectId,
+    ref: 'Rack',
+    required: false,
+  },
+  hsnNumber: {
+    type: String,
+    maxlength: [50, 'HSN number cannot exceed 50 characters'],
+  },
+  productType1: {
+    type: String,
+    maxlength: [100, 'Product Type 1 cannot exceed 100 characters'],
+  },
+  productType2: {
+    type: String,
+    maxlength: [100, 'Product Type 2 cannot exceed 100 characters'],
+  },
+  productType3: {
+    type: String,
+    maxlength: [100, 'Product Type 3 cannot exceed 100 characters'],
+  },
+  make: {
+    type: String,
+    maxlength: [100, 'Make cannot exceed 100 characters'],
+  },
+  gst: {
+    type: Number,
+    min: [0, 'GST cannot be negative'],
+    max: [100, 'GST cannot exceed 100'],
+  },
+  gndp: {
+    type: Number,
+    min: [0, 'GNDP cannot be negative'],
+  },
+  price: {
+    type: Number,
+    min: [0, 'Price cannot be negative'],
+  },
+  gndpTotal: {
+    type: Number,
+    min: [0, 'GNDP Total cannot be negative'],
+  },
+  uom: {
+    type: String,
+    enum: ['kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'],
+    default: null
+  },
+  cpcbNo: {
+    type: String,
+    maxlength: [100, 'CPCB number cannot exceed 100 characters'],
   },
   createdBy: {
     type: Schema.Types.ObjectId,
@@ -59,13 +138,14 @@ const productSchema = new Schema({
 productSchema.index({ name: 'text', brand: 'text', modelNumber: 'text' });
 productSchema.index({ category: 1 });
 productSchema.index({ isActive: 1 });
+productSchema.index({ partNo: 1 }, { unique: true });
 
 // Virtual for product code (auto-generated)
-productSchema.virtual('productCode').get(function(this: any) {
-  const categoryCode = this.category.toUpperCase().substring(0, 3);
-  const idCode = this._id.toString().slice(-6).toUpperCase();
-  return `${categoryCode}-${idCode}`;
-});
+// productSchema.virtual('productCode').get(function(this: any) {
+//   const categoryCode = this.category.toUpperCase().substring(0, 3);
+//   const idCode = this._id.toString().slice(-6).toUpperCase();
+//   return `${categoryCode}-${idCode}`;
+// });
 
 // Virtual to get current stock levels (populated from Stock model)
 productSchema.virtual('stockLevels', {
@@ -88,12 +168,17 @@ productSchema.pre('save', function(this: any, next) {
   if (this.price < 0) {
     throw new Error('Price cannot be negative');
   }
-  
   // Ensure minimum stock level is valid
   if (this.minStockLevel < 0) {
     throw new Error('Minimum stock level cannot be negative');
   }
-  
+  // Ensure maximum stock level is valid
+  if (this.maxStockLevel < 0) {
+    throw new Error('Maximum stock level cannot be negative');
+  }
+  if (this.maxStockLevel && this.minStockLevel && this.maxStockLevel < this.minStockLevel) {
+    throw new Error('Maximum stock level must be greater than or equal to minimum stock level');
+  }
   next();
 });
 

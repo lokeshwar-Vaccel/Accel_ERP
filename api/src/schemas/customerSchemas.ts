@@ -1,29 +1,39 @@
 import Joi from 'joi';
-import { CustomerType, LeadStatus } from '../types';
+import { CustomerType, LeadStatus, CustomerMainType } from '../types';
 
 // TypeScript interfaces for validation results
 export interface CreateCustomerInput {
   name: string;
+  designation?: string;
+  contactPersonName?: string;
   email?: string;
-  phone: string;
-  address: string;
+  phone?: string;
+  panNumber?: string;
+  addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean }[];
   customerType: CustomerType;
+  type: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
   assignedTo?: string;
   status?: LeadStatus;
   notes?: string;
+  isDGSalesCustomer?: boolean;
 }
 
 export interface UpdateCustomerInput {
   name?: string;
+  designation?: string;
+  contactPersonName?: string;
   email?: string;
   phone?: string;
-  address?: string;
+  panNumber?: string;
+  addresses?: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean }[];
   customerType?: CustomerType;
+  type?: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
   assignedTo?: string;
   status?: LeadStatus;
   notes?: string;
+  isDGSalesCustomer?: boolean;
 }
 
 export interface AddContactHistoryInput {
@@ -44,6 +54,7 @@ export interface CustomerQueryInput {
   page?: number;
   limit?: number;
   sort?: string;
+  isDGSalesCustomer?: boolean;
   search?: string;
   customerType?: CustomerType;
   status?: LeadStatus;
@@ -51,6 +62,12 @@ export interface CustomerQueryInput {
   leadSource?: string;
   dateFrom?: string;
   dateTo?: string;
+  type?: string;
+  newLeadStatus?: string;
+  qualifiedStatus?: string;
+  convertedStatus?: string;
+  lostStatus?: string;
+  contactedStatus?: string;
 }
 
 export interface ConvertLeadInput {
@@ -68,52 +85,83 @@ export interface ScheduleFollowUpInput {
 
 export interface CustomerImportInput {
   name: string;
+  designation?: string;
+  contactPersonName?: string;
+  gstNumber?: string;
   email?: string;
-  phone: string;
-  address: string;
+  phone?: string;
+  addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean }[];
   customerType: CustomerType;
+  type: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
   status?: LeadStatus;
   notes?: string;
 }
 
+// Address Joi schema
+const addressJoiSchema = Joi.object({
+  id: Joi.number().required(),
+  address: Joi.string().max(500).required(),
+  state: Joi.string().max(100).required(),
+  district: Joi.string().max(100).required(),
+  pincode: Joi.string().pattern(/^\d{6}$/).allow('').optional(),
+  gstNumber: Joi.string().max(15).trim().allow(''),
+  isPrimary: Joi.boolean().default(false)
+});
+
 // Base customer fields
 const baseCustomerFields = {
   name: Joi.string().min(2).max(100).trim(),
-  email: Joi.string().email().lowercase().allow(null),
-  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
-  address: Joi.string().max(500).trim(),
+  designation: Joi.string().max(100).trim().allow(''),
+  contactPersonName: Joi.string().max(100).trim().allow(''),
+  gstNumber: Joi.string().max(50).trim().allow(''),
+  email: Joi.string().email().lowercase().allow('', null),
+  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).allow('', null),
+  panNumber: Joi.string().max(10).trim().allow(''),
+  addresses: Joi.array().items(addressJoiSchema).min(1),
   customerType: Joi.string().valid(...Object.values(CustomerType)),
+  type: Joi.string().valid(...Object.values(CustomerMainType)),
   leadSource: Joi.string().max(100).trim().allow(''),
   assignedTo: Joi.string().hex().length(24), // MongoDB ObjectId
   status: Joi.string().valid(...Object.values(LeadStatus)),
-  notes: Joi.string().max(2000).allow('')
+  notes: Joi.string().max(2000).allow(''),
+  isDGSalesCustomer: Joi.boolean().optional()
 };
 
 // Create customer schema
 export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   name: baseCustomerFields.name.required(),
-  email: baseCustomerFields.email,
-  phone: baseCustomerFields.phone.required(),
-  address: baseCustomerFields.address.required(),
-  customerType: baseCustomerFields.customerType.required(),
+  designation: baseCustomerFields.designation,
+  contactPersonName: baseCustomerFields.contactPersonName,
+  email: baseCustomerFields?.email.allow('', null),
+  phone: baseCustomerFields?.phone.allow('', null),
+  panNumber: baseCustomerFields.panNumber,
+  addresses: baseCustomerFields.addresses,
+  customerType: baseCustomerFields.customerType,
+  type: baseCustomerFields.type,
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
-  status: baseCustomerFields.status.default(LeadStatus.NEW),
-  notes: baseCustomerFields.notes
+  status: baseCustomerFields.status,
+  notes: baseCustomerFields.notes,
+  isDGSalesCustomer: baseCustomerFields.isDGSalesCustomer
 });
 
 // Update customer schema
 export const updateCustomerSchema = Joi.object<UpdateCustomerInput>({
   name: baseCustomerFields.name,
+  designation: baseCustomerFields.designation,
+  contactPersonName: baseCustomerFields.contactPersonName,
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone,
-  address: baseCustomerFields.address,
+  panNumber: baseCustomerFields.panNumber,
+  addresses: baseCustomerFields.addresses,
   customerType: baseCustomerFields.customerType,
+  type: baseCustomerFields.type,
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
   status: baseCustomerFields.status,
-  notes: baseCustomerFields.notes
+  notes: baseCustomerFields.notes,
+  isDGSalesCustomer: baseCustomerFields.isDGSalesCustomer
 });
 
 // Contact history schema
@@ -140,13 +188,20 @@ export const customerQuerySchema = Joi.object<CustomerQueryInput>({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   sort: Joi.string().default('-createdAt'),
+  isDGSalesCustomer: Joi.boolean(),
   search: Joi.string().allow(''),
   customerType: Joi.string().valid(...Object.values(CustomerType)),
   status: Joi.string().valid(...Object.values(LeadStatus)),
   assignedTo: Joi.string().hex().length(24),
   leadSource: Joi.string(),
   dateFrom: Joi.date().iso(),
-  dateTo: Joi.date().iso().greater(Joi.ref('dateFrom'))
+  dateTo: Joi.date().iso().greater(Joi.ref('dateFrom')),
+  type: Joi.string(),
+  newLeadStatus: Joi.string().valid('true', 'false'),
+  qualifiedStatus: Joi.string().valid('true', 'false'),
+  convertedStatus: Joi.string().valid('true', 'false'),
+  lostStatus: Joi.string().valid('true', 'false'),
+  contactedStatus: Joi.string().valid('true', 'false'),
 });
 
 // Convert lead to customer schema
@@ -167,12 +222,16 @@ export const scheduleFollowUpSchema = Joi.object<ScheduleFollowUpInput>({
 // Customer import schema (CSV/Excel)
 export const customerImportSchema = Joi.object<CustomerImportInput>({
   name: baseCustomerFields.name.required(),
-  email: baseCustomerFields.email,
-  phone: baseCustomerFields.phone.required(),
-  address: baseCustomerFields.address.required(),
-  customerType: baseCustomerFields.customerType.required(),
+  designation: baseCustomerFields.designation,
+  contactPersonName: baseCustomerFields.contactPersonName,
+  gstNumber: baseCustomerFields.gstNumber,
+  // email: baseCustomerFields.email,
+  phone: baseCustomerFields.phone,
+  addresses: baseCustomerFields.addresses,
+  customerType: baseCustomerFields.customerType,
+  type: baseCustomerFields.type,
   leadSource: baseCustomerFields.leadSource,
-  status: baseCustomerFields.status.default(LeadStatus.NEW),
+  status: baseCustomerFields.status,
   notes: baseCustomerFields.notes
 });
 

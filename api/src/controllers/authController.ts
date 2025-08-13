@@ -2,6 +2,10 @@ import { Response, NextFunction } from 'express';
 import { User } from '../models/User';
 import { AuthenticatedRequest, APIResponse, UserRole } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import jwt from 'jsonwebtoken';
+import { Request } from 'express';// TODO: Implement email service
+import { log } from 'console';
+import { sendEmail } from '../utils/email';
 
 // @desc    Register user
 // @route   POST /api/v1/auth/register
@@ -71,11 +75,15 @@ export const login = async (
       return next(new AppError('Please provide email and password', 400));
     }
 
+    console.log("email:",email,password);
     // Check for user
     const user = await User.findOne({ email }).select('+password');
+    console.log("user12:",user);
     if (!user) {
       return next(new AppError('Invalid credentials', 401));
     }
+
+    
 
     // Check if user is active
     if (user.status !== 'active') {
@@ -273,5 +281,69 @@ export const logout = async (
     res.status(200).json(response);
   } catch (error) {
     next(error);
+  }
+};
+
+
+export const forgotPassword = async (req: Request, res: Response): Promise<void> => {
+  const { email } = req.body;
+  const user = await User.findOne({ email });
+  if (!user) {
+    res.status(404).json({ success: false, message: "User not found" });
+    return;
+  }
+  const token = user.generateJWT();
+  const frontendBaseUrl = process.env.FRONTEND_BASE_URL || 'http://localhost:3000';
+  const resetLink = `${frontendBaseUrl}/reset-password?token=${token}`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Password Reset - Sun Power Services</title>
+    </head>
+    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #0a0e1a;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; margin: 40px auto; background-color: #1c2526; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.3);">
+        <tr>
+          <td style="padding: 40px 30px; text-align: center;">
+            <h1 style="font-size: 24px; color: #ffffff; margin: 0 0 20px;">Sun Power Services</h1>
+            <p style="font-size: 16px; color: #ffffff; margin: 0 0 10px;">Hello ${user.firstName},</p>
+            <p style="font-size: 16px; color: #b0b8c4; line-height: 1.5; margin: 0 0 30px;">You requested a password reset. Click the button below to proceed:</p>
+            <a href="${resetLink}" style="display: inline-block; padding: 12px 24px; background-color: #1e90ff; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: bold; border-radius: 25px; transition: background-color 0.3s ease;">Reset Your Password</a>
+            <p style="font-size: 14px; color: #b0b8c4; line-height: 1.5; margin: 30px 0 0;">If you did not request this, please ignore this email or contact our support team at <a href="mailto:support@sunpowerservices.com" style="color: #1e90ff; text-decoration: none;">support@sunpowerservices.com</a>.</p>
+            <p style="font-size: 14px; color: #6c757d; margin: 20px 0 0;">© 2025 Sun Power Services. All rights reserved.</p>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+  `;
+
+  try {
+    await sendEmail(user.email, 'Click to Reset Password', html);
+    res.status(200).json({ success: true, message: "Reset link sent to your email" });
+  } catch (error: any) {
+    res.status(500).json({ message: "Failed to send email", error: error.message, details: error });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response): Promise<void> => {
+  const { token, newPassword } = req.body;
+  try {
+   
+    const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string };
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      res.status(404).json({ success: false, message: "User not found" });
+      return;
+    }
+
+    user.password = newPassword; 
+    await user.save();
+    res.json({ success: true, message: "Password updated successfully" });
+  } catch (err: any) {
+    res.status(400).json({ success: false, message: "Invalid or expired token" });
   }
 }; 
