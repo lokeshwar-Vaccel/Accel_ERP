@@ -1,18 +1,68 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { apiClient } from '../../utils/api';
+
+// Simple API client to avoid circular imports
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+
+const makeNotificationRequest = async (endpoint: string, options: RequestInit = {}) => {
+  const token = localStorage.getItem('authToken');
+  
+  const headers: HeadersInit = {
+    ...(token && { Authorization: `Bearer ${token}` }),
+    'Content-Type': 'application/json',
+    ...(options.headers as Record<string, string>),
+  };
+
+  const config: RequestInit = {
+    headers,
+    ...options,
+  };
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, config);
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'API request failed');
+  }
+
+  return response.json();
+};
+
+const makeNotificationGetRequest = async (endpoint: string, params: Record<string, any> = {}) => {
+  const token = localStorage.getItem('authToken');
+  
+  const queryString = new URLSearchParams(params).toString();
+  const url = `${API_BASE_URL}${endpoint}${queryString ? `?${queryString}` : ''}`;
+  
+  const headers: HeadersInit = {
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+
+  const response = await fetch(url, { headers });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'API request failed');
+  }
+
+  return response.json();
+};
 
 // Types
 export interface Notification {
   _id: string;
-  recipientId: string;
-  type: 'assignment' | 'status_change' | 'contact_update' | 'follow_up' | 'payment_received' | 'invoice_created';
-  content: string;
-  entityId: string;
-  entityType: 'customer' | 'invoice' | 'contact' | 'payment';
-  createdAt: string;
+  userId: string;
+  type: 'assignment' | 'status_change' | 'contact_history' | 'follow_up' | 'general' | 'low_stock' | 'out_of_stock' | 'over_stock' | 'payment_due' | 'amc_expiry' | 'service_reminder' | 'system_alert';
+  title: string;
+  message: string;
   isRead: boolean;
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  category: 'inventory' | 'customer' | 'service' | 'payment' | 'system' | 'general';
+  customerId?: any;
+  productId?: any;
   metadata?: Record<string, any>;
-  priority: 'low' | 'medium' | 'high';
+  actionUrl?: string;
+  createdBy?: any;
+  createdAt: string;
   expiresAt?: string;
 }
 
@@ -56,7 +106,7 @@ export const fetchNotifications = createAsyncThunk(
       if (limit) params.limit = limit.toString();
       if (isRead !== undefined) params.isRead = isRead.toString();
 
-      const response = await apiClient.notifications.getAll(params);
+      const response = await makeNotificationGetRequest('/notifications', params);
       return response;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to fetch notifications');
@@ -69,7 +119,7 @@ export const fetchUnreadCount = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       // Since getUnreadCount does not exist, use getAll with limit=1 to get unreadCount from response
-      const response = await apiClient.notifications.getAll({ limit: '100' });
+      const response = await makeNotificationGetRequest('/notifications', { limit: '100' });
       return response;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to fetch unread count');
@@ -81,7 +131,7 @@ export const markNotificationRead = createAsyncThunk(
   'notifications/markNotificationRead',
   async (notificationId: string, { rejectWithValue }) => {
     try {
-      const response = await apiClient.notifications.markAsRead(notificationId);
+      const response = await makeNotificationRequest(`/notifications/${notificationId}/read`, { method: 'PUT' });
       return response;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to mark notification as read');
@@ -93,7 +143,7 @@ export const markAllNotificationsRead = createAsyncThunk(
   'notifications/markAllNotificationsRead',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await apiClient.notifications.markAllAsRead();
+      const response = await makeNotificationRequest('/notifications/read-all', { method: 'PUT' });
       return response;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to mark all notifications as read');
@@ -105,7 +155,7 @@ export const deleteNotification = createAsyncThunk(
   'notifications/deleteNotification',
   async (notificationId: string, { rejectWithValue }) => {
     try {
-      await apiClient.notifications.delete(notificationId);
+      const response = await makeNotificationRequest(`/notifications/${notificationId}`, { method: 'DELETE' });
       return notificationId;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Failed to delete notification');
@@ -137,10 +187,15 @@ const notificationSlice = createSlice({
     },
     // Real-time notification actions
     addNotification: (state, action: PayloadAction<Notification>) => {
+      console.log('🔔 Redux: addNotification called with:', action.payload);
+      console.log('🔔 Redux: Before - items:', state.items.length, 'unread:', state.unreadCount);
+      
       state.items.unshift(action.payload);
       if (!action.payload.isRead) {
         state.unreadCount += 1;
       }
+      
+      console.log('🔔 Redux: After - items:', state.items.length, 'unread:', state.unreadCount);
     },
     updateNotification: (state, action: PayloadAction<{ id: string; updates: Partial<Notification> }>) => {
       const index = state.items.findIndex(n => n._id === action.payload.id);
@@ -185,14 +240,22 @@ const notificationSlice = createSlice({
         state.loading = false;
         const { notifications, pagination, unreadCount } = action.payload.data;
         
+        // Store current real-time notifications before overwriting
+        const currentRealTimeNotifications = state.items.filter(item => 
+          !notifications.some((fetched: any) => fetched._id === item._id)
+        );
+        
         if (pagination.page === 1) {
-          state.items = notifications;
+          // Merge real-time notifications with fetched ones
+          state.items = [...currentRealTimeNotifications, ...notifications];
         } else {
           state.items.push(...notifications);
         }
         
         state.pagination = pagination;
-        state.unreadCount = unreadCount;
+        // Calculate unread count from all notifications (real-time + fetched)
+        const totalUnreadCount = state.items.filter(n => !n.isRead).length;
+        state.unreadCount = Math.max(totalUnreadCount, unreadCount);
         state.hasMore = pagination.page < pagination.pages;
       })
       .addCase(fetchNotifications.rejected, (state, action) => {

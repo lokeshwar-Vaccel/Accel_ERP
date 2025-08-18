@@ -617,6 +617,67 @@ export const importInventory = async (
             lastUpdated: new Date()
           });
 
+          // 🔔 AUTOMATIC NOTIFICATION TRIGGER
+          // Check if stock change requires notification and send real-time alert
+          try {
+            const { Product } = await import('../models/Product');
+            const { notificationService } = await import('../services/notificationService');
+            
+            const product = await Product.findById(stock.product);
+            if (product) {
+              const currentStock = newAvailable;
+              const minStockLevel = product.minStockLevel || 0;
+              const maxStockLevel = product.maxStockLevel || 0;
+
+              // Determine notification type based on new stock level
+              let notificationType: 'low_stock' | 'out_of_stock' | 'over_stock' | null = null;
+              let threshold = 0;
+
+              if (currentStock === 0 && minStockLevel > 0) {
+                notificationType = 'out_of_stock';
+                threshold = minStockLevel;
+              } else if (currentStock > 0 && currentStock <= minStockLevel && minStockLevel > 0) {
+                notificationType = 'low_stock';
+                threshold = minStockLevel;
+              } else if (maxStockLevel > 0 && currentStock > maxStockLevel) {
+                notificationType = 'over_stock';
+                threshold = maxStockLevel;
+              }
+
+              // If notification is needed, send it via WebSocket
+              if (notificationType) {
+                console.log(`🔔 Inventory import triggered ${notificationType} notification for product: ${product.name}`);
+                
+                // Get location details
+                const { StockLocation } = await import('../models/Stock');
+                const { Room } = await import('../models/Stock');
+                const { Rack } = await import('../models/Stock');
+                
+                const location = await StockLocation.findById(stock.location);
+                const room = roomId ? await Room.findById(roomId) : null;
+                const rack = rackId ? await Rack.findById(rackId) : null;
+
+                // Create real-time notification
+                await notificationService.createInventoryNotification(
+                  notificationType,
+                  stock.product.toString(),
+                  product.name,
+                  product.partNo || 'N/A',
+                  currentStock,
+                  threshold,
+                  location?.name || 'Unknown',
+                  room?.name,
+                  rack?.name
+                );
+
+                console.log(`✅ Real-time ${notificationType} notification sent for ${product.name}`);
+              }
+            }
+          } catch (error) {
+            // Don't let notification errors break the import operation
+            console.error('❌ Error in automatic import stock notification:', error);
+          }
+
           result.updatedStocks.push({
             ...stock.toObject(),
             quantity: newQuantity,

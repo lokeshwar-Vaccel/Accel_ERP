@@ -556,6 +556,61 @@ export const receiveItems = async (
         
         const res = await stock.save();
         
+        // 🔔 AUTOMATIC NOTIFICATION TRIGGER
+        // Check if stock increase requires notification and send real-time alert
+        try {
+          const { Product } = await import('../models/Product');
+          const { notificationService } = await import('../services/notificationService');
+          
+          const product = await Product.findById(actualProductId);
+          if (product) {
+            const currentStock = stock.availableQuantity;
+            const minStockLevel = product.minStockLevel || 0;
+            const maxStockLevel = product.maxStockLevel || 0;
+
+            // Check if we're now overstocked
+            let notificationType: 'over_stock' | null = null;
+            let threshold = 0;
+
+            if (maxStockLevel > 0 && currentStock > maxStockLevel) {
+              notificationType = 'over_stock';
+              threshold = maxStockLevel;
+            }
+
+            // If notification is needed, send it via WebSocket
+            if (notificationType) {
+              console.log(`🔔 Purchase order receipt triggered ${notificationType} notification for product: ${product.name}`);
+              
+              // Get location details
+              const { StockLocation } = await import('../models/Stock');
+              const { Room } = await import('../models/Stock');
+              const { Rack } = await import('../models/Stock');
+              
+              const stockLocation = await StockLocation.findById(location);
+              const room = stock.room ? await Room.findById(stock.room) : null;
+              const rack = stock.rack ? await Rack.findById(stock.rack) : null;
+
+              // Create real-time notification
+                await notificationService.createInventoryNotification(
+                  notificationType,
+                  actualProductId.toString(),
+                  product.name,
+                  product.partNo || 'N/A',
+                  currentStock,
+                  threshold,
+                  stockLocation?.name || 'Unknown',
+                  room?.name,
+                  rack?.name
+                );
+
+              console.log(`✅ Real-time ${notificationType} notification sent for ${product.name}`);
+            }
+          }
+        } catch (error) {
+          // Don't let notification errors break the purchase order operation
+          console.error('❌ Error in automatic purchase order stock notification:', error);
+        }
+        
       } else {
        const ress = stock = await Stock.create({
           product: actualProductId,

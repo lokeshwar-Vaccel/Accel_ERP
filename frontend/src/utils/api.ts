@@ -1,4 +1,5 @@
-import { forgotPassword } from "redux/auth/authSlice";
+// Remove circular import
+// import { forgotPassword } from "redux/auth/authSlice";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
@@ -1038,31 +1039,45 @@ class ApiClient {
 
   // Notifications APIs
   notifications = {
-    getAll: (params?: any) =>
-      this.makeRequest<{ success: boolean; data: { notifications: any[]; pagination: any; unreadCount: number } }>(`/notifications${params ? `?${new URLSearchParams(params)}` : ''}`),
+    getAll: (params?: any) => {
+      const queryString = params ? `?${new URLSearchParams(params)}` : '';
+      return this.makeRequest<{ success: boolean; data: { notifications: any[]; pagination: any; unreadCount: number } }>(`/notifications${queryString}`);
+    },
 
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/notifications/stats'),
 
     markAsRead: (id: string) =>
-      this.makeRequest<{ success: boolean; data: any }>(`/notifications/${id}/read`, {
+      this.makeRequest<{ success: boolean; data: { notification: any } }>(`/notifications/${id}/read`, {
         method: 'PATCH',
       }),
 
     markAllAsRead: () =>
-      this.makeRequest<{ success: boolean; data: any }>('/notifications/read-all', {
+      this.makeRequest<{ success: boolean; data: { updatedCount: number } }>('/notifications/read-all', {
         method: 'PATCH',
       }),
 
     delete: (id: string) =>
-      this.makeRequest<{ success: boolean; data: any }>(`/notifications/${id}`, {
+      this.makeRequest<{ success: boolean; data: { deleted: boolean } }>(`/notifications/${id}`, {
         method: 'DELETE',
       }),
 
-    create: (notificationData: any) =>
-      this.makeRequest<{ success: boolean; data: any }>('/notifications/create', {
+    create: (data: any) =>
+      this.makeRequest<{ success: boolean; data: { notification: any } }>('/notifications/create', {
         method: 'POST',
-        body: JSON.stringify(notificationData),
+        body: JSON.stringify(data),
+      }),
+
+    // Low stock notification methods
+    getLowStockSummary: () =>
+      this.makeRequest<{ success: boolean; data: { summary: any } }>('/notifications/low-stock-summary'),
+
+    getLowStockItems: () =>
+      this.makeRequest<{ success: boolean; data: { lowStockItems: any[]; outOfStockItems: any[]; totalLowStock: number; totalOutOfStock: number } }>('/notifications/low-stock-items'),
+
+    triggerLowStockNotifications: () =>
+      this.makeRequest<{ success: boolean; data: { notificationsCreated: number } }>('/notifications/trigger-low-stock', {
+        method: 'POST',
       }),
   };
 

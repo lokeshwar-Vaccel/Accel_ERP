@@ -4,14 +4,17 @@ import mongoose, { Schema, Document } from 'mongoose';
 export interface INotification extends Document {
   userId: mongoose.Types.ObjectId;
   customerId?: mongoose.Types.ObjectId;
-  type: 'assignment' | 'status_change' | 'contact_history' | 'follow_up' | 'general';
+  productId?: mongoose.Types.ObjectId;
+  type: 'assignment' | 'status_change' | 'contact_history' | 'follow_up' | 'general' | 'low_stock' | 'out_of_stock' | 'over_stock' | 'payment_due' | 'amc_expiry' | 'service_reminder' | 'system_alert';
   title: string;
   message: string;
   isRead: boolean;
-  priority: 'low' | 'medium' | 'high';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  category: 'inventory' | 'customer' | 'service' | 'payment' | 'system' | 'general';
   metadata?: Record<string, any>;
   expiresAt?: Date;
   createdBy?: mongoose.Types.ObjectId;
+  actionUrl?: string; // URL to navigate when notification is clicked
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,10 +32,15 @@ const notificationSchema = new Schema<INotification>({
     ref: 'Customer',
     index: true
   },
+  productId: {
+    type: Schema.Types.ObjectId,
+    ref: 'Product',
+    index: true
+  },
   type: {
     type: String,
     required: true,
-    enum: ['assignment', 'status_change', 'contact_history', 'follow_up', 'general'],
+    enum: ['assignment', 'status_change', 'contact_history', 'follow_up', 'general', 'low_stock', 'out_of_stock', 'over_stock', 'payment_due', 'amc_expiry', 'service_reminder', 'system_alert'],
     index: true
   },
   title: {
@@ -52,8 +60,14 @@ const notificationSchema = new Schema<INotification>({
   },
   priority: {
     type: String,
-    enum: ['low', 'medium', 'high'],
+    enum: ['low', 'medium', 'high', 'urgent'],
     default: 'medium',
+    index: true
+  },
+  category: {
+    type: String,
+    enum: ['inventory', 'customer', 'service', 'payment', 'system', 'general'],
+    default: 'general',
     index: true
   },
   metadata: {
@@ -67,6 +81,10 @@ const notificationSchema = new Schema<INotification>({
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User'
+  },
+  actionUrl: {
+    type: String,
+    trim: true
   }
 }, {
   timestamps: true
@@ -75,8 +93,11 @@ const notificationSchema = new Schema<INotification>({
 // Indexes for better query performance
 notificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
 notificationSchema.index({ userId: 1, type: 1, createdAt: -1 });
+notificationSchema.index({ userId: 1, category: 1, createdAt: -1 });
 notificationSchema.index({ customerId: 1, createdAt: -1 });
+notificationSchema.index({ productId: 1, createdAt: -1 });
 notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL index for expired notifications
+notificationSchema.index({ priority: 1, createdAt: -1 }); // For priority-based queries
 
 // Pre-save middleware to set default expiration (30 days)
 notificationSchema.pre('save', function(next) {
@@ -85,5 +106,28 @@ notificationSchema.pre('save', function(next) {
   }
   next();
 });
+
+// Static method to get unread count for a user
+notificationSchema.statics.getUnreadCount = async function(userId: mongoose.Types.ObjectId): Promise<number> {
+  return this.countDocuments({ userId, isRead: false });
+};
+
+// Static method to get notifications by category
+notificationSchema.statics.getByCategory = async function(userId: mongoose.Types.ObjectId, category: string, limit: number = 10) {
+  return this.find({ userId, category })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .populate('customerId', 'name email phone')
+    .populate('productId', 'name partNo')
+    .populate('createdBy', 'firstName lastName');
+};
+
+// Static method to get urgent notifications
+notificationSchema.statics.getUrgentNotifications = async function(userId: mongoose.Types.ObjectId) {
+  return this.find({ userId, priority: 'urgent', isRead: false })
+    .sort({ createdAt: -1 })
+    .populate('customerId', 'name email phone')
+    .populate('productId', 'name partNo');
+};
 
 export const Notification = mongoose.model<INotification>('Notification', notificationSchema);
