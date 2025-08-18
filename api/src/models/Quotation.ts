@@ -5,13 +5,7 @@ export interface IQuotation extends Document {
   invoiceId?: string | Types.ObjectId;
   issueDate: Date;
   validUntil: Date;
-  customer: {
-    _id?: string; // Customer ID for reference
-    name: string;
-    email?: string;
-    phone?: string;
-    pan?: string;
-  };
+  customer: string | Types.ObjectId; // Reference to Customer model
   company: {
     name?: string;
     logo?: string;
@@ -26,13 +20,13 @@ export interface IQuotation extends Document {
       branch?: string;
     };
   };
-  location?: string | Types.ObjectId; // Added location field as reference
+  location?: string | Types.ObjectId;
   items: Array<{
     product: string;
     description: string;
     hsnCode?: string;
-    hsnNumber?: string; // Added hsnNumber field
-    partNo?: string; // Added partNo field
+    hsnNumber?: string;
+    partNo?: string;
     quantity: number;
     uom: string;
     unitPrice: number;
@@ -44,7 +38,8 @@ export interface IQuotation extends Document {
   }>;
   subtotal: number;
   totalDiscount: number;
-  overallDiscount?: number; // Add overall discount field
+  overallDiscount?: number;
+  overallDiscountAmount?: number; // Calculated overall discount amount
   totalTax: number;
   grandTotal: number;
   roundOff: number;
@@ -65,16 +60,34 @@ export interface IQuotation extends Document {
     pincode: string;
     addressId?: number;
   };
-  dgEnquiry?: string; // Add reference to DGEnquiry
-  assignedEngineer?: string | Types.ObjectId; // Add reference to assigned engineer (Field Operator)
-  // Advance payment fields
-  advanceAmount?: number;
-  remainingAmount?: number;
-  advancePaymentStatus?: 'pending' | 'partial' | 'paid';
-  advancePaymentDate?: Date;
-  advancePaymentMethod?: string;
-  advancePaymentNotes?: string;
+  dgEnquiry?: string;
+  assignedEngineer?: string | Types.ObjectId;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentMethod?: string;
+  paymentDate?: Date;
   status?: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
+}
+
+// Interface for populated quotations (used in controllers)
+export interface IPopulatedQuotation extends Omit<IQuotation, 'customer'> {
+  customer: {
+    _id: string;
+    name: string;
+    email?: string;
+    phone?: string;
+    pan?: string;
+    addresses?: Array<{
+      id: number;
+      address: string;
+      state: string;
+      district: string;
+      pincode: string;
+      isPrimary: boolean;
+      gstNumber?: string;
+    }>;
+  };
 }
 
 const QuotationSchema = new Schema<IQuotation>({
@@ -82,13 +95,7 @@ const QuotationSchema = new Schema<IQuotation>({
   invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
   issueDate: { type: Date, },
   validUntil: { type: Date, },
-  customer: {
-    _id: { type: String }, // Customer ID for reference
-    name: { type: String, required: true },
-    email: { type: String },
-    phone: { type: String },
-    pan: { type: String }
-  },
+  customer: { type: Schema.Types.ObjectId, ref: 'Customer', required: true },
 
   company: {
     name: { type: String, },
@@ -125,6 +132,7 @@ const QuotationSchema = new Schema<IQuotation>({
   subtotal: { type: Number, },
   totalDiscount: { type: Number, },
   overallDiscount: { type: Number, required: false },
+  overallDiscountAmount: { type: Number, required: false }, // Calculated overall discount amount
   totalTax: { type: Number, },
   grandTotal: { type: Number, },
   roundOff: { type: Number, },
@@ -147,22 +155,37 @@ const QuotationSchema = new Schema<IQuotation>({
   },
   dgEnquiry: { type: Schema.Types.ObjectId, ref: 'DGEnquiry', required: false },
   assignedEngineer: { type: Schema.Types.ObjectId, ref: 'User', required: false },
-  // Advance payment fields
-  advanceAmount: { type: Number, default: 0 },
-  remainingAmount: { type: Number, default: 0 },
-  advancePaymentStatus: { 
+  // Payment fields - same structure as Invoice model
+  paidAmount: { type: Number, default: 0, min: 0 },
+  remainingAmount: { type: Number, default: 0, min: 0 },
+  paymentStatus: { 
     type: String, 
-    enum: ['pending', 'partial', 'paid'], 
+    enum: ['pending', 'partial', 'paid', 'failed'], 
     default: 'pending' 
   },
-  advancePaymentDate: { type: Date },
-  advancePaymentMethod: { type: String },
-  advancePaymentNotes: { type: String },
+  paymentMethod: { 
+    type: String,
+    enum: ['cash', 'cheque', 'bank_transfer', 'upi', 'card', 'razorpay', 'other']
+  },
+  paymentDate: { type: Date },
   status: { 
     type: String, 
     enum: ['draft', 'sent', 'accepted', 'rejected', 'expired'], 
     default: 'draft' 
   },
+});
+
+// Pre-save middleware to calculate overallDiscountAmount
+QuotationSchema.pre('save', function(next) {
+  // Calculate overallDiscountAmount if overallDiscount is set
+  if (this.overallDiscount && this.overallDiscount > 0) {
+    // Calculate grand total before overall discount
+    const grandTotalBeforeOverallDiscount = this.subtotal + this.totalTax - this.totalDiscount;
+    this.overallDiscountAmount = Math.round((this.overallDiscount / 100) * grandTotalBeforeOverallDiscount * 100) / 100;
+  } else {
+    this.overallDiscountAmount = 0;
+  }
+  next();
 });
 
 export const Quotation = mongoose.model<IQuotation>('Quotation', QuotationSchema); 

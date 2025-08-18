@@ -35,19 +35,9 @@ export class QuotationService {
   static validateQuotationData(data: Partial<IQuotation>): ValidationResult {
     const errors: ValidationError[] = [];
 
-    // Customer validation
+    // Customer validation - now customer is a reference ID
     if (!data.customer) {
-      errors.push({ field: 'customer', message: 'Customer information is required' });
-    } else {
-      if (!data.customer.name?.trim()) {
-        errors.push({ field: 'customer.name', message: 'Customer name is required' });
-      }
-      if (data.customer.email && !this.isValidEmail(data.customer.email)) {
-        errors.push({ field: 'customer.email', message: 'Invalid email format' });
-      }
-      if (data.customer.phone && !this.isValidPhone(data.customer.phone)) {
-        errors.push({ field: 'customer.phone', message: 'Invalid phone number format' });
-      }
+      errors.push({ field: 'customer', message: 'Customer ID is required' });
     }
 
     // Bill to address validation
@@ -199,13 +189,7 @@ export class QuotationService {
   static sanitizeQuotationData(data: any): Partial<IQuotation> {
     return {
       ...data,
-      customer: data.customer ? {
-        name: String(data.customer.name || '').trim(),
-        email: String(data.customer.email || '').trim(),
-        phone: String(data.customer.phone || '').trim(),
-        address: String(data.customer.address || '').trim(),
-        pan: String(data.customer.pan || '').trim()
-      } : undefined,
+      customer: data.customer || undefined, // Customer is now a reference ID
       company: data?.company ? {
         name: String(data.company?.name || '').trim(),
         address: String(data.company?.address || '').trim(),
@@ -323,12 +307,7 @@ export class QuotationService {
       invoiceId: invoice._id.toString(),
       issueDate,
       validUntil,
-      customer: {
-        name: customerObj.name || '',
-        email: customerObj.email || '',
-        phone: customerObj.phone || '',
-        pan: customerObj.pan || ''
-      },
+      customer: customerObj._id || customerObj.id || customerObj,
       billToAddress: invoice.customerAddress ? {
         address: invoice.customerAddress.address || '',
         state: invoice.customerAddress.state || '',

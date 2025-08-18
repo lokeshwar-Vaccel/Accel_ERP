@@ -3,10 +3,11 @@ import { AuthenticatedRequest, APIResponse } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { QuotationService } from '../services/quotationService';
 import { Invoice } from '../models/Invoice';
-import { Quotation } from '../models/Quotation';
+import { Quotation, IPopulatedQuotation } from '../models/Quotation';
 import { generateReferenceId } from '../utils/generateReferenceId';
 import { Customer } from '../models/Customer';
 import { DGEnquiry } from '../models/DGEnquiry';
+import { sendQuotationEmail as sendQuotationEmailViaNodemailer } from '../utils/nodemailer';
 
 // Helper function to create quotation data from image
 const createQuotationFromImageData = () => {
@@ -354,15 +355,15 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
       subtotal: calculationResult.subtotal,
       totalDiscount: calculationResult.totalDiscount,
       overallDiscount: sanitizedData.overallDiscount || 0,
-      overallDiscountAmount: calculationResult.overallDiscount,
+      overallDiscountAmount: calculationResult.overallDiscountAmount,
       totalTax: calculationResult.totalTax,
       grandTotal: calculationResult.grandTotal,
       roundOff: calculationResult.roundOff,
       items: calculationResult.items,
-      // Set default advance payment values
-      advanceAmount: sanitizedData.advanceAmount || 0,
-      remainingAmount: calculationResult.grandTotal - (sanitizedData.advanceAmount || 0),
-      advancePaymentStatus: sanitizedData.advanceAmount && sanitizedData.advanceAmount > 0 ? 'partial' : 'pending',
+      // Set default payment values
+      paidAmount: sanitizedData.paidAmount || 0,
+      remainingAmount: calculationResult.grandTotal - (sanitizedData.paidAmount || 0),
+      paymentStatus: sanitizedData.paidAmount && sanitizedData.paidAmount > 0 ? 'partial' : 'pending',
       status: sanitizedData.status || 'draft'
     };
 
@@ -668,7 +669,8 @@ const calculateQuotationTotals = (items: any[], overallDiscount: number = 0): an
   return {
     subtotal: roundTo2Decimals(subtotal),
     totalDiscount: roundTo2Decimals(totalDiscount),
-    overallDiscount: roundTo2Decimals(overallDiscountAmount),
+    overallDiscount: roundTo2Decimals(overallDiscount),
+    overallDiscountAmount: roundTo2Decimals(overallDiscountAmount),
     totalTax: roundTo2Decimals(totalTax),
     grandTotal: roundTo2Decimals(grandTotal),
     roundOff,
@@ -731,7 +733,7 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
       sanitizedData.subtotal = calculationResult.subtotal;
       sanitizedData.totalDiscount = calculationResult.totalDiscount;
       sanitizedData.overallDiscount = sanitizedData.overallDiscount || 0;
-      sanitizedData.overallDiscountAmount = calculationResult.overallDiscount;
+      sanitizedData.overallDiscountAmount = calculationResult.overallDiscountAmount;
       sanitizedData.totalTax = calculationResult.totalTax;
       sanitizedData.grandTotal = calculationResult.grandTotal;
       sanitizedData.roundOff = calculationResult.roundOff;
@@ -739,20 +741,20 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
     }
 
     // Handle advance payment calculations if advance amount is provided
-    if (sanitizedData.advanceAmount !== undefined) {
+    if (sanitizedData.paidAmount !== undefined) {
       const totalAmount = sanitizedData.grandTotal || existingQuotation.grandTotal || 0;
-      const advanceAmount = sanitizedData.advanceAmount || 0;
+      const advanceAmount = sanitizedData.paidAmount || 0;
       
       // Calculate remaining amount
       sanitizedData.remainingAmount = Math.max(0, totalAmount - advanceAmount);
       
       // Determine advance payment status
       if (advanceAmount === 0) {
-        sanitizedData.advancePaymentStatus = 'pending';
+        sanitizedData.paymentStatus = 'pending';
       } else if (advanceAmount >= totalAmount) {
-        sanitizedData.advancePaymentStatus = 'paid';
+        sanitizedData.paymentStatus = 'paid';
       } else {
-        sanitizedData.advancePaymentStatus = 'partial';
+        sanitizedData.paymentStatus = 'partial';
       }
       
       // Update status to 'sent' if it was 'draft' and advance payment is made
@@ -809,22 +811,22 @@ export const deleteQuotation = async (req: Request, res: Response, next: NextFun
   }
 };
 
-// @desc    Update quotation advance payment
-// @route   PUT /api/quotations/:id/advance-payment
+// @desc    Update quotation payment
+// @route   PUT /api/quotations/:id/payment
 // @access  Private
-export const updateQuotationAdvancePayment = async (req: Request, res: Response, next: NextFunction) => {
+export const updateQuotationPayment = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { id } = req.params;
     const { 
-      advanceAmount, 
-      advancePaymentMethod, 
-      advancePaymentDate, 
-      advancePaymentNotes 
+      paidAmount, 
+      paymentMethod, 
+      paymentDate, 
+      notes 
     } = req.body;
 
     // Validate required fields
-    if (advanceAmount === undefined || advanceAmount < 0) {
-      return next(new AppError('Valid advance amount is required', 400));
+    if (paidAmount === undefined || paidAmount < 0) {
+      return next(new AppError('Valid payment amount is required', 400));
     }
 
     // Find the quotation
@@ -833,47 +835,242 @@ export const updateQuotationAdvancePayment = async (req: Request, res: Response,
       return next(new AppError('Quotation not found', 404));
     }
 
+    // Calculate new total paid amount (existing + new payment)
+    const existingPaidAmount = quotation.paidAmount || 0;
+    const newTotalPaidAmount = existingPaidAmount + paidAmount;
+    
     // Calculate remaining amount
     const totalAmount = quotation.grandTotal || 0;
-    const newRemainingAmount = Math.max(0, totalAmount - advanceAmount);
+    const newRemainingAmount = Math.max(0, totalAmount - newTotalPaidAmount);
 
-    // Determine advance payment status
-    let newAdvancePaymentStatus: 'pending' | 'partial' | 'paid';
-    if (advanceAmount === 0) {
-      newAdvancePaymentStatus = 'pending';
-    } else if (advanceAmount >= totalAmount) {
-      newAdvancePaymentStatus = 'paid';
+    // Determine payment status
+    let newPaymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+    if (newTotalPaidAmount === 0) {
+      newPaymentStatus = 'pending';
+    } else if (newTotalPaidAmount >= totalAmount) {
+      newPaymentStatus = 'paid';
     } else {
-      newAdvancePaymentStatus = 'partial';
+      newPaymentStatus = 'partial';
     }
 
-    // Update the quotation with advance payment information
+    // Update the quotation
     const updatedQuotation = await Quotation.findByIdAndUpdate(
       id,
       {
-        advanceAmount,
+        paidAmount: newTotalPaidAmount,
         remainingAmount: newRemainingAmount,
-        advancePaymentStatus: newAdvancePaymentStatus,
-        advancePaymentDate: advancePaymentDate ? new Date(advancePaymentDate) : undefined,
-        advancePaymentMethod,
-        advancePaymentNotes,
-        // Update status to 'sent' if it was 'draft' and advance payment is made
-        ...(quotation.status === 'draft' && advanceAmount > 0 && { status: 'sent' })
+        paymentStatus: newPaymentStatus,
+        paymentDate: paymentDate ? new Date(paymentDate) : undefined,
+        paymentMethod,
+        notes,
+        ...(quotation.status === 'draft' && newTotalPaidAmount > 0 && { status: 'sent' })
       },
       { new: true, runValidators: true }
     );
 
     res.status(200).json({
       success: true,
-      message: 'Advance payment updated successfully',
+      message: 'Payment updated successfully',
       data: {
         quotation: updatedQuotation,
-        advanceAmount,
+        newPaymentAmount: paidAmount,
+        totalPaidAmount: newTotalPaidAmount,
         remainingAmount: newRemainingAmount,
-        advancePaymentStatus: newAdvancePaymentStatus
+        paymentStatus: newPaymentStatus
       }
     });
   } catch (error) {
     next(error);
+  }
+};
+
+// @desc    Send quotation email to customer
+// @route   POST /api/v1/quotations/:id/send-email
+// @access  Private
+export const sendQuotationEmailToCustomer = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+
+    // Find the quotation with populated customer and company data
+    const quotation = await Quotation.findById(id)
+      .populate('customer', 'name email phone pan addresses')
+      .populate('company', 'name email phone address')
+      .lean() as any; // Type assertion to avoid TypeScript complexity
+
+    if (!quotation) {
+      return next(new AppError('Quotation not found', 404));
+    }
+
+    // Check if quotation has customer email
+    if (!quotation.customer?.email) {
+      return next(new AppError('Customer email not found for this quotation', 400));
+    }
+
+    // Allow sending draft quotations - this will update their status to 'sent'
+
+    // Generate email subject and content
+    const subject = `Quotation ${quotation.quotationNumber} - ${quotation.company?.name || 'Sun Power Services'}`;
+    
+    console.log('Generating email content for quotation:', {
+      quotationNumber: quotation.quotationNumber,
+      customerEmail: quotation.customer.email,
+      customerName: quotation.customer.name,
+      companyName: quotation.company?.name,
+      subject: subject
+    });
+    
+    // Create HTML email content
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Quotation ${quotation.quotationNumber}</title>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+            .header { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+            .company-info { background: #e9ecef; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+            .customer-info { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+            .quotation-details { background: #fff; padding: 20px; border: 1px solid #dee2e6; border-radius: 5px; margin-bottom: 20px; }
+            .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+            .items-table th, .items-table td { border: 1px solid #dee2e6; padding: 10px; text-align: left; }
+            .items-table th { background: #f8f9fa; }
+            .totals { background: #f8f9fa; padding: 15px; border-radius: 5px; }
+            .footer { text-align: center; margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 5px; }
+            .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Quotation ${quotation.quotationNumber}</h1>
+              <p><strong>Issue Date:</strong> ${new Date(quotation.issueDate).toLocaleDateString()}</p>
+              <p><strong>Valid Until:</strong> ${new Date(quotation.validUntil).toLocaleDateString()}</p>
+              <p><strong>Status:</strong> ${quotation.status}</p>
+            </div>
+
+            <div class="company-info">
+              <h3>Company Information</h3>
+              <p><strong>${quotation.company?.name || 'Sun Power Services'}</strong></p>
+              <p>${quotation.company?.address || 'Address not available'}</p>
+              <p>Phone: ${quotation.company?.phone || 'N/A'}</p>
+              <p>Email: ${quotation.company?.email || 'N/A'}</p>
+            </div>
+
+            <div class="customer-info">
+              <h3>Customer Information</h3>
+              <p><strong>${quotation.customer?.name}</strong></p>
+              <p>Phone: ${quotation.customer?.phone || 'N/A'}</p>
+              <p>Email: ${quotation.customer?.email}</p>
+            </div>
+
+            <div class="quotation-details">
+              <h3>Quotation Details</h3>
+              ${quotation.notes ? `<p><strong>Notes:</strong> ${quotation.notes}</p>` : ''}
+              ${quotation.terms ? `<p><strong>Terms:</strong> ${quotation.terms}</p>` : ''}
+            </div>
+
+            <h3>Items</h3>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>Quantity</th>
+                  <th>Unit Price</th>
+                  <th>Discount</th>
+                  <th>Tax Rate</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${quotation.items.map((item: any) => `
+                  <tr>
+                    <td>${item.description || item.product || 'N/A'}</td>
+                    <td>${item.quantity} ${item.uom || 'nos'}</td>
+                    <td>₹${item.unitPrice?.toFixed(2) || '0.00'}</td>
+                    <td>${item.discount || 0}%</td>
+                    <td>${item.taxRate || 0}%</td>
+                    <td>₹${item.totalPrice?.toFixed(2) || '0.00'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+
+            <div class="totals">
+              <p><strong>Subtotal:</strong> ₹${quotation.subtotal?.toFixed(2) || '0.00'}</p>
+              <p><strong>Total Discount:</strong> ₹${quotation.totalDiscount?.toFixed(2) || '0.00'}</p>
+              <p><strong>Total Tax:</strong> ₹${quotation.totalTax?.toFixed(2) || '0.00'}</p>
+              <p><strong>Grand Total:</strong> ₹${quotation.grandTotal?.toFixed(2) || '0.00'}</p>
+            </div>
+
+            <div class="footer">
+              <p>Thank you for your interest in our services!</p>
+              <p>Please contact us if you have any questions or need clarification.</p>
+              <p><strong>Contact:</strong> ${quotation.company?.phone || 'N/A'} | ${quotation.company?.email || 'N/A'}</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    // Send the email
+    await sendQuotationEmailViaNodemailer(
+      quotation.customer.email,
+      subject,
+      htmlContent
+    );
+
+    // Log the email sending attempt
+    console.log(`Attempting to send quotation email to ${quotation.customer.email} for quotation ${quotation.quotationNumber}`);
+
+    // Always update quotation status to 'sent' after sending email
+    await Quotation.findByIdAndUpdate(id, { status: 'sent' });
+
+    // Log the email sending
+    console.log(`Quotation email sent successfully to ${quotation.customer.email} for quotation ${quotation.quotationNumber}`);
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Quotation email sent successfully',
+      data: {
+        sentTo: quotation.customer.email,
+        quotationNumber: quotation.quotationNumber,
+        status: 'sent'
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error sending quotation email:', error);
+    
+    // Provide more specific error messages based on the error type
+    let errorMessage = 'Failed to send quotation email';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      if (error.message.includes('Missing required SMTP environment variables')) {
+        errorMessage = 'Email service configuration is incomplete. Please contact administrator.';
+        statusCode = 503; // Service Unavailable
+      } else if (error.message.includes('SMTP connection failed')) {
+        errorMessage = 'Email service is temporarily unavailable. Please try again later.';
+        statusCode = 503; // Service Unavailable
+      } else if (error.message.includes('Missing required email parameters')) {
+        errorMessage = 'Invalid email data provided.';
+        statusCode = 400; // Bad Request
+      } else if (error.message.includes('Email sending failed')) {
+        errorMessage = 'Failed to send email. Please try again.';
+        statusCode = 500; // Internal Server Error
+      } else {
+        errorMessage = `Email error: ${error.message}`;
+        statusCode = 500; // Internal Server Error
+      }
+    }
+    
+    next(new AppError(errorMessage, statusCode));
   }
 }; 

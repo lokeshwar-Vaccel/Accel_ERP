@@ -159,3 +159,89 @@ export async function sendThankYouEmail(toEmail: string): Promise<void> {
   const result = await transporter.sendMail(mailOptions);
   console.log('Thank you email sent:', result);
 }
+
+/**
+ * Sends a quotation email to customers
+ * @param toEmail - The customer's email address
+ * @param subject - The email subject
+ * @param htmlContent - The HTML email content
+ */
+export async function sendQuotationEmail(
+  toEmail: string, 
+  subject: string, 
+  htmlContent: string
+): Promise<void> {
+  // Check if we're in development mode and SMTP is not configured
+  const isDevelopment = process.env.NODE_ENV === 'development';
+  const hasSMTPConfig = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.FROM_NAME && process.env.FROM_EMAIL;
+  
+  console.log('=== EMAIL CONFIGURATION DEBUG ===');
+  console.log('NODE_ENV:', process.env.NODE_ENV);
+  console.log('SMTP_HOST:', process.env.SMTP_HOST ? 'SET' : 'NOT SET');
+  console.log('SMTP_USER:', process.env.SMTP_USER ? 'SET' : 'NOT SET');
+  console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT SET');
+  console.log('FROM_NAME:', process.env.FROM_NAME ? 'SET' : 'NOT SET');
+  console.log('FROM_EMAIL:', process.env.FROM_EMAIL ? 'SET' : 'NOT SET');
+  console.log('isDevelopment:', isDevelopment);
+  console.log('hasSMTPConfig:', hasSMTPConfig);
+  console.log('=== END DEBUG ===');
+  
+  // In development, if SMTP is not configured, log the email instead of sending
+  if (isDevelopment && !hasSMTPConfig) {
+    console.log('=== DEVELOPMENT MODE: EMAIL LOGGING ===');
+    console.log('To:', toEmail);
+    console.log('Subject:', subject);
+    console.log('Content Length:', htmlContent.length);
+    console.log('HTML Content Preview:', htmlContent.substring(0, 500) + '...');
+    console.log('=== END EMAIL LOG ===');
+    return; // Exit early, don't try to send via SMTP
+  }
+
+  // Validate required environment variables for production
+  if (!hasSMTPConfig) {
+    throw new Error(`Missing required SMTP environment variables: SMTP_HOST, SMTP_USER, SMTP_PASS, FROM_NAME, FROM_EMAIL`);
+  }
+
+  // Validate email parameters
+  if (!toEmail || !subject || !htmlContent) {
+    throw new Error('Missing required email parameters: toEmail, subject, or htmlContent');
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_PORT === '465',
+    auth: {
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS
+    },
+  });
+
+  // Verify SMTP connection
+  try {
+    await transporter.verify();
+    console.log('SMTP connection verified successfully');
+  } catch (verifyError) {
+    console.error('SMTP connection verification failed:', verifyError);
+    throw new Error(`SMTP connection failed: ${verifyError instanceof Error ? verifyError.message : 'Unknown error'}`);
+  }
+
+  const mailOptions = {
+    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
+    to: toEmail,
+    subject: subject,
+    html: htmlContent,
+  };
+
+  try {
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Quotation email sent successfully:', result);
+  } catch (error) {
+    console.error('Error sending quotation email:', error);
+    if (error instanceof Error) {
+      throw new Error(`Email sending failed: ${error.message}`);
+    } else {
+      throw new Error('Email sending failed with unknown error');
+    }
+  }
+}
