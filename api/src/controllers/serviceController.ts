@@ -489,16 +489,11 @@ export const createServiceTicket = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Calculate SLA deadline based on priority
-    const slaHours = {
-      critical: 4,
-      high: 24,
-      medium: 72,
-      low: 168
-    };
+    // Calculate SLA deadline based on priority (default to medium)
+    const slaHours = 72; // Default to medium priority (72 hours)
     
     const slaDeadline = new Date();
-    slaDeadline.setHours(slaDeadline.getHours() + slaHours[req.body.priority as TicketPriority]);
+    slaDeadline.setHours(slaDeadline.getHours() + slaHours);
 
     // Prepare ticket data with standardized fields
     const ticketData = {
@@ -507,17 +502,14 @@ export const createServiceTicket = async (
       createdBy: req.user!.id,
       // Map legacy fields to standardized fields if not provided
       customerName: req.body.customerName || (req.body.customer ? 'Customer Name' : ''),
-      complaintDescription: req.body.complaintDescription || req.body.description || '',
+      complaintDescription: req.body.complaintDescription || '',
       serviceRequestEngineer: req.body.serviceRequestEngineer || req.body.assignedTo,
       serviceRequestStatus: req.body.serviceRequestStatus || req.body.status || TicketStatus.OPEN,
       serviceRequestType: req.body.serviceRequestType || req.body.serviceType || 'repair',
       requestSubmissionDate: req.body.requestSubmissionDate ? (typeof req.body.requestSubmissionDate === 'string' ? new Date(req.body.requestSubmissionDate.split('T')[0] + 'T00:00:00.000Z') : new Date(req.body.requestSubmissionDate)) : new Date(),
       serviceRequiredDate: req.body.serviceRequiredDate || req.body.scheduledDate || new Date(),
       engineSerialNumber: req.body.engineSerialNumber || req.body.serialNumber || undefined,
-      magiecSystemCode: req.body.magiecSystemCode || '',
-      magiecCode: req.body.magiecCode || '',
       businessVertical: req.body.businessVertical || '',
-      invoiceRaised: req.body.invoiceRaised || false,
       siteIdentifier: req.body.siteIdentifier || '',
       stateName: req.body.stateName || '',
       siteLocation: req.body.siteLocation || '',
@@ -545,7 +537,6 @@ export const createServiceTicket = async (
 
     const populatedTicket = await ServiceTicket.findById(ticket._id)
       .populate('customer', 'name email phone customerType addresses')
-      .populate('product', 'name category brand')
       .populate('products', 'name category brand')
       .populate('createdBy', 'firstName lastName email')
       .populate('serviceRequestEngineer', 'firstName lastName email');
@@ -585,16 +576,12 @@ export const updateServiceTicket = async (
     }
     console.log("req.body==>",req.body);
 
-    // Check if priority is being updated and update SLA deadline accordingly
-    if (req.body.priority && req.body.priority !== ticket.priority) {
-      const hoursToAdd = req.body.priority === TicketPriority.CRITICAL ? 4 :
-                        req.body.priority === TicketPriority.HIGH ? 24 :
-                        req.body.priority === TicketPriority.MEDIUM ? 72 : 120;
-      
-      // Only update SLA deadline if the ticket is not already resolved or closed
-      if (ticket.status !== TicketStatus.RESOLVED && ticket.status !== TicketStatus.CLOSED) {
-        req.body.slaDeadline = new Date(Date.now() + hoursToAdd * 60 * 60 * 1000);
-      }
+    // Set default SLA deadline (72 hours for medium priority)
+    const hoursToAdd = 72;
+    
+    // Only update SLA deadline if the ticket is not already resolved or closed
+    if (ticket.status !== TicketStatus.RESOLVED && ticket.status !== TicketStatus.CLOSED) {
+      req.body.slaDeadline = new Date(Date.now() + hoursToAdd * 60 * 60 * 1000);
     }
 
     // Sync standardized fields with legacy fields
@@ -610,9 +597,6 @@ export const updateServiceTicket = async (
     if (req.body.serviceRequestEngineer) {
       req.body.assignedTo = req.body.serviceRequestEngineer;
     }
-    if (req.body.description) {
-      req.body.complaintDescription = req.body.description;
-    }
     if (req.body.complaintDescription) {
       req.body.description = req.body.complaintDescription;
     }
@@ -623,7 +607,6 @@ export const updateServiceTicket = async (
       { new: true, runValidators: true }
     )
       .populate('customer', 'name email phone customerType addresses')
-      .populate('product', 'name category brand')
       .populate('products', 'name category brand')
       .populate('assignedTo', 'firstName lastName email')
       .populate('serviceRequestEngineer', 'firstName lastName email');
@@ -1031,10 +1014,7 @@ export const bulkImportServiceTickets = async (
           complaintDescription: ticketData.complaintDescription || ticketData.description || '',
           customerName: ticketData.customerName || '',
           engineSerialNumber: ticketData.engineSerialNumber || ticketData.serialNumber || undefined,
-          magiecSystemCode: ticketData.magiecSystemCode || '',
-          magiecCode: ticketData.magiecCode || '',
           businessVertical: ticketData.businessVertical || '',
-          invoiceRaised: ticketData.invoiceRaised || false,
           siteIdentifier: ticketData.siteIdentifier || '',
           stateName: ticketData.stateName || '',
           siteLocation: ticketData.siteLocation || ''
@@ -1132,14 +1112,11 @@ export const exportServiceTickets = async (
       'Required Date': ticket.serviceRequiredDate?.toISOString().split('T')[0] || '',
       'Engine Serial Number': ticket.engineSerialNumber || '',
       'Customer Name': ticket.customerName || '',
-      'MAGIEC': ticket.magiecSystemCode || '',
-      'MAGIEC Code': ticket.magiecCode || '',
       'SR Engineer': ticket.serviceRequestEngineer ? 
         `${(ticket.serviceRequestEngineer as any).firstName || ''} ${(ticket.serviceRequestEngineer as any).lastName || ''}`.trim() : '',
       'Status': ticket.serviceRequestStatus || '',
       'Complaint': ticket.complaintDescription || '',
       'Vertical': ticket.businessVertical || '',
-      'Invoice': ticket.invoiceRaised ? 'Yes' : 'No',
       'Site Id': ticket.siteIdentifier || '',
       'State Name': ticket.stateName || '',
       'Site Location': ticket.siteLocation || ''

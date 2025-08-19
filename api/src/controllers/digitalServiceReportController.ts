@@ -69,7 +69,6 @@ export const createDigitalServiceReport = async (
       reportNumber,
       technician: ticket.assignedTo,
       customer: ticket.customer,
-      product: ticket.product,
       serviceDate: new Date(),
       workCompleted,
       partsUsed,
@@ -91,7 +90,6 @@ export const createDigitalServiceReport = async (
       .populate('ticketId', 'ticketNumber description status')
       .populate('technician', 'firstName lastName email')
       .populate('customer', 'name email phone')
-      .populate('product', 'name category brand modelNumber')
       .populate('partsUsed.product', 'name category price');
 
     const response: APIResponse = {
@@ -116,10 +114,9 @@ export const getDigitalServiceReport = async (
 ): Promise<void> => {
   try {
     const report = await DigitalServiceReport.findById(req.params.id)
-      .populate('ticketId', 'ticketNumber description status priority')
+      .populate('ticketId', 'ticketNumber description status')
       .populate('technician', 'firstName lastName email phone')
       .populate('customer', 'name email phone address')
-      .populate('product', 'name category brand modelNumber serialNumber')
       .populate('partsUsed.product', 'name category price')
       .populate('approvedBy', 'firstName lastName email');
 
@@ -149,10 +146,9 @@ export const getDigitalServiceReportByTicket = async (
 ): Promise<void> => {
   try {
     const report = await DigitalServiceReport.findOne({ ticketId: req.params.ticketId })
-      .populate('ticketId', 'ticketNumber description status priority')
+      .populate('ticketId', 'ticketNumber description status')
       .populate('technician', 'firstName lastName email phone')
       .populate('customer', 'name email phone address')
-      .populate('product', 'name category brand modelNumber serialNumber')
       .populate('partsUsed.product', 'name category price')
       .populate('approvedBy', 'firstName lastName email');
 

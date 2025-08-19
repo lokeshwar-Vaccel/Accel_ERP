@@ -18,7 +18,6 @@ export interface ServiceTicketPDFData {
   };
   serialNumber?: string;
   description: string;
-  priority: string;
   status: string;
   assignedTo?: string;
   scheduledDate?: string;
@@ -338,7 +337,6 @@ export const exportServiceTicketToPDF = async (ticket: ServiceTicketPDFData) => 
   yPosition += addSection('Service Details', 
     `Serial Number: ${ticket.serialNumber || 'N/A'}
      Description: ${ticket.description}
-     Priority: ${ticket.priority}
      Status: ${ticket.status}
      Assigned To: ${ticket.assignedTo || 'N/A'}
      Service Charge: ₹${ticket.serviceCharge?.toLocaleString() || '0'}`, yPosition);
@@ -480,8 +478,8 @@ export const exportMultipleTicketsToPDF = async (tickets: ServiceTicketPDFData[]
       currentY += 4;
     }
 
-    // Status and priority
-    currentY += addWrappedText(`Status: ${ticket.status} | Priority: ${ticket.priority}`, margin, currentY, contentWidth);
+    // Status
+    currentY += addWrappedText(`Status: ${ticket.status}`, margin, currentY, contentWidth);
     currentY += 4;
 
     // Service charge

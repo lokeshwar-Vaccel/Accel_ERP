@@ -68,7 +68,6 @@ export interface TicketAnalytics {
   closedTickets: number;
   avgTAT: number;
   slaCompliance: number;
-  priorityBreakdown: Record<string, number>;
   statusBreakdown: Record<string, number>;
   tatDistribution: Array<{ range: string; count: number }>;
   monthlyTrend: Array<{ month: string; tickets: number; closed: number }>;
@@ -396,12 +395,7 @@ export class AnalyticsService {
     const slaCompliance = totalTickets > 0 ? 
       Math.round(((totalTickets - overdueTickets) / totalTickets) * 100) : 100;
 
-    // Priority and status breakdown
-    const priorityBreakdown = tickets.reduce((acc: any, ticket) => {
-      acc[ticket.priority] = (acc[ticket.priority] || 0) + 1;
-      return acc;
-    }, {});
-
+    // Status breakdown
     const statusBreakdown = tickets.reduce((acc: any, ticket) => {
       acc[ticket.status] = (acc[ticket.status] || 0) + 1;
       return acc;
@@ -473,7 +467,6 @@ export class AnalyticsService {
       closedTickets,
       avgTAT: Math.round(avgTAT * 100) / 100,
       slaCompliance,
-      priorityBreakdown,
       statusBreakdown,
       tatDistribution,
       monthlyTrend: monthlyTrend.map(item => ({

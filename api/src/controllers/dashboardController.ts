@@ -152,9 +152,8 @@ export const getRecentActivities = async (
         type: 'ticket',
         id: ticket._id,
         title: `New Service Ticket: ${ticket.ticketNumber}`,
-        description: ticket.description,
+        description: ticket.complaintDescription,
         status: ticket.status,
-        priority: ticket.priority,
         date: (ticket as any).createdAt,
         customer: (ticket.customer as any)?.name,
         assignedTo: (ticket.assignedTo as any) ? 

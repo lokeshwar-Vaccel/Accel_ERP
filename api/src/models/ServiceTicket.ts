@@ -17,13 +17,10 @@ interface IServiceTicketSchema extends Document {
   serviceRequiredDate: Date; // Service Required On Date -> Service Required Date
   engineSerialNumber?: string; // Engine Sr No -> Engine Serial Number
   customerName: string; // Customer Name
-  magiecSystemCode: string; // MAGIEC -> MAGIEC (System Code or Identifier)
-  magiecCode: string; // MAGIEC Code
   serviceRequestEngineer: mongoose.Types.ObjectId; // SR Engineer -> Service Request Engineer
   serviceRequestStatus: TicketStatus; // SR Status -> Service Request Status
   complaintDescription: string; // Complaint -> Complaint Description
   businessVertical: string; // Vertical -> Business Vertical
-  invoiceRaised: boolean; // Invoice Raised -> Invoice Raised (Yes/No)
   siteIdentifier: string; // Site ID -> Site Identifier
   stateName: string; // State Name
   siteLocation: string; // SiteLocation -> Site Location
@@ -31,11 +28,8 @@ interface IServiceTicketSchema extends Document {
   // Legacy fields for backward compatibility
   ticketNumber?: string; // Auto-generated
   customer: mongoose.Types.ObjectId;
-  product?: mongoose.Types.ObjectId;
   products?: mongoose.Types.ObjectId[]; // Multiple products support
   serialNumber?: string;
-  description: string;
-  priority: TicketPriority;
   status: TicketStatus;
   assignedTo?: mongoose.Types.ObjectId;
   scheduledDate?: Date;
@@ -107,16 +101,6 @@ const serviceTicketSchema = new Schema({
     trim: true,
     maxlength: [200, 'Customer name cannot exceed 200 characters']
   },
-  magiecSystemCode: {
-    type: String,
-    trim: true,
-    maxlength: [50, 'MAGIEC system code cannot exceed 50 characters']
-  },
-  magiecCode: {
-    type: String,
-    trim: true,
-    maxlength: [50, 'MAGIEC code cannot exceed 50 characters']
-  },
   serviceRequestEngineer: {
     type: Schema.Types.ObjectId,
     ref: 'User',
@@ -144,10 +128,6 @@ const serviceTicketSchema = new Schema({
     type: String,
     trim: true,
     maxlength: [100, 'Business vertical cannot exceed 100 characters']
-  },
-  invoiceRaised: {
-    type: Boolean,
-    default: false
   },
   siteIdentifier: {
     type: String,
@@ -177,10 +157,6 @@ const serviceTicketSchema = new Schema({
     ref: 'Customer',
     required: [true, 'Customer is required']
   },
-  product: {
-    type: Schema.Types.ObjectId,
-    ref: 'Product'
-  },
   products: [{
     type: Schema.Types.ObjectId,
     ref: 'Product'
@@ -189,24 +165,6 @@ const serviceTicketSchema = new Schema({
     type: String,
     trim: true,
     maxlength: [100, 'Serial number cannot exceed 100 characters']
-  },
-  description: {
-    type: String,
-    required: [true, 'Service description is required'],
-    validate: {
-      validator: function(value: string) {
-        if (!value) return true; // Let required validation handle empty values
-        const wordCount = value.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
-        return wordCount <= 500;
-      },
-      message: 'Description cannot exceed 500 words'
-    }
-  },
-  priority: {
-    type: String,
-    enum: Object.values(TicketPriority),
-    default: TicketPriority.MEDIUM,
-    required: [true, 'Priority is required']
   },
   status: {
     type: String,
@@ -329,13 +287,11 @@ serviceTicketSchema.pre('save', async function(this: IServiceTicketSchema, next)
   next();
 });
 
-// Set SLA deadline based on priority when creating ticket
+// Set default SLA deadline when creating ticket
 serviceTicketSchema.pre('save', function(this: IServiceTicketSchema, next) {
   if (this.isNew && !this.slaDeadline) {
-    const hoursToAdd = this.priority === TicketPriority.CRITICAL ? 4 :
-                      this.priority === TicketPriority.HIGH ? 24 :
-                      this.priority === TicketPriority.MEDIUM ? 72 : 120;
-    
+    // Set default SLA to 72 hours (3 days)
+    const hoursToAdd = 72;
     this.slaDeadline = new Date(Date.now() + hoursToAdd * 60 * 60 * 1000);
   }
   next();
