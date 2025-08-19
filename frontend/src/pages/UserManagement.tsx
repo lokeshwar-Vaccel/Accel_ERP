@@ -394,11 +394,22 @@ export const UserManagement: React.FC = () => {
 
       await fetchUsers();
       closeUserModal();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving user:', err);
-      const msg = isEditing ? 'Failed to update user' : 'Failed to create user';
-      toast.error(msg);
-      setError(msg);
+      
+      // Extract error message from backend response
+      let errorMessage = 'Failed to save user';
+      
+      if (err?.response?.data?.message) {
+        // Backend error message from API response
+        errorMessage = err.response.data.message;
+      } else if (err?.message) {
+        // Direct error message (like "User with this email already exists")
+        errorMessage = err.message;
+      }
+      
+      toast.error(errorMessage);
+      setError(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -415,12 +426,22 @@ export const UserManagement: React.FC = () => {
 
       await fetchUsers();
       closeDeleteConfirm();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error deactivating user:', err);
-      setError('Failed to deactivate user');
-      const msg = isEditing ? 'Failed to delete user' : 'Failed to delete user';
-      toast.error(msg);
-      setError(msg);
+      
+      // Extract error message from backend response
+      let errorMessage = 'Failed to deactivate user';
+      
+      if (err?.response?.data?.message) {
+        // Backend error message from API response
+        errorMessage = err.response.data.message;
+      } else if (err?.message) {
+        // Direct error message
+        errorMessage = err.message;
+      }
+      
+      toast.error(errorMessage);
+      setError(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -432,9 +453,22 @@ export const UserManagement: React.FC = () => {
       await apiClient.users.restore(user.id);
       await fetchUsers();
       setError(null); // Clear any existing errors
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error restoring user:', err);
-      setError('Failed to restore user');
+      
+      // Extract error message from backend response
+      let errorMessage = 'Failed to restore user';
+      
+      if (err?.response?.data?.message) {
+        // Backend error message from API response
+        errorMessage = err.response.data.message;
+      } else if (err?.message) {
+        // Direct error message
+        errorMessage = err.message;
+      }
+      
+      toast.error(errorMessage);
+      setError(errorMessage);
     } finally {
       setSubmitting(false);
     }
