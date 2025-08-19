@@ -4,6 +4,8 @@ import { Customer } from '../models/Customer';
 import { User } from '../models/User';
 import { AuthenticatedRequest, APIResponse } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import notificationService from '../services/notificationService';
+import inventoryNotificationService from '../services/inventoryNotificationService';
 
 // @desc    Get user notifications
 // @route   GET /api/v1/notifications
@@ -14,25 +16,28 @@ export const getUserNotifications = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { page = 1, limit = 20, type, isRead } = req.query;
+    const { page = 1, limit = 20, type, category, priority, isRead } = req.query;
     const userId = req.user!.id;
 
     // Build query
-    const query: any = { userId };
+    const query: any = { userId: new (require('mongoose')).Types.ObjectId(userId) };
     if (type) query.type = type;
+    if (category) query.category = category;
+    if (priority) query.priority = priority;
     if (isRead !== undefined) query.isRead = isRead === 'true';
 
     // Pagination
     const skip = (Number(page) - 1) * Number(limit);
     const notifications = await Notification.find(query)
       .populate('customerId', 'name email phone')
+      .populate('productId', 'name partNo')
       .populate('createdBy', 'firstName lastName email')
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(Number(limit));
 
     const total = await Notification.countDocuments(query);
-    const unreadCount = await Notification.countDocuments({ userId, isRead: false });
+    const unreadCount = await Notification.countDocuments({ userId: new (require('mongoose')).Types.ObjectId(userId), isRead: false });
 
     const response: APIResponse = {
       success: true,
@@ -56,6 +61,78 @@ export const getUserNotifications = async (
   }
 };
 
+// @desc    Get notifications by category
+// @route   GET /api/v1/notifications/category/:category
+// @access  Private
+export const getNotificationsByCategory = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { category } = req.params;
+    const { limit = 10 } = req.query;
+    const userId = req.user!.id;
+
+    // Use the notification service instead of static method
+    const notifications = await Notification.find({ 
+      userId: new (require('mongoose')).Types.ObjectId(userId),
+      category 
+    })
+    .sort({ createdAt: -1 })
+    .limit(Number(limit))
+    .populate('customerId', 'name email phone')
+    .populate('productId', 'name partNo')
+    .populate('createdBy', 'firstName lastName email');
+
+    const response: APIResponse = {
+      success: true,
+      message: `${category} notifications retrieved successfully`,
+      data: { notifications }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error fetching notifications by category:', error);
+    next(new AppError('Failed to fetch notifications by category', 500));
+  }
+};
+
+// @desc    Get urgent notifications
+// @route   GET /api/v1/notifications/urgent
+// @access  Private
+export const getUrgentNotifications = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const userId = req.user!.id;
+
+    // Use the notification service instead of static method
+    const notifications = await Notification.find({ 
+      userId: new (require('mongoose')).Types.ObjectId(userId),
+      priority: 'urgent',
+      isRead: false 
+    })
+    .sort({ createdAt: -1 })
+    .populate('customerId', 'name email phone')
+    .populate('productId', 'name partNo')
+    .populate('createdBy', 'firstName lastName email');
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Urgent notifications retrieved successfully',
+      data: { notifications }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error fetching urgent notifications:', error);
+    next(new AppError('Failed to fetch urgent notifications', 500));
+  }
+};
+
 // @desc    Mark notification as read
 // @route   PATCH /api/v1/notifications/:id/read
 // @access  Private
@@ -68,11 +145,7 @@ export const markNotificationAsRead = async (
     const { id } = req.params;
     const userId = req.user!.id;
 
-    const notification = await Notification.findOneAndUpdate(
-      { _id: id, userId },
-      { isRead: true },
-      { new: true }
-    ).populate('customerId', 'name email phone');
+    const notification = await notificationService.markAsRead(id, userId);
 
     if (!notification) {
       return next(new AppError('Notification not found', 404));
@@ -102,15 +175,12 @@ export const markAllNotificationsAsRead = async (
   try {
     const userId = req.user!.id;
 
-    const result = await Notification.updateMany(
-      { userId, isRead: false },
-      { isRead: true }
-    );
+    const updatedCount = await notificationService.markAllAsRead(userId);
 
     const response: APIResponse = {
       success: true,
       message: 'All notifications marked as read',
-      data: { updatedCount: result.modifiedCount }
+      data: { updatedCount }
     };
 
     res.status(200).json(response);
@@ -132,16 +202,16 @@ export const deleteNotification = async (
     const { id } = req.params;
     const userId = req.user!.id;
 
-    const notification = await Notification.findOneAndDelete({ _id: id, userId });
+    const deleted = await notificationService.deleteNotification(id, userId);
 
-    if (!notification) {
+    if (!deleted) {
       return next(new AppError('Notification not found', 404));
     }
 
     const response: APIResponse = {
       success: true,
       message: 'Notification deleted successfully',
-      data: { notification }
+      data: { deleted: true }
     };
 
     res.status(200).json(response);
@@ -162,26 +232,12 @@ export const getNotificationStats = async (
   try {
     const userId = req.user!.id;
 
-    const [unreadCount, totalCount, typeStats] = await Promise.all([
-      Notification.countDocuments({ userId, isRead: false }),
-      Notification.countDocuments({ userId }),
-      Notification.aggregate([
-        { $match: { userId: new (require('mongoose')).Types.ObjectId(userId) } },
-        { $group: { _id: '$type', count: { $sum: 1 } } }
-      ])
-    ]);
+    const stats = await notificationService.getUserNotificationStats(userId);
 
     const response: APIResponse = {
       success: true,
       message: 'Notification statistics retrieved successfully',
-      data: {
-        unreadCount,
-        totalCount,
-        typeStats: typeStats.reduce((acc: any, stat: any) => {
-          acc[stat._id] = stat.count;
-          return acc;
-        }, {})
-      }
+      data: stats
     };
 
     res.status(200).json(response);
@@ -200,35 +256,22 @@ export const createNotification = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { userId, customerId, type, title, message, priority = 'medium', metadata } = req.body;
+    const notificationData = req.body;
 
     // Validate required fields
-    if (!userId || !type || !title || !message) {
+    if (!notificationData.userId || !notificationData.type || !notificationData.title || !notificationData.message) {
       return next(new AppError('User ID, type, title, and message are required', 400));
     }
 
-    const notification = new Notification({
-      userId,
-      customerId,
-      type,
-      title,
-      message,
-      priority,
-      metadata,
+    const notification = await notificationService.createNotification({
+      ...notificationData,
       createdBy: req.user!.id
     });
-
-    await notification.save();
-
-    const populatedNotification = await notification.populate([
-      { path: 'customerId', select: 'name email phone' },
-      { path: 'createdBy', select: 'firstName lastName email' }
-    ]);
 
     const response: APIResponse = {
       success: true,
       message: 'Notification created successfully',
-      data: { notification: populatedNotification }
+      data: { notification }
     };
 
     res.status(201).json(response);
@@ -238,95 +281,118 @@ export const createNotification = async (
   }
 };
 
-// Utility function to create notifications (for internal use)
-export const createNotificationForUser = async (
-  userId: string,
-  type: INotification['type'],
-  title: string,
-  message: string,
-  options: {
-    customerId?: string;
-    priority?: 'low' | 'medium' | 'high';
-    metadata?: Record<string, any>;
-    createdBy?: string;
-  } = {}
-): Promise<INotification> => {
+// @desc    Create bulk notifications (internal use)
+// @route   POST /api/v1/notifications/create-bulk
+// @access  Private
+export const createBulkNotifications = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
   try {
-    const notification = new Notification({
-      userId,
-      customerId: options.customerId,
-      type,
-      title,
-      message,
-      priority: options.priority || 'medium',
-      metadata: options.metadata || {},
-      createdBy: options.createdBy
+    const bulkData = req.body;
+
+    // Validate required fields
+    if (!bulkData.userIds || !bulkData.type || !bulkData.title || !bulkData.message) {
+      return next(new AppError('User IDs, type, title, and message are required', 400));
+    }
+
+    const notifications = await notificationService.createBulkNotifications({
+      ...bulkData,
+      createdBy: req.user!.id
     });
 
-    await notification.save();
-    return notification;
+    const response: APIResponse = {
+      success: true,
+      message: 'Bulk notifications created successfully',
+      data: { notifications, count: notifications.length }
+    };
+
+    res.status(201).json(response);
   } catch (error) {
-    console.error('Error creating notification for user:', error);
-    throw error;
+    console.error('Error creating bulk notifications:', error);
+    next(new AppError('Failed to create bulk notifications', 500));
   }
 };
 
-// Utility function to create customer assignment notification
-export const createAssignmentNotification = async (
-  userId: string,
-  customerId: string,
-  customerName: string
-): Promise<INotification> => {
-  return createNotificationForUser(
-    userId,
-    'assignment',
-    'New Customer Assignment',
-    `You have been assigned a new customer: ${customerName}`,
-    {
-      customerId,
-      priority: 'high',
-      metadata: { assignmentType: 'new_customer' }
-    }
-  );
+// @desc    Get low stock summary
+// @route   GET /api/v1/notifications/low-stock-summary
+// @access  Private
+export const getLowStockSummary = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const summary = await inventoryNotificationService.getLowStockSummary();
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Low stock summary retrieved successfully',
+      data: { summary }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error fetching low stock summary:', error);
+    next(new AppError('Failed to fetch low stock summary', 500));
+  }
 };
 
-// Utility function to create status change notification
-export const createStatusChangeNotification = async (
-  userId: string,
-  customerId: string,
-  customerName: string,
-  oldStatus: string,
-  newStatus: string
-): Promise<INotification> => {
-  return createNotificationForUser(
-    userId,
-    'status_change',
-    'Customer Status Updated',
-    `Customer ${customerName} status changed from "${oldStatus}" to "${newStatus}"`,
-    {
-      customerId,
-      priority: 'medium',
-      metadata: { oldStatus, newStatus }
-    }
-  );
+// @desc    Manually trigger low stock notifications
+// @route   POST /api/v1/notifications/trigger-low-stock
+// @access  Private (Admin only)
+export const triggerLowStockNotifications = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const notificationsCreated = await inventoryNotificationService.createLowStockNotifications();
+
+    const response: APIResponse = {
+      success: true,
+      message: `Low stock notifications triggered successfully`,
+      data: { notificationsCreated }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error triggering low stock notifications:', error);
+    next(new AppError('Failed to trigger low stock notifications', 500));
+  }
 };
 
-// Utility function to create follow-up reminder notification
-export const createFollowUpNotification = async (
-  userId: string,
-  customerId: string,
-  customerName: string,
-  followUpDate: Date
-): Promise<INotification> => {
-  return createNotificationForUser(
-    userId,
-    'follow_up',
-    'Follow-up Reminder',
-    `Follow-up reminder for customer ${customerName} on ${followUpDate.toLocaleDateString()}`,
-    {
-      customerId,
-      priority: 'high',
-      metadata: { followUpDate }
-    }
-  );
+// @desc    Get low stock items
+// @route   GET /api/v1/notifications/low-stock-items
+// @access  Private
+export const getLowStockItems = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const lowStockItems = await inventoryNotificationService.checkLowStockItems();
+    const outOfStockItems = await inventoryNotificationService.checkOutOfStockItems();
+    const overStockItems = await inventoryNotificationService.checkOverStockItems();
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Inventory status items retrieved successfully',
+      data: {
+        lowStockItems,
+        outOfStockItems,
+        overStockItems,
+        totalLowStock: lowStockItems.length,
+        totalOutOfStock: outOfStockItems.length,
+        totalOverStock: overStockItems.length
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    console.error('Error fetching low stock items:', error);
+    next(new AppError('Failed to fetch low stock items', 500));
+  }
 };
+

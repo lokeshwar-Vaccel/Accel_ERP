@@ -604,7 +604,7 @@ export class AnalyticsService {
       },
       {
         $group: {
-          _id: { $arrayElemAt: ['$customerInfo.customerType', 0] },
+          _id: { $first: '$customerInfo.customerType' },
           revenue: { $sum: '$totalAmount' }
         }
       }
@@ -643,8 +643,8 @@ export class AnalyticsService {
         $group: {
           _id: '$customer',
           revenue: { $sum: '$totalAmount' },
-          customerType: { $arrayElemAt: ['$customerInfo.customerType', 0] },
-          customerName: { $arrayElemAt: ['$customerInfo.name', 0] }
+          customerType: { $first: '$customerInfo.customerType' },
+          customerName: { $first: '$customerInfo.name' }
         }
       },
       { $sort: { revenue: -1 } },

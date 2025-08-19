@@ -158,6 +158,9 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
 
         {/* Right: User Dropdown + Notifications */}
         <div className="flex items-center justify-end flex-1 space-x-2">
+          {/* Notifications */}
+          <NotificationBell className="mr-2" />
+          
           {/* User Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
@@ -198,12 +201,9 @@ export default function Header({ onMenuToggle, pathSegments, baseLabel = 'Home' 
                     {isLoading || isLoggingOut ? 'Signing out...' : 'Logout'}
                   </span>
                 </button>
-                             </div>
-             )}
-           </div>
-
-          {/* Notifications */}
-          <NotificationBell className="ml-2" />
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </header>

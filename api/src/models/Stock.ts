@@ -157,6 +157,11 @@ stockSchema.pre('save', function (this: any, next) {
   next();
 });
 
+// --- Post-save Middleware for Real-time Notifications ---
+// TODO: Implement automatic stock change notifications
+// This will be added in the next iteration to trigger notifications
+// when stock levels change automatically
+
 // --- Static Methods ---
 stockSchema.statics.getTotalStock = async function (productId: string) {
   const stocks = await this.find({ product: productId });
