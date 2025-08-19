@@ -3,22 +3,31 @@ import { apiClient } from './api';
 export type NotificationType = 
   | 'assignment' 
   | 'status_change' 
-  | 'contact_update' 
+  | 'contact_history' 
   | 'follow_up' 
-  | 'payment_received' 
-  | 'invoice_created';
+  | 'general'
+  | 'low_stock'
+  | 'out_of_stock'
+  | 'over_stock'
+  | 'payment_due'
+  | 'amc_expiry'
+  | 'service_reminder'
+  | 'system_alert';
 
 export type EntityType = 'customer' | 'invoice' | 'contact' | 'payment';
 
 // Notification data interface
 export interface NotificationData {
-  recipientId: string;
+  userId: string;
   type: NotificationType;
-  content: string;
-  entityId: string;
-  entityType: EntityType;
-  priority?: 'low' | 'medium' | 'high';
+  title: string;
+  message: string;
+  priority?: 'low' | 'medium' | 'high' | 'urgent';
+  category?: 'inventory' | 'customer' | 'service' | 'payment' | 'system' | 'general';
+  customerId?: string;
+  productId?: string;
   metadata?: Record<string, any>;
+  actionUrl?: string;
 }
 
 // Notification service class
@@ -57,11 +66,11 @@ class NotificationService {
     assignedByName: string
   ) {
     return this.createNotification({
-      recipientId: assignedToId,
+      userId: assignedToId,
       type: 'assignment',
-      content: `New customer "${customerName}" has been assigned to you by ${assignedByName}`,
-      entityId: customerId,
-      entityType: 'customer',
+      title: `New customer "${customerName}" assigned`,
+      message: `New customer "${customerName}" has been assigned to you by ${assignedByName}`,
+      customerId: customerId,
       priority: 'medium',
       metadata: {
         customerName,
@@ -81,11 +90,11 @@ class NotificationService {
     recipientId: string
   ) {
     return this.createNotification({
-      recipientId,
+      userId: recipientId,
       type: 'status_change',
-      content: `Customer "${customerName}" status changed from ${oldStatus} to ${newStatus} by ${updatedBy}`,
-      entityId: customerId,
-      entityType: 'customer',
+      title: `Customer "${customerName}" status changed`,
+      message: `Customer "${customerName}" status changed from ${oldStatus} to ${newStatus} by ${updatedBy}`,
+      customerId: customerId,
       priority: 'medium',
       metadata: {
         customerName,
@@ -106,11 +115,11 @@ class NotificationService {
     recipientId: string
   ) {
     return this.createNotification({
-      recipientId,
-      type: 'contact_update',
-      content: `New ${contactType} contact added for customer "${customerName}" by ${updatedBy}`,
-      entityId: customerId,
-      entityType: 'contact',
+      userId: recipientId,
+      type: 'contact_history',
+      title: `New ${contactType} contact added`,
+      message: `New ${contactType} contact added for customer "${customerName}" by ${updatedBy}`,
+      customerId: customerId,
       priority: 'low',
       metadata: {
         customerName,
@@ -129,11 +138,11 @@ class NotificationService {
     recipientId: string
   ) {
     return this.createNotification({
-      recipientId,
+      userId: recipientId,
       type: 'follow_up',
-      content: `Follow-up reminder for customer "${customerName}" scheduled for ${followUpDate}`,
-      entityId: customerId,
-      entityType: 'customer',
+      title: `Follow-up reminder`,
+      message: `Follow-up reminder for customer "${customerName}" scheduled for ${followUpDate}`,
+      customerId: customerId,
       priority: 'high',
       metadata: {
         customerName,
@@ -151,11 +160,11 @@ class NotificationService {
     recipientId: string
   ) {
     return this.createNotification({
-      recipientId,
-      type: 'payment_received',
-      content: `Payment of ₹${amount.toLocaleString()} received from ${customerName}`,
-      entityId: paymentId,
-      entityType: 'payment',
+      userId: recipientId,
+      type: 'general',
+      title: `Payment received`,
+      message: `Payment of ₹${amount.toLocaleString()} received from ${customerName}`,
+      customerId: paymentId,
       priority: 'medium',
       metadata: {
         amount,
@@ -174,11 +183,11 @@ class NotificationService {
     recipientId: string
   ) {
     return this.createNotification({
-      recipientId,
-      type: 'invoice_created',
-      content: `Invoice #${invoiceNumber} created for ${customerName} - ₹${amount.toLocaleString()}`,
-      entityId: invoiceId,
-      entityType: 'invoice',
+      userId: recipientId,
+      type: 'general',
+      title: `Invoice created`,
+      message: `Invoice #${invoiceNumber} created for ${customerName} - ₹${amount.toLocaleString()}`,
+      customerId: invoiceId,
       priority: 'medium',
       metadata: {
         invoiceNumber,

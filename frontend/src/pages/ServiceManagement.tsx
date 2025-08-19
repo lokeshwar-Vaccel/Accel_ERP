@@ -1550,10 +1550,10 @@ const ServiceManagement: React.FC = () => {
       
       if (successCount > 0 && duplicateErrors.length > 0) {
         // Both imported and duplicates
-        toast.success(`✅ ${successCount} tickets added successfully | ⚠️ ${duplicateErrors.length} tickets already exist in system`);
+        toast.success(`${successCount} tickets added successfully | ⚠️ ${duplicateErrors.length} tickets already exist in system`);
       } else if (successCount > 0) {
         // Only imported
-        toast.success(`✅ ${successCount} tickets added successfully!`);
+        toast.success(`${successCount} tickets added successfully!`);
       } else if (duplicateErrors.length > 0) {
         // Only duplicates
         toast.error(`⚠️ ${duplicateErrors.length} tickets already exist in system - no new tickets added`);

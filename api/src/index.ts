@@ -5,18 +5,23 @@ import morgan from 'morgan';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
+import { createServer } from 'http';
 
 import { connectDB } from './database/connection';
 import { errorHandler } from './middleware/errorHandler';
 import { notFound } from './middleware/notFound';
 import routes from './routes';
 import createSampleData from './scripts/seed';
+import socketService from './services/socketService';
 
 // Load environment variables
 dotenv.config();
 
 // Create Express application
 const app = express();
+
+// Create HTTP server for Socket.IO
+const server = createServer(app);
 
 // Set security headers
 app.use(helmet());
@@ -30,23 +35,18 @@ app.use(cors({
 }));
 
 // Rate limiting (more lenient in development)
-// const limiter = rateLimit({
-//   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000'), // 15 minutes
-//   max: process.env.NODE_ENV === 'development' 
-//     ? parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '1000') // 1000 requests in development
-//     : parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '100'), // 100 requests in production
-//   message: 'Too many requests from this IP, please try again later.',
-//   standardHeaders: true,
-//   legacyHeaders: false,
-//   // Skip rate limiting for certain routes in development
-//   skip: (req) => {
-//     if (process.env.NODE_ENV === 'development') {
-//       return req.path.includes('/auth/profile') || req.path.includes('/dashboard');
-//     }
-//     return false;
-//   }
-// });
-// app.use('/api/', limiter);
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: parseInt(process.env.RATE_LIMIT_MAX || '') || (process.env.NODE_ENV === 'development' ? 1000 : 100), // Configurable via env
+  message: 'Too many requests from this IP, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for health checks and certain routes
+    return req.path === '/health' || req.path === '/api/v1/health';
+  }
+});
+app.use('/api/', limiter);
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -54,7 +54,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Logging middleware
 if (process.env.NODE_ENV === 'development') {
-  app.use(morgan('combined'));
+  app.use(morgan('dev'));
 }
 
 // Serve static files
@@ -80,17 +80,25 @@ app.use(notFound);
 app.use(errorHandler);
 
 // Start server
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 
 const startServer = async () => {
   try {
     // Connect to MongoDB
     await connectDB();
     
-    app.listen(PORT, () => {
+    // Initialize Socket.IO for real-time notifications
+    socketService.initialize(server);
+    console.log('✅ Socket.IO service initialized');
 
+    // WebSocket-only notification system
+    console.log('📡 All notifications are now real-time via WebSocket only');
+
+    server.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
       console.log(`📡 API Documentation: http://localhost:${PORT}/api/v1`);
+      console.log(`🔌 WebSocket server ready for real-time notifications`);
+      console.log(`📱 Real-time notifications enabled via WebSocket`);
       // createSampleData(); 
     });
   } catch (error) {
@@ -109,6 +117,17 @@ process.on('unhandledRejection', (err: Error) => {
 process.on('uncaughtException', (err: Error) => {
   console.error('Uncaught Exception:', err.message);
   process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received, shutting down gracefully');
+  process.exit(0);
 });
 
 startServer(); 
