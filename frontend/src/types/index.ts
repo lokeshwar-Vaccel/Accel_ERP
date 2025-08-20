@@ -416,3 +416,81 @@ export interface Notification {
   timestamp: Date;
   read: boolean;
 }
+
+// Enhanced Payment Method Details
+export interface PaymentMethodDetails {
+  // Cash Payment
+  cash?: {
+    receivedBy?: string;
+    receiptNumber?: string;
+  };
+  
+  // Cheque Payment
+  cheque?: {
+    chequeNumber?: string;
+    bankName?: string;
+    branchName?: string;
+    issueDate?: string;
+    clearanceDate?: string;
+    accountHolderName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+  };
+  
+  // Bank Transfer
+  bankTransfer?: {
+    bankName?: string;
+    branchName?: string;
+    accountNumber?: string;
+    ifscCode?: string;
+    transactionId?: string;
+    transferDate?: string;
+    accountHolderName?: string;
+    referenceNumber?: string;
+  };
+  
+  // UPI Payment
+  upi?: {
+    upiId?: string;
+    transactionId?: string;
+    transactionReference?: string;
+    payerName?: string;
+    payerPhone?: string;
+  };
+  
+  // Card Payment
+  card?: {
+    cardType?: 'credit' | 'debit' | 'prepaid';
+    cardNetwork?: 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other';
+    lastFourDigits?: string;
+    transactionId?: string;
+    authorizationCode?: string;
+    cardHolderName?: string;
+  };
+  
+  // Other Payment Methods
+  other?: {
+    methodName?: string;
+    referenceNumber?: string;
+    additionalDetails?: Record<string, any>;
+  };
+}
+
+// Enhanced Purchase Order Payment
+export interface PurchaseOrderPayment {
+  _id: string;
+  purchaseOrderId: string;
+  poNumber: string;
+  supplierId: string;
+  amount: number;
+  currency: string;
+  paymentMethod: 'cash' | 'cheque' | 'bank_transfer' | 'upi' | 'card' | 'other';
+  paymentMethodDetails: PaymentMethodDetails;
+  paymentStatus: 'pending' | 'processing' | 'completed' | 'failed' | 'refunded';
+  paymentDate: string;
+  notes?: string;
+  receiptNumber?: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}

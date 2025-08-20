@@ -909,7 +909,10 @@ export const updatePurchaseOrderStatus = async (
   try {
     const { status } = req.body;
 
-    const order = await PurchaseOrder.findById(req.params.id);
+    const order = await PurchaseOrder.findById(req.params.id)
+    .populate('items.product', 'name category brand partNo hsnNumber')
+    .populate('createdBy', 'firstName lastName email')
+    .populate('supplier', 'name email addresses');
     if (!order) {
       return next(new AppError('Purchase order not found', 404));
     }
@@ -1211,17 +1214,17 @@ const createInvoiceFromPO = async ({
 
   if (externalInvoiceTotal && externalInvoiceTotal > 0) {
     // Use external invoice total
-    finalTotalAmount = externalInvoiceTotal;
+    finalTotalAmount = subtotal + totalTax - discountAmount;
     finalSubtotal = subtotal;
     finalTaxAmount = totalTax;
     
-    // Adjust discount if needed to match external total
-    const calculatedTotal = subtotal + totalTax - discountAmount;
-    if (Math.abs(calculatedTotal - externalInvoiceTotal) > 0.01) {
-      // Adjust discount to match external total
-      const newDiscountAmount = (subtotal + totalTax) - externalInvoiceTotal;
-      discountAmount = Math.max(0, newDiscountAmount);
-    }
+    // // Adjust discount if needed to match external total
+    // const calculatedTotal = subtotal + totalTax - discountAmount;
+    // if (Math.abs(calculatedTotal - externalInvoiceTotal) > 0.01) {
+    //   // Adjust discount to match external total
+    //   const newDiscountAmount = (subtotal + totalTax) - externalInvoiceTotal;
+    //   discountAmount = Math.max(0, newDiscountAmount);
+    // }
   } else {
     // Calculate from items
     finalSubtotal = subtotal;

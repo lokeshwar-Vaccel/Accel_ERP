@@ -865,19 +865,13 @@ const CustomerManagement: React.FC = () => {
           if (!gstRegex.test(addr.gstNumber)) {
             gstErrors[index] = 'GST Number must be 15 characters, uppercase, and in valid GSTIN format (e.g., 22AAAAA0000A1Z5)';
           } else {
+            // Check if GST number already exists for another customer
             const existingCustomer = allCustomers.find(customer =>
               customer.addresses?.some(a => a.gstNumber === addr.gstNumber) &&
               (!editingCustomer || customer._id !== editingCustomer._id)
             );
             if (existingCustomer) {
-              gstErrors[index] = 'GST Number already exists. Please use a different GST Number.';
-            } else {
-              const duplicateInForm = customerFormData.addresses.filter(
-                (a, i) => a.gstNumber === addr.gstNumber && a.gstNumber && i !== index
-              ).length > 0;
-              if (duplicateInForm) {
-                gstErrors[index] = 'GST Number must be unique for each address.';
-              }
+              gstErrors[index] = 'GST Number already exists with another customer. Please use a different GST Number.';
             }
           }
         }

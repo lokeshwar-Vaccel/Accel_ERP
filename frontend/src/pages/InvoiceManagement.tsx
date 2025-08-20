@@ -98,6 +98,7 @@ interface Invoice {
   referenceDate?: string;
   buyersOrderNo?: string;
   buyersOrderDate?: string;
+  poNumber?: string;
   dispatchDocNo?: string;
   deliveryNoteDate?: string;
   dispatchedThrough?: string;
@@ -298,6 +299,7 @@ interface NewInvoice {
   referenceDate?: string;
   buyersOrderNo?: string;
   buyersOrderDate?: string;
+  poNumber?: string;
   dispatchDocNo?: string;
   deliveryNoteDate?: string;
   dispatchedThrough?: string;
@@ -492,6 +494,9 @@ const InvoiceManagement: React.FC = () => {
     const savedInvoiceType = localStorage.getItem('selectedInvoiceType');
     return (savedInvoiceType as 'quotation' | 'sale' | 'purchase' | 'challan') || 'quotation';
   });
+
+  console.log("selectedInvoice123:",selectedInvoice);
+  
 
   // Custom setter function that updates both state and localStorage
   const updateInvoiceType = (newType: 'quotation' | 'sale' | 'purchase' | 'challan') => {
@@ -2191,7 +2196,9 @@ const InvoiceManagement: React.FC = () => {
     const matchesSearch =
       invoice?.invoiceNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      invoice?.supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase());
+      invoice?.supplier?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (invoiceType === 'purchase' && invoice?.poNumber?.toLowerCase().includes(searchTerm.toLowerCase()));
+    
     const matchesStatus = statusFilter === 'all' || invoice.status === statusFilter;
     const matchesPayment = paymentFilter === 'all' || invoice.paymentStatus === paymentFilter;
     const matchesType = invoice.invoiceType === invoiceType;
@@ -3736,27 +3743,23 @@ const InvoiceManagement: React.FC = () => {
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
         <div className="flex flex-col justify-between md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
           <div className="flex gap-4 ">
-            {invoiceType !== 'quotation' ? <div className="relative flex-1 max-w-sm">
+            <div className="relative flex-1 max-w-sm">
               <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search invoices..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={invoiceType === 'quotation' ? "Search quotations..." : "Search invoices, PO numbers..."}
+                value={invoiceType === 'quotation' ? searchQuotationTerm : searchTerm}
+                onChange={(e) => {
+                  if (invoiceType === 'quotation') {
+                    setSearchQuotationTerm(e.target.value);
+                  } else {
+                    setSearchTerm(e.target.value);
+                  }
+                }}
                 data-field="search"
                 className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
-            </div> : <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search quotations..."
-                value={searchQuotationTerm}
-                onChange={(e) => setSearchQuotationTerm(e.target.value)}
-                data-field="search"
-                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>}
+            </div>
 
             {/* Status Filter Custom Dropdown */}
             {invoiceType !== 'quotation' && <div className="relative dropdown-container">
@@ -3872,8 +3875,11 @@ const InvoiceManagement: React.FC = () => {
                     invoiceType === 'challan' ? 'Challan No' :
                       'Invoice No'}
                 </th>
-                {invoiceType === 'sale' && 
+                {/* {invoiceType === 'sale' && 
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quotation Ref</th>
+                } */}
+                {invoiceType === 'purchase' && 
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PO No</th>
                 }
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {invoiceType === 'purchase' ? 'Supplier' : 'Customer'}
@@ -4054,7 +4060,7 @@ const InvoiceManagement: React.FC = () => {
                     <td className="px-4 py-3 text-sm font-medium text-blue-600">
                       {invoice.invoiceNumber}
                     </td>
-                    {invoiceType === 'sale' && 
+                    {/* {invoiceType === 'sale' && 
                       <td className="px-4 py-3 text-sm text-gray-600">
                         {invoice.sourceQuotation ? (
                           <div className="flex flex-col">
@@ -4067,6 +4073,19 @@ const InvoiceManagement: React.FC = () => {
                                 <div>Remaining: ₹{invoice.quotationPaymentDetails.remainingAmount?.toFixed(2) || '0.00'}</div>
                               </div>
                             )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-400">-</span>
+                        )}
+                      </td>
+                    } */}
+                    {invoiceType === 'purchase' && 
+                      <td className="px-4 py-3 text-sm text-gray-600">
+                        {invoice.poNumber ? (
+                          <div className="flex flex-col">
+                            <span className="text-xs text-blue-600 font-medium">
+                              {invoice.poNumber}
+                            </span>
                           </div>
                         ) : (
                           <span className="text-xs text-gray-400">-</span>
@@ -4102,11 +4121,13 @@ const InvoiceManagement: React.FC = () => {
                     </td>
                       : <td className="px-4 py-3">
                         <div className="flex items-center space-x-2">
-                          {getStatusIcon(invoice.status)}
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${((invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2))
+                          {/* {getStatusIcon(invoice.status)} */}
+                          {invoice.status === 'cancelled' ? <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(invoice.status)}`}>
+                          {invoice.status.charAt(0).toUpperCase() + invoice.status.slice(1)}
+                        </span> :  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${((invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2))
                             ? "bg-green-100 text-green-800" : (invoice.externalInvoiceTotal || 0) === 0 ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}>
-                            {(invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2) ? "Not Mismatch" : (invoice.externalInvoiceTotal || 0) === 0 ? "Not Mismatch" : "Amount Mismatch"}
-                          </span>
+                            {(invoice.externalInvoiceTotal || 0).toFixed(2) === (invoice.totalAmount || 0).toFixed(2) ? "Matched" : (invoice.externalInvoiceTotal || 0) === 0 ? "Matched" : "Mismatch"}
+                          </span>}
                         </div>
                       </td>}
                     {(invoiceType === 'sale' || invoiceType === 'purchase') && <td className="px-4 py-3">
