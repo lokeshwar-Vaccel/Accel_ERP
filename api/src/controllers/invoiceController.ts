@@ -343,6 +343,67 @@ export const createInvoice = async (
           stock.availableQuantity = stock.quantity - stock.reservedQuantity;
           await stock.save();
 
+          // 🔔 AUTOMATIC NOTIFICATION TRIGGER
+          // Check if stock reduction requires notification and send real-time alert
+          try {
+            const { Product } = await import('../models/Product');
+            const { notificationService } = await import('../services/notificationService');
+            
+            const product = await Product.findById(item.product);
+            if (product) {
+              const currentStock = stock.availableQuantity;
+              const minStockLevel = product.minStockLevel || 0;
+              const maxStockLevel = product.maxStockLevel || 0;
+
+              // Determine notification type based on new stock level
+              let notificationType: 'low_stock' | 'out_of_stock' | 'over_stock' | null = null;
+              let threshold = 0;
+
+              if (currentStock === 0 && minStockLevel > 0) {
+                notificationType = 'out_of_stock';
+                threshold = minStockLevel;
+              } else if (currentStock > 0 && currentStock <= minStockLevel && minStockLevel > 0) {
+                notificationType = 'low_stock';
+                threshold = minStockLevel;
+              } else if (maxStockLevel > 0 && currentStock > maxStockLevel) {
+                notificationType = 'over_stock';
+                threshold = maxStockLevel;
+              }
+
+              // If notification is needed, send it via WebSocket
+              if (notificationType) {
+                console.log(`🔔 Invoice stock reduction triggered ${notificationType} notification for product: ${product.name}`);
+                
+                // Get location details
+                const { StockLocation } = await import('../models/Stock');
+                const { Room } = await import('../models/Stock');
+                const { Rack } = await import('../models/Stock');
+                
+                const stockLocation = await StockLocation.findById(location);
+                const room = stock.room ? await Room.findById(stock.room) : null;
+                const rack = stock.rack ? await Rack.findById(stock.rack) : null;
+
+                // Create real-time notification
+                await notificationService.createInventoryNotification(
+                  notificationType,
+                  item.product.toString(),
+                  product.name,
+                  product.partNo || 'N/A',
+                  currentStock,
+                  threshold,
+                  stockLocation?.name || 'Unknown',
+                  room?.name,
+                  rack?.name
+                );
+
+                console.log(`✅ Real-time ${notificationType} notification sent for ${product.name}`);
+              }
+            }
+          } catch (error) {
+            // Don't let notification errors break the invoice operation
+            console.error('❌ Error in automatic invoice stock notification:', error);
+          }
+
           // Create stock ledger entry
           await StockLedger.create({
             product: item.product,

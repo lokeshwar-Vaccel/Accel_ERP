@@ -4,7 +4,7 @@ import { DGCustomer } from '../models/DGCustomer';
 import { OEM } from '../models/OEM';
 import { AuthenticatedRequest, APIResponse, LeadStatus, CustomerType, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
-import { createAssignmentNotification, createStatusChangeNotification, createFollowUpNotification } from './notificationController';
+import notificationService from '../services/notificationService';
 import { TransactionCounter } from '../models/TransactionCounter';
 
 // Utility to get next customerId
@@ -255,7 +255,7 @@ export const createCustomer = async (
     // Create assignment notification if customer is assigned to someone
     try {
       if (customer.assignedTo) {
-        await createAssignmentNotification(
+        await notificationService.createAssignmentNotification(
           customer.assignedTo.toString(),
           (customer as any)._id.toString(),
           customer.name
@@ -323,7 +323,7 @@ export const updateCustomer = async (
     try {
       // Notification for assignment change
       if (req.body.assignedTo && req.body.assignedTo !== oldAssignedTo?.toString()) {
-        await createAssignmentNotification(
+        await notificationService.createAssignmentNotification(
           req.body.assignedTo,
           (customer as any)._id.toString(),
           customer.name
@@ -334,7 +334,7 @@ export const updateCustomer = async (
       if (req.body.status && req.body.status !== oldStatus) {
         const assignedUserId = req.body.assignedTo || oldAssignedTo?.toString();
         if (assignedUserId) {
-          await createStatusChangeNotification(
+          await notificationService.createStatusChangeNotification(
             assignedUserId,
             (customer as any)._id.toString(),
             customer.name,

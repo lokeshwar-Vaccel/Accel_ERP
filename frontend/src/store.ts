@@ -1,12 +1,17 @@
 import { configureStore } from '@reduxjs/toolkit';
 import authReducer from './redux/auth/authSlice';
+import userSlice from './redux/auth/userSlice';
+import navigationSlice from './redux/auth/navigationSlice';
 import settingsReducer from './redux/settings/settingsSlice';
-// Import slices here when created
+import notificationReducer from './redux/notifications/notificationSlice';
 
 const store = configureStore({
   reducer: {
     auth: authReducer,
+    navigation: navigationSlice,
+    user: userSlice,
     settings: settingsReducer,
+    notifications: notificationReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
