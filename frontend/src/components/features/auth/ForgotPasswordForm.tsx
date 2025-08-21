@@ -8,7 +8,7 @@ import { forgotPassword, clearError, clearPasswordResetState } from 'redux/auth/
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { Button } from 'components/ui/Botton';
-import { AppDispatch, RootState } from 'redux/store';
+import { AppDispatch, RootState } from '../../../store';
 
 const forgotPasswordSchema = z.object({
   email: z.string().email({ message: 'Please enter a valid email address' }),

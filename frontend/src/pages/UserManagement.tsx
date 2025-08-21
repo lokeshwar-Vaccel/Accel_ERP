@@ -12,8 +12,9 @@ import { apiClient } from '../utils/api';
 import { User, UserRole } from '../types';
 import PageHeader from '../components/ui/PageHeader';
 import { useCurrentModulePermission } from 'layout/Sidebar';
-import { RootState } from 'redux/store';
+import { RootState } from '../store';
 import toast from 'react-hot-toast';
+import { Pagination } from 'components/ui/Pagination';
 
 
 // Module key-label map
@@ -83,6 +84,12 @@ export const UserManagement: React.FC = () => {
   const currentUser = useSelector((state: RootState) => state.auth.user?.role);
 
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [totalPages, setTotalPages] = useState(0);
+  const [totalDatas, setTotalDatas] = useState(0);
 
   // Modal states
   const [showUserModal, setShowUserModal] = useState(false);
@@ -199,16 +206,27 @@ export const UserManagement: React.FC = () => {
     };
   }, []);
 
-  // Fetch users from API
+  // Fetch users from API with pagination
   const fetchUsers = async () => {
     try {
       setLoading(true);
       setError(null);
-      // Fetch all users including deleted ones
-      const response = await apiClient.users.getAll({ status: 'all' });
+      
+      // Prepare query parameters for pagination and filtering
+      const params: any = {
+        page: currentPage,
+        limit,
+        ...(searchTerm && { search: searchTerm }),
+        ...(statusFilter !== 'all' && { status: statusFilter }),
+        ...(roleFilter !== 'all' && { role: roleFilter }),
+      };
+
+      // Fetch users with pagination
+      const response = await apiClient.users.getAll(params);
 
       // Map API response to UserDisplay interface
-      const usersData = response.data as any; // Type assertion since API client types aren't fully typed
+      const usersData = response.data as any;
+      const paginationData = response.pagination || {};
 
       const mappedUsers: UserDisplay[] = usersData.users.map((user: any) => ({
         id: user.id || user._id,
@@ -222,8 +240,13 @@ export const UserManagement: React.FC = () => {
         moduleAccess: user.moduleAccess || [] // Ensure module access is included
       }));
 
-
       setUsers(mappedUsers);
+      
+      // Set pagination data
+      setCurrentPage(paginationData.page || 1);
+      setLimit(paginationData.limit || 10);
+      setTotalDatas(paginationData.total || 0);
+      setTotalPages(paginationData.pages || 0);
     } catch (err) {
       console.error('Error fetching users:', err);
       setError('Failed to fetch users');
@@ -239,7 +262,7 @@ export const UserManagement: React.FC = () => {
     ]));
 
     fetchUsers();
-  }, [dispatch]);
+  }, [dispatch, currentPage, limit, searchTerm, statusFilter, roleFilter]);
 
   // Handle click outside dropdown
   useEffect(() => {
@@ -546,6 +569,11 @@ export const UserManagement: React.FC = () => {
     if (a.status !== 'deleted' && b.status === 'deleted') return -1;
     return 0;
   });
+
+  // Handle page change
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
 
   const getStatusBadge = (status: string) => {
     const statusColors: { [key: string]: string } = {
@@ -856,8 +884,6 @@ export const UserManagement: React.FC = () => {
         </div>
       </div>
 
-
-
       {/* Error State */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
@@ -1029,6 +1055,15 @@ export const UserManagement: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Pagination */}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
+        totalItems={totalDatas}
+        itemsPerPage={limit}
+      />
 
       {/* User Form Modal */}
       {showUserModal && (

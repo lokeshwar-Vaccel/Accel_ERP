@@ -6,7 +6,7 @@ import { resetPassword, clearError, resetPasswordConfirmState } from 'redux/auth
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 import { Button } from 'components/ui/Botton';
-import { AppDispatch, RootState } from 'redux/store';
+import { AppDispatch, RootState } from '../../../store';
 
 const resetPasswordSchema = z.object({
   password: z.string()
