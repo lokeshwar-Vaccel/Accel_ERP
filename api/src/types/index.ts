@@ -189,6 +189,7 @@ export interface Address {
   pincode?: string;
   isPrimary: boolean;
   gstNumber?: string;
+  notes?: string; // Added for storing notes from misused fields
 }
 // DG Requirements Interface
 export interface DGRequirements {
@@ -205,10 +206,15 @@ export interface DGRequirements {
 // Customer Interface
 export interface ICustomer extends Document {
   name: string;
+  alice?: string;
+  designation?: string;
+  contactPersonName?: string;
   email?: string;
   phone: string;
   panNumber?: string;
   addresses: Address[];
+  siteAddress?: string;
+  numberOfDG?: number;
   customerType: CustomerType;
   type: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
@@ -220,6 +226,7 @@ export interface ICustomer extends Document {
   customerId?: string;
   isDGSalesCustomer?: boolean;
   dgRequirements?: DGRequirements;
+  dgDetails?: Types.ObjectId[]; // Array of DGDetails ObjectIds
 }
 
 // Contact History Interface
@@ -390,6 +397,26 @@ export interface AuthenticatedRequest extends Request {
   };
 }
 
+// DGDetails Interface
+export interface IDGDetails extends Document {
+  customer: Types.ObjectId;
+  dgSerialNumbers: string;
+  alternatorMake: string;
+  alternatorSerialNumber: string;
+  dgMake: string;
+  engineSerialNumber: string;
+  dgModel: string;
+  dgRatingKVA: number;
+  salesDealerName: string;
+  commissioningDate: Date;
+  warrantyStatus: 'warranty' | 'non_warranty';
+  installationType: 'infold' | 'outfold';
+  amcStatus: 'yes' | 'no';
+  cluster: string;
+  createdBy: Types.ObjectId;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 // API Response Interface
 export interface APIResponse<T = any> {

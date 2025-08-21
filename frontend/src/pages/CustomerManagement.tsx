@@ -86,6 +86,7 @@ interface Customer {
   _id: string;
   customerId?: string;
   name: string;
+  alice?: string;
   designation?: string;
   contactPersonName?: string;
   gstNumber?: string;
@@ -111,6 +112,22 @@ interface Customer {
   latestContact?: ContactHistory;
   addresses?: Address[];
   type?: CustomerMainType;
+  // DG Details
+  dgDetails?: {
+    dgSerialNumbers: string;
+    alternatorMake: string;
+    alternatorSerialNumber: string;
+    dgMake: string;
+    engineSerialNumber: string;
+    dgModel: string;
+    dgRatingKVA: number;
+    salesDealerName: string;
+    commissioningDate: string;
+    warrantyStatus: 'warranty' | 'non_warranty';
+    installationType: 'infold' | 'outfold';
+    amcStatus: 'yes' | 'no';
+    cluster: string;
+  }[];
   // OEM specific properties
   oemCode?: string;
   companyName?: string;
@@ -139,6 +156,8 @@ interface Customer {
   warrantyTerms?: string;
   creditLimit?: number;
   creditDays?: number;
+  siteAddress?: string;
+  numberOfDG?: number;
 }
 
 // Address type
@@ -154,18 +173,36 @@ interface Address {
 
 interface CustomerFormData {
   name: string;
+  alice?: string;
   designation: string;
   contactPersonName: string;
   email: string;
   phone: string;
   panNumber: string;
   address: string;
+  siteAddress?: string;
+  numberOfDG?: number;
   customerType: CustomerType;
   leadSource: string;
   assignedTo: string;
   notes: string;
   addresses: Address[];
   type: CustomerMainType;
+  dgDetails?: {
+    dgSerialNumbers: string;
+    alternatorMake: string;
+    alternatorSerialNumber: string;
+    dgMake: string;
+    engineSerialNumber: string;
+    dgModel: string;
+    dgRatingKVA: number;
+    salesDealerName: string;
+    commissioningDate: string;
+    warrantyStatus: 'warranty' | 'non_warranty';
+    installationType: 'infold' | 'outfold';
+    amcStatus: 'yes' | 'no';
+    cluster: string;
+  }[];
 }
 
 interface ContactFormData {
@@ -247,12 +284,15 @@ const CustomerManagement: React.FC = () => {
   // Form data
   const [customerFormData, setCustomerFormData] = useState<CustomerFormData>({
     name: '',
+    alice: '',
     designation: '',
     contactPersonName: '',
     email: '',
     phone: '',
     panNumber: '',
     address: '',
+    siteAddress: '',
+    numberOfDG: 0,
     customerType: 'retail',
     leadSource: '',
     assignedTo: '',
@@ -266,7 +306,22 @@ const CustomerManagement: React.FC = () => {
       isPrimary: true,
       gstNumber: '', // Add default
     }],
-    type: 'customer'
+    type: 'customer',
+    dgDetails: [{
+      dgSerialNumbers: '',
+      alternatorMake: '',
+      alternatorSerialNumber: '',
+      dgMake: '',
+      engineSerialNumber: '',
+      dgModel: '',
+      dgRatingKVA: 0,
+      salesDealerName: '',
+      commissioningDate: new Date().toISOString().split('T')[0],
+      warrantyStatus: 'warranty',
+      installationType: 'infold',
+      amcStatus: 'yes',
+      cluster: ''
+    }]
   });
 
   const [contactFormData, setContactFormData] = useState<ContactFormData>({
@@ -527,6 +582,46 @@ const CustomerManagement: React.FC = () => {
       ...prev,
       addresses: updatedAddresses
     }));
+  };
+
+  // DGDetails helper functions
+  const updateDGDetails = (index: number, field: keyof NonNullable<CustomerFormData['dgDetails']>[0], value: any) => {
+    setCustomerFormData(prev => ({
+      ...prev,
+      dgDetails: prev.dgDetails!.map((dg, i) => 
+        i === index ? { ...dg, [field]: value } : dg
+      )
+    }));
+  };
+
+  const addDGDetails = () => {
+    setCustomerFormData(prev => ({
+      ...prev,
+      dgDetails: [...prev.dgDetails!, {
+        dgSerialNumbers: '',
+        alternatorMake: '',
+        alternatorSerialNumber: '',
+        dgMake: '',
+        engineSerialNumber: '',
+        dgModel: '',
+        dgRatingKVA: 0,
+        salesDealerName: '',
+        commissioningDate: new Date().toISOString().split('T')[0],
+        warrantyStatus: 'warranty' as const,
+        installationType: 'infold' as const,
+        amcStatus: 'yes' as const,
+        cluster: ''
+      }]
+    }));
+  };
+
+  const removeDGDetails = (index: number) => {
+    if (customerFormData.dgDetails!.length > 1) {
+      setCustomerFormData(prev => ({
+        ...prev,
+        dgDetails: prev.dgDetails!.filter((_, i) => i !== index)
+      }));
+    }
   };
 
   const addressTypes = [
@@ -865,19 +960,13 @@ const CustomerManagement: React.FC = () => {
           if (!gstRegex.test(addr.gstNumber)) {
             gstErrors[index] = 'GST Number must be 15 characters, uppercase, and in valid GSTIN format (e.g., 22AAAAA0000A1Z5)';
           } else {
+            // Check if GST number already exists for another customer
             const existingCustomer = allCustomers.find(customer =>
               customer.addresses?.some(a => a.gstNumber === addr.gstNumber) &&
               (!editingCustomer || customer._id !== editingCustomer._id)
             );
             if (existingCustomer) {
-              gstErrors[index] = 'GST Number already exists. Please use a different GST Number.';
-            } else {
-              const duplicateInForm = customerFormData.addresses.filter(
-                (a, i) => a.gstNumber === addr.gstNumber && a.gstNumber && i !== index
-              ).length > 0;
-              if (duplicateInForm) {
-                gstErrors[index] = 'GST Number must be unique for each address.';
-              }
+              gstErrors[index] = 'GST Number already exists with another customer. Please use a different GST Number.';
             }
           }
         }
@@ -928,7 +1017,10 @@ const CustomerManagement: React.FC = () => {
       const submitData = { 
         ...customerFormData, 
         type: customerTypeTab === 'oem' ? 'customer' : customerTypeTab,
-        customerType: customerTypeTab === 'oem' ? 'oem' : customerFormData.customerType
+        customerType: customerTypeTab === 'oem' ? 'oem' : customerFormData.customerType,
+        alice: customerFormData.alice || undefined,
+        siteAddress: customerFormData.siteAddress || undefined,
+        numberOfDG: customerFormData.numberOfDG || undefined
       };
       if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
         delete (submitData as any).assignedTo;
@@ -962,7 +1054,10 @@ const CustomerManagement: React.FC = () => {
       // Prepare form data, excluding assignedTo if it's empty to avoid ObjectId validation error
       const submitData = { 
         ...customerFormData,
-        customerType: customerTypeTab === 'oem' ? 'oem' : customerFormData.customerType
+        customerType: customerTypeTab === 'oem' ? 'oem' : customerFormData.customerType,
+        alice: customerFormData.alice || undefined,
+        siteAddress: customerFormData.siteAddress || undefined,
+        numberOfDG: customerFormData.numberOfDG || undefined
       };
       if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
         delete (submitData as any).assignedTo;
@@ -1044,12 +1139,15 @@ const CustomerManagement: React.FC = () => {
   const resetCustomerForm = () => {
     setCustomerFormData({
       name: '',
+      alice: '',
       designation: '',
       contactPersonName: '',
       email: '',
       phone: '',
       panNumber: '',
       address: '',
+      siteAddress: '',
+      numberOfDG: 0,
       customerType: customerTypeTab === 'oem' ? 'oem' : 'retail',
       leadSource: '',
       assignedTo: '',
@@ -1063,7 +1161,22 @@ const CustomerManagement: React.FC = () => {
         isPrimary: true,
         gstNumber: '',
       }],
-      type: customerTypeTab === 'oem' ? 'customer' : customerTypeTab
+      type: customerTypeTab === 'oem' ? 'customer' : customerTypeTab,
+      dgDetails: [{
+        dgSerialNumbers: '',
+        alternatorMake: '',
+        alternatorSerialNumber: '',
+        dgMake: '',
+        engineSerialNumber: '',
+        dgModel: '',
+        dgRatingKVA: 0,
+        salesDealerName: '',
+        commissioningDate: new Date().toISOString().split('T')[0],
+        warrantyStatus: 'warranty',
+        installationType: 'infold',
+        amcStatus: 'yes',
+        cluster: ''
+      }]
     });
     setShowAssignedToDropdown(false);
   };
@@ -1082,9 +1195,12 @@ const CustomerManagement: React.FC = () => {
   };
 
   const openEditModal = (customer: Customer) => {
+    console.log('Opening edit modal for customer:', customer);
+    console.log('Customer DGDetails:', (customer as any).dgDetails);
     setEditingCustomer(customer);
     setCustomerFormData({
       name: customer.name,
+      alice: (customer as any).alice || '',
       designation: customer.designation || '',
       contactPersonName: customer.contactPersonName || '',
       email: customer.email || '',
@@ -1097,6 +1213,8 @@ const CustomerManagement: React.FC = () => {
       leadSource: customer.leadSource || '',
       assignedTo: getUserId(customer.assignedTo),
       notes: customer.notes || '',
+      siteAddress: (customer as any).siteAddress || '',
+      numberOfDG: (customer as any).numberOfDG || 0,
       addresses: (customer as any).addresses && Array.isArray((customer as any).addresses)
         ? (customer as any).addresses.map((addr: any) => ({ ...addr, gstNumber: addr.gstNumber || '' }))
         : [{
@@ -1108,8 +1226,42 @@ const CustomerManagement: React.FC = () => {
           isPrimary: true,
           gstNumber: '',
         }],
-      type: (customer as any).type || (customerTypeTab === 'oem' ? 'customer' : customerTypeTab) // <-- ensure type is set
+      type: (customer as any).type || (customerTypeTab === 'oem' ? 'customer' : customerTypeTab), // <-- ensure type is set
+      dgDetails: (customer as any).dgDetails && Array.isArray((customer as any).dgDetails) && (customer as any).dgDetails.length > 0
+        ? (customer as any).dgDetails.map((dg: any) => ({
+            dgSerialNumbers: dg.dgSerialNumbers || '',
+            alternatorMake: dg.alternatorMake || '',
+            alternatorSerialNumber: dg.alternatorSerialNumber || '',
+            dgMake: dg.dgMake || '',
+            engineSerialNumber: dg.engineSerialNumber || '',
+            dgModel: dg.dgModel || '',
+            dgRatingKVA: dg.dgRatingKVA || 0,
+            salesDealerName: dg.salesDealerName || '',
+            commissioningDate: dg.commissioningDate 
+              ? new Date(dg.commissioningDate).toISOString().split('T')[0]
+              : new Date().toISOString().split('T')[0],
+            warrantyStatus: dg.warrantyStatus || 'warranty',
+            installationType: dg.installationType || 'infold',
+            amcStatus: dg.amcStatus || 'yes',
+            cluster: dg.cluster || ''
+          }))
+        : [{
+            dgSerialNumbers: '',
+            alternatorMake: '',
+            alternatorSerialNumber: '',
+            dgMake: '',
+            engineSerialNumber: '',
+            dgModel: '',
+            dgRatingKVA: 0,
+            salesDealerName: '',
+            commissioningDate: new Date().toISOString().split('T')[0],
+            warrantyStatus: 'warranty',
+            installationType: 'infold',
+            amcStatus: 'yes',
+            cluster: ''
+          }]
     });
+    console.log('Final form data set:', customerFormData);
     setFormErrors({});
     setShowEditModal(true);
   };
@@ -1966,6 +2118,29 @@ const CustomerManagement: React.FC = () => {
               </button>
             </div>
             <div className="p-6 space-y-6">
+              {/* Import Summary */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-3">Import Summary</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{previewData.summary.totalRows}</div>
+                    <div className="text-gray-600">Total Rows</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600">{previewData.summary.newCustomers}</div>
+                    <div className="text-gray-600">New Customers</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-yellow-600">{previewData.summary.existingCustomers}</div>
+                    <div className="text-gray-600">Existing Customers</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-red-600">{previewData.errors.length}</div>
+                    <div className="text-gray-600">Errors</div>
+                  </div>
+                </div>
+              </div>
+              
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                   <div className="flex items-center justify-between">
@@ -2035,21 +2210,63 @@ const CustomerManagement: React.FC = () => {
                     <table className="w-full text-sm">
                       <thead className="bg-green-100 text-green-800">
                         <tr>
-                          <th className="px-3 py-2 text-left font-medium">Name</th>
-                          <th className="px-3 py-2 text-left font-medium">Phone</th>
-                          <th className="px-3 py-2 text-left font-medium">GST</th>
+                          <th className="px-3 py-2 text-left font-medium">Customer Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Alias (Alice)</th>
+                          <th className="px-3 py-2 text-left font-medium">Mobile Number</th>
                           <th className="px-3 py-2 text-left font-medium">Contact Person</th>
                           <th className="px-3 py-2 text-left font-medium">Designation</th>
+                          <th className="px-3 py-2 text-left font-medium">Site Address</th>
+                          <th className="px-3 py-2 text-left font-medium">DG Count</th>
+                          <th className="px-3 py-2 text-left font-medium">
+                            DG Details
+                            <span className="ml-1 text-xs text-gray-500" title="Click on 'Yes' to view detailed DG information">
+                              ℹ️
+                            </span>
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-green-200">
                         {previewData.customersToCreate.slice(0, 10).map((customer: any, index: number) => (
                           <tr key={index} className="hover:bg-green-50">
                             <td className="px-3 py-2">{customer.name}</td>
-                            <td className="px-3 py-2">{customer.phone}</td>
-                            <td className="px-3 py-2">{customer.gstNumber}</td>
-                            <td className="px-3 py-2">{customer.contactPersonName}</td>
-                            <td className="px-3 py-2">{customer.designation}</td>
+                            <td className="px-3 py-2">{customer.alice || '-'}</td>
+                            <td className="px-3 py-2">{customer.phone || '-'}</td>
+                            <td className="px-3 py-2">{customer.contactPersonName || '-'}</td>
+                            <td className="px-3 py-2">{customer.designation || '-'}</td>
+                            <td className="px-3 py-2">{customer.siteAddress || '-'}</td>
+                            <td className="px-3 py-2">{customer.numberOfDG || 0}</td>
+                            <td className="px-3 py-2">
+                              {customer.hasDGDetails ? (
+                                <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full cursor-pointer hover:bg-blue-200" 
+                                      title="Click to view DG details"
+                                      onClick={() => {
+                                        const dgDetails = customer.dgDetails || [];
+                                        if (dgDetails.length > 0) {
+                                          alert(`DG Details:\n${dgDetails.map((dg: any, idx: number) => 
+                                            `DG ${idx + 1}:\n` +
+                                            `  Serial: ${dg.dgSerialNumbers}\n` +
+                                            `  Make: ${dg.dgMake}\n` +
+                                            `  Model: ${dg.dgModel}\n` +
+                                            `  Rating: ${dg.dgRatingKVA} KVA\n` +
+                                            `  Alternator: ${dg.alternatorMake}\n` +
+                                            `  Engine: ${dg.engineSerialNumber}\n` +
+                                            `  Dealer: ${dg.salesDealerName}\n` +
+                                            `  Commissioning: ${dg.commissioningDate}\n` +
+                                            `  Warranty: ${dg.warrantyStatus}\n` +
+                                            `  Installation: ${dg.installationType}\n` +
+                                            `  AMC: ${dg.amcStatus}\n` +
+                                            `  Cluster: ${dg.cluster}`
+                                          ).join('\n\n')}`);
+                                        }
+                                      }}>
+                                  Yes ({customer.dgDetails?.length || 0})
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
+                                  No
+                                </span>
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -2080,17 +2297,21 @@ const CustomerManagement: React.FC = () => {
                     <table className="w-full text-sm">
                       <thead className="bg-yellow-100 text-yellow-800">
                         <tr>
-                          <th className="px-3 py-2 text-left font-medium">Name</th>
-                          <th className="px-3 py-2 text-left font-medium">Phone</th>
-                          <th className="px-3 py-2 text-left font-medium">GST</th>
+                          <th className="px-3 py-2 text-left font-medium">Customer Name</th>
+                          <th className="px-3 py-2 text-left font-medium">Alias (Alice)</th>
+                          <th className="px-3 py-2 text-left font-medium">Mobile Number</th>
+                          <th className="px-3 py-2 text-left font-medium">Site Address</th>
+                          <th className="px-3 py-2 text-left font-medium">DG Count</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-yellow-200">
                         {previewData.existingCustomers.slice(0, 10).map((customer: any, index: number) => (
                           <tr key={index} className="hover:bg-yellow-50">
                             <td className="px-3 py-2">{customer.name}</td>
-                            <td className="px-3 py-2">{customer.phone}</td>
-                            <td className="px-3 py-2">{customer.gstNumber}</td>
+                            <td className="px-3 py-2">{customer.alice || '-'}</td>
+                            <td className="px-3 py-2">{customer.phone || '-'}</td>
+                            <td className="px-3 py-2">{customer.siteAddress || '-'}</td>
+                            <td className="px-3 py-2">{customer.numberOfDG || 0}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2105,6 +2326,114 @@ const CustomerManagement: React.FC = () => {
                         }
                       </p>
                     )}
+                  </div>
+                </div>
+              )}
+              
+              {/* Data Validation Summary */}
+              {previewData.customersToCreate.length > 0 && (
+                <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-indigo-900 mb-4 flex items-center">
+                    <CheckCircle className="w-5 h-5 mr-2" />
+                    Data Validation Summary
+                  </h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-green-600">
+                        {previewData.customersToCreate.filter((c: any) => c.name && c.name.trim()).length}
+                      </div>
+                      <div className="text-gray-600">Valid Names</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-blue-600">
+                        {previewData.customersToCreate.filter((c: any) => c.phone && c.phone.trim()).length}
+                      </div>
+                      <div className="text-gray-600">With Phone</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-purple-600">
+                        {previewData.customersToCreate.filter((c: any) => c.siteAddress && c.siteAddress.trim()).length}
+                      </div>
+                      <div className="text-gray-600">With Site Address</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-orange-600">
+                        {previewData.customersToCreate.filter((c: any) => c.hasDGDetails).length}
+                      </div>
+                      <div className="text-gray-600">With DG Details</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* Detailed Preview Section */}
+              {previewData.customersToCreate.length > 0 && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <h3 className="text-lg font-medium text-blue-900 mb-4 flex items-center">
+                    <FileText className="w-5 h-5 mr-2" />
+                    Detailed Preview - First Customer
+                  </h3>
+                  <div className="bg-white rounded-lg p-4 border border-blue-200">
+                    {(() => {
+                      const firstCustomer = previewData.customersToCreate[0];
+                      return (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-2">Basic Information</h4>
+                              <div className="space-y-2 text-sm">
+                                <div><span className="font-medium">Name:</span> {firstCustomer.name}</div>
+                                <div><span className="font-medium">Alice:</span> {firstCustomer.alice || 'Not provided'}</div>
+                                <div><span className="font-medium">Contact Person:</span> {firstCustomer.contactPersonName || 'Not provided'}</div>
+                                <div><span className="font-medium">Designation:</span> {firstCustomer.designation || 'Not provided'}</div>
+                                <div><span className="font-medium">Phone:</span> {firstCustomer.phone || 'Not provided'}</div>
+                                <div><span className="font-medium">Email:</span> {firstCustomer.email || 'Not provided'}</div>
+                              </div>
+                            </div>
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-2">Address & Location</h4>
+                              <div className="space-y-2 text-sm">
+                                <div><span className="font-medium">Site Address:</span> {firstCustomer.siteAddress || 'Not provided'}</div>
+                                <div><span className="font-medium">Number of DG:</span> {firstCustomer.numberOfDG || 0}</div>
+                                <div><span className="font-medium">GST Number:</span> {firstCustomer.gstNumber || 'Not provided'}</div>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {firstCustomer.hasDGDetails && firstCustomer.dgDetails && firstCustomer.dgDetails.length > 0 && (
+                            <div>
+                              <h4 className="font-medium text-gray-900 mb-2">DG Technical Details</h4>
+                              <div className="bg-gray-50 rounded-lg p-3">
+                                {firstCustomer.dgDetails.map((dg: any, idx: number) => (
+                                  <div key={idx} className="mb-3 last:mb-0">
+                                    <div className="font-medium text-sm text-gray-700 mb-2">DG Unit #{idx + 1}</div>
+                                    <div className="grid grid-cols-2 gap-2 text-xs">
+                                      <div><span className="font-medium">Serial:</span> {dg.dgSerialNumbers || 'N/A'}</div>
+                                      <div><span className="font-medium">Make:</span> {dg.dgMake || 'N/A'}</div>
+                                      <div><span className="font-medium">Model:</span> {dg.dgModel || 'N/A'}</div>
+                                      <div><span className="font-medium">Rating:</span> {dg.dgRatingKVA || 0} KVA</div>
+                                      <div><span className="font-medium">Alternator:</span> {dg.alternatorMake || 'N/A'}</div>
+                                      <div><span className="font-medium">Engine:</span> {dg.engineSerialNumber || 'N/A'}</div>
+                                      <div><span className="font-medium">Dealer:</span> {dg.salesDealerName || 'N/A'}</div>
+                                      <div><span className="font-medium">Commissioning:</span> {dg.commissioningDate || 'N/A'}</div>
+                                      <div><span className="font-medium">Warranty:</span> {dg.warrantyStatus || 'N/A'}</div>
+                                      <div><span className="font-medium">Installation:</span> {dg.installationType || 'N/A'}</div>
+                                      <div><span className="font-medium">AMC:</span> {dg.amcStatus || 'N/A'}</div>
+                                      <div><span className="font-medium">Cluster:</span> {dg.cluster || 'N/A'}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          <div className="text-xs text-gray-600 bg-gray-100 p-2 rounded">
+                            <strong>Note:</strong> This preview shows the first customer from your Excel file. 
+                            All {previewData.customersToCreate.length} customers will be imported with similar structure.
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -2141,14 +2470,17 @@ const CustomerManagement: React.FC = () => {
       {/* Add Customer Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Add New {
-                customerTypeTab === 'customer' ? 'Customer' : 
-                customerTypeTab === 'supplier' ? 'Supplier' : 
-                customerTypeTab === 'dg_customer' ? 'DG Customer' :
-                'OEM Customer'
-              }</h2>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl m-4 max-h-[95vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Add New {
+                  customerTypeTab === 'customer' ? 'Customer' : 
+                  customerTypeTab === 'supplier' ? 'Supplier' : 
+                  customerTypeTab === 'dg_customer' ? 'DG Customer' :
+                  'OEM Customer'
+                }</h2>
+                <p className="text-sm text-gray-600 mt-1">Fill in the details below to create a new customer</p>
+              </div>
               <button
                 onClick={() => {
                   setShowAddModal(false);
@@ -2156,22 +2488,25 @@ const CustomerManagement: React.FC = () => {
                   setFormErrors({})
                   setShowAssignedToDropdown(false);
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
             <form onSubmit={(e) => { e.preventDefault(); handleSubmitCustomer(); }}>
               {formErrors.general && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4 mx-4">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
                 </div>
               )}
-              <div className="flex flex-1">
+              <div className="flex flex-col lg:flex-row">
                 {/* Left: Main Fields */}
-                <div className="w-1/2 border-r border-gray-200 flex flex-col p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
+                <div className="w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col p-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <div>
+                      <h3 className="text-xl font-bold text-gray-800">Basic Information</h3>
+                      <p className="text-sm text-gray-600 mt-1">Customer details and contact information</p>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     {/* Customer Name, Type */}
@@ -2376,6 +2711,50 @@ const CustomerManagement: React.FC = () => {
                     />
                   </div>
 
+                  {/* Alice (Alias) Field */}
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Alice (Alias)
+                    </label>
+                    <input
+                      type="text"
+                      value={customerFormData.alice || ''}
+                      onChange={(e) => setCustomerFormData({ ...customerFormData, alice: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter customer alias/short name"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 my-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Number of DG
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={customerFormData.numberOfDG || 0}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, numberOfDG: parseInt(e.target.value) || 0 })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., 2"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Site Address
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.siteAddress || ''}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, siteAddress: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter site/installation address"
+                      />
+                    </div>
+                  </div>
+
                 </div>
                 {/* Right: Addresses */}
                 <div className="w-1/2 p-4">
@@ -2502,8 +2881,280 @@ const CustomerManagement: React.FC = () => {
                   </div>
                 </div>
 
+                {/* DG Details Section - Only show for DG Customers */}
+                {/* {customerTypeTab === 'dg_customer' && ( */}
+                  <div className="w-full border-t border-gray-200 p-4 bg-gray-50">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-800">DG Technical Details</h3>
+                      <span className="text-sm text-gray-600">Service Team Information</span>
+                    </div>
+                    
+                    {/* DG Details Management */}
+                    <div className="mt-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="block text-sm font-medium text-gray-700">
+                          DG Details ({customerFormData.dgDetails?.length || 0})
+                        </label>
+                        <button
+                          type="button"
+                          onClick={addDGDetails}
+                          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                        >
+                          Add DG Details
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        {customerFormData.dgDetails?.map((dgDetail, index) => (
+                          <div key={index} className="border border-gray-200 rounded-lg p-4 bg-white">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-sm font-medium text-gray-700">DG Details #{index + 1}</h4>
+                              {customerFormData.dgDetails!.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeDGDetails(index)}
+                                  className="px-2 py-1 text-red-500 hover:text-red-700 text-sm"
+                                  title="Remove DG Details"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                              {/* DG Serial Number */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  DG Serial Number *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.dgSerialNumbers}
+                                  onChange={(e) => updateDGDetails(index, 'dgSerialNumbers', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., DG001"
+                                />
+                              </div>
+
+                              {/* DG Make */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  DG Make *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.dgMake}
+                                  onChange={(e) => updateDGDetails(index, 'dgMake', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., Cummins, Kirloskar"
+                                />
+                              </div>
+
+                              {/* DG Model */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  DG Model *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.dgModel}
+                                  onChange={(e) => updateDGDetails(index, 'dgModel', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., C1100D5"
+                                />
+                              </div>
+
+                              {/* DG Rating KVA */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  DG Rating (KVA) *
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={dgDetail.dgRatingKVA}
+                                  onChange={(e) => updateDGDetails(index, 'dgRatingKVA', parseFloat(e.target.value))}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., 1000"
+                                />
+                              </div>
+
+                              {/* Alternator Make */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Alternator Make *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.alternatorMake}
+                                  onChange={(e) => updateDGDetails(index, 'alternatorMake', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., Stamford, Leroy Somer"
+                                />
+                              </div>
+
+                              {/* Alternator Serial Number */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Alternator Serial Number *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.alternatorSerialNumber}
+                                  onChange={(e) => updateDGDetails(index, 'alternatorSerialNumber', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., ALT001"
+                                />
+                              </div>
+
+                              {/* Engine Serial Number */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Engine Serial Number *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.engineSerialNumber}
+                                  onChange={(e) => updateDGDetails(index, 'engineSerialNumber', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., ENG001"
+                                />
+                              </div>
+
+                              {/* Sales Dealer Name */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Sales Dealer Name *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.salesDealerName}
+                                  onChange={(e) => updateDGDetails(index, 'salesDealerName', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., ABC Motors"
+                                />
+                              </div>
+
+                              {/* Commissioning Date */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Commissioning Date *
+                                </label>
+                                <input
+                                  type="date"
+                                  value={dgDetail.commissioningDate}
+                                  onChange={(e) => updateDGDetails(index, 'commissioningDate', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                              </div>
+
+                              {/* Warranty Status */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Warranty Status *
+                                </label>
+                                <select
+                                  value={dgDetail.warrantyStatus}
+                                  onChange={(e) => updateDGDetails(index, 'warrantyStatus', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                  <option value="warranty">Warranty</option>
+                                  <option value="non_warranty">Non-Warranty</option>
+                                </select>
+                              </div>
+
+                              {/* Installation Type */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Installation Type *
+                                </label>
+                                <select
+                                  value={dgDetail.installationType}
+                                  onChange={(e) => updateDGDetails(index, 'installationType', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                  <option value="infold">In-Fold</option>
+                                  <option value="outfold">Out-Fold</option>
+                                </select>
+                              </div>
+
+                              {/* AMC Status */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  AMC Status *
+                                </label>
+                                <select
+                                  value={dgDetail.amcStatus}
+                                  onChange={(e) => updateDGDetails(index, 'amcStatus', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                  <option value="yes">Yes</option>
+                                  <option value="no">No</option>
+                                </select>
+                              </div>
+
+                              {/* Cluster */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Service Cluster *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.cluster}
+                                  onChange={(e) => updateDGDetails(index, 'cluster', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., North Zone, South Zone"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                {/* )} */}
+
+                {/* Additional Information Section */}
+                {/* <div className="w-full border-t border-gray-200 p-4 bg-gray-50">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-800">Additional Information</h3>
+                    <span className="text-sm text-gray-600">Site and DG details</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Number of DG
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={customerFormData.numberOfDG || 0}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, numberOfDG: parseInt(e.target.value) || 0 })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., 2"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Site Address
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.siteAddress || ''}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, siteAddress: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter site/installation address"
+                      />
+                    </div>
+                  </div>
+                </div> */}
+
               </div>
-              <div className="flex space-x-3 p-4 border-t border-gray-200">
+              <div className="flex space-x-4 p-6 border-t border-gray-200 bg-gray-50">
                 <button
                   type="button"
                   onClick={() => {
@@ -2511,14 +3162,14 @@ const CustomerManagement: React.FC = () => {
                     resetCustomerForm();
                     setShowAssignedToDropdown(false);
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium shadow-sm"
                 >
                   {customerTypeTab === 'customer' ? (submitting ? 'Creating...' : 'Create Customer') : 
                    customerTypeTab === 'supplier' ? (submitting ? 'Creating...' : 'Create Supplier') : 
@@ -2534,14 +3185,17 @@ const CustomerManagement: React.FC = () => {
       {/* Edit Customer Modal */}
       {showEditModal && editingCustomer && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Edit {
-                customerTypeTab === 'customer' ? 'Customer' : 
-                customerTypeTab === 'supplier' ? 'Supplier' : 
-                customerTypeTab === 'dg_customer' ? 'DG Customer' :
-                'OEM Customer'
-              }</h2>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl m-4 max-h-[95vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200 bg-gradient-to-r from-green-50 to-emerald-50">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Edit {
+                  customerTypeTab === 'customer' ? 'Customer' : 
+                  customerTypeTab === 'supplier' ? 'Supplier' : 
+                  customerTypeTab === 'dg_customer' ? 'DG Customer' :
+                  'OEM Customer'
+                }</h2>
+                <p className="text-sm text-gray-600 mt-1">Update customer information and details</p>
+              </div>
               <button
                 onClick={() => {
                   setShowEditModal(false);
@@ -2549,7 +3203,7 @@ const CustomerManagement: React.FC = () => {
                   setFormErrors({});
                   setShowAssignedToDropdown(false);
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
@@ -2769,6 +3423,52 @@ const CustomerManagement: React.FC = () => {
                     />
                   </div>
 
+                  {/* Alice (Alias) Field */}
+                  <div className="mt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Alice (Alias)
+                    </label>
+                    <input
+                      type="text"
+                      value={customerFormData.alice || ''}
+                      onChange={(e) => setCustomerFormData({ ...customerFormData, alice: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter customer alias/short name"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4 my-6">
+                    {/* Number of DG */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Number of DG
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={customerFormData.numberOfDG || 0}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, numberOfDG: parseInt(e.target.value) || 0 })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., 2"
+                      />
+                    </div>
+                    
+                    {/* Site Address */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Site Address
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.siteAddress || ''}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, siteAddress: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter site/installation address"
+                      />
+                    </div>
+                  </div>
+
                 </div>
                 {/* Right: Addresses */}
                 <div className="w-1/2 p-4">
@@ -2895,8 +3595,280 @@ const CustomerManagement: React.FC = () => {
                   </div>
                 </div>
 
+                {/* DG Details Section - Only show for DG Customers */}
+                {/* {customerTypeTab === 'dg_customer' && ( */}
+                  <div className="w-full border-t border-gray-200 p-4 bg-gray-50">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-gray-800">DG Technical Details</h3>
+                      <span className="text-sm text-gray-600">Service Team Information</span>
+                    </div>
+                    
+                    {/* DG Details Management */}
+                    <div className="mt-6">
+                      <div className="flex items-center justify-between mb-3">
+                        <label className="block text-sm font-medium text-gray-700">
+                          DG Details ({customerFormData.dgDetails?.length || 0})
+                        </label>
+                        <button
+                          type="button"
+                          onClick={addDGDetails}
+                          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
+                        >
+                          Add DG Details
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        {customerFormData.dgDetails?.map((dgDetail, index) => (
+                          <div key={index} className="border border-gray-200 rounded-lg p-4 bg-white">
+                            <div className="flex items-center justify-between mb-3">
+                              <h4 className="text-sm font-medium text-gray-700">DG Details #{index + 1}</h4>
+                              {customerFormData.dgDetails!.length > 1 && (
+                                <button
+                                  type="button"
+                                  onClick={() => removeDGDetails(index)}
+                                  className="px-2 py-1 text-red-500 hover:text-red-700 text-sm"
+                                  title="Remove DG Details"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                              {/* DG Serial Number */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  DG Serial Number *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.dgSerialNumbers}
+                                  onChange={(e) => updateDGDetails(index, 'dgSerialNumbers', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., DG001"
+                                />
+                              </div>
+
+                              {/* DG Make */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  DG Make *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.dgMake}
+                                  onChange={(e) => updateDGDetails(index, 'dgMake', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., Cummins, Kirloskar"
+                                />
+                              </div>
+
+                              {/* DG Model */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  DG Model *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.dgModel}
+                                  onChange={(e) => updateDGDetails(index, 'dgModel', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., C1100D5"
+                                />
+                              </div>
+
+                              {/* DG Rating KVA */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  DG Rating (KVA) *
+                                </label>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="1"
+                                  value={dgDetail.dgRatingKVA}
+                                  onChange={(e) => updateDGDetails(index, 'dgRatingKVA', parseFloat(e.target.value))}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., 1000"
+                                />
+                              </div>
+
+                              {/* Alternator Make */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Alternator Make *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.alternatorMake}
+                                  onChange={(e) => updateDGDetails(index, 'alternatorMake', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., Stamford, Leroy Somer"
+                                />
+                              </div>
+
+                              {/* Alternator Serial Number */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Alternator Serial Number *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.alternatorSerialNumber}
+                                  onChange={(e) => updateDGDetails(index, 'alternatorSerialNumber', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., ALT001"
+                                />
+                              </div>
+
+                              {/* Engine Serial Number */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Engine Serial Number *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.engineSerialNumber}
+                                  onChange={(e) => updateDGDetails(index, 'engineSerialNumber', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., ENG001"
+                                />
+                              </div>
+
+                              {/* Sales Dealer Name */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Sales Dealer Name *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.salesDealerName}
+                                  onChange={(e) => updateDGDetails(index, 'salesDealerName', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., ABC Motors"
+                                />
+                              </div>
+
+                              {/* Commissioning Date */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Commissioning Date *
+                                </label>
+                                <input
+                                  type="date"
+                                  value={dgDetail.commissioningDate}
+                                  onChange={(e) => updateDGDetails(index, 'commissioningDate', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                              </div>
+
+                              {/* Warranty Status */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Warranty Status *
+                                </label>
+                                <select
+                                  value={dgDetail.warrantyStatus}
+                                  onChange={(e) => updateDGDetails(index, 'warrantyStatus', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                  <option value="warranty">Warranty</option>
+                                  <option value="non_warranty">Non-Warranty</option>
+                                </select>
+                              </div>
+
+                              {/* Installation Type */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Installation Type *
+                                </label>
+                                <select
+                                  value={dgDetail.installationType}
+                                  onChange={(e) => updateDGDetails(index, 'installationType', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                  <option value="infold">In-Fold</option>
+                                  <option value="outfold">Out-Fold</option>
+                                </select>
+                              </div>
+
+                              {/* AMC Status */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  AMC Status *
+                                </label>
+                                <select
+                                  value={dgDetail.amcStatus}
+                                  onChange={(e) => updateDGDetails(index, 'amcStatus', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                >
+                                  <option value="yes">Yes</option>
+                                  <option value="no">No</option>
+                                </select>
+                              </div>
+
+                              {/* Cluster */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Service Cluster *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={dgDetail.cluster}
+                                  onChange={(e) => updateDGDetails(index, 'cluster', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="e.g., North Zone, South Zone"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                {/* )} */}
+
+                {/* Additional Information Section */}
+                {/* <div className="w-full border-t border-gray-200 p-4 bg-gray-50">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-800">Additional Information</h3>
+                    <span className="text-sm text-gray-600">Site and DG details</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4 mb-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Number of DG
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={customerFormData.numberOfDG || 0}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, numberOfDG: parseInt(e.target.value) || 0 })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., 2"
+                      />
+                    </div>
+                    
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Site Address
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.siteAddress || ''}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, siteAddress: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter site/installation address"
+                      />
+                    </div>
+                  </div>
+                </div> */}
+
               </div>
-              <div className="flex space-x-3 p-4 border-t border-gray-200">
+              <div className="flex space-x-4 p-6 border-t border-gray-200 bg-gray-50">
                 <button
                   type="button"
                   onClick={() => {
@@ -2904,14 +3876,14 @@ const CustomerManagement: React.FC = () => {
                     resetCustomerForm();
                     setShowAssignedToDropdown(false);
                   }}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition-colors font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 font-medium shadow-sm"
                 >
                   {submitting ? 'Updating...' : `Update ${
                     customerTypeTab === 'customer' ? 'Customer' : 
@@ -3071,6 +4043,12 @@ const CustomerManagement: React.FC = () => {
                         <p className="font-medium text-sm">{selectedCustomer.contactPersonName}</p>
                       </div>
                     )}
+                    {selectedCustomer.panNumber && (
+                      <div>
+                        <p className="text-xs text-gray-500">PAN Number</p>
+                        <p className="font-medium text-sm">{selectedCustomer.panNumber}</p>
+                      </div>
+                    )}
                     {selectedCustomer.gstNumber && (
                       <div>
                         <p className="text-xs text-gray-500">GST Number</p>
@@ -3087,6 +4065,24 @@ const CustomerManagement: React.FC = () => {
                       <p className="text-xs text-gray-500">Phone</p>
                       <p className="font-medium">{selectedCustomer.phone}</p>
                     </div>
+                    {selectedCustomer.alice && (
+                      <div>
+                        <p className="text-xs text-gray-500">Alice (Alias)</p>
+                        <p className="font-medium text-sm">{selectedCustomer.alice}</p>
+                      </div>
+                    )}
+                    {selectedCustomer.siteAddress && (
+                      <div>
+                        <p className="text-xs text-gray-500">Site Address</p>
+                        <p className="font-medium text-sm">{selectedCustomer.siteAddress}</p>
+                      </div>
+                    )}
+                    {selectedCustomer.numberOfDG && selectedCustomer.numberOfDG > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-500">Number of DG</p>
+                        <p className="font-medium text-sm">{selectedCustomer.numberOfDG}</p>
+                      </div>
+                    )}
                     {customerTypeTab === 'oem' && selectedCustomer.rating && (
                       <div>
                         <p className="text-xs text-gray-500">Rating</p>
@@ -3295,6 +4291,75 @@ const CustomerManagement: React.FC = () => {
                         </div>
                       ))}
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* DG Details Section - Only show for DG Customers */}
+              {selectedCustomer.dgDetails && Array.isArray(selectedCustomer.dgDetails) && selectedCustomer.dgDetails.length > 0 && (
+                <div className="space-y-6 mb-6">
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-medium text-gray-900 border-b pb-2">DG Technical Details ({selectedCustomer.dgDetails.length})</h3>
+                    
+                    {selectedCustomer.dgDetails.map((dgDetail, index) => (
+                      <div key={index} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">DG Details #{index + 1}</h4>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <p className="text-xs text-gray-500">DG Serial Number</p>
+                            <p className="font-medium text-sm">{dgDetail.dgSerialNumbers}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">DG Make</p>
+                            <p className="font-medium text-sm">{dgDetail.dgMake}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">DG Model</p>
+                            <p className="font-medium text-sm">{dgDetail.dgModel}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">DG Rating (KVA)</p>
+                            <p className="font-medium text-sm">{dgDetail.dgRatingKVA}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Alternator Make</p>
+                            <p className="font-medium text-sm">{dgDetail.alternatorMake}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Alternator Serial Number</p>
+                            <p className="font-medium text-sm">{dgDetail.alternatorSerialNumber}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Engine Serial Number</p>
+                            <p className="font-medium text-sm">{dgDetail.engineSerialNumber}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Sales Dealer Name</p>
+                            <p className="font-medium text-sm">{dgDetail.salesDealerName}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Commissioning Date</p>
+                            <p className="font-medium text-sm">{new Date(dgDetail.commissioningDate).toLocaleDateString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Warranty Status</p>
+                            <p className="font-medium text-sm capitalize">{dgDetail.warrantyStatus.replace('_', ' ')}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Installation Type</p>
+                            <p className="font-medium text-sm capitalize">{dgDetail.installationType}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">AMC Status</p>
+                            <p className="font-medium text-sm capitalize">{dgDetail.amcStatus}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Service Cluster</p>
+                            <p className="font-medium text-sm">{dgDetail.cluster}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}

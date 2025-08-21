@@ -2,6 +2,8 @@ import { Request, Response, NextFunction } from 'express';
 import { Customer } from '../models/Customer';
 import { DGCustomer } from '../models/DGCustomer';
 import { OEM } from '../models/OEM';
+import { DGDetails } from '../models/DGDetails';
+
 import { AuthenticatedRequest, APIResponse, LeadStatus, CustomerType, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import notificationService from '../services/notificationService';
@@ -118,6 +120,7 @@ export const getCustomers = async (
     let customers = await Customer.find(query)
       .populate('assignedTo', 'firstName lastName email')
       .populate('createdBy', 'firstName lastName email')
+      .populate('dgDetails')
       .sort(sort as string)
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
@@ -193,7 +196,8 @@ export const getCustomer = async (
     const customer = await Customer.findById(req.params.id)
       .populate('assignedTo', 'firstName lastName email')
       .populate('createdBy', 'firstName lastName email')
-      .populate('contactHistory.createdBy', 'firstName lastName email');
+      .populate('contactHistory.createdBy', 'firstName lastName email')
+      .populate('dgDetails');
 
     if (!customer) {
       return next(new AppError('Customer not found', 404));
@@ -241,6 +245,9 @@ export const createCustomer = async (
       createdBy: req.user?.id
     };
 
+    // Remove dgDetails from customerData to avoid validation issues
+    delete customerData.dgDetails;
+
     if (req.body.type === 'customer') {
       const customerId = await getNextCustomerId();
       customerData.customerId = customerId;
@@ -248,9 +255,46 @@ export const createCustomer = async (
 
     const customer = await Customer.create(customerData);
 
+    // Create DGDetails if provided
+    let dgDetails = null;
+    if (req.body.dgDetails && Array.isArray(req.body.dgDetails)) {
+      console.log('Creating DGDetails for customer:', customer._id);
+      console.log('DGDetails data:', req.body.dgDetails);
+      try {
+        const dgDetailsArray = [];
+        for (const dgData of req.body.dgDetails) {
+          console.log('Creating DGDetail with data:', dgData);
+          const dgDetail = new DGDetails({
+            ...dgData,
+            customer: customer._id,
+            createdBy: req.user?.id
+          });
+          console.log('DGDetail object created:', dgDetail);
+          const savedDGDetail = await dgDetail.save();
+          console.log('DGDetail saved successfully:', savedDGDetail._id);
+          dgDetailsArray.push(savedDGDetail);
+        }
+
+        // Update Customer's dgDetails array with the new DGDetails IDs
+        console.log('Updating customer with DGDetails IDs:', dgDetailsArray.map(dg => dg._id));
+        await Customer.findByIdAndUpdate(
+          customer._id,
+          { $push: { dgDetails: { $each: dgDetailsArray.map(dg => dg._id) } } }
+        );
+        
+        dgDetails = dgDetailsArray;
+        console.log('Successfully created and linked DGDetails');
+      } catch (dgError) {
+        console.error('Error creating DGDetails:', dgError);
+        // Don't fail the main request if DGDetails creation fails
+        // You might want to handle this differently based on your requirements
+      }
+    }
+
     const populatedCustomer = await Customer.findById(customer._id)
       .populate('assignedTo', 'firstName lastName email')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('createdBy', 'firstName lastName email')
+      .populate('dgDetails');
 
     // Create assignment notification if customer is assigned to someone
     try {
@@ -269,7 +313,10 @@ export const createCustomer = async (
     const response: APIResponse = {
       success: true,
       message: 'Customer created successfully',
-      data: { customer: populatedCustomer }
+      data: { 
+        customer: populatedCustomer,
+        dgDetails: dgDetails 
+      }
     };
 
     res.status(201).json(response);
@@ -287,6 +334,9 @@ export const updateCustomer = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    console.log('Update customer request received for ID:', req.params.id);
+    console.log('Request body:', req.body);
+    console.log('DGDetails in request:', req.body.dgDetails);
     const customer = await Customer.findById(req.params.id);
     if (!customer) {
       return next(new AppError('Customer not found', 404));
@@ -311,13 +361,67 @@ export const updateCustomer = async (
     const oldAssignedTo = customer.assignedTo;
     const oldStatus = customer.status;
 
+    // Create update data without dgDetails to avoid validation issues
+    const updateData = { ...req.body };
+    delete updateData.dgDetails;
+
     const updatedCustomer = await Customer.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     )
       .populate('assignedTo', 'firstName lastName email')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('createdBy', 'firstName lastName email')
+      .populate('dgDetails');
+
+    // Handle DGDetails update if provided
+    if (req.body.dgDetails) {
+      try {
+        console.log('Updating DGDetails for customer:', req.params.id);
+        console.log('New DGDetails data:', req.body.dgDetails);
+        
+        // First, delete all existing DGDetails for this customer
+        await DGDetails.deleteMany({ customer: req.params.id });
+        console.log('Deleted existing DGDetails');
+        
+        // Clear the customer's dgDetails array
+        await Customer.findByIdAndUpdate(
+          req.params.id,
+          { $set: { dgDetails: [] } }
+        );
+        console.log('Cleared customer dgDetails array');
+        
+        // Create new DGDetails if provided
+        if (Array.isArray(req.body.dgDetails) && req.body.dgDetails.length > 0) {
+          const newDGDetailsIds = [];
+          
+          for (const dgData of req.body.dgDetails) {
+            console.log('Creating new DGDetail:', dgData);
+            const newDGDetails = new DGDetails({
+              ...dgData,
+              customer: req.params.id,
+              createdBy: req.user?.id
+            });
+            
+            const savedDGDetails = await newDGDetails.save();
+            newDGDetailsIds.push(savedDGDetails._id);
+            console.log('Created DGDetail with ID:', savedDGDetails._id);
+          }
+          
+          // Update customer's dgDetails array with new IDs
+          await Customer.findByIdAndUpdate(
+            req.params.id,
+            { $set: { dgDetails: newDGDetailsIds } }
+          );
+          console.log('Updated customer with new DGDetails IDs:', newDGDetailsIds);
+        }
+        
+        console.log('Successfully updated DGDetails');
+      } catch (dgError) {
+        console.error('Error updating DGDetails:', dgError);
+        // Don't fail the main request if DGDetails update fails
+      }
+    }
 
     // Create notifications for changes
     try {
@@ -348,10 +452,19 @@ export const updateCustomer = async (
       // Don't fail the main request if notifications fail
     }
 
+    // Get the final updated customer with populated DGDetails
+    const finalCustomer = await Customer.findById(req.params.id)
+      .populate('assignedTo', 'firstName lastName email')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('dgDetails');
+
+    console.log('Final customer with populated DGDetails:', finalCustomer);
+    console.log('DGDetails in final customer:', finalCustomer?.dgDetails);
+
     const response: APIResponse = {
       success: true,
       message: 'Customer updated successfully',
-      data: { customer: updatedCustomer }
+      data: { customer: finalCustomer }
     };
 
     res.status(200).json(response);
@@ -372,6 +485,11 @@ export const deleteCustomer = async (
     const customer = await Customer.findById(req.params.id);
     if (!customer) {
       return next(new AppError('Customer not found', 404));
+    }
+
+    // Delete associated DGDetails first
+    if (customer.dgDetails && customer.dgDetails.length > 0) {
+      await DGDetails.deleteMany({ _id: { $in: customer.dgDetails } });
     }
 
     await Customer.findByIdAndDelete(req.params.id);

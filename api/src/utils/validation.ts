@@ -45,30 +45,7 @@ export const updateUserSchema = Joi.object({
   moduleAccess: Joi.array().items(Joi.string())
 });
 
-// Customer validation schemas
-export const createCustomerSchema = Joi.object({
-  name: Joi.string().min(2).max(100).required(),
-  email: Joi.string().email().allow('', null),
-  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).allow('', null),
-  address: Joi.string().max(500).required(),
-  customerType: Joi.string().valid(...Object.values(CustomerType)).required(),
-  leadSource: Joi.string().max(100),
-  assignedTo: Joi.string(),
-  status: Joi.string().valid(...Object.values(LeadStatus)),
-  notes: Joi.string().max(2000)
-});
-
-export const updateCustomerSchema = Joi.object({
-  name: Joi.string().min(2).max(100),
-  email: Joi.string().email(),
-  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
-  address: Joi.string().max(500),
-  customerType: Joi.string().valid(...Object.values(CustomerType)),
-  leadSource: Joi.string().max(100),
-  assignedTo: Joi.string(),
-  status: Joi.string().valid(...Object.values(LeadStatus)),
-  notes: Joi.string().max(2000)
-});
+// Customer validation schemas - imported from schemas folder
 
 export const addContactHistorySchema = Joi.object({
   type: Joi.string().valid('call', 'meeting', 'email', 'whatsapp').required(),
