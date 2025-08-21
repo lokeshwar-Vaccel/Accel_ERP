@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { RootState } from 'redux/store';
+import { RootState } from '../store';
 
 interface SidebarProps {
   currentPanel: string;
@@ -158,7 +158,7 @@ export function useCurrentModulePermission() {
   const location = useLocation();
   const currentModuleKey = getActiveKeyFromPath(location.pathname);
   const moduleEntry = user?.moduleAccess?.find(
-    (entry) => entry.module === currentModuleKey
+    (entry: any) => entry.module === currentModuleKey
   );
   
   return moduleEntry?.permission ?? null; // "read", "write", "admin", or null

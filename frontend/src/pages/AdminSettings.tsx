@@ -14,7 +14,7 @@ import { Button } from '../components/ui/Botton';
 import { Form } from '../components/ui/Form';
 import PageHeader from '../components/ui/PageHeader';
 import { useDispatch, useSelector } from 'react-redux';
-import { RootState, AppDispatch } from '../redux/store';
+import { RootState, AppDispatch } from '../store';
 import { Navigate } from 'react-router-dom';
 import { 
   fetchSettings, 
@@ -121,8 +121,8 @@ const AdminSettings: React.FC = () => {
       }
     } else {
       // Handle other settings
-      const categorySettings = settings?.filter(s => s.category === category) || [];
-      const settingsToUpdate = categorySettings.map(setting => ({
+      const categorySettings = settings?.filter((s: any) => s.category === category) || [];
+      const settingsToUpdate = categorySettings.map((setting: any) => ({
         key: setting.key,
         value: formData[setting.key]
       }));
@@ -149,7 +149,7 @@ const AdminSettings: React.FC = () => {
       .filter(setting => setting.category === category)
       .map(setting => ({
         name: setting.key,
-        label: setting.displayName || setting.key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+        label: setting.displayName || setting.key.replace(/_/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase()),
         type: setting.dataType === 'boolean' ? 'checkbox' : 
               setting.dataType === 'number' ? 'number' : 
             setting.dataType === 'password' ? 'password' :

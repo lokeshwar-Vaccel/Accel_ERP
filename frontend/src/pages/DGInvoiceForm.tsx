@@ -17,7 +17,7 @@ import {
 import { Button } from '../components/ui/Botton';
 import PageHeader from '../components/ui/PageHeader';
 import { apiClient } from '../utils/api';
-import { RootState } from '../redux/store';
+import { RootState } from '../store';
 import toast from 'react-hot-toast';
 import {
   calculateQuotationTotals,

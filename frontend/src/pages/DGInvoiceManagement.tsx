@@ -34,7 +34,7 @@ import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
 import PageHeader from '../components/ui/PageHeader';
 import { apiClient } from '../utils/api';
-import { RootState } from '../redux/store';
+import { RootState } from '../store';
 import toast from 'react-hot-toast';
 import { Pagination } from '../components/ui/Pagination';
 
