@@ -33,9 +33,14 @@ export interface Address {
 export interface Customer {
   _id: string;
   name: string;
+  alice?: string;
+  designation?: string;
+  contactPersonName?: string;
   email: string;
   phone: string;
   address: string;
+  siteAddress?: string;
+  numberOfDG?: number;
   customerType: CustomerType;
   leadSource: string;
   status: LeadStatus;
@@ -46,6 +51,7 @@ export interface Customer {
   createdAt: string;
   updatedAt: string;
   addresses: Address[];
+  dgDetails?: DGDetails[];
 }
 
 export enum CustomerType {
@@ -71,6 +77,27 @@ export interface ContactHistory {
   date: string;
   notes: string;
   createdBy: string;
+}
+
+export interface DGDetails {
+  _id: string;
+  dgSerialNumbers: string;
+  alternatorMake: string;
+  alternatorSerialNumber: string;
+  dgMake: string;
+  engineSerialNumber: string;
+  dgModel: string;
+  dgRatingKVA: number;
+  salesDealerName: string;
+  commissioningDate: string;
+  warrantyStatus: string;
+  installationType: string;
+  amcStatus: string;
+  cluster: string;
+  customer: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Product {
