@@ -12,7 +12,7 @@ import { apiClient } from '../utils/api';
 import { User, UserRole } from '../types';
 import PageHeader from '../components/ui/PageHeader';
 import { useCurrentModulePermission } from 'layout/Sidebar';
-import { RootState } from 'redux/store';
+import { RootState } from '../store';
 import toast from 'react-hot-toast';
 
 

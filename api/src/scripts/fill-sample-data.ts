@@ -230,7 +230,7 @@ async function main() {
       serialNumber: `SN${randomInt(1000, 9999)}`,
       description: `Service for ${randomString(8)}`,
       priority: pickRandom(['low', 'medium', 'high', 'critical']),
-      status: pickRandom(['open', 'in_progress', 'resolved', 'closed', 'cancelled']),
+              status: pickRandom(['open', 'resolved', 'closed']),
       assignedTo: FIXED_USER_ID,
       scheduledDate: new Date(Date.now() + randomInt(1, 30) * 86400000),
       completedDate: null,

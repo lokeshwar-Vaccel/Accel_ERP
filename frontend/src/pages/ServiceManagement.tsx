@@ -39,19 +39,18 @@ import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 import { Pagination } from '../components/ui/Pagination';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
-import { exportServiceTicketToPDF, exportMultipleTicketsToPDF, ServiceTicketPDFData } from '../utils/pdfExport';
+
 import DigitalServiceReport from '../components/DigitalServiceReport';
 import { MultiSelect } from '../components/ui/MultiSelect';
 import { MultiSelectRef } from '../components/ui/MultiSelect';
 
 // Types matching backend structure
-type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'cancelled';
+type TicketStatus = 'open' | 'resolved' | 'closed';
 type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
 
 // New dropdown options
 type TypeOfVisit = 'oil_service' | 'courtesy_visit' | 'amc_visit' | 'spare' | 'fsc_visit' | 'paid_visit' | '';
-type NatureOfWork = 'oil_service' | 'site_visit' | 'breakdown' | 'installation' | 'dms_call' | '';
-type SubNatureOfWork = 'fsc' | 'amc' | 'paid' | 'courtesy_visit' | 'warranty' | 'pre_installation' | 'commissioning' | 'ev' | 'logged' | 'without_logged' | '';
+type TypeOfService = 'breakdown' | 'courtesy_visit' | 'free_service_coupon' | 'preventive_maintenance' | '';
 
 interface User {
   _id: string;
@@ -102,6 +101,27 @@ interface PartUsed {
 
 interface ServiceTicket {
   _id: string;
+  // New Excel fields from API response
+  ServiceRequestNumber?: string;
+  CustomerType?: string;
+  CustomerName?: string;
+  EngineSerialNumber?: string;
+  EngineModel?: string;
+  KVA?: string;
+  ServiceRequestDate?: string;
+  ServiceAttendedDate?: string;
+  HourMeterReading?: string;
+  TypeofService?: string;
+  SiteID?: string;
+  ServiceEngineerName?: string | User;
+  ComplaintCode?: string;
+  ComplaintDescription?: string;
+  ResolutionDescription?: string;
+  eFSRNumber?: string;
+  eFSRClosureDateAndTime?: string;
+  ServiceRequestStatus?: string;
+  OemName?: string;
+
   // Standardized fields
   serviceRequestNumber: string;
   serviceRequestType: string;
@@ -112,8 +132,9 @@ interface ServiceTicket {
   serviceRequestEngineer: string | User;
   serviceRequestStatus: TicketStatus;
   typeOfVisit?: TypeOfVisit;
-  natureOfWork?: NatureOfWork;
-  subNatureOfWork?: SubNatureOfWork;
+  typeOfService?: TypeOfService;
+  natureOfWork?: string;
+  subNatureOfWork?: string;
   businessVertical?: string;
   siteIdentifier?: string;
   stateName?: string;
@@ -143,14 +164,14 @@ interface ServiceTicket {
 
 interface TicketFormData {
   // Standardized fields
+  serviceRequestNumber: string;
   serviceRequestType: string;
   serviceRequiredDate: string;
   engineSerialNumber?: string;
   customerName: string;
   serviceRequestEngineer: string;
   typeOfVisit: TypeOfVisit;
-  natureOfWork: NatureOfWork;
-  subNatureOfWork: SubNatureOfWork;
+  typeOfService: TypeOfService;
   businessVertical: string;
   siteIdentifier: string;
   stateName: string;
@@ -184,11 +205,25 @@ interface Address {
 const ServiceManagement: React.FC = () => {
   const location = useLocation();
 
+  // Helper function to generate service request number
+  const generateServiceRequestNumber = () => {
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2); // Last 2 digits of year
+    const month = (now.getMonth() + 1).toString().padStart(2, '0'); // Month with leading zero
+    
+    // Start from 0001 for each month
+    const counter = 1; // This would be fetched from database to get the next available number for the current month
+    const counterStr = counter.toString().padStart(4, '0');
+    
+    return `SPS${year}${month}${counterStr}`;
+  };
+
   // Core state
   const [tickets, setTickets] = useState<ServiceTicket[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [customerEngines, setCustomerEngines] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -237,20 +272,40 @@ const ServiceManagement: React.FC = () => {
   const [selectedTicket, setSelectedTicket] = useState<ServiceTicket | null>(null);
   const [editingTicket, setEditingTicket] = useState<ServiceTicket | null>(null);
 
+  // Editable visit details state
+  const [editableVisitDetails, setEditableVisitDetails] = useState({
+    typeOfVisit: '',
+    typeOfService: '',
+    natureOfWork: '',
+    subNatureOfWork: ''
+  });
+  const [isEditingVisitDetails, setIsEditingVisitDetails] = useState(false);
+  const [updatingVisitDetails, setUpdatingVisitDetails] = useState(false);
+  const [visitDetailsHighlighted, setVisitDetailsHighlighted] = useState(false);
+
   // Current user for ticket creation
   const [currentUserId, setCurrentUserId] = useState<string>('');
+
+  // Stats state
+  const [serviceStats, setServiceStats] = useState({
+    totalTickets: 0,
+    openTickets: 0,
+    resolvedTickets: 0,
+    closedTickets: 0,
+    overdueTickets: 0
+  });
 
   // Form data
   const [ticketFormData, setTicketFormData] = useState<TicketFormData>({
     // Standardized fields
+    serviceRequestNumber: generateServiceRequestNumber(),
     serviceRequestType: '',
     serviceRequiredDate: new Date().toISOString().slice(0, 16),
     engineSerialNumber: '',
     customerName: '',
     serviceRequestEngineer: '',
-    typeOfVisit: 'oil_service',
-    natureOfWork: 'oil_service',
-    subNatureOfWork: 'fsc',
+    typeOfVisit: '',
+    typeOfService: '',
     businessVertical: '',
     siteIdentifier: '',
     stateName: '',
@@ -283,6 +338,13 @@ const ServiceManagement: React.FC = () => {
     filteredOptions: []
   });
 
+  const [engineDropdown, setEngineDropdown] = useState<DropdownState>({
+    isOpen: false,
+    searchTerm: '',
+    selectedIndex: 0,
+    filteredOptions: []
+  });
+
   const [productDropdown, setProductDropdown] = useState<DropdownState>({
     isOpen: false,
     searchTerm: '',
@@ -299,30 +361,9 @@ const ServiceManagement: React.FC = () => {
     filteredOptions: []
   });
 
-  // Enhanced dropdown states for the three new fields
-  const [typeOfVisitDropdown, setTypeOfVisitDropdown] = useState<DropdownState>({
-    isOpen: false,
-    searchTerm: '',
-    selectedIndex: 0,
-    filteredOptions: []
-  });
-
-  const [natureOfWorkDropdown, setNatureOfWorkDropdown] = useState<DropdownState>({
-    isOpen: false,
-    searchTerm: '',
-    selectedIndex: 0,
-    filteredOptions: []
-  });
-
-  const [subNatureOfWorkDropdown, setSubNatureOfWorkDropdown] = useState<DropdownState>({
-    isOpen: false,
-    searchTerm: '',
-    selectedIndex: 0,
-    filteredOptions: []
-  });
-
   // Refs for dropdown focus management
   const customerDropdownRef = useRef<HTMLDivElement>(null);
+  const engineDropdownRef = useRef<HTMLDivElement>(null);
   const productDropdownRef = useRef<HTMLDivElement>(null);
 
   const assigneeDropdownRef = useRef<HTMLDivElement>(null);
@@ -403,7 +444,6 @@ const ServiceManagement: React.FC = () => {
 
   // Dropdown options for new fields
   const typeOfVisitOptions = [
-    { value: '', label: 'Select Type of Visit' },
     { value: 'oil_service', label: 'Oil Service' },
     { value: 'courtesy_visit', label: 'Courtesy Visit' },
     { value: 'amc_visit', label: 'AMC Visit' },
@@ -412,8 +452,14 @@ const ServiceManagement: React.FC = () => {
     { value: 'paid_visit', label: 'Paid Visit' }
   ];
 
+  const typeOfServiceOptions = [
+    { value: 'breakdown', label: 'Breakdown' },
+    { value: 'courtesy_visit', label: 'Courtesy Visit' },
+    { value: 'free_service_coupon', label: 'Free Service Coupon' },
+    { value: 'preventive_maintenance', label: 'Preventive Maintenance' }
+  ];
+
   const natureOfWorkOptions = [
-    { value: '', label: 'Select Nature of Work' },
     { value: 'oil_service', label: 'Oil Service' },
     { value: 'site_visit', label: 'Site Visit' },
     { value: 'breakdown', label: 'Breakdown' },
@@ -422,7 +468,6 @@ const ServiceManagement: React.FC = () => {
   ];
 
   const subNatureOfWorkOptions = [
-    { value: '', label: 'Select Sub Nature of Work' },
     { value: 'fsc', label: 'FSC' },
     { value: 'amc', label: 'AMC' },
     { value: 'paid', label: 'Paid' },
@@ -499,11 +544,29 @@ const ServiceManagement: React.FC = () => {
     };
   }, [showCreateModal]);
 
+  const fetchServiceStats = async () => {
+    try {
+      const response = await apiClient.services.getStats();
+      if (response.success && response.data) {
+        setServiceStats({
+          totalTickets: response.data.totalTickets || 0,
+          openTickets: response.data.openTickets || 0,
+          resolvedTickets: response.data.resolvedTickets || 0,
+          closedTickets: response.data.closedTickets || 0,
+          overdueTickets: response.data.overdueTickets || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching service stats:', error);
+    }
+  };
+
   const fetchAllData = async () => {
     setLoading(true);
     try {
       await Promise.all([
         fetchTickets(),
+        fetchServiceStats(),
         fetchCustomers(),
         fetchProducts(),
         fetchFieldOperator()
@@ -742,6 +805,26 @@ const ServiceManagement: React.FC = () => {
     }
   };
 
+  const fetchCustomerEngines = async (customerId: string) => {
+    try {
+      const response = await apiClient.services.getCustomerEngines(customerId);
+      if (response.success && response.data.engines) {
+        setCustomerEngines(response.data.engines);
+        setEngineDropdown(prev => ({
+          ...prev,
+          filteredOptions: response.data.engines
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching customer engines:', error);
+      setCustomerEngines([]);
+      setEngineDropdown(prev => ({
+        ...prev,
+        filteredOptions: []
+      }));
+    }
+  };
+
   // Helper functions
   const getUserName = (user: string | User | undefined): string => {
     if (!user) return '';
@@ -768,14 +851,14 @@ const ServiceManagement: React.FC = () => {
   const handleCreateTicket = () => {
     setTicketFormData({
       // Standardized fields
+      serviceRequestNumber: generateServiceRequestNumber(),
       serviceRequestType: '',
       serviceRequiredDate: new Date().toISOString().split('T')[0],
       engineSerialNumber: '',
       customerName: '',
       serviceRequestEngineer: '',
       typeOfVisit: '',
-      natureOfWork: '',
-      subNatureOfWork: '',
+      typeOfService: '',
       businessVertical: '',
       siteIdentifier: '',
       stateName: '',
@@ -796,14 +879,14 @@ const ServiceManagement: React.FC = () => {
     setEditingTicket(ticket);
     setTicketFormData({
       // Standardized fields
+      serviceRequestNumber: ticket.serviceRequestNumber || generateServiceRequestNumber(),
       serviceRequestType: ticket.serviceRequestType || '',
       serviceRequiredDate: ticket.serviceRequiredDate ? ticket.serviceRequiredDate.slice(0, 16) : new Date().toISOString().slice(0, 16),
       engineSerialNumber: ticket.engineSerialNumber || '',
       customerName: ticket.customerName || '',
       serviceRequestEngineer: typeof ticket.serviceRequestEngineer === 'string' ? ticket.serviceRequestEngineer : ticket.serviceRequestEngineer?._id || '',
       typeOfVisit: ticket.typeOfVisit || '',
-      natureOfWork: ticket.natureOfWork || '',
-      subNatureOfWork: ticket.subNatureOfWork || '',
+      typeOfService: ticket.typeOfService || '',
       businessVertical: ticket.businessVertical || '',
       siteIdentifier: ticket.siteIdentifier || '',
       stateName: ticket.stateName || '',
@@ -848,6 +931,16 @@ const ServiceManagement: React.FC = () => {
   const openDetailsModal = async (ticket: ServiceTicket) => {
     setSelectedTicket(ticket);
     setShowDetailsModal(true);
+    
+    // Reset editing state when opening modal
+    setIsEditingVisitDetails(false);
+    setEditableVisitDetails({
+      typeOfVisit: '',
+      typeOfService: '',
+      natureOfWork: '',
+      subNatureOfWork: ''
+    });
+    setVisitDetailsHighlighted(false);
 
     // Check if feedback exists for this ticket
     if (ticket.status === 'resolved') {
@@ -877,7 +970,6 @@ const ServiceManagement: React.FC = () => {
     if (!ticketFormData.scheduledDate) {
       errors.scheduledDate = 'Scheduled Date is required';
     }
-
 
     // Validate engine serial number if provided
     if (ticketFormData.engineSerialNumber && ticketFormData.engineSerialNumber.trim()) {
@@ -916,8 +1008,7 @@ const ServiceManagement: React.FC = () => {
         customerName: customers.find(c => c._id === ticketFormData.customer)?.name || '',
         serviceRequestEngineer: ticketFormData.assignedTo || undefined,
         typeOfVisit: ticketFormData.typeOfVisit,
-        natureOfWork: ticketFormData.natureOfWork,
-        subNatureOfWork: ticketFormData.subNatureOfWork,
+        typeOfService: ticketFormData.typeOfService,
         businessVertical: ticketFormData.businessVertical || undefined,
         siteIdentifier: ticketFormData.siteIdentifier || undefined,
         stateName: ticketFormData.stateName || undefined,
@@ -929,7 +1020,7 @@ const ServiceManagement: React.FC = () => {
         payload.assignedTo = ticketFormData.assignedTo;
       }
 
-      console.log('Creating service ticket with payload:', payload);
+  
       const response = await apiClient.services.create(payload);
 
       // Add the new ticket to the list
@@ -937,6 +1028,7 @@ const ServiceManagement: React.FC = () => {
         const newTicket = response.data.ticket || response.data;
         setTickets([newTicket, ...tickets]);
         fetchTickets();
+        fetchServiceStats(); // Refresh stats after creating ticket
       }
 
       setShowCreateModal(false);
@@ -976,8 +1068,7 @@ const ServiceManagement: React.FC = () => {
         customerName: customers.find(c => c._id === ticketFormData.customer)?.name || '',
         serviceRequestEngineer: ticketFormData.assignedTo || undefined,
         typeOfVisit: ticketFormData.typeOfVisit,
-        natureOfWork: ticketFormData.natureOfWork,
-        subNatureOfWork: ticketFormData.subNatureOfWork,
+        typeOfService: ticketFormData.typeOfService,
         businessVertical: ticketFormData.businessVertical || undefined,
         siteIdentifier: ticketFormData.siteIdentifier || undefined,
         stateName: ticketFormData.stateName || undefined,
@@ -996,6 +1087,7 @@ const ServiceManagement: React.FC = () => {
       if (response.success && response.data) {
         const updatedTicket = response.data.ticket || response.data;
         setTickets(tickets.map(t => t._id === editingTicket._id ? updatedTicket : t));
+        fetchServiceStats(); // Refresh stats after updating ticket
       }
 
       setShowEditModal(false);
@@ -1016,14 +1108,14 @@ const ServiceManagement: React.FC = () => {
   const resetTicketForm = () => {
     setTicketFormData({
       // Standardized fields
+      serviceRequestNumber: generateServiceRequestNumber(),
       serviceRequestType: '',
       serviceRequiredDate: new Date().toISOString().slice(0, 16),
       engineSerialNumber: '',
       customerName: '',
       serviceRequestEngineer: '',
       typeOfVisit: '',
-      natureOfWork: '',
-      subNatureOfWork: '',
+      typeOfService: '',
       businessVertical: '',
       siteIdentifier: '',
       stateName: '',
@@ -1039,14 +1131,10 @@ const ServiceManagement: React.FC = () => {
 
     // Reset dropdown states
     setCustomerDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
+    setEngineDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
     setProductDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
 
     setAssigneeDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
-    
-    // Reset the three new enhanced dropdown states
-    setTypeOfVisitDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
-    setNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
-    setSubNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
   };
 
   // Since filtering is now handled by the backend, we just use the tickets directly
@@ -1056,14 +1144,10 @@ const ServiceManagement: React.FC = () => {
     switch (status) {
       case 'open':
         return 'bg-blue-100 text-blue-800';
-      case 'in_progress':
-        return 'bg-yellow-100 text-yellow-800';
       case 'resolved':
-        return 'bg-green-100 text-green-800';
+        return 'bg-yellow-100 text-yellow-800';
       case 'closed':
-        return 'bg-gray-100 text-gray-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
+        return 'bg-green-100 text-green-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -1078,7 +1162,14 @@ const ServiceManagement: React.FC = () => {
   };
 
   const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-IN');
+    return new Date(dateString).toLocaleString('en-IN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
   };
 
   const getTimeRemaining = (deadline: string) => {
@@ -1099,27 +1190,27 @@ const ServiceManagement: React.FC = () => {
   const stats = [
     {
       title: 'Total Tickets',
-      value: totalDatas.toString(),
+      value: serviceStats.totalTickets.toString(),
       icon: <FileText className="w-6 h-6" />,
       color: 'blue'
     },
     {
       title: 'Open Tickets',
-      value: tickets.filter(t => t.status === 'open').length.toString(),
+      value: serviceStats.openTickets.toString(),
       icon: <AlertTriangle className="w-6 h-6" />,
       color: 'orange'
     },
     {
-      title: 'In Progress',
-      value: tickets.filter(t => t.status === 'in_progress').length.toString(),
-      icon: <Activity className="w-6 h-6" />,
-      color: 'yellow'
-    },
-    {
       title: 'Resolved Tickets',
-      value: tickets.filter(t => t.status === 'resolved').length.toString(),
+      value: serviceStats.resolvedTickets.toString(),
       icon: <CheckCircle className="w-6 h-6" />,
       color: 'green'
+    },
+    {
+      title: 'Closed Tickets',
+      value: serviceStats.closedTickets.toString(),
+      icon: <CheckCircle className="w-6 h-6" />,
+      color: 'gray'
     }
   ];
 
@@ -1127,10 +1218,8 @@ const ServiceManagement: React.FC = () => {
   const statusOptions = [
     { value: 'all', label: 'All Status' },
     { value: 'open', label: 'Open' },
-    { value: 'in_progress', label: 'In Progress' },
     { value: 'resolved', label: 'Resolved' },
-    { value: 'closed', label: 'Closed' },
-    { value: 'cancelled', label: 'Cancelled' }
+    { value: 'closed', label: 'Closed' }
   ];
 
 
@@ -1157,6 +1246,112 @@ const ServiceManagement: React.FC = () => {
   };
 
 
+
+  const handleServiceRequestStatusUpdate = async (ticketId: string, newStatus: string) => {
+    try {
+      // Find the ticket to check if it has a product
+      const ticket = tickets.find(t => t._id === ticketId);
+      if (!ticket) {
+        throw new Error('Ticket not found');
+      }
+
+      // Update the ticket ServiceRequestStatus
+      const response = await apiClient.services.update(ticketId, { ServiceRequestStatus: newStatus });
+
+      if (response.success) {
+        // Update the ticket in the local state
+        setTickets(tickets.map(ticket =>
+          ticket._id === ticketId
+            ? { ...ticket, ServiceRequestStatus: newStatus, status: newStatus as TicketStatus }
+            : ticket
+        ));
+
+        // Update selected ticket if it's the same one
+        if (selectedTicket && selectedTicket._id === ticketId) {
+          setSelectedTicket({ ...selectedTicket, ServiceRequestStatus: newStatus, status: newStatus as TicketStatus });
+        }
+
+        // Refresh stats after status update
+        fetchServiceStats();
+
+        toast.success('Service Request Status updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error updating Service Request Status:', error);
+      toast.error('Failed to update Service Request Status. Please try again.');
+    }
+  };
+
+  const handleVisitDetailsUpdate = async () => {
+    if (!selectedTicket) return;
+
+    try {
+      setUpdatingVisitDetails(true);
+
+      const payload = {
+        typeOfVisit: editableVisitDetails.typeOfVisit,
+        typeOfService: editableVisitDetails.typeOfService,
+        natureOfWork: editableVisitDetails.natureOfWork,
+        subNatureOfWork: editableVisitDetails.subNatureOfWork
+      };
+
+      const response = await apiClient.services.update(selectedTicket._id, payload);
+
+      if (response.success) {
+        // Update the ticket in the local state
+        const updatedTicket = response.data.ticket || response.data;
+        setTickets(tickets.map(ticket =>
+          ticket._id === selectedTicket._id ? updatedTicket : ticket
+        ));
+
+        // Update selected ticket
+        setSelectedTicket(updatedTicket);
+
+        // Exit edit mode
+        setIsEditingVisitDetails(false);
+        
+        // Highlight the visit details section
+        setVisitDetailsHighlighted(true);
+        
+        // Remove highlight after 3 seconds
+        setTimeout(() => {
+          setVisitDetailsHighlighted(false);
+        }, 3000);
+        
+        // Refresh stats after updating visit details
+        fetchServiceStats();
+        
+        toast.success('Visit details updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error updating visit details:', error);
+      toast.error('Failed to update visit details. Please try again.');
+    } finally {
+      setUpdatingVisitDetails(false);
+    }
+  };
+
+  const startEditingVisitDetails = () => {
+    if (!selectedTicket) return;
+    
+    setEditableVisitDetails({
+      typeOfVisit: selectedTicket.typeOfVisit || '',
+      typeOfService: selectedTicket.typeOfService || '',
+      natureOfWork: selectedTicket.natureOfWork || '',
+      subNatureOfWork: selectedTicket.subNatureOfWork || ''
+    });
+    setIsEditingVisitDetails(true);
+  };
+
+  const cancelEditingVisitDetails = () => {
+    setIsEditingVisitDetails(false);
+    setEditableVisitDetails({
+      typeOfVisit: '',
+      typeOfService: '',
+      natureOfWork: '',
+      subNatureOfWork: ''
+    });
+  };
 
   const handleStatusUpdate = async (ticketId: string, newStatus: TicketStatus) => {
     try {
@@ -1190,79 +1385,7 @@ const ServiceManagement: React.FC = () => {
     }
   };
 
-  const handleExportToPDF = async (ticket: ServiceTicket) => {
-    try {
-      const pdfData: ServiceTicketPDFData = {
-        ticketNumber: ticket.ticketNumber,
-        customer: {
-          name: getCustomerName(ticket.customer),
-          email: typeof ticket.customer === 'object' ? ticket.customer.email : undefined,
-          phone: typeof ticket.customer === 'object' ? ticket.customer.phone : '',
-          address: typeof ticket.customer === 'object' ? (ticket.customer as any).addresses.find((address: any) => address.isPrimary)?.address || 'No address available' : undefined,
-        },
-        serialNumber: ticket.serialNumber,
-        description: `${ticket.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === ticket.typeOfVisit)?.label || 'N/A' : 'N/A'} - ${ticket.natureOfWork ? natureOfWorkOptions.find(opt => opt.value === ticket.natureOfWork)?.label || 'N/A' : 'N/A'} - ${ticket.subNatureOfWork ? subNatureOfWorkOptions.find(opt => opt.value === ticket.subNatureOfWork)?.label || 'N/A' : 'N/A'}`,
-        status: ticket.status,
-        assignedTo: getUserName(ticket.assignedTo),
-        scheduledDate: ticket.scheduledDate,
-        completedDate: ticket.completedDate,
-        createdAt: ticket.createdAt,
-        serviceReport: ticket.serviceReport,
-        serviceCharge: ticket.serviceCharge || 0,
-        partsUsed: ticket.partsUsed?.map(part => ({
-          product: getProductName(part.product),
-          quantity: part.quantity,
-          serialNumbers: part.serialNumbers,
-        })),
-      };
 
-      await exportServiceTicketToPDF(pdfData);
-    } catch (error) {
-      console.error('Error exporting PDF:', error);
-      alert('Failed to export PDF. Please try again.');
-    }
-  };
-
-  const handleBulkExportToPDF = async () => {
-    if (tickets.length === 0) {
-      alert('No tickets to export');
-      return;
-    }
-
-    try {
-      // Convert all tickets to PDF data format
-      const pdfDataArray: ServiceTicketPDFData[] = tickets.map(ticket => ({
-        ticketNumber: ticket.ticketNumber,
-        customer: {
-          name: getCustomerName(ticket.customer),
-          email: typeof ticket.customer === 'object' ? ticket.customer.email : undefined,
-          phone: typeof ticket.customer === 'object' ? ticket.customer.phone : '',
-          address: typeof ticket.customer === 'object' ? (ticket.customer as any).addresses.find((address: any) => address.isPrimary)?.address || 'No address available' : undefined,
-        },
-        serialNumber: ticket.serialNumber,
-        description: `${ticket.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === ticket.typeOfVisit)?.label || 'N/A' : 'N/A'} - ${ticket.natureOfWork ? natureOfWorkOptions.find(opt => opt.value === ticket.natureOfWork)?.label || 'N/A' : 'N/A'} - ${ticket.subNatureOfWork ? subNatureOfWorkOptions.find(opt => opt.value === ticket.subNatureOfWork)?.label || 'N/A' : 'N/A'}`,
-        status: ticket.status,
-        assignedTo: getUserName(ticket.assignedTo),
-        scheduledDate: ticket.scheduledDate,
-        completedDate: ticket.completedDate,
-        createdAt: ticket.createdAt,
-        serviceReport: ticket.serviceReport,
-        serviceCharge: ticket.serviceCharge || 0,
-        partsUsed: ticket.partsUsed?.map(part => ({
-          product: getProductName(part.product),
-          quantity: part.quantity,
-          serialNumbers: part.serialNumbers,
-        })),
-      }));
-
-      // Export all tickets in a single PDF
-      await exportMultipleTicketsToPDF(pdfDataArray);
-
-    } catch (error) {
-      console.error('Error in bulk PDF export:', error);
-      alert('Failed to export PDF. Please try again.');
-    }
-  };
 
   // Excel upload functions
   const handleExcelUpload = () => {
@@ -1431,57 +1554,66 @@ const ServiceManagement: React.FC = () => {
           return new Date().toISOString();
         };
 
-        // Map the Excel headers to our standardized fields with flexible header matching
-        const mappedData = {
-          serviceRequestNumber: getFieldValue(['Service Request Number', 'SR Number', 'Service Request Number'], ''),
-          serviceRequestType: getFieldValue(['Service Request Type', 'SR Type', 'Service Type'], ''),
-          requestSubmissionDate: convertExcelDateOnly(getFieldValue(['Request Submission Date', 'Requested Date', 'Submission Date', 'Created Date', 'Request Date', 'Date Requested', 'Request Date', 'Submission Date', 'Created Date', 'Date Created'])),
-          serviceRequiredDate: convertExcelDateTime(getFieldValue(['Service Required Date', 'Service Required On Date', 'Required Date'])),
-          engineSerialNumber: getFieldValue(['Engine Serial Number', 'Engine Sr No', 'Serial Number'], ''),
-          customerName: getFieldValue(['Customer Name', 'Customer'], ''),
-          serviceRequestEngineer: getFieldValue(['Service Request Engineer', 'SR Engineer', 'Engineer', 'Technician', 'Field Operator'], ''),
-          typeOfVisit: getFieldValue(['Type of Visit', 'Visit Type', 'Type'], 'oil_service'),
-          natureOfWork: getFieldValue(['Nature of Work', 'Work Nature', 'Nature'], 'oil_service'),
-          subNatureOfWork: getFieldValue(['Sub Nature of Work', 'Sub Nature', 'Sub Work'], 'fsc'),
-          businessVertical: getFieldValue(['Business Vertical', 'Vertical', 'Industry'], ''),
-          siteIdentifier: getFieldValue(['Site Identifier', 'Site ID', 'Site'], ''),
-          stateName: getFieldValue(['State Name', 'State'], ''),
-          siteLocation: getFieldValue(['SiteLocation', 'Location', 'Site', 'Site Location', 'Location Address', 'Address'], ''),
-          // Legacy fields
-          description: getFieldValue(['Complaint Description', 'Complaint', 'Description', 'Issue'], ''),
-          priority: 'medium',
-          status: (() => {
-            const statusHeaders = ['Service Request Status', 'SR Status', 'Status', 'Ticket Status', 'State', 'Current Status', 'Status'];
-            const excelStatusValue = getFieldValue(statusHeaders, 'open');
+        // Helper function to convert Excel date with time to proper format
+        const convertExcelDateTimeWithTime = (dateValue: any) => {
+          if (!dateValue) return new Date().toISOString();
 
-            // Map Excel status to application status
-            let mappedStatus = 'open';
-            if (excelStatusValue) {
-              const statusMapping: { [key: string]: string } = {
-                'new': 'open',
-                'New': 'open',
-                'NEW': 'open',
-                'resolved': 'resolved',
-                'Resolved': 'resolved',
-                'RESOLVED': 'resolved',
-                'in progress': 'in_progress',
-                'In Progress': 'in_progress',
-                'IN PROGRESS': 'in_progress',
-                'closed': 'closed',
-                'Closed': 'closed',
-                'CLOSED': 'closed',
-                'cancelled': 'cancelled',
-                'Cancelled': 'cancelled',
-                'CANCELLED': 'cancelled'
-              };
-              mappedStatus = statusMapping[excelStatusValue] || 'open';
+          // If it's already a string in ISO format, return as is
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateValue)) {
+            return dateValue;
+          }
+
+          // If it's a string in YYYY-MM-DD HH:MM:SS format, convert to ISO
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateValue)) {
+            return new Date(dateValue.replace(' ', 'T')).toISOString();
+          }
+
+          // If it's a string in YYYY-MM-DD format, add time
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+            return dateValue + 'T00:00:00.000Z';
+          }
+
+          // Handle Excel date numbers (Excel stores dates as numbers)
+          if (typeof dateValue === 'number') {
+            // Excel dates are days since 1900-01-01
+            const excelEpoch = new Date(1900, 0, 1);
+            const date = new Date(excelEpoch.getTime() + (dateValue - 2) * 24 * 60 * 60 * 1000);
+            return date.toISOString();
+          }
+
+          // If it's a Date object or other date string, convert it
+          try {
+            const date = new Date(dateValue);
+            if (!isNaN(date.getTime())) {
+              return date.toISOString();
             }
+          } catch (error) {
+            console.warn('Invalid date value:', dateValue, 'Error:', error);
+          }
+          return new Date().toISOString();
+        };
 
-            return mappedStatus;
-          })(),
-          serviceCharge: 0,
-          // Ensure dates are in proper format
-          scheduledDate: convertExcelDateTime(getFieldValue(['Service Required Date', 'Service Required On Date', 'Required Date']))
+        // Map the Excel headers to our new 19 fields structure
+        const mappedData = {
+          // Excel fields based on new structure
+          SRNumber: getFieldValue(['SRNumber', 'SR Number', 'Service Request Number', 'SR Number'], ''),
+          CustomerType: getFieldValue(['CustomerType', 'Customer Type', 'Customer Type'], ''),
+          CustomerName: getFieldValue(['CustomerName', 'Customer Name', 'Customer'], ''),
+          EngineNo: getFieldValue(['EngineNo', 'Engine No', 'Engine Number', 'Engine Serial Number'], ''),
+          ModelCode: getFieldValue(['ModelCode', 'Model Code', 'Model'], ''),
+          KVA: getFieldValue(['KVA', 'KVA Rating', 'KVA'], ''),
+          RequestedDate: convertExcelDateTimeWithTime(getFieldValue(['RequestedDate', 'Requested Date', 'Request Date', 'Service Required Date'])),
+          AttendedHrs: getFieldValue(['AttendedHrs', 'Attended Hours', 'Attended Hours'], ''),
+          SRType: getFieldValue(['SRType', 'SR Type', 'Service Request Type', 'Service Type'], ''),
+          SITEID: getFieldValue(['SITEID', 'Site ID', 'Site Identifier', 'Site'], ''),
+          SREngineer: getFieldValue(['SREngineer', 'SR Engineer', 'Service Request Engineer', 'Engineer', 'Technician'], ''),
+          ComplaintCode: getFieldValue(['ComplaintCode', 'Complaint Code', 'Complaint Code'], ''),
+          ComplaintDescription: getFieldValue(['ComplaintDescription', 'Complaint Description', 'Complaint', 'Description'], ''),
+          ResolutionDesc: getFieldValue(['ResolutionDesc', 'Resolution Description', 'Resolution', 'Resolution Desc'], ''),
+          eFSRNo: getFieldValue(['eFSRNo', 'eFSR Number', 'eFSR No'], ''),
+          eFSRClosureDateTime: convertExcelDateTimeWithTime(getFieldValue(['eFSRClosureDateTime', 'eFSR Closure Date Time', 'eFSR Closure Date'])),
+          SRStatus: getFieldValue(['SRStatus', 'SR Status', 'Service Request Status', 'Status'], 'open'),
+          OEMName: getFieldValue(['OEMName', 'OEM Name', 'OEM'], '')
         };
 
         return mappedData;
@@ -1490,20 +1622,23 @@ const ServiceManagement: React.FC = () => {
 
       setUploadProgress(20);
 
-      // Process all data without filtering - let backend handle missing customers and service engineers
+      // Process all data and map to new field structure
       const processedTickets = processedData.map((row, index) => {
         const rowNumber = index + 2; // Excel row number (1-based + header row)
         
-        // Return the processed data as is - backend will handle validation and creation
+        // Return the processed data with new field names for backend processing
         return {
           ...row,
-          // Keep the original names for backend processing
-          serviceRequestEngineer: row.serviceRequestEngineer || '',
-          customerName: row.customerName || ''
+          // Map to new field names for backend
+          SREngineer: row.SREngineer || '',
+          CustomerName: row.CustomerName || ''
         };
       });
 
       setUploadProgress(50);
+
+      // Debug: Log the data being sent
+      
 
       // Send all processed data to backend for import
       let successCount = 0;
@@ -1511,11 +1646,16 @@ const ServiceManagement: React.FC = () => {
 
       try {
         const response = await apiClient.services.bulkImport(processedTickets);
+  
 
         if (response.success) {
           successCount = response.data.importedCount || 0;
           if (response.data.errors && response.data.errors.length > 0) {
             creationErrors.push(...response.data.errors);
+          }
+          // Handle duplicates separately
+          if (response.data.duplicates && response.data.duplicates.length > 0) {
+            creationErrors.push(...response.data.duplicates);
           }
         } else {
           creationErrors.push({
@@ -1550,10 +1690,10 @@ const ServiceManagement: React.FC = () => {
       
       if (successCount > 0 && duplicateErrors.length > 0) {
         // Both imported and duplicates
-        toast.success(`${successCount} tickets added successfully | ⚠️ ${duplicateErrors.length} tickets already exist in system`);
+        toast.success(`✅ ${successCount} tickets added successfully | ⚠️ ${duplicateErrors.length} tickets already exist in system`);
       } else if (successCount > 0) {
         // Only imported
-        toast.success(`${successCount} tickets added successfully!`);
+        toast.success(`✅ ${successCount} tickets added successfully!`);
       } else if (duplicateErrors.length > 0) {
         // Only duplicates
         toast.error(`⚠️ ${duplicateErrors.length} tickets already exist in system - no new tickets added`);
@@ -1649,26 +1789,26 @@ const ServiceManagement: React.FC = () => {
           };
         }
 
-        // Auto-size columns
+        // Auto-size columns for new 19 fields
         const columnWidths = [
-          { wch: 20 }, // Service Request Number
-          { wch: 20 }, // Service Request Type
-          { wch: 15 }, // Request Submission Date
-          { wch: 15 }, // Service Required Date
-          { wch: 20 }, // Engine Serial Number
-          { wch: 25 }, // Customer Name
-          { wch: 25 }, // MAGIEC (System Code or Identifier)
-          { wch: 15 }, // MAGIEC Code
-          { wch: 25 }, // Service Request Engineer
-          { wch: 15 }, // Service Request Status
-          { wch: 20 }, // Type of Visit
-          { wch: 20 }, // Nature of Work
-          { wch: 20 }, // Sub Nature of Work
-          { wch: 20 }, // Business Vertical
-          { wch: 15 }, // Invoice Raised (Yes/No)
-          { wch: 15 }, // Site Identifier
-          { wch: 15 }, // State Name
-          { wch: 25 }, // Site Location
+          { wch: 20 }, // SRNumber
+          { wch: 20 }, // CustomerType
+          { wch: 25 }, // CustomerName
+          { wch: 20 }, // EngineNo
+          { wch: 20 }, // ModelCode
+          { wch: 15 }, // KVA
+          { wch: 20 }, // RequestedDate
+          { wch: 20 }, // AttendedHrs
+          { wch: 20 }, // SRType
+          { wch: 20 }, // SITEID
+          { wch: 25 }, // SREngineer
+          { wch: 20 }, // ComplaintCode
+          { wch: 30 }, // ComplaintDescription
+          { wch: 30 }, // ResolutionDesc
+          { wch: 20 }, // eFSRNo
+          { wch: 25 }, // eFSRClosureDateTime
+          { wch: 20 }, // SRStatus
+          { wch: 20 }, // OEMName
         ];
         worksheet['!cols'] = columnWidths;
 
@@ -1697,7 +1837,7 @@ const ServiceManagement: React.FC = () => {
 
 
   // Enhanced dropdown handlers
-  const scrollToSelectedItem = (dropdownType: 'customer' | 'product' | 'assignee') => {
+  const scrollToSelectedItem = (dropdownType: 'customer' | 'engine' | 'product' | 'assignee') => {
     const dropdownState = getDropdownState(dropdownType);
     const containerId = `${dropdownType}-dropdown-container`;
     const selectedItemId = `${dropdownType}-item-${dropdownState.selectedIndex}`;
@@ -1722,7 +1862,7 @@ const ServiceManagement: React.FC = () => {
   };
 
   const handleDropdownKeyDown = (
-    dropdownType: 'customer' | 'product' | 'assignee',
+    dropdownType: 'customer' | 'engine' | 'product' | 'assignee',
     event: React.KeyboardEvent,
     options: any[],
     onSelect: (value: string) => void
@@ -1775,23 +1915,25 @@ const ServiceManagement: React.FC = () => {
     }
   };
 
-  const getDropdownState = (type: 'customer' | 'product' | 'assignee') => {
+  const getDropdownState = (type: 'customer' | 'engine' | 'product' | 'assignee') => {
     switch (type) {
       case 'customer': return customerDropdown;
+      case 'engine': return engineDropdown;
       case 'product': return productDropdown;
       case 'assignee': return assigneeDropdown;
     }
   };
 
-  const getSetDropdownState = (type: 'customer' | 'product' | 'assignee') => {
+  const getSetDropdownState = (type: 'customer' | 'engine' | 'product' | 'assignee') => {
     switch (type) {
       case 'customer': return setCustomerDropdown;
+      case 'engine': return setEngineDropdown;
       case 'product': return setProductDropdown;
       case 'assignee': return setAssigneeDropdown;
     }
   };
 
-  const moveToNextDropdown = (currentType: 'customer' | 'product' | 'assignee') => {
+  const moveToNextDropdown = (currentType: 'customer' | 'engine' | 'product' | 'assignee') => {
     // Close current dropdown
     const setCurrentDropdown = getSetDropdownState(currentType);
     setCurrentDropdown(prev => ({ ...prev, isOpen: false }));
@@ -1800,9 +1942,20 @@ const ServiceManagement: React.FC = () => {
     switch (currentType) {
       case 'customer':
         setTimeout(() => {
-          // Focus the engine serial number field
-          if (serialNumberRef.current) {
-            serialNumberRef.current.focus();
+          // Open engine dropdown after customer selection
+          setEngineDropdown(prev => ({ ...prev, isOpen: true }));
+          // Focus the engine input
+          const engineInput = document.querySelector('input[placeholder="Search engine..."]') as HTMLInputElement;
+          if (engineInput) {
+            engineInput.focus();
+          }
+        }, 50);
+        break;
+      case 'engine':
+        setTimeout(() => {
+          // Focus and open the MultiSelect component for products
+          if (multiSelectRef.current) {
+            multiSelectRef.current.open();
           }
         }, 50);
         break;
@@ -1825,7 +1978,7 @@ const ServiceManagement: React.FC = () => {
   };
 
   const handleDropdownSearch = (
-    type: 'customer' | 'product' | 'assignee',
+    type: 'customer' | 'engine' | 'product' | 'assignee',
     searchTerm: string
   ) => {
     const setDropdownState = getSetDropdownState(type);
@@ -1835,6 +1988,9 @@ const ServiceManagement: React.FC = () => {
     switch (type) {
       case 'customer':
         originalOptions = customers;
+        break;
+      case 'engine':
+        originalOptions = customerEngines;
         break;
       case 'product':
         originalOptions = products;
@@ -1847,8 +2003,8 @@ const ServiceManagement: React.FC = () => {
     // Filter from original data
     const filtered = originalOptions.filter((option: any) => {
       const searchText = searchTerm.toLowerCase();
-      const optionText = (option.name || option.label || option.fullName || '').toLowerCase();
-      const partNumber = (option.modelNumber || '').toLowerCase();
+      const optionText = (option.name || option.label || option.fullName || option.engineSerialNumber || '').toLowerCase();
+      const partNumber = (option.modelNumber || option.engineModel || '').toLowerCase();
       return optionText.includes(searchText) || partNumber.includes(searchText);
     });
 
@@ -1861,7 +2017,7 @@ const ServiceManagement: React.FC = () => {
   };
 
   const handleDropdownFocus = (
-    type: 'customer' | 'product' | 'assignee'
+    type: 'customer' | 'engine' | 'product' | 'assignee'
   ) => {
     const setDropdownState = getSetDropdownState(type);
 
@@ -1870,6 +2026,9 @@ const ServiceManagement: React.FC = () => {
     switch (type) {
       case 'customer':
         originalOptions = customers;
+        break;
+      case 'engine':
+        originalOptions = customerEngines;
         break;
       case 'product':
         originalOptions = products;
@@ -1887,40 +2046,68 @@ const ServiceManagement: React.FC = () => {
       filteredOptions: originalOptions,
       selectedIndex: 0
     }));
-
-    // Focus the input field for immediate typing (for customer dropdown)
-    if (type === 'customer') {
-      setTimeout(() => {
-        const input = document.querySelector('input[placeholder="Search customer..."]') as HTMLInputElement;
-        if (input) {
-          input.focus();
-          input.select(); // Select all text for easy replacement
-        }
-      }, 50);
-    } else if (type === 'assignee') {
-      setTimeout(() => {
-        const input = document.querySelector('input[placeholder="Search technician..."]') as HTMLInputElement;
-        if (input) {
-          input.focus();
-          input.select(); // Select all text for easy replacement
-        }
-      }, 50);
-    } else if (type === 'product') {
-      setTimeout(() => {
-        const input = document.querySelector('input[placeholder="Search products..."]') as HTMLInputElement;
-        if (input) {
-          input.focus();
-          input.select(); // Select all text for easy replacement
-        }
-      }, 50);
-    }
   };
 
   const handleDropdownSelect = (
-    type: 'customer' | 'product' | 'assignee',
+    type: 'customer' | 'engine' | 'product' | 'assignee',
     value: string
   ) => {
     const setDropdownState = getSetDropdownState(type);
+
+    // Handle customer selection - fetch engines
+    if (type === 'customer') {
+      setTicketFormData(prev => ({
+        ...prev,
+        customer: value,
+        engineSerialNumber: '', // Reset engine when customer changes
+        businessVertical: '',
+        siteIdentifier: '',
+        stateName: '',
+        siteLocation: ''
+      }));
+      
+      // Fetch engines for this customer
+      fetchCustomerEngines(value);
+      
+      // Clear error for this field when selected
+      if (formErrors.customer) {
+        setFormErrors(prev => ({ ...prev, customer: '' }));
+      }
+      
+      // Close current dropdown
+      setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
+      
+      // Move to next dropdown after selection
+      moveToNextDropdown(type);
+      return;
+    }
+
+    // Handle engine selection - auto-populate fields
+    if (type === 'engine') {
+      const selectedEngine = customerEngines.find(engine => engine.engineSerialNumber === value);
+      if (selectedEngine) {
+        setTicketFormData(prev => ({
+          ...prev,
+          engineSerialNumber: selectedEngine.engineSerialNumber,
+          businessVertical: selectedEngine.businessVertical || '',
+          siteIdentifier: selectedEngine.siteId || '',
+          stateName: selectedEngine.stateName || '',
+          siteLocation: selectedEngine.siteLocation || ''
+        }));
+      }
+      
+      // Clear error for this field when selected
+      if (formErrors.engineSerialNumber) {
+        setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
+      }
+      
+      // Close current dropdown
+      setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
+      
+      // Move to next dropdown after selection
+      moveToNextDropdown(type);
+      return;
+    }
 
     // For products, check if the selected product is in stock
     if (type === 'product') {
@@ -1931,16 +2118,14 @@ const ServiceManagement: React.FC = () => {
       }
     }
 
-    // Update form data
+    // Update form data for other types
     setTicketFormData(prev => ({
       ...prev,
-      [type === 'customer' ? 'customer' :
-        type === 'product' ? 'product' : 'assignedTo']: value
+      [type === 'product' ? 'product' : 'assignedTo']: value
     }));
 
     // Clear error for this field when selected
-    const errorField = type === 'customer' ? 'customer' :
-      type === 'product' ? 'product' : 'assignedTo';
+    const errorField = type === 'product' ? 'product' : 'assignedTo';
     if (formErrors[errorField]) {
       setFormErrors(prev => ({ ...prev, [errorField]: '' }));
     }
@@ -1950,275 +2135,6 @@ const ServiceManagement: React.FC = () => {
 
     // Move to next dropdown after selection
     moveToNextDropdown(type);
-  };
-
-  // Handler functions for the three new enhanced dropdowns
-  const handleTypeOfVisitSearch = (searchTerm: string) => {
-    const filtered = typeOfVisitOptions.filter((option) => {
-      const searchText = searchTerm.toLowerCase();
-      const optionText = option.label.toLowerCase();
-      return optionText.includes(searchText);
-    });
-
-    setTypeOfVisitDropdown(prev => ({
-      ...prev,
-      searchTerm,
-      filteredOptions: filtered,
-      selectedIndex: 0
-    }));
-  };
-
-  const handleTypeOfVisitFocus = () => {
-    setTypeOfVisitDropdown(prev => ({
-      ...prev,
-      isOpen: true,
-      searchTerm: '',
-      filteredOptions: typeOfVisitOptions,
-      selectedIndex: 0
-    }));
-    // Focus the input field for immediate typing
-    setTimeout(() => {
-      const input = document.querySelector('input[placeholder="Search Type of Visit..."]') as HTMLInputElement;
-      if (input) {
-        input.focus();
-        input.select(); // Select all text for easy replacement
-      }
-    }, 50);
-  };
-
-  const handleTypeOfVisitKeyDown = (event: React.KeyboardEvent) => {
-    switch (event.key) {
-      case 'ArrowDown':
-        event.preventDefault();
-        event.stopPropagation();
-        setTypeOfVisitDropdown(prev => ({
-          ...prev,
-          selectedIndex: Math.min(prev.selectedIndex + 1, prev.filteredOptions.length - 1)
-        }));
-        break;
-      case 'ArrowUp':
-        event.preventDefault();
-        event.stopPropagation();
-        setTypeOfVisitDropdown(prev => ({
-          ...prev,
-          selectedIndex: Math.max(prev.selectedIndex - 1, 0)
-        }));
-        break;
-      case 'Enter':
-        event.preventDefault();
-        event.stopPropagation();
-        if (typeOfVisitDropdown.filteredOptions.length > 0 && typeOfVisitDropdown.selectedIndex >= 0) {
-          const selectedOption = typeOfVisitDropdown.filteredOptions[typeOfVisitDropdown.selectedIndex];
-          handleTypeOfVisitSelect(selectedOption.value as TypeOfVisit);
-        }
-        break;
-      case 'Tab':
-        event.preventDefault();
-        event.stopPropagation();
-        // Focus the nature of work field and open it
-        const natureOfWorkInput = document.querySelector('input[placeholder="Search Nature of Work..."]') as HTMLInputElement;
-        if (natureOfWorkInput) {
-          natureOfWorkInput.focus();
-          // Trigger the focus event to open the dropdown
-          natureOfWorkInput.dispatchEvent(new Event('focus', { bubbles: true }));
-        }
-        break;
-      case 'Escape':
-        event.preventDefault();
-        event.stopPropagation();
-        setTypeOfVisitDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
-        break;
-    }
-  };
-
-  const handleTypeOfVisitSelect = (value: TypeOfVisit) => {
-    setTicketFormData(prev => ({ ...prev, typeOfVisit: value }));
-    
-    // Clear error when user selects an option
-    if (formErrors.typeOfVisit) {
-      setFormErrors(prev => ({ ...prev, typeOfVisit: '' }));
-    }
-
-    // Close dropdown
-    setTypeOfVisitDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
-  };
-
-  const handleNatureOfWorkSearch = (searchTerm: string) => {
-    const filtered = natureOfWorkOptions.filter((option) => {
-      const searchText = searchTerm.toLowerCase();
-      const optionText = option.label.toLowerCase();
-      return optionText.includes(searchText);
-    });
-
-    setNatureOfWorkDropdown(prev => ({
-      ...prev,
-      searchTerm,
-      filteredOptions: filtered,
-      selectedIndex: 0
-    }));
-  };
-
-  const handleNatureOfWorkFocus = () => {
-    setNatureOfWorkDropdown(prev => ({
-      ...prev,
-      isOpen: true,
-      searchTerm: '',
-      filteredOptions: natureOfWorkOptions,
-      selectedIndex: 0
-    }));
-    // Focus the input field for immediate typing
-    setTimeout(() => {
-      const input = document.querySelector('input[placeholder="Search Nature of Work..."]') as HTMLInputElement;
-      if (input) {
-        input.focus();
-        input.select(); // Select all text for easy replacement
-      }
-    }, 50);
-  };
-
-  const handleNatureOfWorkKeyDown = (event: React.KeyboardEvent) => {
-    switch (event.key) {
-      case 'ArrowDown':
-        event.preventDefault();
-        event.stopPropagation();
-        setNatureOfWorkDropdown(prev => ({
-          ...prev,
-          selectedIndex: Math.min(prev.selectedIndex + 1, prev.filteredOptions.length - 1)
-        }));
-        break;
-      case 'ArrowUp':
-        event.preventDefault();
-        event.stopPropagation();
-        setNatureOfWorkDropdown(prev => ({
-          ...prev,
-          selectedIndex: Math.max(prev.selectedIndex - 1, 0)
-        }));
-        break;
-      case 'Enter':
-        event.preventDefault();
-        event.stopPropagation();
-        if (natureOfWorkDropdown.filteredOptions.length > 0 && natureOfWorkDropdown.selectedIndex >= 0) {
-          const selectedOption = natureOfWorkDropdown.filteredOptions[natureOfWorkDropdown.selectedIndex];
-          handleNatureOfWorkSelect(selectedOption.value as NatureOfWork);
-        }
-        break;
-      case 'Tab':
-        event.preventDefault();
-        event.stopPropagation();
-        // Focus the sub nature of work field and open it
-        const subNatureOfWorkInput = document.querySelector('input[placeholder="Search Sub Nature of Work..."]') as HTMLInputElement;
-        if (subNatureOfWorkInput) {
-          subNatureOfWorkInput.focus();
-          // Trigger the focus event to open the dropdown
-          subNatureOfWorkInput.dispatchEvent(new Event('focus', { bubbles: true }));
-        }
-        break;
-      case 'Escape':
-        event.preventDefault();
-        event.stopPropagation();
-        setNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
-        break;
-    }
-  };
-
-  const handleNatureOfWorkSelect = (value: NatureOfWork) => {
-    setTicketFormData(prev => ({ ...prev, natureOfWork: value }));
-    
-    // Clear error when user selects an option
-    if (formErrors.natureOfWork) {
-      setFormErrors(prev => ({ ...prev, natureOfWork: '' }));
-    }
-
-    // Close dropdown
-    setNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
-  };
-
-  const handleSubNatureOfWorkSearch = (searchTerm: string) => {
-    const filtered = subNatureOfWorkOptions.filter((option) => {
-      const searchText = searchTerm.toLowerCase();
-      const optionText = option.label.toLowerCase();
-      return optionText.includes(searchText);
-    });
-
-    setSubNatureOfWorkDropdown(prev => ({
-      ...prev,
-      searchTerm,
-      filteredOptions: filtered,
-      selectedIndex: 0
-    }));
-  };
-
-  const handleSubNatureOfWorkFocus = () => {
-    setSubNatureOfWorkDropdown(prev => ({
-      ...prev,
-      isOpen: true,
-      searchTerm: '',
-      filteredOptions: subNatureOfWorkOptions,
-      selectedIndex: 0
-    }));
-    // Focus the input field for immediate typing
-    setTimeout(() => {
-      const input = document.querySelector('input[placeholder="Search Sub Nature of Work..."]') as HTMLInputElement;
-      if (input) {
-        input.focus();
-        input.select(); // Select all text for easy replacement
-      }
-    }, 50);
-  };
-
-  const handleSubNatureOfWorkKeyDown = (event: React.KeyboardEvent) => {
-    switch (event.key) {
-      case 'ArrowDown':
-        event.preventDefault();
-        event.stopPropagation();
-        setSubNatureOfWorkDropdown(prev => ({
-          ...prev,
-          selectedIndex: Math.min(prev.selectedIndex + 1, prev.filteredOptions.length - 1)
-        }));
-        break;
-      case 'ArrowUp':
-        event.preventDefault();
-        event.stopPropagation();
-        setSubNatureOfWorkDropdown(prev => ({
-          ...prev,
-          selectedIndex: Math.max(prev.selectedIndex - 1, 0)
-        }));
-        break;
-      case 'Enter':
-        event.preventDefault();
-        event.stopPropagation();
-        if (subNatureOfWorkDropdown.filteredOptions.length > 0 && subNatureOfWorkDropdown.selectedIndex >= 0) {
-          const selectedOption = subNatureOfWorkDropdown.filteredOptions[subNatureOfWorkDropdown.selectedIndex];
-          handleSubNatureOfWorkSelect(selectedOption.value as SubNatureOfWork);
-        }
-        break;
-      case 'Tab':
-        event.preventDefault();
-        event.stopPropagation();
-        // Focus the service request type field
-        const serviceRequestTypeInput = document.querySelector('input[placeholder="Enter service request type"]') as HTMLInputElement;
-        if (serviceRequestTypeInput) {
-          serviceRequestTypeInput.focus();
-        }
-        break;
-      case 'Escape':
-        event.preventDefault();
-        event.stopPropagation();
-        setSubNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
-        break;
-    }
-  };
-
-  const handleSubNatureOfWorkSelect = (value: SubNatureOfWork) => {
-    setTicketFormData(prev => ({ ...prev, subNatureOfWork: value }));
-    
-    // Clear error when user selects an option
-    if (formErrors.subNatureOfWork) {
-      setFormErrors(prev => ({ ...prev, subNatureOfWork: '' }));
-    }
-
-    // Close dropdown
-    setSubNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
   };
 
   // Click outside handler for dropdowns
@@ -2231,13 +2147,9 @@ const ServiceManagement: React.FC = () => {
 
         // Close enhanced dropdowns
         setCustomerDropdown(prev => ({ ...prev, isOpen: false }));
+        setEngineDropdown(prev => ({ ...prev, isOpen: false }));
         setProductDropdown(prev => ({ ...prev, isOpen: false }));
         setAssigneeDropdown(prev => ({ ...prev, isOpen: false }));
-        
-        // Close the three new enhanced dropdowns
-        setTypeOfVisitDropdown(prev => ({ ...prev, isOpen: false }));
-        setNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false }));
-        setSubNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false }));
       }
     };
 
@@ -2403,32 +2315,69 @@ const ServiceManagement: React.FC = () => {
 
       {/* Tickets Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-w-full">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ticket
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Service Request Number
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer & Service Type
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  Customer Type
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Visit Details
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Customer Name
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Engine Serial Number
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Assigned To
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  Engine Model
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Service Date
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">
+                  KVA
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Site Info
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[140px]">
+                  Service Request Date
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[140px]">
+                  Service Attended Date
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  Hour Meter Reading
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[130px]">
+                  Type of Service
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                  Site ID
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Service Engineer Name
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  Complaint Code
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Complaint Description
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Resolution Description
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  eFSR Number
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[180px]">
+                  eFSR Closure Date And Time
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Service Request Status
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  OEM Name
+                </th>
+
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
                   Actions
                 </th>
               </tr>
@@ -2436,7 +2385,7 @@ const ServiceManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center">
+                  <td colSpan={20} className="px-6 py-8 text-center">
                     <div className="flex flex-col items-center justify-center space-y-3">
                       <LoadingSpinner size="lg" />
                       <p className="text-gray-500 text-sm">Loading tickets...</p>
@@ -2445,106 +2394,95 @@ const ServiceManagement: React.FC = () => {
                 </tr>
               ) : filteredTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">No tickets found</td>
+                  <td colSpan={20} className="px-6 py-8 text-center text-gray-500">No tickets found</td>
                 </tr>
               ) : (
                 filteredTickets.map((ticket) => (
                   <tr key={ticket._id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-blue-600">{ticket.ticketNumber}</div>
-                        <div className="text-xs text-gray-900 font-medium">
-                          {ticket.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === ticket.typeOfVisit)?.label : 'N/A'}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          Created {formatDate(ticket.createdAt)}
-                        </div>
+                      <div className="text-sm font-medium text-blue-600">{ticket.ServiceRequestNumber || ticket.ticketNumber || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{ticket.CustomerType || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900 max-w-[150px] truncate" title={ticket.CustomerName || getCustomerName(ticket.customer) || '-'}>
+                        {ticket.CustomerName || getCustomerName(ticket.customer) || '-'}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-xs font-medium text-gray-900">{getCustomerName(ticket.customer)}</div>
-                        {ticket.serviceRequestType && (
-                          <div className="text-xs text-gray-600 capitalize">{ticket.serviceRequestType}</div>
-                        )}
-                        {ticket.engineSerialNumber && (
-                          <div className="text-xs text-gray-500">Engine: {ticket.engineSerialNumber}</div>
-                        )}
-                      </div>
+                      <div className="text-xs text-gray-900">{ticket.EngineSerialNumber || ticket.engineSerialNumber || '-'}</div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="space-y-1">
-                        <div className="text-xs text-gray-900">
-                          <span className="font-medium">Type:</span> {ticket.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === ticket.typeOfVisit)?.label : 'N/A'}
-                        </div>
-                        <div className="text-xs text-gray-600">
-                          <span className="font-medium">Nature:</span> {ticket.natureOfWork ? natureOfWorkOptions.find(opt => opt.value === ticket.natureOfWork)?.label : 'N/A'}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          <span className="font-medium">Sub:</span> {ticket.subNatureOfWork ? subNatureOfWorkOptions.find(opt => opt.value === ticket.subNatureOfWork)?.label : 'N/A'}
-                        </div>
-                      </div>
+                      <div className="text-xs text-gray-900">{ticket.EngineModel || '-'}</div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-1">
-                          <select
-                            value={ticket.status}
-                            onChange={(e) => handleStatusUpdate(ticket._id, e.target.value as TicketStatus)}
-                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${getStatusColor(ticket.status)}`}
-                          >
-                            <option value="open">Open</option>
-                            <option value="in_progress">In Progress</option>
-                            <option value="resolved">Resolved</option>
-                            <option value="closed">Closed</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
-
-                        </div>
+                      <div className="text-xs text-gray-900">{ticket.KVA || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">
+                        {ticket.ServiceRequestDate ? formatDateTime(ticket.ServiceRequestDate) : (ticket.serviceRequiredDate ? formatDateTime(ticket.serviceRequiredDate) : '-')}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-xs text-gray-900">
-                        {(() => {
-                          const userName = getUserName(ticket.assignedTo);
-                          return userName || (
-                            <span className="text-gray-400 italic">Unassigned</span>
-                          );
-                        })()}
+                        {ticket.ServiceAttendedDate ? formatDateTime(ticket.ServiceAttendedDate) : (ticket.ServiceRequestDate ? formatDateTime(ticket.ServiceRequestDate) : '-')}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-xs text-gray-900 space-y-1">
-                        {ticket.serviceRequiredDate && (
-                          <div>
-                            <span className="text-blue-600 font-medium">{formatDateTime(ticket.serviceRequiredDate)}</span>
-                          </div>
-                        )}
-                        {!ticket.requestSubmissionDate && !ticket.serviceRequiredDate && (
-                          <span className="text-gray-400 italic">-</span>
-                        )}
+                      <div className="text-xs text-gray-900">{ticket.HourMeterReading || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{ticket.TypeofService || ticket.serviceRequestType || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{ticket.SiteID || ticket.siteIdentifier || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">
+                        {ticket.ServiceEngineerName && typeof ticket.ServiceEngineerName === 'object' && 'firstName' in ticket.ServiceEngineerName 
+                          ? `${(ticket.ServiceEngineerName as any).firstName} ${(ticket.ServiceEngineerName as any).lastName}`
+                          : getUserName(ticket.assignedTo) || '-'
+                        }
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="space-y-1">
-                        {ticket.siteIdentifier && (
-                          <div className="text-xs text-gray-900">
-                            <span className="font-medium">Site ID:</span> {ticket.siteIdentifier}
-                          </div>
-                        )}
-                        {ticket.siteLocation && (
-                          <div className="text-xs text-gray-600">
-                            <span className="font-medium">Location:</span> {ticket.siteLocation}
-                          </div>
-                        )}
-                        {ticket.stateName && (
-                          <div className="text-xs text-gray-600">
-                            <span className="font-medium">State:</span> {ticket.stateName}
-                          </div>
-                        )}
-                        {!ticket.siteIdentifier && !ticket.siteLocation && (
-                          <span className="text-gray-400 italic text-xs">-</span>
-                        )}
+                      <div className="text-xs text-gray-900">{ticket.ComplaintCode || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900 max-w-[150px] truncate" title={ticket.ComplaintDescription || ticket.complaintDescription || '-'}>
+                        {ticket.ComplaintDescription || ticket.complaintDescription || '-'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900 max-w-[150px] truncate" title={ticket.ResolutionDescription || '-'}>
+                        {ticket.ResolutionDescription || '-'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{ticket.eFSRNumber || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">
+                        {ticket.eFSRClosureDateAndTime ? formatDateTime(ticket.eFSRClosureDateAndTime) : '-'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center space-x-1">
+                        <select
+                          value={ticket.ServiceRequestStatus || ticket.status || 'open'}
+                          onChange={(e) => handleServiceRequestStatusUpdate(ticket._id, e.target.value)}
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${getStatusColor((ticket.ServiceRequestStatus || ticket.status || 'open') as TicketStatus)}`}
+                        >
+                          <option value="open">Open</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900 max-w-[150px] truncate" title={ticket.OemName || '-'}>
+                        {ticket.OemName || '-'}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
@@ -2707,38 +2645,65 @@ const ServiceManagement: React.FC = () => {
                   )}
                 </div>
 
-                {/* Engine Serial Number */}
-                <div>
+                {/* Enhanced Engine Dropdown */}
+                <div className="relative dropdown-container" ref={engineDropdownRef} id="engine-dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Engine Serial Number
                   </label>
-                  <input
-                    ref={serialNumberRef}
-                    type="text"
-                    value={ticketFormData.engineSerialNumber}
-                    onChange={(e) => {
-                      setTicketFormData({ ...ticketFormData, engineSerialNumber: e.target.value });
-                      // Clear error when user starts typing
-                      if (formErrors.engineSerialNumber) {
-                        setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Tab' && !e.shiftKey) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        // Focus the assignee field and open it
-                        const assigneeInput = document.querySelector('input[placeholder="Search technician..."]') as HTMLInputElement;
-                        if (assigneeInput) {
-                          assigneeInput.focus();
-                          // Trigger the focus event to open the dropdown
-                          assigneeInput.dispatchEvent(new Event('focus', { bubbles: true }));
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={engineDropdown.searchTerm || ticketFormData.engineSerialNumber || ''}
+                      onChange={(e) => {
+                        setEngineDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                        handleDropdownSearch('engine', e.target.value);
+                        // Clear error when user starts typing
+                        if (formErrors.engineSerialNumber) {
+                          setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
                         }
-                      }
-                    }}
-                    placeholder="Enter engine serial number"
-                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.engineSerialNumber ? 'border-red-500' : 'border-gray-300'}`}
-                  />
+                      }}
+                      onKeyDown={(e) => handleDropdownKeyDown('engine', e, engineDropdown.filteredOptions, (value) => handleDropdownSelect('engine', value))}
+                      onFocus={() => handleDropdownFocus('engine')}
+                      onBlur={() => {
+                        // Delay closing to allow for clicks on dropdown items
+                        setTimeout(() => {
+                          setEngineDropdown(prev => ({ ...prev, isOpen: false }));
+                        }, 200);
+                      }}
+                      placeholder="Search engine..."
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.engineSerialNumber ? 'border-red-500' : 'border-gray-300'
+                        } ${engineDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                    />
+                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  </div>
+
+                  {engineDropdown.isOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                      {engineDropdown.filteredOptions.length > 0 ? (
+                        engineDropdown.filteredOptions.map((engine, index) => (
+                          <button
+                            key={engine.engineSerialNumber}
+                            id={`engine-item-${index}`}
+                            type="button"
+                            onClick={() => handleDropdownSelect('engine', engine.engineSerialNumber)}
+                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === engineDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                              }`}
+                          >
+                            <div className="font-medium">{engine.engineSerialNumber}</div>
+                            <div className="text-xs text-gray-500">
+                              {engine.engineModel && `Model: ${engine.engineModel}`}
+                              {engine.kva && ` | KVA: ${engine.kva}`}
+                              {engine.siteId && ` | Site: ${engine.siteId}`}
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">
+                          {ticketFormData.customer ? 'No engines found for this customer' : 'Select a customer first'}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   {formErrors.engineSerialNumber && (
                     <p className="text-red-500 text-xs mt-1">{formErrors.engineSerialNumber}</p>
                   )}
@@ -2831,7 +2796,7 @@ const ServiceManagement: React.FC = () => {
                       if (e.key === 'Tab' && !e.shiftKey) {
                         e.preventDefault();
                         e.stopPropagation();
-                        // Focus the service request type field
+                        // Focus the Service Request Type field
                         const serviceRequestTypeInput = document.querySelector('input[placeholder="Enter service request type"]') as HTMLInputElement;
                         if (serviceRequestTypeInput) {
                           serviceRequestTypeInput.focus();
@@ -2889,15 +2854,6 @@ const ServiceManagement: React.FC = () => {
                         (e.target as HTMLInputElement).showPicker?.();
                       }}
                       onKeyDown={(e) => {
-                        if (e.key === 'Tab' && !e.shiftKey) {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          // Focus the business vertical field
-                          const businessVerticalInput = document.querySelector('input[placeholder="Enter vertical"]') as HTMLInputElement;
-                          if (businessVerticalInput) {
-                            businessVerticalInput.focus();
-                          }
-                        }
                         // Open date picker on Enter key
                         if (e.key === 'Enter') {
                           (e.target as HTMLInputElement).showPicker?.();
@@ -2967,174 +2923,78 @@ const ServiceManagement: React.FC = () => {
                       placeholder="Enter site location"
                     />
                   </div>
-                </div>
 
-                {/* Enhanced Dropdown Fields */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                  {/* Enhanced Type of Visit Dropdown */}
-                  <div className="relative dropdown-container">
+                  {/* Type of Visit */}
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Type of Visit
                     </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={typeOfVisitDropdown.searchTerm || (ticketFormData.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === ticketFormData.typeOfVisit)?.label : '')}
-                        onChange={(e) => {
-                          setTypeOfVisitDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                          handleTypeOfVisitSearch(e.target.value);
-                          // Clear error when user starts typing
-                          if (formErrors.typeOfVisit) {
-                            setFormErrors(prev => ({ ...prev, typeOfVisit: '' }));
-                          }
-                        }}
-                        onKeyDown={(e) => handleTypeOfVisitKeyDown(e)}
-                        onFocus={() => handleTypeOfVisitFocus()}
-                        onBlur={() => {
-                          // Delay closing to allow for clicks on dropdown items
-                          setTimeout(() => {
-                            setTypeOfVisitDropdown(prev => ({ ...prev, isOpen: false }));
-                          }, 200);
-                        }}
-                        placeholder="Search Type of Visit..."
-                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.typeOfVisit ? 'border-red-500' : 'border-gray-300'} ${typeOfVisitDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                      />
-                      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    </div>
-
-                    {typeOfVisitDropdown.isOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                        {typeOfVisitDropdown.filteredOptions.length > 0 ? (
-                          typeOfVisitDropdown.filteredOptions.map((option, index) => (
-                            <button
-                              key={option.value}
-                              id={`typeOfVisit-item-${index}`}
-                              type="button"
-                              onClick={() => handleTypeOfVisitSelect(option.value as TypeOfVisit)}
-                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === typeOfVisitDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : option.value === '' ? 'text-gray-400 italic' : 'text-gray-700'}`}
-                            >
-                              {option.label}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-gray-500 text-sm">No options found</div>
-                        )}
-                      </div>
-                    )}
+                    <select
+                      value={ticketFormData.typeOfVisit}
+                      onChange={(e) => {
+                        setTicketFormData({ ...ticketFormData, typeOfVisit: e.target.value as TypeOfVisit });
+                        // Clear error when user selects an option
+                        if (formErrors.typeOfVisit) {
+                          setFormErrors(prev => ({ ...prev, typeOfVisit: '' }));
+                        }
+                      }}
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.typeOfVisit ? 'border-red-500' : 'border-gray-300'}`}
+                    >
+                      <option value="">Select Type of Visit</option>
+                      {typeOfVisitOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
                     {formErrors.typeOfVisit && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.typeOfVisit}</p>
                     )}
                   </div>
 
-                  {/* Enhanced Nature of Work Dropdown */}
-                  <div className="relative dropdown-container">
+                  {/* Service Request Number */}
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nature of Work
+                      Service Request Number
                     </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={natureOfWorkDropdown.searchTerm || (ticketFormData.natureOfWork ? natureOfWorkOptions.find(opt => opt.value === ticketFormData.natureOfWork)?.label : '')}
-                        onChange={(e) => {
-                          setNatureOfWorkDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                          handleNatureOfWorkSearch(e.target.value);
-                          // Clear error when user starts typing
-                          if (formErrors.natureOfWork) {
-                            setFormErrors(prev => ({ ...prev, natureOfWork: '' }));
-                          }
-                        }}
-                        onKeyDown={(e) => handleNatureOfWorkKeyDown(e)}
-                        onFocus={() => handleNatureOfWorkFocus()}
-                        onBlur={() => {
-                          // Delay closing to allow for clicks on dropdown items
-                          setTimeout(() => {
-                            setNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false }));
-                          }, 200);
-                        }}
-                        placeholder="Search Nature of Work..."
-                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.natureOfWork ? 'border-red-500' : 'border-gray-300'} ${natureOfWorkDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                      />
-                      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    </div>
+                    <input
+                      type="text"
+                      value={ticketFormData.serviceRequestNumber || generateServiceRequestNumber()}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequestNumber: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Auto-generated SR Number"
+                      readOnly
+                    />
+                  </div>
 
-                    {natureOfWorkDropdown.isOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                        {natureOfWorkDropdown.filteredOptions.length > 0 ? (
-                          natureOfWorkDropdown.filteredOptions.map((option, index) => (
-                            <button
-                              key={option.value}
-                              id={`natureOfWork-item-${index}`}
-                              type="button"
-                              onClick={() => handleNatureOfWorkSelect(option.value as NatureOfWork)}
-                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === natureOfWorkDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : option.value === '' ? 'text-gray-400 italic' : 'text-gray-700'}`}
-                            >
-                              {option.label}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-gray-500 text-sm">No options found</div>
-                        )}
-                      </div>
-                    )}
-                    {formErrors.natureOfWork && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.natureOfWork}</p>
+                  {/* Type of Service */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Type of Service
+                    </label>
+                    <select
+                      value={ticketFormData.typeOfService}
+                      onChange={(e) => {
+                        setTicketFormData({ ...ticketFormData, typeOfService: e.target.value as TypeOfService });
+                        // Clear error when user selects an option
+                        if (formErrors.typeOfService) {
+                          setFormErrors(prev => ({ ...prev, typeOfService: '' }));
+                        }
+                      }}
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.typeOfService ? 'border-red-500' : 'border-gray-300'}`}
+                    >
+                      <option value="">Select Type of Service</option>
+                      {typeOfServiceOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {formErrors.typeOfService && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.typeOfService}</p>
                     )}
                   </div>
 
-                  {/* Enhanced Sub Nature of Work Dropdown */}
-                  <div className="relative dropdown-container">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Sub Nature of Work
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={subNatureOfWorkDropdown.searchTerm || (ticketFormData.subNatureOfWork ? subNatureOfWorkOptions.find(opt => opt.value === ticketFormData.subNatureOfWork)?.label : '')}
-                        onChange={(e) => {
-                          setSubNatureOfWorkDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                          handleSubNatureOfWorkSearch(e.target.value);
-                          // Clear error when user starts typing
-                          if (formErrors.subNatureOfWork) {
-                            setFormErrors(prev => ({ ...prev, subNatureOfWork: '' }));
-                          }
-                        }}
-                        onKeyDown={(e) => handleSubNatureOfWorkKeyDown(e)}
-                        onFocus={() => handleSubNatureOfWorkFocus()}
-                        onBlur={() => {
-                          // Delay closing to allow for clicks on dropdown items
-                          setTimeout(() => {
-                            setSubNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false }));
-                          }, 200);
-                        }}
-                        placeholder="Search Sub Nature of Work..."
-                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.subNatureOfWork ? 'border-red-500' : 'border-gray-300'} ${subNatureOfWorkDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                      />
-                      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    </div>
-
-                    {subNatureOfWorkDropdown.isOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                        {subNatureOfWorkDropdown.filteredOptions.length > 0 ? (
-                          subNatureOfWorkDropdown.filteredOptions.map((option, index) => (
-                            <button
-                              key={option.value}
-                              id={`subNatureOfWork-item-${index}`}
-                              type="button"
-                              onClick={() => handleSubNatureOfWorkSelect(option.value as SubNatureOfWork)}
-                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === subNatureOfWorkDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : option.value === '' ? 'text-gray-400 italic' : 'text-gray-700'}`}
-                            >
-                              {option.label}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-gray-500 text-sm">No options found</div>
-                        )}
-                      </div>
-                    )}
-                    {formErrors.subNatureOfWork && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.subNatureOfWork}</p>
-                    )}
-                  </div>
                 </div>
               </div>
 
@@ -3260,37 +3120,68 @@ const ServiceManagement: React.FC = () => {
                   )}
                 </div>
 
-                {/* Engine Serial Number */}
-                <div>
+                {/* Enhanced Engine Dropdown */}
+                <div className="relative dropdown-container" ref={engineDropdownRef} id="engine-dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Engine Serial Number
                   </label>
-                  <input
-                    ref={serialNumberRef}
-                    type="text"
-                    value={ticketFormData.engineSerialNumber}
-                    onChange={(e) => {
-                      setTicketFormData({ ...ticketFormData, engineSerialNumber: e.target.value });
-                      // Clear error when user starts typing
-                      if (formErrors.engineSerialNumber) {
-                        setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Tab' && !e.shiftKey) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        // Focus the assignee field
-                        setAssigneeDropdown(prev => ({ ...prev, isOpen: true }));
-                        const assigneeInput = document.querySelector('input[placeholder="Search technician..."]') as HTMLInputElement;
-                        if (assigneeInput) {
-                          assigneeInput.focus();
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={engineDropdown.searchTerm || ticketFormData.engineSerialNumber || ''}
+                      onChange={(e) => {
+                        setEngineDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                        handleDropdownSearch('engine', e.target.value);
+                        // Clear error when user starts typing
+                        if (formErrors.engineSerialNumber) {
+                          setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
                         }
-                      }
-                    }}
-                    placeholder="Enter engine serial number"
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
+                      }}
+                      onKeyDown={(e) => handleDropdownKeyDown('engine', e, engineDropdown.filteredOptions, (value) => handleDropdownSelect('engine', value))}
+                      onFocus={() => handleDropdownFocus('engine')}
+                      onBlur={() => {
+                        // Delay closing to allow for clicks on dropdown items
+                        setTimeout(() => {
+                          setEngineDropdown(prev => ({ ...prev, isOpen: false }));
+                        }, 200);
+                      }}
+                      placeholder="Search engine..."
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.engineSerialNumber ? 'border-red-500' : 'border-gray-300'
+                        } ${engineDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                    />
+                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  </div>
+
+                  {engineDropdown.isOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                      {engineDropdown.filteredOptions.length > 0 ? (
+                        engineDropdown.filteredOptions.map((engine, index) => (
+                          <button
+                            key={engine.engineSerialNumber}
+                            id={`engine-item-${index}`}
+                            type="button"
+                            onClick={() => handleDropdownSelect('engine', engine.engineSerialNumber)}
+                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === engineDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                              }`}
+                          >
+                            <div className="font-medium">{engine.engineSerialNumber}</div>
+                            <div className="text-xs text-gray-500">
+                              {engine.engineModel && `Model: ${engine.engineModel}`}
+                              {engine.kva && ` | KVA: ${engine.kva}`}
+                              {engine.siteId && ` | Site: ${engine.siteId}`}
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">
+                          {ticketFormData.customer ? 'No engines found for this customer' : 'Select a customer first'}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {formErrors.engineSerialNumber && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.engineSerialNumber}</p>
+                  )}
                 </div>
               </div>
 
@@ -3364,17 +3255,6 @@ const ServiceManagement: React.FC = () => {
                     type="date"
                     value={ticketFormData.scheduledDate}
                     onChange={(e) => setTicketFormData({ ...ticketFormData, scheduledDate: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Tab' && !e.shiftKey) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        // Focus the service request type field
-                        const serviceRequestTypeInput = document.querySelector('input[placeholder="Enter service request type"]') as HTMLInputElement;
-                        if (serviceRequestTypeInput) {
-                          serviceRequestTypeInput.focus();
-                        }
-                      }
-                    }}
                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -3405,17 +3285,6 @@ const ServiceManagement: React.FC = () => {
                     type="datetime-local"
                     value={ticketFormData.serviceRequiredDate ? ticketFormData.serviceRequiredDate.replace('Z', '') : ''}
                     onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequiredDate: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Tab' && !e.shiftKey) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        // Focus the business vertical field
-                        const businessVerticalInput = document.querySelector('input[placeholder="Enter vertical"]') as HTMLInputElement;
-                        if (businessVerticalInput) {
-                          businessVerticalInput.focus();
-                        }
-                      }
-                    }}
                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
@@ -3483,180 +3352,79 @@ const ServiceManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Service Request Details Section */}
-              <div className="border-t border-gray-200 pt-4">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Service Request Details</h3>
+              {/* New Dropdown Fields */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Type of Visit */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Type of Visit
+                  </label>
+                  <select
+                    value={ticketFormData.typeOfVisit}
+                    onChange={(e) => {
+                      setTicketFormData({ ...ticketFormData, typeOfVisit: e.target.value as TypeOfVisit });
+                      // Clear error when user selects an option
+                      if (formErrors.typeOfVisit) {
+                        setFormErrors(prev => ({ ...prev, typeOfVisit: '' }));
+                      }
+                    }}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.typeOfVisit ? 'border-red-500' : 'border-gray-300'}`}
+                  >
+                    <option value="">Select Type of Visit</option>
+                    {typeOfVisitOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {formErrors.typeOfVisit && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.typeOfVisit}</p>
+                  )}
+                </div>
 
-                {/* Enhanced Dropdown Fields */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {/* Enhanced Type of Visit Dropdown */}
-                  <div className="relative dropdown-container">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Type of Visit
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={typeOfVisitDropdown.searchTerm || (ticketFormData.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === ticketFormData.typeOfVisit)?.label : '')}
-                        onChange={(e) => {
-                          setTypeOfVisitDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                          handleTypeOfVisitSearch(e.target.value);
-                          // Clear error when user starts typing
-                          if (formErrors.typeOfVisit) {
-                            setFormErrors(prev => ({ ...prev, typeOfVisit: '' }));
-                          }
-                        }}
-                        onKeyDown={(e) => handleTypeOfVisitKeyDown(e)}
-                        onFocus={() => handleTypeOfVisitFocus()}
-                        onBlur={() => {
-                          // Delay closing to allow for clicks on dropdown items
-                          setTimeout(() => {
-                            setTypeOfVisitDropdown(prev => ({ ...prev, isOpen: false }));
-                          }, 200);
-                        }}
-                        placeholder="Search Type of Visit..."
-                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.typeOfVisit ? 'border-red-500' : 'border-gray-300'} ${typeOfVisitDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                      />
-                      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    </div>
+                {/* Service Request Number */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Service Request Number
+                  </label>
+                  <input
+                    type="text"
+                    value={ticketFormData.serviceRequestNumber || generateServiceRequestNumber()}
+                    onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequestNumber: e.target.value })}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Auto-generated SR Number"
+                    readOnly
+                  />
+                </div>
 
-                    {typeOfVisitDropdown.isOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                        {typeOfVisitDropdown.filteredOptions.length > 0 ? (
-                          typeOfVisitDropdown.filteredOptions.map((option, index) => (
-                            <button
-                              key={option.value}
-                              id={`edit-typeOfVisit-item-${index}`}
-                              type="button"
-                              onClick={() => handleTypeOfVisitSelect(option.value as TypeOfVisit)}
-                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === typeOfVisitDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : option.value === '' ? 'text-gray-400 italic' : 'text-gray-700'}`}
-                            >
-                              {option.label}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-gray-500 text-sm">No options found</div>
-                        )}
-                      </div>
-                    )}
-                    {formErrors.typeOfVisit && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.typeOfVisit}</p>
-                    )}
-                  </div>
-
-                  {/* Enhanced Nature of Work Dropdown */}
-                  <div className="relative dropdown-container">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Nature of Work
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={natureOfWorkDropdown.searchTerm || (ticketFormData.natureOfWork ? natureOfWorkOptions.find(opt => opt.value === ticketFormData.natureOfWork)?.label : '')}
-                        onChange={(e) => {
-                          setNatureOfWorkDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                          handleNatureOfWorkSearch(e.target.value);
-                          // Clear error when user starts typing
-                          if (formErrors.natureOfWork) {
-                            setFormErrors(prev => ({ ...prev, natureOfWork: '' }));
-                          }
-                        }}
-                        onKeyDown={(e) => handleNatureOfWorkKeyDown(e)}
-                        onFocus={() => handleNatureOfWorkFocus()}
-                        onBlur={() => {
-                          // Delay closing to allow for clicks on dropdown items
-                          setTimeout(() => {
-                            setNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false }));
-                          }, 200);
-                        }}
-                        placeholder="Search Nature of Work..."
-                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.natureOfWork ? 'border-red-500' : 'border-gray-300'} ${natureOfWorkDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                      />
-                      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    </div>
-
-                    {natureOfWorkDropdown.isOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                        {natureOfWorkDropdown.filteredOptions.length > 0 ? (
-                          natureOfWorkDropdown.filteredOptions.map((option, index) => (
-                            <button
-                              key={option.value}
-                              id={`edit-natureOfWork-item-${index}`}
-                              type="button"
-                              onClick={() => handleNatureOfWorkSelect(option.value as NatureOfWork)}
-                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === natureOfWorkDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : option.value === '' ? 'text-gray-400 italic' : 'text-gray-700'}`}
-                            >
-                              {option.label}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-gray-500 text-sm">No options found</div>
-                        )}
-                      </div>
-                    )}
-                    {formErrors.natureOfWork && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.natureOfWork}</p>
-                    )}
-                  </div>
-
-                  {/* Enhanced Sub Nature of Work Dropdown */}
-                  <div className="relative dropdown-container">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Sub Nature of Work
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={subNatureOfWorkDropdown.searchTerm || (ticketFormData.subNatureOfWork ? subNatureOfWorkOptions.find(opt => opt.value === ticketFormData.subNatureOfWork)?.label : '')}
-                        onChange={(e) => {
-                          setSubNatureOfWorkDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                          handleSubNatureOfWorkSearch(e.target.value);
-                          // Clear error when user starts typing
-                          if (formErrors.subNatureOfWork) {
-                            setFormErrors(prev => ({ ...prev, subNatureOfWork: '' }));
-                          }
-                        }}
-                        onKeyDown={(e) => handleSubNatureOfWorkKeyDown(e)}
-                        onFocus={() => handleSubNatureOfWorkFocus()}
-                        onBlur={() => {
-                          // Delay closing to allow for clicks on dropdown items
-                          setTimeout(() => {
-                            setSubNatureOfWorkDropdown(prev => ({ ...prev, isOpen: false }));
-                          }, 200);
-                        }}
-                        placeholder="Search Sub Nature of Work..."
-                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.subNatureOfWork ? 'border-red-500' : 'border-gray-300'} ${subNatureOfWorkDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                      />
-                      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    </div>
-
-                    {subNatureOfWorkDropdown.isOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                        {subNatureOfWorkDropdown.filteredOptions.length > 0 ? (
-                          subNatureOfWorkDropdown.filteredOptions.map((option, index) => (
-                            <button
-                              key={option.value}
-                              id={`edit-subNatureOfWork-item-${index}`}
-                              type="button"
-                              onClick={() => handleSubNatureOfWorkSelect(option.value as SubNatureOfWork)}
-                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === subNatureOfWorkDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : option.value === '' ? 'text-gray-400 italic' : 'text-gray-700'}`}
-                            >
-                              {option.label}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="px-3 py-2 text-gray-500 text-sm">No options found</div>
-                        )}
-                      </div>
-                    )}
-                    {formErrors.subNatureOfWork && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.subNatureOfWork}</p>
-                    )}
-                  </div>
+                {/* Type of Service */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Type of Service
+                  </label>
+                  <select
+                    value={ticketFormData.typeOfService}
+                    onChange={(e) => {
+                      setTicketFormData({ ...ticketFormData, typeOfService: e.target.value as TypeOfService });
+                      // Clear error when user selects an option
+                      if (formErrors.typeOfService) {
+                        setFormErrors(prev => ({ ...prev, typeOfService: '' }));
+                      }
+                    }}
+                    className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.typeOfService ? 'border-red-500' : 'border-gray-300'}`}
+                  >
+                    <option value="">Select Type of Service</option>
+                    {typeOfServiceOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  {formErrors.typeOfService && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.typeOfService}</p>
+                  )}
                 </div>
               </div>
-
-
 
               <div className="flex space-x-3 pt-4">
                 <button
@@ -3704,6 +3472,58 @@ const ServiceManagement: React.FC = () => {
             </div>
 
             <div className="p-4 space-y-3">
+              {/* Service Request Information */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-blue-900 mb-3 flex items-center">
+                  <FileText className="w-5 h-5 mr-2" />
+                  Service Request Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Service Request Number</p>
+                    <p className="text-lg font-bold text-blue-900">{selectedTicket.ServiceRequestNumber || selectedTicket.ticketNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Customer Type</p>
+                    <p className="text-lg font-semibold text-blue-900">{selectedTicket.CustomerType || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Type of Service</p>
+                    <p className="text-lg font-semibold text-blue-900">{selectedTicket.TypeofService || selectedTicket.serviceRequestType || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Site ID</p>
+                    <p className="text-lg font-semibold text-blue-900">{selectedTicket.SiteID || selectedTicket.siteIdentifier || 'Not specified'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Engine Information */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-green-900 mb-3 flex items-center">
+                  <Wrench className="w-5 h-5 mr-2" />
+                  Engine Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide">Engine Serial Number</p>
+                    <p className="text-lg font-semibold text-green-900">{selectedTicket.EngineSerialNumber || selectedTicket.engineSerialNumber || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide">Engine Model</p>
+                    <p className="text-lg font-semibold text-green-900">{selectedTicket.EngineModel || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide">KVA Rating</p>
+                    <p className="text-lg font-semibold text-green-900">{selectedTicket.KVA || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide">Hour Meter Reading</p>
+                    <p className="text-lg font-semibold text-green-900">{selectedTicket.HourMeterReading || 'Not specified'}</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Ticket Overview */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Customer Information */}
@@ -3740,73 +3560,257 @@ const ServiceManagement: React.FC = () => {
                   )}
                 </div>
 
-
+                {/* Service Engineer Information */}
+                <div className="bg-purple-50 p-6 rounded-lg">
+                  <h3 className="text-lg font-medium text-purple-900 mb-4 flex items-center">
+                    <User className="w-5 h-5 mr-2" />
+                    Service Engineer Details
+                  </h3>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs text-gray-600">Assigned Engineer</p>
+                      <p className="font-medium text-purple-900">
+                        {selectedTicket.ServiceEngineerName && typeof selectedTicket.ServiceEngineerName === 'object' && 'firstName' in selectedTicket.ServiceEngineerName 
+                          ? `${(selectedTicket.ServiceEngineerName as any).firstName} ${(selectedTicket.ServiceEngineerName as any).lastName}`
+                          : getUserName(selectedTicket.assignedTo) || getUserName(selectedTicket.serviceRequestEngineer) || 'Unassigned'
+                        }
+                      </p>
+                    </div>
+                    {selectedTicket.ServiceEngineerName && typeof selectedTicket.ServiceEngineerName === 'object' && (selectedTicket.ServiceEngineerName as any).email && (
+                      <div>
+                        <p className="text-xs text-gray-600">Engineer Email</p>
+                        <p className="font-medium text-purple-900">{(selectedTicket.ServiceEngineerName as any).email}</p>
+                      </div>
+                    )}
+                    {selectedTicket.ServiceEngineerName && typeof selectedTicket.ServiceEngineerName === 'object' && (selectedTicket.ServiceEngineerName as any).phone && (
+                      <div>
+                        <p className="text-xs text-gray-600">Engineer Phone</p>
+                        <p className="font-medium text-purple-900">{(selectedTicket.ServiceEngineerName as any).phone}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
 
                 {/* Ticket Status */}
                 <div className="bg-gray-50 p-6 rounded-lg">
                   <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                     <Activity className="w-5 h-5 mr-2" />
-                    Status & Priority
+                    Service Request Status & Priority
                   </h3>
                   <div className="space-y-3">
                     <div>
-                      <p className="text-xs text-gray-600">Status</p>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedTicket.status)}`}>
-                        {selectedTicket.status.replace('_', ' ').charAt(0).toUpperCase() + selectedTicket.status.replace('_', ' ').slice(1)}
+                      <p className="text-xs text-gray-600">Service Request Status</p>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor((selectedTicket.ServiceRequestStatus || selectedTicket.status) as TicketStatus)}`}>
+                        {(selectedTicket.ServiceRequestStatus || selectedTicket.status || 'open').replace('_', ' ').charAt(0).toUpperCase() + (selectedTicket.ServiceRequestStatus || selectedTicket.status || 'open').replace('_', ' ').slice(1)}
                       </span>
                     </div>
-
-
                     <div>
-                      <p className="text-xs text-gray-600">Assigned To</p>
-                      <p className="font-medium">{getUserName(selectedTicket.assignedTo) || 'Unassigned'}</p>
+                      <p className="text-xs text-gray-600">OEM Name</p>
+                      <p className="font-medium">{selectedTicket.OemName || 'Not specified'}</p>
                     </div>
-
                   </div>
                 </div>
               </div>
 
               {/* Timeline Information */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div>
-                  <h4 className="text-sm font-medium text-gray-600">Created</h4>
-                  <p className="text-lg font-medium">{formatDateTime(selectedTicket.createdAt)}</p>
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-indigo-900 mb-3 flex items-center">
+                  <Clock className="w-5 h-5 mr-2" />
+                  Timeline Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Created</p>
+                    <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.createdAt)}</p>
+                  </div>
+                  {selectedTicket.ServiceRequestDate && (
+                    <div>
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Service Request Date</p>
+                      <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.ServiceRequestDate)}</p>
+                    </div>
+                  )}
+                  {selectedTicket.ServiceAttendedDate && (
+                    <div>
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Service Attended Date</p>
+                      <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.ServiceAttendedDate)}</p>
+                    </div>
+                  )}
+                  {selectedTicket.scheduledDate && (
+                    <div>
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Scheduled</p>
+                      <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.scheduledDate)}</p>
+                    </div>
+                  )}
+                  {selectedTicket.completedDate && (
+                    <div>
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Completed</p>
+                      <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.completedDate)}</p>
+                    </div>
+                  )}
+                  {selectedTicket.eFSRClosureDateAndTime && (
+                    <div>
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">eFSR Closure Date</p>
+                      <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.eFSRClosureDateAndTime)}</p>
+                    </div>
+                  )}
                 </div>
-                {selectedTicket.scheduledDate && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-600">Scheduled</h4>
-                    <p className="text-lg font-medium">{formatDateTime(selectedTicket.scheduledDate)}</p>
-                  </div>
-                )}
-                {selectedTicket.completedDate && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-600">Completed</h4>
-                    <p className="text-lg font-medium">{formatDateTime(selectedTicket.completedDate)}</p>
-                  </div>
-                )}
               </div>
 
+              {/* Complaint & Resolution Details */}
+              {(selectedTicket.ComplaintDescription || selectedTicket.ResolutionDescription || selectedTicket.ComplaintCode || selectedTicket.eFSRNumber) && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-orange-900 mb-3 flex items-center">
+                    <MessageSquare className="w-5 h-5 mr-2" />
+                    Complaint & Resolution Details
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {selectedTicket.ComplaintCode && (
+                      <div>
+                        <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">Complaint Code</p>
+                        <p className="text-lg font-semibold text-orange-900">{selectedTicket.ComplaintCode}</p>
+                      </div>
+                    )}
+                    {selectedTicket.eFSRNumber && (
+                      <div>
+                        <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">eFSR Number</p>
+                        <p className="text-lg font-semibold text-orange-900">{selectedTicket.eFSRNumber}</p>
+                      </div>
+                    )}
+                    {selectedTicket.ComplaintDescription && (
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">Complaint Description</p>
+                        <p className="text-lg font-semibold text-orange-900">{selectedTicket.ComplaintDescription}</p>
+                      </div>
+                    )}
+                    {selectedTicket.ResolutionDescription && (
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">Resolution Description</p>
+                        <p className="text-lg font-semibold text-orange-900">{selectedTicket.ResolutionDescription}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Visit Details */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-3">Visit Details</h3>
+              <div className="transition-all duration-500 ease-in-out bg-green-50 border-2 border-green-300 rounded-lg p-4 shadow-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-medium flex items-center transition-colors duration-500 text-green-800">
+                    <MapPin className="w-5 h-5 mr-2 transition-colors duration-500 text-green-600" />
+                    Visit Details
+                    <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      ✓ Active
+                    </span>
+                  </h3>
+                  {!isEditingVisitDetails ? (
+                    <button
+                      onClick={startEditingVisitDetails}
+                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1"
+                    >
+                      <Edit className="w-4 h-4" />
+                      <span>Edit</span>
+                    </button>
+                  ) : (
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={handleVisitDetailsUpdate}
+                        disabled={updatingVisitDetails}
+                        className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors flex items-center space-x-1"
+                      >
+                        {updatingVisitDetails ? (
+                          <>
+                            <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            <span>Save</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={cancelEditingVisitDetails}
+                        disabled={updatingVisitDetails}
+                        className="px-3 py-1 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="text-sm font-medium text-gray-600 mb-2">Type of Visit</h4>
-                    <p className="text-gray-900 font-medium">
-                      {selectedTicket.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === selectedTicket.typeOfVisit)?.label : 'Not specified'}
-                    </p>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Type of Visit
+                    </label>
+                    {isEditingVisitDetails ? (
+                      <select
+                        value={editableVisitDetails.typeOfVisit}
+                        onChange={(e) => setEditableVisitDetails(prev => ({ ...prev, typeOfVisit: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select Type of Visit</option>
+                        {typeOfVisitOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="font-medium transition-colors duration-500 text-green-700">
+                        {selectedTicket.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === selectedTicket.typeOfVisit)?.label : 'Not specified'}
+                      </p>
+                    )}
                   </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="text-sm font-medium text-gray-600 mb-2">Nature of Work</h4>
-                    <p className="text-gray-900 font-medium">
-                      {selectedTicket.natureOfWork ? natureOfWorkOptions.find(opt => opt.value === selectedTicket.natureOfWork)?.label : 'Not specified'}
-                    </p>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nature of Work
+                    </label>
+                    {isEditingVisitDetails ? (
+                      <select
+                        value={editableVisitDetails.natureOfWork}
+                        onChange={(e) => setEditableVisitDetails(prev => ({ ...prev, natureOfWork: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select Nature of Work</option>
+                        {natureOfWorkOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="font-medium transition-colors duration-500 text-green-700">
+                        {selectedTicket.natureOfWork ? natureOfWorkOptions.find(opt => opt.value === selectedTicket.natureOfWork)?.label : 'Not specified'}
+                      </p>
+                    )}
                   </div>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <h4 className="text-sm font-medium text-gray-600 mb-2">Sub Nature of Work</h4>
-                    <p className="text-gray-900 font-medium">
-                      {selectedTicket.subNatureOfWork ? subNatureOfWorkOptions.find(opt => opt.value === selectedTicket.subNatureOfWork)?.label : 'Not specified'}
-                    </p>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Sub Nature of Work
+                    </label>
+                    {isEditingVisitDetails ? (
+                      <select
+                        value={editableVisitDetails.subNatureOfWork}
+                        onChange={(e) => setEditableVisitDetails(prev => ({ ...prev, subNatureOfWork: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select Sub Nature of Work</option>
+                        {subNatureOfWorkOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="font-medium transition-colors duration-500 text-green-700">
+                        {selectedTicket.subNatureOfWork ? subNatureOfWorkOptions.find(opt => opt.value === selectedTicket.subNatureOfWork)?.label : 'Not specified'}
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3876,25 +3880,23 @@ const ServiceManagement: React.FC = () => {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
                   <Settings className="w-5 h-5 mr-2" />
-                  Update Status
+                  Update Service Request Status
                 </h3>
                 <div className="flex items-center space-x-3">
-                  <span className="text-sm text-gray-600">Current Status:</span>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedTicket.status)}`}>
-                    {selectedTicket.status.replace('_', ' ').charAt(0).toUpperCase() + selectedTicket.status.replace('_', ' ').slice(1)}
+                  <span className="text-sm text-gray-600">Current Service Request Status:</span>
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor((selectedTicket.ServiceRequestStatus || selectedTicket.status) as TicketStatus)}`}>
+                    {(selectedTicket.ServiceRequestStatus || selectedTicket.status || 'open').replace('_', ' ').charAt(0).toUpperCase() + (selectedTicket.ServiceRequestStatus || selectedTicket.status || 'open').replace('_', ' ').slice(1)}
                   </span>
                   <span className="text-sm text-gray-600">→</span>
                   <div className="flex items-center space-x-2">
                     <select
-                      value={selectedTicket.status}
-                      onChange={(e) => handleStatusUpdate(selectedTicket._id, e.target.value as TicketStatus)}
+                      value={selectedTicket.ServiceRequestStatus || selectedTicket.status || 'open'}
+                      onChange={(e) => handleServiceRequestStatusUpdate(selectedTicket._id, e.target.value)}
                       className="px-3 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="open">Open</option>
-                      <option value="in_progress">In Progress</option>
                       <option value="resolved">Resolved</option>
                       <option value="closed">Closed</option>
-                      <option value="cancelled">Cancelled</option>
                     </select>
 
                   </div>
@@ -3903,16 +3905,6 @@ const ServiceManagement: React.FC = () => {
 
               {/* Action Buttons */}
               <div className="flex space-x-3 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    handleEditTicket(selectedTicket);
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                >
-                  <Edit className="w-4 h-4" />
-                  <span>Edit Ticket</span>
-                </button>
                 {selectedTicket.status === 'resolved' && (
                   <button
                     onClick={() => {
@@ -3926,13 +3918,6 @@ const ServiceManagement: React.FC = () => {
                   </button>
                 )}
 
-                <button
-                  onClick={() => handleExportToPDF(selectedTicket)}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Export PDF</span>
-                </button>
                 {selectedTicket.status === 'resolved' && ticketsWithFeedback.has(selectedTicket._id) && (
                   <button
                     onClick={() => handleViewFeedback(selectedTicket._id)}
@@ -3947,8 +3932,6 @@ const ServiceManagement: React.FC = () => {
           </div>
         </div>
       )}
-
-
 
       {/* Digital Service Report Modal */}
       {showDigitalReportModal && selectedTicket && (
@@ -3993,6 +3976,8 @@ const ServiceManagement: React.FC = () => {
                       <FileText className="w-5 h-5 mr-2 text-blue-600" />
                       File Selection
                     </h3>
+                    
+
 
                     <div className="space-y-4">
                       <div>

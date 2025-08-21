@@ -557,6 +557,12 @@ class ApiClient {
 
     export: (params?: any) =>
       this.makeRequest<{ success: boolean; data: { tickets: any[]; totalCount: number } }>(`/services/export${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getCustomerEngines: (customerId: string) =>
+      this.makeRequest<{ success: boolean; data: { engines: any[]; count: number } }>(`/services/customer/${customerId}/engines`),
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: { totalTickets: number; openTickets: number; resolvedTickets: number; closedTickets: number; overdueTickets: number; ticketsByPriority: any[]; avgResolutionHours: number } }>('/services/stats/overview'),
   };
 
   // Digital Service Report APIs

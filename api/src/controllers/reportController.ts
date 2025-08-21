@@ -95,12 +95,12 @@ export const generateDashboardAnalytics = async (
       avgResolutionTime
     ] = await Promise.all([
       ServiceTicket.countDocuments({ ...dateQuery, status: TicketStatus.OPEN }),
-      ServiceTicket.countDocuments({ ...dateQuery, status: TicketStatus.IN_PROGRESS }),
+      ServiceTicket.countDocuments({ ...dateQuery, ServiceRequestStatus: TicketStatus.RESOLVED }),
       ServiceTicket.countDocuments({ ...dateQuery, status: TicketStatus.RESOLVED }),
       ServiceTicket.countDocuments({ 
         ...dateQuery, 
         slaDeadline: { $lt: new Date() },
-        status: { $in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] }
+        ServiceRequestStatus: { $in: [TicketStatus.OPEN] }
       }),
       ServiceTicket.aggregate([
         { $match: { ...dateQuery, status: TicketStatus.RESOLVED, completedDate: { $exists: true } } },
@@ -352,7 +352,7 @@ export const generateServiceReport = async (
       if (dateTo) query.createdAt.$lte = new Date(dateTo);
     }
     
-    if (status) query.status = status;
+    if (status) query.ServiceRequestStatus = status;
     if (priority) query.priority = priority;
     if (assignedTo) query.assignedTo = assignedTo;
     if (customer) query.customer = customer;
@@ -370,7 +370,7 @@ export const generateServiceReport = async (
     if (includeMetrics) {
       const totalTickets = tickets.length;
       const statusBreakdown = tickets.reduce((acc: any, ticket: any) => {
-        acc[ticket.status] = (acc[ticket.status] || 0) + 1;
+        acc[ticket.ServiceRequestStatus] = (acc[ticket.ServiceRequestStatus] || 0) + 1;
         return acc;
       }, {});
 
@@ -380,7 +380,7 @@ export const generateServiceReport = async (
       }, {});
 
       // Calculate average resolution time for resolved tickets
-      const resolvedTickets = tickets.filter((t: any) => t.status === TicketStatus.RESOLVED && t.completedDate);
+      const resolvedTickets = tickets.filter((t: any) => t.ServiceRequestStatus === TicketStatus.RESOLVED && t.completedDate);
       const avgResolutionTime = resolvedTickets.length > 0 
         ? resolvedTickets.reduce((acc: number, ticket: any) => {
             const resolutionTime = (new Date(ticket.completedDate).getTime() - new Date(ticket.createdAt).getTime()) / (1000 * 60 * 60);
@@ -391,7 +391,7 @@ export const generateServiceReport = async (
       // SLA compliance
       const overdueTickets = tickets.filter((t: any) => 
         t.slaDeadline && new Date() > new Date(t.slaDeadline) && 
-        [TicketStatus.OPEN, TicketStatus.IN_PROGRESS].includes(t.status)
+        [TicketStatus.OPEN].includes(t.ServiceRequestStatus)
       ).length;
 
       // TAT distribution
@@ -840,7 +840,7 @@ export const generatePerformanceReport = async (
         assignedTo: userId
       });
 
-      const resolvedTickets = userTickets.filter(t => t.status === TicketStatus.RESOLVED);
+      const resolvedTickets = userTickets.filter(t => t.ServiceRequestStatus === TicketStatus.RESOLVED);
       const avgResolutionTime = resolvedTickets.length > 0
         ? resolvedTickets.reduce((acc, ticket) => {
             const time = (new Date(ticket.completedDate!).getTime() - new Date(ticket.createdAt).getTime()) / (1000 * 60 * 60);
@@ -867,7 +867,7 @@ export const generatePerformanceReport = async (
             _id: '$assignedTo',
             totalTickets: { $sum: 1 },
             resolvedTickets: {
-              $sum: { $cond: [{ $eq: ['$status', TicketStatus.RESOLVED] }, 1, 0] }
+              $sum: { $cond: [{ $eq: ['$ServiceRequestStatus', TicketStatus.RESOLVED] }, 1, 0] }
             }
           }
         },

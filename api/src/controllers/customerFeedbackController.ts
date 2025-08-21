@@ -69,14 +69,14 @@ export const sendFeedbackEmail = async (
     console.log("feedbackUrl==>",feedbackUrl); 
     console.log("customerEmail==>",customerEmail);
     console.log("customerName==>",customerName);
-    console.log("ticket.ticketNumber==>",ticket.ticketNumber);
+    console.log("ticket.ServiceRequestNumber==>",ticket.ServiceRequestNumber);
     console.log("ticket==>",ticket);
 
     // Send email using nodemailer
     await sendFeedbackEmailUtil(
       customerEmail,
       customerName,
-      ticket.ticketNumber || '',
+      ticket.ServiceRequestNumber || '',
       feedbackUrl,
       ticket
     );

@@ -50,10 +50,8 @@ export enum LeadStatus {
 // Service Ticket Status
 export enum TicketStatus {
   OPEN = 'open',
-  IN_PROGRESS = 'in_progress',
   RESOLVED = 'resolved',
-  CLOSED = 'closed',
-  CANCELLED = 'cancelled'
+  CLOSED = 'closed'
 }
 
 // Service Ticket Priority
@@ -62,6 +60,37 @@ export enum TicketPriority {
   MEDIUM = 'medium',
   HIGH = 'high',
   CRITICAL = 'critical'
+}
+
+// Visit Details Enums
+export enum TypeOfVisit {
+  OIL_SERVICE = 'oil_service',
+  COURTESY_VISIT = 'courtesy_visit',
+  AMC_VISIT = 'amc_visit',
+  SPARE = 'spare',
+  FSC_VISIT = 'fsc_visit',
+  PAID_VISIT = 'paid_visit'
+}
+
+export enum NatureOfWork {
+  OIL_SERVICE = 'oil_service',
+  SITE_VISIT = 'site_visit',
+  BREAKDOWN = 'breakdown',
+  INSTALLATION = 'installation',
+  DMS_CALL = 'dms_call'
+}
+
+export enum SubNatureOfWork {
+  FSC = 'fsc',
+  AMC = 'amc',
+  PAID = 'paid',
+  COURTESY_VISIT = 'courtesy_visit',
+  WARRANTY = 'warranty',
+  PRE_INSTALLATION = 'pre_installation',
+  COMMISSIONING = 'commissioning',
+  EV = 'ev',
+  LOGGED = 'logged',
+  WITHOUT_LOGGED = 'without_logged'
 }
 
 // AMC Status

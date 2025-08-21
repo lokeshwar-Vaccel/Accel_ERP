@@ -37,7 +37,7 @@ export const createDigitalServiceReport = async (
       return next(new AppError('Service ticket not found', 404));
     }
 
-    if (ticket.status !== TicketStatus.RESOLVED) {
+    if (ticket.ServiceRequestStatus !== TicketStatus.RESOLVED) {
       return next(new AppError('Service ticket must be resolved to create digital service report', 400));
     }
 
