@@ -4,12 +4,15 @@ import { CustomerType, LeadStatus, CustomerMainType } from '../types';
 // TypeScript interfaces for validation results
 export interface CreateCustomerInput {
   name: string;
+  alice?: string;
   designation?: string;
   contactPersonName?: string;
   email?: string;
   phone?: string;
   panNumber?: string;
-  addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean }[];
+  addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean; gstNumber?: string; notes?: string }[];
+  siteAddress?: string;
+  numberOfDG?: number;
   customerType: CustomerType;
   type: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
@@ -17,16 +20,34 @@ export interface CreateCustomerInput {
   status?: LeadStatus;
   notes?: string;
   isDGSalesCustomer?: boolean;
+  dgDetails?: {
+    dgSerialNumbers: string;
+    alternatorMake: string;
+    alternatorSerialNumber: string;
+    dgMake: string;
+    engineSerialNumber: string;
+    dgModel: string;
+    dgRatingKVA: number;
+    salesDealerName: string;
+    commissioningDate: Date;
+    warrantyStatus: 'warranty' | 'non_warranty';
+    installationType: 'infold' | 'outfold';
+    amcStatus: 'yes' | 'no';
+    cluster: string;
+  }[];
 }
 
 export interface UpdateCustomerInput {
   name?: string;
+  alice?: string;
   designation?: string;
   contactPersonName?: string;
   email?: string;
   phone?: string;
   panNumber?: string;
-  addresses?: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean }[];
+  addresses?: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean; gstNumber?: string; notes?: string }[];
+  siteAddress?: string;
+  numberOfDG?: number;
   customerType?: CustomerType;
   type?: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
@@ -34,6 +55,21 @@ export interface UpdateCustomerInput {
   status?: LeadStatus;
   notes?: string;
   isDGSalesCustomer?: boolean;
+  dgDetails?: {
+    dgSerialNumbers: string;
+    alternatorMake: string;
+    alternatorSerialNumber: string;
+    dgMake: string;
+    engineSerialNumber: string;
+    dgModel: string;
+    dgRatingKVA: number;
+    salesDealerName: string;
+    commissioningDate: Date;
+    warrantyStatus: 'warranty' | 'non_warranty';
+    installationType: 'infold' | 'outfold';
+    amcStatus: 'yes' | 'no';
+    cluster: string;
+  }[];
 }
 
 export interface AddContactHistoryInput {
@@ -85,12 +121,15 @@ export interface ScheduleFollowUpInput {
 
 export interface CustomerImportInput {
   name: string;
+  alice?: string;
   designation?: string;
   contactPersonName?: string;
   gstNumber?: string;
   email?: string;
   phone?: string;
-  addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean }[];
+  addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean; gstNumber?: string; notes?: string }[];
+  siteAddress?: string;
+  numberOfDG?: number;
   customerType: CustomerType;
   type: CustomerMainType; // 'customer' or 'supplier'
   leadSource?: string;
@@ -104,64 +143,94 @@ const addressJoiSchema = Joi.object({
   address: Joi.string().max(500).required(),
   state: Joi.string().max(100).required(),
   district: Joi.string().max(100).required(),
-  pincode: Joi.string().pattern(/^\d{6}$/).allow('').optional(),
-  gstNumber: Joi.string().max(15).trim().allow(''),
-  isPrimary: Joi.boolean().default(false)
+  pincode: Joi.string().max(100).trim().allow('', null), // Allow any text for pincode field
+  gstNumber: Joi.string().max(200).trim().allow('', null), // Allow longer text for GST field
+  isPrimary: Joi.boolean().default(false),
+  notes: Joi.string().max(500).trim().allow('', null) // Allow notes field
+});
+
+// DGDetails Joi schema - Made fields optional for imports
+const dgDetailsJoiSchema = Joi.object({
+  dgSerialNumbers: Joi.string().trim().max(100).allow('', null),
+  alternatorMake: Joi.string().trim().max(100).allow('', null),
+  alternatorSerialNumber: Joi.string().trim().max(100).allow('', null),
+  dgMake: Joi.string().trim().max(100).allow('', null),
+  engineSerialNumber: Joi.string().trim().max(100).allow('', null),
+  dgModel: Joi.string().trim().max(100).allow('', null),
+  dgRatingKVA: Joi.number().min(0).allow('', null),
+  salesDealerName: Joi.string().trim().max(200).allow('', null),
+  commissioningDate: Joi.date().allow('', null),
+  warrantyStatus: Joi.string().valid('warranty', 'non_warranty').allow('', null),
+  installationType: Joi.string().valid('infold', 'outfold').allow('', null),
+  amcStatus: Joi.string().valid('yes', 'no').allow('', null),
+  cluster: Joi.string().trim().max(100).allow('', null)
 });
 
 // Base customer fields
 const baseCustomerFields = {
   name: Joi.string().min(2).max(100).trim(),
+  alice: Joi.string().max(100).trim().allow(''),
   designation: Joi.string().max(100).trim().allow(''),
   contactPersonName: Joi.string().max(100).trim().allow(''),
   gstNumber: Joi.string().max(50).trim().allow(''),
   email: Joi.string().email().lowercase().allow('', null),
-  phone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/).allow('', null),
+  phone: Joi.string().max(200).trim().allow('', null), // Allow any text for phone field
   panNumber: Joi.string().max(10).trim().allow(''),
   addresses: Joi.array().items(addressJoiSchema).min(1),
+  siteAddress: Joi.string().max(500).trim().allow(''),
+  numberOfDG: Joi.number().integer().min(0).max(100).allow('', null, 0),
   customerType: Joi.string().valid(...Object.values(CustomerType)),
   type: Joi.string().valid(...Object.values(CustomerMainType)),
   leadSource: Joi.string().max(100).trim().allow(''),
   assignedTo: Joi.string().hex().length(24), // MongoDB ObjectId
   status: Joi.string().valid(...Object.values(LeadStatus)),
   notes: Joi.string().max(2000).allow(''),
-  isDGSalesCustomer: Joi.boolean().optional()
+  isDGSalesCustomer: Joi.boolean().optional(),
+  dgDetails: Joi.array().items(dgDetailsJoiSchema).optional()
 };
 
 // Create customer schema
 export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   name: baseCustomerFields.name.required(),
+  alice: baseCustomerFields.alice,
   designation: baseCustomerFields.designation,
   contactPersonName: baseCustomerFields.contactPersonName,
   email: baseCustomerFields?.email.allow('', null),
   phone: baseCustomerFields?.phone.allow('', null),
   panNumber: baseCustomerFields.panNumber,
   addresses: baseCustomerFields.addresses,
+  siteAddress: baseCustomerFields.siteAddress,
+  numberOfDG: baseCustomerFields.numberOfDG,
   customerType: baseCustomerFields.customerType,
   type: baseCustomerFields.type,
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
   status: baseCustomerFields.status,
   notes: baseCustomerFields.notes,
-  isDGSalesCustomer: baseCustomerFields.isDGSalesCustomer
+  isDGSalesCustomer: baseCustomerFields.isDGSalesCustomer,
+  dgDetails: baseCustomerFields.dgDetails
 });
 
 // Update customer schema
 export const updateCustomerSchema = Joi.object<UpdateCustomerInput>({
   name: baseCustomerFields.name,
+  alice: baseCustomerFields.alice,
   designation: baseCustomerFields.designation,
   contactPersonName: baseCustomerFields.contactPersonName,
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone,
   panNumber: baseCustomerFields.panNumber,
   addresses: baseCustomerFields.addresses,
+  siteAddress: baseCustomerFields.siteAddress,
+  numberOfDG: baseCustomerFields.numberOfDG,
   customerType: baseCustomerFields.customerType,
   type: baseCustomerFields.type,
   leadSource: baseCustomerFields.leadSource,
   assignedTo: baseCustomerFields.assignedTo,
   status: baseCustomerFields.status,
   notes: baseCustomerFields.notes,
-  isDGSalesCustomer: baseCustomerFields.isDGSalesCustomer
+  isDGSalesCustomer: baseCustomerFields.isDGSalesCustomer,
+  dgDetails: baseCustomerFields.dgDetails
 });
 
 // Contact history schema

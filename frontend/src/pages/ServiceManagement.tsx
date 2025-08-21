@@ -2254,7 +2254,7 @@ const ServiceManagement: React.FC = () => {
                       <div>
                         <div className="text-sm font-medium text-blue-600">{ticket.ticketNumber}</div>
                         <div className="text-xs text-gray-900 font-medium">
-                          {ticket.description.length > 50
+                          {ticket.description?.length > 50
                             ? `${ticket.description.substring(0, 50)}...`
                             : ticket.description}
                         </div>

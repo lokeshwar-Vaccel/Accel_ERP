@@ -7,4 +7,6 @@ export * from './DGPayment';
 export * from './OEM';
 export * from './OEMOrder';
 export * from './DGMovement';
-export * from './DGQuotation'; 
+export * from './DGQuotation';
+export * from './PurchaseOrderPayment';
+export * from './DGDetails'; 

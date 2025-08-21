@@ -5,7 +5,6 @@ import {
   Search,
   Filter,
   Package,
-  DollarSign,
   Calendar,
   CheckCircle,
   Clock,
@@ -34,6 +33,7 @@ import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 import { Pagination } from 'components/ui/Pagination';
 import toast from 'react-hot-toast';
+import { PaymentMethodDetails } from '../types';
 
 // Types matching backend structure
 type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'partially_received' | 'received' | 'cancelled';
@@ -159,6 +159,8 @@ interface ReceiveItemsData {
   supplierEmail?: string;
   supplierAddress?: SupplierAddress;
   externalInvoiceTotal?: number;
+  // Add totalAmount field for clarity - this will be the invoice total
+  totalAmount?: number;
   // New shipping and documentation fields
   shipDate: string;
   docketNumber: string;
@@ -229,8 +231,10 @@ const PurchaseOrderManagement: React.FC = () => {
     paidAmount: 0,
     paymentMethod: '',
     paymentDate: new Date().toISOString().split('T')[0],
-    notes: ''
+    notes: '',
+    paymentMethodDetails: {} as PaymentMethodDetails
   });
+  const [showPaymentMethodDropdown, setShowPaymentMethodDropdown] = useState(false);
 
   const [totalPurchaseOrdersCount, setTotalPurchaseOrdersCount] = useState(0);
   const [pendingPurchaseOrdersCount, setPendingPurchaseOrdersCount] = useState(0);
@@ -638,6 +642,9 @@ const PurchaseOrderManagement: React.FC = () => {
 
     setSelectedPO(po);
     setReceiveSearchTerm(''); // Clear search when opening modal
+    
+    // Clear any existing form errors
+    setFormErrors({});
 
     // Extract supplier name from purchase order
     const extractedSupplierName = typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)?.name || 'Unknown Supplier';
@@ -709,7 +716,8 @@ const PurchaseOrderManagement: React.FC = () => {
       paidAmount: 0,
       paymentMethod: '',
       paymentDate: new Date().toISOString().split('T')[0],
-      notes: ''
+      notes: '',
+      paymentMethodDetails: {}
     });
     setShowPaymentModal(true);
   };
@@ -814,76 +822,91 @@ const PurchaseOrderManagement: React.FC = () => {
     }
   };
 
-  // Add validation for Receive Items form
-  const validateReceiveForm = async (): Promise<boolean> => {
-    const errors: Record<string, string> = {};
 
-    // Validate all required fields marked with asterisks in the form
-    if (!receiveData.location || receiveData.location.trim() === '') {
-      errors.location = 'Delivery Location is required';
-    }
-    if (!receiveData.receiptDate || receiveData.receiptDate.trim() === '') {
-      errors.receiptDate = 'Receipt Date is required';
-    }
-    if (!receiveData.shipDate || receiveData.shipDate.trim() === '') {
-      errors.shipDate = 'Ship Date is required';
-    }
-    // if (!receiveData.docketNumber || receiveData.docketNumber.trim() === '') {
-    //   errors.docketNumber = 'Docket Number is required';
-    // }
-    if (!receiveData.noOfPackages || receiveData.noOfPackages <= 0) {
-      errors.noOfPackages = 'Number of Packages must be greater than 0';
-    }
-    if (!receiveData.gstInvoiceNumber || receiveData.gstInvoiceNumber.trim() === '') {
-      errors.gstInvoiceNumber = 'GST Invoice Number is required';
-    } else {
-      // Check for duplicate GST Invoice Number
-      try {
-        const response = await apiClient.purchaseOrders.checkGstInvoiceNumber(receiveData.gstInvoiceNumber.trim());
-        if (response.data.exists) {
-          const foundIn = response.data.foundIn === 'purchase_order' ? 'Purchase Order' : 'Invoice';
-          errors.gstInvoiceNumber = `GST Invoice Number "${receiveData.gstInvoiceNumber}" already exists in ${foundIn}. Please use a different GST Invoice Number.`;
-        }
-      } catch (error) {
-        console.error('Error checking GST Invoice Number:', error);
-        // Don't block validation if the check fails, but log the error
-      }
-    }
-    if (!receiveData.invoiceDate || receiveData.invoiceDate.trim() === '') {
-      errors.invoiceDate = 'Invoice Date is required';
-    }
-    // if (!receiveData.documentNumber || receiveData.documentNumber.trim() === '') {
-    //   errors.documentNumber = 'Document Number is required';
-    // }
-    // if (!receiveData.documentDate || receiveData.documentDate.trim() === '') {
-    //   errors.documentDate = 'Document Date is required';
-    // }
-
-    // Validate that at least one item has been selected to receive
-    if (receiveData.receivedItems.every(item => (item.quantityReceived || 0) === 0)) {
-      errors.items = 'Please select items to receive';
-    }
-
-    // setFormErrors(errors);
-
-    if (Object.keys(errors).length > 0) {
-      toast.error('Please fill in all required fields');
-    }
-
-    return Object.keys(errors).length === 0;
-  };
 
   const handleReceiveItems = async () => {
     if (!selectedPO) return;
 
-    // Validate form before submitting
-    if (!(await validateReceiveForm())) return;
+    // Clear any existing errors first
+    setFormErrors({});
+
+    // Collect ALL validation errors at once - this ensures all errors are shown together
+    const allErrors: Record<string, string> = {};
+    
+    // Critical field validations
+    if (!receiveData.gstInvoiceNumber || receiveData.gstInvoiceNumber.trim() === '') {
+      allErrors.gstInvoiceNumber = 'GST Invoice Number is required for invoice creation';
+    }
+    
+    if (!receiveData.location || receiveData.location.trim() === '') {
+      allErrors.location = 'Delivery Location is required';
+    }
+    
+    if (!receiveData.receiptDate || receiveData.receiptDate.trim() === '') {
+      allErrors.receiptDate = 'Receipt Date is required';
+    }
+    
+    if (!receiveData.shipDate || receiveData.shipDate.trim() === '') {
+      allErrors.shipDate = 'Ship Date is required';
+    }
+    
+    if (!receiveData.noOfPackages || receiveData.noOfPackages <= 0) {
+      allErrors.noOfPackages = 'Number of Packages must be greater than 0';
+    }
+    
+    if (!receiveData.invoiceDate || receiveData.invoiceDate.trim() === '') {
+      allErrors.invoiceDate = 'Invoice Date is required';
+    }
+    
+    // Items validation
+    if (receiveData.receivedItems.every(item => (item.quantityReceived || 0) === 0)) {
+      allErrors.items = 'Please select items to receive';
+    }
+    
+    // Check for duplicate GST Invoice Number if provided
+    if (receiveData.gstInvoiceNumber && receiveData.gstInvoiceNumber.trim() !== '') {
+      try {
+        const response = await apiClient.purchaseOrders.checkGstInvoiceNumber(receiveData.gstInvoiceNumber.trim());
+        if (response.data.exists) {
+          const foundIn = response.data.foundIn === 'purchase_order' ? 'Purchase Order' : 'Invoice';
+          allErrors.gstInvoiceNumber = `GST Invoice Number "${receiveData.gstInvoiceNumber}" already exists in ${foundIn}. Please use a different GST Invoice Number.`;
+        }
+      } catch (error) {
+        console.error('Error checking GST Invoice Number:', error);
+        // Don't block validation if the check fails
+      }
+    }
+    
+    // Filter out any empty error messages
+    const validErrors = Object.fromEntries(
+      Object.entries(allErrors).filter(([field, error]) => error && error.trim() !== '')
+    );
+    
+    // If there are any valid errors, display them all and stop
+    if (Object.keys(validErrors).length > 0) {
+      setFormErrors(validErrors);
+      toast.error(`Please fix ${Object.keys(validErrors).length} validation error(s)`);
+      return;
+    }
+
+    // If we get here, all validations passed
 
     setSubmitting(true);
     console.log("receiveData:", receiveData);
 
     try {
-      const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, receiveData);
+      // Prepare the data to send to backend
+      const dataToSend = {
+        ...receiveData,
+        // Ensure externalInvoiceTotal is properly set for invoice creation
+        externalInvoiceTotal: receiveData.externalInvoiceTotal || 0,
+        // Also set totalAmount for clarity (backend will use externalInvoiceTotal)
+        totalAmount: receiveData.totalAmount || 0
+      };
+
+      console.log("Sending data to backend:", dataToSend);
+      
+      const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, dataToSend);
 
       // Use the updated purchase order from the backend response
       const updatedPO = response.data.order;
@@ -1201,15 +1224,15 @@ const PurchaseOrderManagement: React.FC = () => {
       icon: <IndianRupee className="w-6 h-6" />,
       color: 'purple'
     },
-    {
-      title: 'Payment Status',
-      value: `${purchaseOrders.filter(po => po.paymentStatus === 'paid').length} Paid / ${purchaseOrders.filter(po => po.paymentStatus === 'partial').length} Partial`,
-      action: () => {
-        // Could add payment status filter in the future
-      },
-      icon: <DollarSign className="w-6 h-6" />,
-      color: 'emerald'
-    }
+    // {
+    //   title: 'Payment Status',
+    //   value: `${purchaseOrders.filter(po => po.paymentStatus === 'paid').length} Paid / ${purchaseOrders.filter(po => po.paymentStatus === 'partial').length} Partial`,
+    //   action: () => {
+    //     // Could add payment status filter in the future
+    //   },
+    //   icon: <IndianRupee className="w-6 h-6" />,
+    //   color: 'emerald'
+    // }
   ];
 
   // Status options with labels
@@ -1233,6 +1256,36 @@ const PurchaseOrderManagement: React.FC = () => {
     return value || 'All Suppliers';
   };
 
+  const getPaymentMethodLabel = (value: string) => {
+    const options = [
+      { value: '', label: 'Select payment method' },
+      { value: 'cash', label: 'Cash' },
+      { value: 'cheque', label: 'Cheque' },
+      { value: 'bank_transfer', label: 'Bank Transfer' },
+      { value: 'upi', label: 'UPI' },
+      { value: 'card', label: 'Credit/Debit Card' },
+      { value: 'other', label: 'Other' }
+    ];
+    return options.find(opt => opt.value === value)?.label || 'Select payment method';
+  };
+
+  // Helper function to update payment method details safely
+  const updatePaymentMethodDetails = (method: string, field: string, value: string) => {
+    setPaymentUpdate(prev => {
+      const currentDetails = prev.paymentMethodDetails[method as keyof PaymentMethodDetails] || {};
+      return {
+        ...prev,
+        paymentMethodDetails: {
+          ...prev.paymentMethodDetails,
+          [method]: {
+            ...currentDetails,
+            [field]: value
+          }
+        }
+      };
+    });
+  };
+
   // Click outside handler for dropdowns
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -1242,6 +1295,7 @@ const PurchaseOrderManagement: React.FC = () => {
         // setShowAddressDropdown(false);
         setShowCreateSupplierDropdown(false);
         setShowEditSupplierDropdown(false);
+        setShowPaymentMethodDropdown(false);
         setSupplierSearchTerm('');
 
         // Close all product dropdowns
@@ -1274,6 +1328,57 @@ const PurchaseOrderManagement: React.FC = () => {
       gstAmount,
       total: subtotal + gstAmount
     };
+  };
+
+  // Helper function to validate individual fields
+  const validateField = (fieldName: string, value: any): string => {
+    switch (fieldName) {
+      case 'gstInvoiceNumber':
+        if (!value || value.trim() === '') {
+          return 'GST Invoice Number is required';
+        }
+        if (value.trim().length < 3) {
+          return 'GST Invoice Number must be at least 3 characters long';
+        }
+        // Check for basic format validation (alphanumeric with common separators)
+        const gstPattern = /^[A-Za-z0-9\/\-_\.\s]+$/;
+        if (!gstPattern.test(value.trim())) {
+          return 'GST Invoice Number contains invalid characters. Use only letters, numbers, spaces, and common separators (/, -, _, .)';
+        }
+        return '';
+      case 'location':
+        if (!value || value.trim() === '') {
+          return 'Delivery Location is required';
+        }
+        return '';
+      case 'receiptDate':
+        if (!value || value.trim() === '') {
+          return 'Receipt Date is required';
+        }
+        return '';
+      case 'shipDate':
+        if (!value || value.trim() === '') {
+          return 'Ship Date is required';
+        }
+        return '';
+      case 'noOfPackages':
+        if (!value || value <= 0) {
+          return 'Number of Packages must be greater than 0';
+        }
+        return '';
+      case 'invoiceDate':
+        if (!value || value.trim() === '') {
+          return 'Invoice Date is required';
+        }
+        return '';
+      default:
+        return '';
+    }
+  };
+
+  // Helper function to check if any items are selected for receiving
+  const hasSelectedItems = (): boolean => {
+    return receiveData.receivedItems.some(item => (item.quantityReceived || 0) > 0);
   };
 
 
@@ -1341,7 +1446,7 @@ const PurchaseOrderManagement: React.FC = () => {
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {stats.map((stat, index) => (
           <div key={index} onClick={stat.action} className={`bg-white p-4 hover:bg-gray-50 rounded-xl shadow-sm border border-gray-100 ${stat.title === 'Total Value' ? 'cursor-not-allowed' : 'cursor-pointer transform transition-transform duration-200 hover:scale-105 active:scale-95'}`}>
             <div className="flex items-center justify-between">
@@ -1611,6 +1716,14 @@ const PurchaseOrderManagement: React.FC = () => {
                             {/* <span>Mark as Confirmed</span> */}
                           </button>
                         )}
+                        {/* Payment Update Button */}
+                        {(po.status !== 'draft') && <button
+                          onClick={() => openPaymentModal(po)}
+                          className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
+                          title="Update Payment"
+                        >
+                          <IndianRupee className="w-4 h-4" />
+                        </button>}
                         {(po.status === 'draft' || po.status === 'sent') && (
                           <button
                             onClick={() => handleStatusUpdate(po._id, 'cancelled')}
@@ -1620,16 +1733,8 @@ const PurchaseOrderManagement: React.FC = () => {
                             {/* <span>Cancel PO</span> */}
                           </button>
                         )}
-                        {/* Payment Update Button */}
-                        <button
-                          onClick={() => openPaymentModal(po)}
-                          className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
-                          title="Update Payment"
-                        >
-                          <DollarSign className="w-4 h-4" />
-                        </button>
                         {/* Sync Payment Status Button */}
-                        <button
+                        {/* <button
                           onClick={async () => {
                             try {
                               await apiClient.purchaseOrders.syncPaymentStatus(po._id);
@@ -1644,7 +1749,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           title="Sync Payment Status from Invoices"
                         >
                           <RefreshCw className="w-4 h-4" />
-                        </button>
+                        </button> */}
                       </div>
                     </td>
                   </tr>
@@ -1980,7 +2085,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     onClick={() => openPaymentModal(selectedPO)}
                     className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-purple-700 transition-colors"
                   >
-                    <DollarSign className="w-4 h-4" />
+                    <IndianRupee className="w-4 h-4" />
                     <span>Update Payment</span>
                   </button>
                   {/* Sync Payment Status Button */}
@@ -2197,32 +2302,65 @@ const PurchaseOrderManagement: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       GST Invoice Number <span className="text-red-500">*</span>
+                      <span className="text-xs text-gray-500 ml-2">(Required for invoice creation)</span>
                     </label>
                     <div className="relative">
                       <input
                         type="text"
                         value={receiveData.gstInvoiceNumber}
                         onChange={(e) => {
-                          setReceiveData({ ...receiveData, gstInvoiceNumber: e.target.value });
-                          validateGstInvoiceNumber(e.target.value);
+                          const value = e.target.value;
+                          setReceiveData({ ...receiveData, gstInvoiceNumber: value });
+                          
+                          // Clear form error when user starts typing
+                          if (formErrors.gstInvoiceNumber) {
+                            setFormErrors(prev => ({ ...prev, gstInvoiceNumber: '' }));
+                          }
+                          
+                          // Real-time validation
+                          const error = validateField('gstInvoiceNumber', value);
+                          if (error) {
+                            setFormErrors(prev => ({ ...prev, gstInvoiceNumber: error }));
+                          }
+                          
+                          // Validate GST Invoice Number for duplicates
+                          validateGstInvoiceNumber(value);
+                        }}
+                        onBlur={(e) => {
+                          // Additional validation on blur
+                          const value = e.target.value;
+                          const error = validateField('gstInvoiceNumber', value);
+                          if (error) {
+                            setFormErrors(prev => ({ ...prev, gstInvoiceNumber: error }));
+                          }
                         }}
                         placeholder="GST Invoice Number"
                         className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                           formErrors.gstInvoiceNumber || gstInvoiceValidation.isDuplicate ? 'border-red-500' : 
-                          gstInvoiceValidation.message && !gstInvoiceValidation.isDuplicate ? '' : 'border-gray-300'
+                          gstInvoiceValidation.message && !gstInvoiceValidation.isDuplicate ? 'border-blue-300' : 'border-gray-300'
                         }`}
                       />
+                      {gstInvoiceValidation.isValidating && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        </div>
+                      )}
                     </div>
                     {formErrors.gstInvoiceNumber && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.gstInvoiceNumber}</p>
                     )}
-                    {gstInvoiceValidation.message && !formErrors.gstInvoiceNumber && (
-                      <p className={`text-xs mt-1 ${
-                        gstInvoiceValidation.isDuplicate ? 'text-red-500' : ''
-                      }`}>
-                        {gstInvoiceValidation.message}
-                      </p>
-                    )}
+                                          {gstInvoiceValidation.message && !formErrors.gstInvoiceNumber && (
+                        <p className={`text-xs mt-1 ${
+                          gstInvoiceValidation.isDuplicate ? 'text-red-500' : 'text-blue-600'
+                        }`}>
+                          {gstInvoiceValidation.message}
+                        </p>
+                      )}
+                      {!gstInvoiceValidation.message && !formErrors.gstInvoiceNumber && receiveData.gstInvoiceNumber && receiveData.gstInvoiceNumber.trim() !== '' && (
+                        <p className="text-xs mt-1 text-green-600">
+                          ✓ GST Invoice Number format is valid
+                        </p>
+                      )}
                   </div>
 
                   <div>
@@ -2290,7 +2428,14 @@ const PurchaseOrderManagement: React.FC = () => {
               {/* Items to Receive */}
               <div>
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-gray-900">Items to Receive</h3>
+                  <div className="flex items-center space-x-3">
+                    <h3 className="text-lg font-semibold text-gray-900">Items to Receive</h3>
+                    {hasSelectedItems() && (
+                      <span className="px-2 py-1 bg-green-100 text-green-800 text-xs font-medium rounded-full">
+                        {receiveData.receivedItems.reduce((sum, item) => sum + (item.quantityReceived || 0), 0)} items selected
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <input
@@ -2302,9 +2447,26 @@ const PurchaseOrderManagement: React.FC = () => {
                     />
                   </div>
                 </div>
+                
+                {/* Items Validation Summary */}
                 {formErrors.items && (
                   <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <p className="text-red-600 text-sm">{formErrors.items}</p>
+                    <div className="flex items-center">
+                      <AlertTriangle className="w-4 h-4 text-red-600 mr-2" />
+                      <p className="text-red-600 text-sm font-medium">{formErrors.items}</p>
+                    </div>
+                  </div>
+                )}
+                
+                {/* Warning when no items are selected */}
+                {!hasSelectedItems() && !formErrors.items && (
+                  <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                    <div className="flex items-center">
+                      <AlertTriangle className="w-4 h-4 text-yellow-600 mr-2" />
+                      <p className="text-yellow-600 text-sm font-medium">
+                        Please select items to receive by entering quantities above
+                      </p>
+                    </div>
                   </div>
                 )}
 
@@ -2417,6 +2579,11 @@ const PurchaseOrderManagement: React.FC = () => {
                                     onChange={(e) => {
                                       const qty = parseInt(e.target.value);
 
+                                      // Clear items validation error when user starts selecting items
+                                      if (formErrors.items && qty > 0) {
+                                        setFormErrors(prev => ({ ...prev, items: '' }));
+                                      }
+
                                       // Update receivedItems
                                       const newReceivedItems = [...receiveData.receivedItems];
                                       const existingItem = newReceivedItems[originalIndex] || {};
@@ -2452,6 +2619,11 @@ const PurchaseOrderManagement: React.FC = () => {
                                   <button
                                     type="button"
                                     onClick={() => {
+                                      // Clear items validation error when user selects max quantity
+                                      if (formErrors.items && remainingQty > 0) {
+                                        setFormErrors(prev => ({ ...prev, items: '' }));
+                                      }
+
                                       const newReceivedItems = [...receiveData.receivedItems];
                                       const existingItem = newReceivedItems[originalIndex] || {};
                                       newReceivedItems[originalIndex] = {
@@ -2860,7 +3032,25 @@ const PurchaseOrderManagement: React.FC = () => {
                             <div>
                               <span className="font-medium">Amount mismatch detected</span>
                               <div className="text-sm mt-1">
-                                External Invoice: {formatCurrency(externalTotal)} | Grand Total: {formatCurrency(grandTotal)}
+                                <div className="mt-2">
+                                  <div className="flex justify-between">
+                                    <span>External Invoice Total:</span>
+                                    <span className="font-semibold">{formatCurrency(externalTotal)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Calculated Total:</span>
+                                    <span className="font-semibold">{formatCurrency(grandTotal)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span>Difference:</span>
+                                    <span className={`font-semibold ${Math.abs(externalTotal - grandTotal) > 0.01 ? 'text-red-600' : 'text-green-600'}`}>
+                                      {formatCurrency(Math.abs(externalTotal - grandTotal))}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="mt-2 text-xs text-gray-600">
+                                  <strong>Note:</strong> The External Invoice Total will be used as the final invoice amount.
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -2870,6 +3060,33 @@ const PurchaseOrderManagement: React.FC = () => {
                   )}
                 </div>
               </div>
+
+              {/* Validation Summary */}
+              {formErrors && Object.keys(formErrors).length > 0 && Object.values(formErrors).some(error => error && error.trim() !== '') && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                  <div className="flex items-start">
+                    <AlertTriangle className="w-5 h-5 text-red-600 mr-2 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-sm font-medium text-red-800 mb-2">Please fix the following errors:</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-red-700">
+                        {Object.entries(formErrors)
+                          .filter(([field, error]) => error && error.trim() !== '') // Only show fields with actual error messages
+                          .map(([field, error]) => (
+                            <li key={field}>
+                              <span className="font-medium">{field === 'gstInvoiceNumber' ? 'GST Invoice Number' : 
+                                field === 'location' ? 'Delivery Location' :
+                                field === 'receiptDate' ? 'Receipt Date' :
+                                field === 'shipDate' ? 'Ship Date' :
+                                field === 'noOfPackages' ? 'Number of Packages' :
+                                field === 'invoiceDate' ? 'Invoice Date' :
+                                field === 'items' ? 'Items' : field}:</span> {error}
+                            </li>
+                          ))}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex space-x-4 pt-6 border-t border-gray-200">
@@ -2914,142 +3131,1164 @@ const PurchaseOrderManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Payment Update Modal */}
+      {/* Payment Update Modal - Invoice Style */}
       {showPaymentModal && selectedPO && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">Update Payment</h2>
-                <p className="text-gray-600 mt-1">
-                  PO: <span className="font-semibold">{selectedPO.poNumber}</span>
-                </p>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
+            {/* Invoice Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6 rounded-t-xl">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-4">
+                  <div className="p-3 bg-white bg-opacity-20 rounded-lg">
+                    <IndianRupee className="w-8 h-8" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold">Payment Update</h2>
+                    <p className="text-blue-100 mt-1">
+                      Purchase Order: <span className="font-semibold">{selectedPO.poNumber}</span>
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowPaymentModal(false)}
+                  className="text-white hover:text-blue-100 p-2 hover:bg-white hover:bg-opacity-20 rounded-lg transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
               </div>
-              <button
-                onClick={() => setShowPaymentModal(false)}
-                className="text-gray-400 hover:text-gray-600 p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <X className="w-6 h-6" />
-              </button>
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Payment Summary */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">Payment Summary</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-600">Total Amount:</span>
-                    <span className="ml-2 font-semibold text-gray-900">{formatCurrency(selectedPO.totalAmount)}</span>
+              {/* Invoice Information Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                {/* Left Column - PO Details */}
+                <div className="lg:col-span-1 space-y-4">
+                  <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center">
+                      <Package className="w-5 h-5 mr-2 text-blue-600" />
+                      Purchase Order Details
+                    </h3>
+                    <div className="space-y-3 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">PO Number:</span>
+                        <span className="font-semibold text-gray-900">{selectedPO.poNumber}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Supplier:</span>
+                        <span className="font-semibold text-gray-900">
+                          {typeof selectedPO.supplier === 'string' ? selectedPO.supplier : (selectedPO.supplier as Supplier)?.name || 'Unknown'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Order Date:</span>
+                        <span className="font-semibold text-gray-900">{formatDate(selectedPO.orderDate)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Status:</span>
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedPO.status)}`}>
+                          {selectedPO.status.charAt(0).toUpperCase() + selectedPO.status.slice(1)}
+                        </span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-gray-600">Paid Amount:</span>
-                    <span className="ml-2 font-semibold text-green-600">{formatCurrency(selectedPO.paidAmount || 0)}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Remaining Amount:</span>
-                    <span className="ml-2 font-semibold text-orange-600">{formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Payment Status:</span>
-                    <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
-                      selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {(selectedPO.paymentStatus
-                        ? selectedPO.paymentStatus.charAt(0).toUpperCase() + selectedPO.paymentStatus.slice(1)
-                        : 'Pending')}
-                    </span>
+
+                  {/* Payment Summary Card */}
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-lg p-4 border border-green-200">
+                    <h3 className="text-lg font-semibold text-green-900 mb-3 flex items-center">
+                      <IndianRupee className="w-5 h-5 mr-2 text-green-600" />
+                      Payment Summary
+                    </h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-green-700 font-medium">Total Amount:</span>
+                        <span className="text-xl font-bold text-green-900">{formatCurrency(selectedPO.totalAmount)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-green-700 font-medium">Paid Amount:</span>
+                        <span className="text-lg font-semibold text-green-600">{formatCurrency(selectedPO.paidAmount || 0)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-green-700 font-medium">Remaining:</span>
+                        <span className="text-lg font-semibold text-orange-600">
+                          {formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}
+                        </span>
+                      </div>
+                      <div className="pt-2 border-t border-green-200">
+                        <div className="flex justify-between items-center">
+                          <span className="text-green-700 font-medium">Payment Status:</span>
+                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
+                            selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                            selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {(selectedPO.paymentStatus
+                              ? selectedPO.paymentStatus.charAt(0).toUpperCase() + selectedPO.paymentStatus.slice(1)
+                              : 'Pending')}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Payment Form */}
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Payment Amount (₹) <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-3 text-gray-500">₹</span>
-                    <input
-                      type="number"
-                      min="0"
-                      max={selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))}
-                      step="1"
-                      value={paymentUpdate.paidAmount}
-                      onChange={(e) => {
-                        const amount = parseFloat(e.target.value) || 0;
-                        setPaymentUpdate({ ...paymentUpdate, paidAmount: amount });
+                {/* Right Column - Payment Form */}
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                      <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                      </svg>
+                      Payment Details
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* Payment Amount */}
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Payment Amount (₹) <span className="text-red-500">*</span>
+                        </label>
                         
-                        if (formErrors.paidAmount && amount > 0 && amount <= (selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))) {
-                          setFormErrors(prev => ({ ...prev, paidAmount: '' }));
-                        }
-                      }}
-                      className={`w-full pl-8 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                        formErrors.paidAmount ? 'border-red-500' : 'border-gray-300'
-                      }`}
-                      placeholder="Enter payment amount"
-                    />
+                        {/* Quick Payment Buttons */}
+                        <div className="mb-2">
+                          <div className="text-xs text-gray-500 mb-2">Quick Payment Options:</div>
+                          <div className="flex space-x-3">
+                            <button
+                              type="button"
+                                                          onClick={() => {
+                              const halfAmount = Math.ceil((selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))) / 2);
+                              setPaymentUpdate({ ...paymentUpdate, paidAmount: halfAmount, paymentMethodDetails: {} });
+                              if (formErrors.paidAmount) {
+                                setFormErrors(prev => ({ ...prev, paidAmount: '' }));
+                              }
+                            }}
+                              className="flex-1 px-4 py-2 bg-orange-100 text-orange-700 border border-orange-300 rounded-lg hover:bg-orange-200 transition-colors font-medium text-sm flex items-center justify-center"
+                              title="Set payment amount to 50% of remaining balance"
+                            >
+                              <Clock className="w-4 h-4 mr-1" />
+                              Half Payment
+                            </button>
+                            <button
+                              type="button"
+                                                          onClick={() => {
+                              const fullAmount = selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0));
+                              setPaymentUpdate({ ...paymentUpdate, paidAmount: fullAmount, paymentMethodDetails: {} });
+                              if (formErrors.paidAmount) {
+                                setFormErrors(prev => ({ ...prev, paidAmount: '' }));
+                              }
+                            }}
+                              className="flex-1 px-4 py-2 bg-green-100 text-green-700 border border-green-300 rounded-lg hover:bg-green-200 transition-colors font-medium text-sm flex items-center justify-center"
+                              title="Set payment amount to 100% of remaining balance"
+                            >
+                              <Check className="w-4 h-4 mr-1" />
+                              Full Payment
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <div className="relative">
+                          <span className="absolute left-3 top-3 text-gray-500 text-lg">₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max={selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))}
+                            step="1"
+                            value={paymentUpdate.paidAmount}
+                            onChange={(e) => {
+                              const amount = parseFloat(e.target.value) || 0;
+                              setPaymentUpdate({ ...paymentUpdate, paidAmount: amount, paymentMethodDetails: {} });
+                              
+                              if (formErrors.paidAmount && amount > 0 && amount <= (selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))) {
+                                setFormErrors(prev => ({ ...prev, paidAmount: '' }));
+                              }
+                            }}
+                            className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-lg ${
+                              formErrors.paidAmount ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                            placeholder="Enter payment amount"
+                          />
+                        </div>
+                        {formErrors.paidAmount && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.paidAmount}</p>
+                        )}
+                        
+                        {/* Amount Info */}
+                        <div className="mt-2 text-xs text-gray-600">
+                          <span className="font-medium">Remaining Amount:</span> {formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}
+                        </div>
+                        
+                        {/* Payment Type Indicator */}
+                        {paymentUpdate.paidAmount > 0 && (
+                          <div className="mt-2">
+                            {paymentUpdate.paidAmount === (selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))) ? (
+                              <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-green-100 text-green-800 rounded-full">
+                                <Check className="w-3 h-3 mr-1" />
+                                Full Payment
+                              </span>
+                            ) : paymentUpdate.paidAmount === Math.ceil((selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))) / 2) ? (
+                              <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-orange-100 text-orange-800 rounded-full">
+                                <Clock className="w-3 h-3 mr-1" />
+                                Half Payment
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-blue-100 text-blue-800 rounded-full">
+                                <Edit className="w-3 h-3 mr-1" />
+                                Custom Amount
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Payment Method */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Payment Method <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative dropdown-container">
+                          <button
+                            onClick={() => setShowPaymentMethodDropdown(!showPaymentMethodDropdown)}
+                            className={`flex items-center justify-between w-full px-4 py-3 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400 bg-gray-50 ${
+                              formErrors.paymentMethod ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          >
+                            <span className="text-gray-700 font-medium">{getPaymentMethodLabel(paymentUpdate.paymentMethod)}</span>
+                            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPaymentMethodDropdown ? 'rotate-180' : ''}`} />
+                          </button>
+                          {formErrors.paymentMethod && (
+                            <p className="text-red-500 text-sm mt-1">{formErrors.paymentMethod}</p>
+                          )}
+                          {showPaymentMethodDropdown && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                              {[
+                                { value: '', label: 'Select payment method' },
+                                { value: 'cash', label: 'Cash' },
+                                { value: 'cheque', label: 'Cheque' },
+                                { value: 'bank_transfer', label: 'Bank Transfer' },
+                                { value: 'upi', label: 'UPI' },
+                                { value: 'card', label: 'Credit/Debit Card' },
+                                { value: 'other', label: 'Other' }
+                              ].map((option) => (
+                                <button
+                                  key={option.value}
+                                  onClick={() => {
+                                    setPaymentUpdate({ ...paymentUpdate, paymentMethod: option.value, paymentMethodDetails: {} });
+                                    setShowPaymentMethodDropdown(false);
+
+                                    if (formErrors.paymentMethod && option.value) {
+                                      setFormErrors(prev => ({ ...prev, paymentMethod: '' }));
+                                    }
+                                  }}
+                                  className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
+                                    paymentUpdate.paymentMethod === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                  }`}
+                                >
+                                  {option.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Dynamic Payment Method Details */}
+                      {paymentUpdate.paymentMethod && paymentUpdate.paymentMethod !== '' && (
+                        <div className="md:col-span-2 bg-gray-50 rounded-lg p-4 border border-gray-200">
+                          <h4 className="text-sm font-medium text-gray-900 mb-4 flex items-center">
+                            <svg className="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            Payment Method Details - {getPaymentMethodLabel(paymentUpdate.paymentMethod)}
+                          </h4>
+                          
+                          {/* Cash Payment Details */}
+                          {paymentUpdate.paymentMethod === 'cash' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Received By
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cash?.receivedBy || ''}
+                                  onChange={(e) => updatePaymentMethodDetails('cash', 'receivedBy', e.target.value)}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Who received the cash?"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Receipt Number
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cash?.receiptNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cash: {
+                                        ...paymentUpdate.paymentMethodDetails?.cash,
+                                        receiptNumber: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Receipt number (optional)"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Cheque Payment Details */}
+                          {paymentUpdate.paymentMethod === 'cheque' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Cheque Number <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cheque: {
+                                        chequeNumber: e.target.value,
+                                        bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                        issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || '',
+                                        ...paymentUpdate.paymentMethodDetails?.cheque
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter cheque number"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Bank Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cheque?.bankName || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cheque: {
+                                        ...paymentUpdate.paymentMethodDetails?.cheque,
+                                        bankName: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter bank name"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Branch Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cheque?.branchName || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cheque: {
+                                        ...paymentUpdate.paymentMethodDetails?.cheque,
+                                        branchName: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter branch name"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Issue Date <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  value={paymentUpdate.paymentMethodDetails?.cheque?.issueDate || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cheque: {
+                                        ...paymentUpdate.paymentMethodDetails?.cheque,
+                                        issueDate: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Account Holder Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cheque?.accountHolderName || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cheque: {
+                                        ...paymentUpdate.paymentMethodDetails?.cheque,
+                                        accountHolderName: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter account holder name"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Account Number
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cheque?.accountNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cheque: {
+                                        ...paymentUpdate.paymentMethodDetails?.cheque,
+                                        accountNumber: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter account number"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Bank Transfer Details */}
+                          {paymentUpdate.paymentMethod === 'bank_transfer' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Bank Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      bankTransfer: {
+                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
+                                        bankName: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter bank name"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Account Number <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      bankTransfer: {
+                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
+                                        accountNumber: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter account number"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  IFSC Code <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cheque?.ifscCode || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      bankTransfer: {
+                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
+                                        ifscCode: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter IFSC code"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Transaction ID <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      bankTransfer: {
+                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
+                                        transactionId: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter transaction ID"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Transfer Date <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="date"
+                                  value={paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      bankTransfer: {
+                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
+                                        transferDate: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Reference Number
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      bankTransfer: {
+                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
+                                        referenceNumber: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter reference number"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* UPI Payment Details */}
+                          {paymentUpdate.paymentMethod === 'upi' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  UPI ID <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.upi?.upiId || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      upi: {
+                                        ...paymentUpdate.paymentMethodDetails?.upi,
+                                        upiId: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter UPI ID"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Transaction ID <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.upi?.transactionId || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      upi: {
+                                        ...paymentUpdate.paymentMethodDetails?.upi,
+                                        transactionId: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter transaction ID"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Payer Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.upi?.payerName || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      upi: {
+                                        ...paymentUpdate.paymentMethodDetails?.upi,
+                                        payerName: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter payer name"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Payer Phone
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      upi: {
+                                        ...paymentUpdate.paymentMethodDetails?.upi,
+                                        payerPhone: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter payer phone"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Card Payment Details */}
+                          {paymentUpdate.paymentMethod === 'card' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Card Type <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                  value={paymentUpdate.paymentMethodDetails?.card?.cardType || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      card: {
+                                        ...paymentUpdate.paymentMethodDetails?.card,
+                                        cardType: e.target.value as 'credit' | 'debit' | 'prepaid'
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  required
+                                >
+                                  <option value="">Select card type</option>
+                                  <option value="credit">Credit Card</option>
+                                  <option value="debit">Debit Card</option>
+                                  <option value="prepaid">Prepaid Card</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Card Network <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                  value={paymentUpdate.paymentMethodDetails?.card?.cardNetwork || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      card: {
+                                        ...paymentUpdate.paymentMethodDetails?.card,
+                                        cardNetwork: e.target.value as 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other'
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  required
+                                >
+                                  <option value="">Select card network</option>
+                                  <option value="visa">Visa</option>
+                                  <option value="mastercard">Mastercard</option>
+                                  <option value="amex">American Express</option>
+                                  <option value="rupay">RuPay</option>
+                                  <option value="other">Other</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Last 4 Digits <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  maxLength={4}
+                                  value={paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      card: {
+                                        ...paymentUpdate.paymentMethodDetails?.card,
+                                        lastFourDigits: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Last 4 digits"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Transaction ID <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.card?.transactionId || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      card: {
+                                        ...paymentUpdate.paymentMethodDetails?.card,
+                                        transactionId: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter transaction ID"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Card Holder Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      card: {
+                                        ...paymentUpdate.paymentMethodDetails?.card,
+                                        cardHolderName: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter card holder name"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Authorization Code
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.card?.authorizationCode || ''}
+                                  onChange={(e) => updatePaymentMethodDetails('card', 'authorizationCode', e.target.value)}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter authorization code"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Other Payment Method Details */}
+                          {paymentUpdate.paymentMethod === 'other' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Method Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.other?.methodName || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      other: {
+                                        ...paymentUpdate.paymentMethodDetails?.other,
+                                        methodName: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter payment method name"
+                                  required
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  Reference Number
+                                </label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.other?.referenceNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      other: {
+                                        ...paymentUpdate.paymentMethodDetails?.other,
+                                        referenceNumber: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  placeholder="Enter reference number"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Payment Date */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Payment Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          value={paymentUpdate.paymentDate}
+                          onChange={(e) => setPaymentUpdate({ ...paymentUpdate, paymentDate: e.target.value, paymentMethodDetails: {} })}
+                          className={`w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                            formErrors.paymentDate ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        />
+                        {formErrors.paymentDate && (
+                          <p className="text-red-500 text-xs mt-1">{formErrors.paymentDate}</p>
+                        )}
+                      </div>
+
+                      {/* Notes */}
+                      <div className="md:col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Payment Notes
+                        </label>
+                        <textarea
+                          value={paymentUpdate.notes}
+                          onChange={(e) => setPaymentUpdate({ ...paymentUpdate, notes: e.target.value, paymentMethodDetails: {} })}
+                          rows={3}
+                          placeholder="Any additional notes about the payment..."
+                          className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
+                        />
+                      </div>
+                    </div>
                   </div>
-                  {formErrors.paidAmount && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.paidAmount}</p>
-                  )}
-                </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Payment Method <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={paymentUpdate.paymentMethod}
-                    onChange={(e) => setPaymentUpdate({ ...paymentUpdate, paymentMethod: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      formErrors.paymentMethod ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  >
-                    <option value="">Select payment method</option>
-                    <option value="cash">Cash</option>
-                    <option value="cheque">Cheque</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                    <option value="upi">UPI</option>
-                    <option value="card">Credit/Debit Card</option>
-                    <option value="other">Other</option>
-                  </select>
-                  {formErrors.paymentMethod && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.paymentMethod}</p>
-                  )}
-                </div>
+                  {/* Payment Preview */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <h4 className="text-sm font-medium text-blue-800 mb-3 flex items-center justify-between">
+                      <div className="flex items-center">
+                        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Payment Preview
+                      </div>
+                      {paymentUpdate.paymentMethod && paymentUpdate.paymentMethod !== '' && (
+                        <div className="flex items-center">
+                          <span className="text-xs text-blue-600 mr-2">Payment Method:</span>
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs font-medium rounded-full">
+                            {getPaymentMethodLabel(paymentUpdate.paymentMethod)}
+                          </span>
+                        </div>
+                      )}
+                    </h4>
+                    
+                    {/* Payment Options Summary */}
+                    <div className="mb-3 p-3 bg-white rounded-lg border border-blue-200">
+                      <div className="text-xs text-blue-700 mb-2 font-medium">Quick Payment Options:</div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="flex justify-between">
+                          <span className="text-blue-600">Half Payment:</span>
+                          <span className="font-medium text-blue-900">
+                            {formatCurrency(Math.ceil((selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))) / 2))}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-blue-600">Full Payment:</span>
+                          <span className="font-medium text-blue-900">
+                            {formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-blue-600">Current Paid:</span>
+                        <span className="ml-2 font-semibold text-blue-900">{formatCurrency(selectedPO.paidAmount || 0)}</span>
+                      </div>
+                      <div>
+                        <span className="text-blue-600">New Payment:</span>
+                        <span className="ml-2 font-semibold text-blue-900">{formatCurrency(paymentUpdate.paidAmount || 0)}</span>
+                      </div>
+                      <div>
+                        <span className="text-blue-600">Total After:</span>
+                        <span className="ml-2 font-semibold text-blue-900">
+                          {formatCurrency((selectedPO.paidAmount || 0) + (paymentUpdate.paidAmount || 0))}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-blue-600">Remaining:</span>
+                        <span className="ml-2 font-semibold text-blue-900">
+                          {formatCurrency(selectedPO.totalAmount - ((selectedPO.paidAmount || 0) + (paymentUpdate.paidAmount || 0)))}
+                        </span>
+                      </div>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Payment Date <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="date"
-                    value={paymentUpdate.paymentDate}
-                    onChange={(e) => setPaymentUpdate({ ...paymentUpdate, paymentDate: e.target.value })}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                      formErrors.paymentDate ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  />
-                  {formErrors.paymentDate && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.paymentDate}</p>
-                  )}
-                </div>
+                    {/* Payment Method Details Summary */}
+                    {paymentUpdate.paymentMethod && paymentUpdate.paymentMethod !== '' && (
+                      <div className="mt-4 p-3 bg-white rounded-lg border border-blue-200">
+                        <div className="text-xs text-blue-700 mb-3 font-medium flex items-center">
+                          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          Payment Method Details - {getPaymentMethodLabel(paymentUpdate.paymentMethod)}
+                        </div>
+                        
+                        {/* Cash Payment Details Summary */}
+                        {paymentUpdate.paymentMethod === 'cash' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            {paymentUpdate.paymentMethodDetails?.cash?.receivedBy && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Received By:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.cash.receivedBy}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.cash?.receiptNumber && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Receipt Number:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.cash.receiptNumber}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Notes
-                  </label>
-                  <textarea
-                    value={paymentUpdate.notes}
-                    onChange={(e) => setPaymentUpdate({ ...paymentUpdate, notes: e.target.value })}
-                    rows={3}
-                    placeholder="Any additional notes about the payment..."
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"
-                  />
+                        {/* Cheque Payment Details Summary */}
+                        {paymentUpdate.paymentMethod === 'cheque' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            {paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Cheque Number:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.cheque.chequeNumber}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.cheque?.bankName && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Bank Name:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.cheque.bankName}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.cheque?.branchName && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Branch Name:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.cheque.branchName}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.cheque?.issueDate && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Issue Date:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.cheque.issueDate}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.cheque?.accountHolderName && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Account Holder:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.cheque.accountHolderName}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.cheque?.accountNumber && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Account Number:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.cheque.accountNumber}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Bank Transfer Details Summary */}
+                        {paymentUpdate.paymentMethod === 'bank_transfer' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            {paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Bank Name:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.bankTransfer.bankName}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Account Number:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.bankTransfer.accountNumber}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">IFSC Code:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.bankTransfer.ifscCode}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Transaction ID:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.bankTransfer.transactionId}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Transfer Date:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.bankTransfer.transferDate}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Reference Number:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.bankTransfer.referenceNumber}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* UPI Payment Details Summary */}
+                        {paymentUpdate.paymentMethod === 'upi' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            {paymentUpdate.paymentMethodDetails?.upi?.upiId && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">UPI ID:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.upi.upiId}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.upi?.transactionId && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Transaction ID:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.upi.transactionId}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.upi?.payerName && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Payer Name:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.upi.payerName}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.upi?.payerPhone && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Payer Phone:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.upi.payerPhone}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Card Payment Details Summary */}
+                        {paymentUpdate.paymentMethod === 'card' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            {paymentUpdate.paymentMethodDetails?.card?.cardType && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Card Type:</span>
+                                <span className="font-medium text-blue-900 capitalize">{paymentUpdate.paymentMethodDetails.card.cardType}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.card?.cardNetwork && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Card Network:</span>
+                                <span className="font-medium text-blue-900 capitalize">{paymentUpdate.paymentMethodDetails.card.cardNetwork}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.card?.lastFourDigits && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Last 4 Digits:</span>
+                                <span className="font-medium text-blue-900">****{paymentUpdate.paymentMethodDetails.card.lastFourDigits}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.card?.transactionId && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-900">Transaction ID:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.card.transactionId}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.card?.cardHolderName && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Card Holder:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.card.cardHolderName}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.card?.authorizationCode && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Auth Code:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.card.authorizationCode}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Other Payment Method Details Summary */}
+                        {paymentUpdate.paymentMethod === 'other' && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            {paymentUpdate.paymentMethodDetails?.other?.methodName && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Method Name:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.other.methodName}</span>
+                              </div>
+                            )}
+                            {paymentUpdate.paymentMethodDetails?.other?.referenceNumber && (
+                              <div className="flex justify-between">
+                                <span className="text-blue-600">Reference Number:</span>
+                                <span className="font-medium text-blue-900">{paymentUpdate.paymentMethodDetails.other.referenceNumber}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -3064,7 +4303,7 @@ const PurchaseOrderManagement: React.FC = () => {
                 <button
                   onClick={submitPaymentUpdate}
                   disabled={submitting}
-                  className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                  className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed font-medium"
                 >
                   {submitting ? 'Updating...' : 'Update Payment'}
                 </button>
@@ -3359,3 +4598,5 @@ const PurchaseOrderManagement: React.FC = () => {
 };
 
 export default PurchaseOrderManagement; 
+
+

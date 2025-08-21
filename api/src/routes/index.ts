@@ -31,6 +31,7 @@ import oemsRoutes from './oems';
 import oemOrdersRoutes from './oemOrders';
 import dgReportsRoutes from './dgReports';
 import dgQuotationsRoutes from './dgQuotations';
+import purchaseOrderPaymentRoutes from './purchaseOrderPayments';
 
 const router = Router();
 
@@ -59,6 +60,7 @@ router.get('/', (req, res) => {
       payments: '/payments',
       paymentLinks: '/payment-links',
       inventory: '/inventory',
+      purchaseOrderPayments: '/purchase-order-payments',
     }
   });
 });
@@ -96,5 +98,6 @@ router.use('/oems', oemsRoutes);
 router.use('/oem-orders', oemOrdersRoutes);
 router.use('/dg-reports', dgReportsRoutes);
 router.use('/dg-quotations', dgQuotationsRoutes);
+router.use('/purchase-order-payments', purchaseOrderPaymentRoutes);
 
 export default router;

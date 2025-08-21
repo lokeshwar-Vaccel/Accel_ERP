@@ -72,6 +72,11 @@ const customerSchema = new Schema({
     default: '',
     maxlength: [100, 'Customer name cannot exceed 100 characters']
   },
+  alice: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Customer alias cannot exceed 100 characters']
+  },
   designation: {
     type: String,
     trim: true,
@@ -106,6 +111,21 @@ const customerSchema = new Schema({
     type: [addressSchema],
     required: true,
     validate: [(arr: any[]) => arr.length > 0, 'At least one address is required']
+  },
+  siteAddress: {
+    type: String,
+    trim: true,
+    maxlength: [500, 'Site address cannot exceed 500 characters']
+  },
+  numberOfDG: {
+    type: Number,
+    min: [0, 'Number of DG cannot be negative'],
+    max: [100, 'Number of DG cannot exceed 100']
+  },
+  dgDetails: {
+    type: [Schema.Types.ObjectId],
+    ref: 'DGDetails',
+    default: []
   },
   customerType: {
     type: String,
