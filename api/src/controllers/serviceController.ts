@@ -9,9 +9,32 @@ import { AppError } from '../middleware/errorHandler';
 import { TransactionCounter } from '../models/TransactionCounter';
 import { TypeOfVisit, NatureOfWork, SubNatureOfWork } from '../types';
 import { sendFeedbackEmail as sendFeedbackEmailUtil } from '../utils/nodemailer';
-import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
+import * as bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
+import { DGDetails } from '../models/DGDetails';
+
+// Helper function to generate service request number
+const generateServiceRequestNumber = async (): Promise<string> => {
+  try {
+    const counter = await TransactionCounter.findOneAndUpdate(
+      { type: 'service_request' },
+      { $inc: { sequence: 1 } },
+      { upsert: true, new: true }
+    );
+    
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2); // Last 2 digits of year (e.g., "25" for 2025)
+    const month = (now.getMonth() + 1).toString().padStart(2, '0'); // Month with leading zero (e.g., "08" for August)
+    const paddedCount = counter.sequence.toString().padStart(4, '0'); // Sequence number padded to 4 digits
+    
+    // Format: SPS25080001 (SPS = company prefix, 25 = year, 08 = month, 0001 = sequence)
+    return `SPS${year}${month}${paddedCount}`;
+  } catch (error) {
+    console.error('Error generating service request number:', error);
+    throw new Error('Failed to generate service request number');
+  }
+};
 
 // Helper function to create a customer if it doesn't exist
 const createCustomerIfNotExists = async (customerName: string, createdBy: string, businessVertical?: string) => {
@@ -383,50 +406,188 @@ export const createServiceTicket = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Calculate SLA deadline based on priority (default to medium)
-    const slaHours = 72; // Default to medium priority (72 hours)
-    
-    const slaDeadline = new Date();
-    slaDeadline.setHours(slaDeadline.getHours() + slaHours);
+    // Enhanced validation for manual ticket creation
+    const {
+      customer,
+      customerName,
+      engineSerialNumber,
+      engineModel,
+      kva,
+      selectedAddress,
+      typeOfService,
+      typeOfVisit,
+      businessVertical,
+      complaintDescription,
+      serviceRequestEngineer,
+      assignedTo,
+      scheduledDate,
+      serviceRequiredDate,
+      serviceRequestNumber,
+      serviceRequestType,
+      products,
+      serviceCharge
+    } = req.body;
 
-    // Prepare ticket data with standardized fields
-    const ticketData = {
-      ...req.body,
-      slaDeadline,
-      createdBy: req.user!.id,
-      // Map legacy fields to standardized fields if not provided
-      customerName: req.body.customerName || (req.body.customer ? 'Customer Name' : ''),
-      complaintDescription: req.body.complaintDescription || '',
-      serviceRequestEngineer: req.body.serviceRequestEngineer || req.body.assignedTo,
-      serviceRequestStatus: req.body.serviceRequestStatus || TicketStatus.OPEN,
-      serviceRequestType: req.body.serviceRequestType || req.body.serviceType || 'repair',
-      requestSubmissionDate: req.body.requestSubmissionDate ? (typeof req.body.requestSubmissionDate === 'string' ? new Date(req.body.requestSubmissionDate.split('T')[0] + 'T00:00:00.000Z') : new Date(req.body.requestSubmissionDate)) : new Date(),
-      serviceRequiredDate: req.body.serviceRequiredDate || req.body.scheduledDate || new Date(),
-      engineSerialNumber: req.body.engineSerialNumber || req.body.serialNumber || undefined,
-      businessVertical: req.body.businessVertical || '',
-      siteIdentifier: req.body.siteIdentifier || '',
-      stateName: req.body.stateName || '',
-      siteLocation: req.body.siteLocation || '',
-      // Pass the ServiceRequestNumber from Excel to the model
-      ServiceRequestNumber: req.body.serviceRequestNumber,
-    };
+    // Debug logging for request body
+    console.log('=== DEBUG: Request Body ===');
+    console.log('Full request body:', JSON.stringify(req.body, null, 2));
+    console.log('typeOfService:', typeOfService);
+    console.log('typeOfService type:', typeof typeOfService);
+    console.log('typeOfService truthy check:', !!typeOfService);
+    console.log('typeOfService in req.body:', req.body.typeOfService);
+    console.log('engineModel:', engineModel);
+    console.log('kva:', kva);
+    console.log('All keys in req.body:', Object.keys(req.body));
+    console.log('========================================');
 
-    // Check if ticket with same service request number already exists
-    if (ticketData.ServiceRequestNumber) {
-      const existingTicket = await ServiceTicket.findOne({
-        ServiceRequestNumber: ticketData.ServiceRequestNumber
-      });
-      
-      if (existingTicket) {
-        return next(new AppError(`Ticket with service request number "${ticketData.ServiceRequestNumber}" already exists in the system`, 400));
+
+
+
+
+    // Validate required fields
+    if (!customer) {
+      return next(new AppError('Customer is required for ticket creation', 400));
+    }
+
+    if (!customerName || customerName.trim() === '') {
+      return next(new AppError('Customer name is required for ticket creation', 400));
+    }
+
+    if (!typeOfService || typeOfService === '' || (typeof typeOfService === 'string' && typeOfService.trim() === '')) {
+      return next(new AppError('Type of service is required for ticket creation', 400));
+    }
+
+    // Generate service request number if not provided
+    let finalServiceRequestNumber = serviceRequestNumber;
+    if (!finalServiceRequestNumber || finalServiceRequestNumber.trim() === '') {
+      try {
+        finalServiceRequestNumber = await generateServiceRequestNumber();
+      } catch (counterError) {
+        console.error('Error generating service request number:', counterError);
+        return next(new AppError('Failed to generate service request number', 500));
       }
     }
 
+    // Check if ticket with same service request number already exists
+    if (finalServiceRequestNumber) {
+      const existingTicket = await ServiceTicket.findOne({
+        ServiceRequestNumber: finalServiceRequestNumber
+      });
+      
+      if (existingTicket) {
+        return next(new AppError(`Ticket with service request number "${finalServiceRequestNumber}" already exists in the system`, 400));
+      }
+    }
+
+    // Handle service engineer assignment
+    let serviceEngineerId = null;
+    if (serviceRequestEngineer || assignedTo) {
+      const engineerId = serviceRequestEngineer || assignedTo;
+      
+      // Check if it's a valid ObjectId
+      if (/^[0-9a-fA-F]{24}$/.test(engineerId)) {
+        const engineer = await User.findById(engineerId);
+        if (engineer && engineer.role === UserRole.FIELD_OPERATOR) {
+          serviceEngineerId = engineer._id;
+        } else {
+          return next(new AppError('Invalid service engineer ID or engineer does not have field operator role', 400));
+        }
+      } else {
+        return next(new AppError('Invalid service engineer ID format', 400));
+      }
+    }
+
+    // Validate customer exists
+    let customerDoc = null;
+    if (/^[0-9a-fA-F]{24}$/.test(customer)) {
+      customerDoc = await Customer.findById(customer);
+      if (!customerDoc) {
+        return next(new AppError('Customer not found', 404));
+      }
+    } else {
+      return next(new AppError('Invalid customer ID format', 400));
+    }
+
+    // Validate products if provided
+    let productIds = [];
+    if (products && Array.isArray(products) && products.length > 0) {
+      for (const productId of products) {
+        if (/^[0-9a-fA-F]{24}$/.test(productId)) {
+          const product = await Product.findById(productId);
+          if (!product) {
+            return next(new AppError(`Product with ID ${productId} not found`, 404));
+          }
+          productIds.push(productId);
+        } else {
+          return next(new AppError(`Invalid product ID format: ${productId}`, 400));
+        }
+      }
+    }
+
+    // Prepare comprehensive ticket data with proper field mapping
+    const ticketData: any = {
+      // Core service request information
+      ServiceRequestNumber: finalServiceRequestNumber,
+      serviceRequestType: serviceRequestType || 'manual',
+      requestSubmissionDate: new Date(),
+      
+      // Customer and engine information
+      customer: customerDoc._id,
+      CustomerName: customerName.trim(),
+      CustomerType: businessVertical || customerDoc.customerType || 'retail',
+      EngineSerialNumber: engineSerialNumber !== undefined && engineSerialNumber !== null ? engineSerialNumber.trim() : undefined,
+      EngineModel: engineModel !== undefined && engineModel !== null && engineModel !== '' ? engineModel.trim() : undefined,
+      KVA: kva !== undefined && kva !== null && kva !== '' ? String(kva) : undefined,
+      
+      // Location and service details
+      SiteID: selectedAddress !== undefined && selectedAddress !== null ? selectedAddress.trim() : undefined,
+      TypeofService: typeOfService ? typeOfService.trim() : '',
+      typeOfVisit: typeOfVisit || undefined,
+      ComplaintDescription: complaintDescription !== undefined && complaintDescription !== null ? complaintDescription.trim() : undefined,
+      
+      // Service engineer and scheduling
+      ServiceEngineerName: serviceEngineerId,
+      assignedTo: serviceEngineerId, // For backward compatibility
+      ServiceRequestDate: scheduledDate ? new Date(scheduledDate) : new Date(),
+      ServiceAttendedDate: serviceRequiredDate ? new Date(serviceRequiredDate) : new Date(),
+      
+      // Products and service charge
+      products: productIds,
+      serviceCharge: serviceCharge || 0,
+      
+      // System fields
+      createdBy: req.user!.id,
+      ServiceRequestStatus: TicketStatus.OPEN,
+      serviceRequestStatus: TicketStatus.OPEN, // For backward compatibility
+      
+      // Set default SLA deadline (72 hours for medium priority)
+      slaDeadline: new Date(Date.now() + 72 * 60 * 60 * 1000),
+      
+      // Additional fields for better tracking
+      priority: TicketPriority.MEDIUM,
+      description: complaintDescription !== undefined && complaintDescription !== null ? complaintDescription.trim() : undefined
+    };
+
+
+
+    // Debug logging for ticket data
+    console.log('=== DEBUG: Ticket Data ===');
+    console.log('EngineModel in ticketData:', ticketData.EngineModel);
+    console.log('KVA in ticketData:', ticketData.KVA);
+    console.log('Full ticketData:', JSON.stringify(ticketData, null, 2));
+    console.log('========================================');
+
+    // Create the ticket
     const ticket = await ServiceTicket.create(ticketData);
 
+
+
+    // Populate the created ticket with related data
     const populatedTicket = await ServiceTicket.findById(ticket._id)
       .populate('customer', 'name email phone customerType addresses')
-      .populate('products', 'name category brand')
+      .populate('products', 'name category brand modelNumber specifications')
+      .populate('assignedTo', 'firstName lastName email phone')
+      .populate('ServiceEngineerName', 'firstName lastName email phone')
       .populate('createdBy', 'firstName lastName email');
 
     // Process ticket to include primary address
@@ -440,11 +601,27 @@ export const createServiceTicket = async (
     const response: APIResponse = {
       success: true,
       message: 'Service ticket created successfully',
-      data: { ticket: populatedTicket }
+      data: { 
+        ticket: populatedTicket,
+        serviceRequestNumber: finalServiceRequestNumber
+      }
     };
 
     res.status(201).json(response);
-  } catch (error) {
+  } catch (error: any) {
+    console.error('Error creating service ticket:', error);
+    
+    // Enhanced error handling
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map((err: any) => err.message);
+      return next(new AppError(`Validation failed: ${validationErrors.join(', ')}`, 400));
+    }
+    
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return next(new AppError(`${field} already exists in the system`, 400));
+    }
+    
     next(error);
   }
 };
@@ -462,63 +639,198 @@ export const updateServiceTicket = async (
     if (!ticket) {
       return next(new AppError('Service ticket not found', 404));
     }
-    
+
+    // Extract and validate update data
+    const {
+      customer,
+      customerName,
+      engineSerialNumber,
+      engineModel,
+      kva,
+      selectedAddress,
+      typeOfService,
+      typeOfVisit,
+      businessVertical,
+      complaintDescription,
+      serviceRequestEngineer,
+      assignedTo,
+      scheduledDate,
+      serviceRequiredDate,
+      serviceRequestNumber,
+      serviceRequestType,
+      products,
+      serviceCharge,
+      serviceRequestStatus,
+      ServiceRequestStatus
+    } = req.body;
 
 
-    // Set default SLA deadline (72 hours for medium priority)
-    const hoursToAdd = 72;
-    
-    // Only update SLA deadline if the ticket is not already resolved or closed
-    if (ticket.ServiceRequestStatus !== TicketStatus.RESOLVED && ticket.ServiceRequestStatus !== TicketStatus.CLOSED) {
-      req.body.slaDeadline = new Date(Date.now() + hoursToAdd * 60 * 60 * 1000);
-    }
-    
-    // Handle field mappings
-    if (req.body.assignedTo) {
-      req.body.serviceRequestEngineer = req.body.assignedTo;
-    }
-    if (req.body.serviceRequestEngineer) {
-      req.body.assignedTo = req.body.serviceRequestEngineer;
-    }
-    if (req.body.complaintDescription) {
-      req.body.description = req.body.complaintDescription;
+
+    // Prepare update data with proper field mapping
+    const updateData: any = {};
+
+    // Handle customer updates
+    if (customer) {
+      if (/^[0-9a-fA-F]{24}$/.test(customer)) {
+        const customerDoc = await Customer.findById(customer);
+        if (!customerDoc) {
+          return next(new AppError('Customer not found', 404));
+        }
+        updateData.customer = customerDoc._id;
+      } else {
+        return next(new AppError('Invalid customer ID format', 400));
+      }
     }
 
-    // Handle ServiceRequestStatus field (both uppercase and lowercase)
-    if (req.body.ServiceRequestStatus && !req.body.serviceRequestStatus) {
-      req.body.serviceRequestStatus = req.body.ServiceRequestStatus;
-      delete req.body.ServiceRequestStatus;
+    // Handle customer name
+    if (customerName !== undefined) {
+      if (!customerName || customerName.trim() === '') {
+        return next(new AppError('Customer name cannot be empty', 400));
+      }
+      updateData.CustomerName = customerName.trim();
     }
 
-    // Validate ServiceRequestStatus if provided
-    if (req.body.serviceRequestStatus) {
+    // Handle engine information
+    if (engineSerialNumber !== undefined) {
+      updateData.EngineSerialNumber = engineSerialNumber !== null ? engineSerialNumber.trim() : undefined;
+    }
+          if (engineModel !== undefined) {
+        updateData.EngineModel = engineModel !== null && engineModel !== '' ? engineModel.trim() : undefined;
+      }
+      if (kva !== undefined) {
+        updateData.KVA = kva !== null && kva !== '' ? String(kva) : undefined;
+      }
+
+    // Handle location and service details
+    if (selectedAddress !== undefined) {
+      updateData.SiteID = selectedAddress !== null ? selectedAddress.trim() : undefined;
+    }
+    if (typeOfService !== undefined) {
+      if (!typeOfService || typeOfService.trim() === '') {
+        return next(new AppError('Type of service cannot be empty', 400));
+      }
+      updateData.TypeofService = typeOfService.trim();
+    }
+    if (typeOfVisit !== undefined) {
+      updateData.typeOfVisit = typeOfVisit;
+    }
+    if (businessVertical !== undefined) {
+      updateData.CustomerType = businessVertical;
+    }
+    if (complaintDescription !== undefined) {
+      updateData.ComplaintDescription = complaintDescription !== null ? complaintDescription.trim() : undefined;
+      updateData.description = complaintDescription !== null ? complaintDescription.trim() : undefined; // For backward compatibility
+    }
+
+    // Handle service engineer assignment
+    if (serviceRequestEngineer || assignedTo) {
+      const engineerId = serviceRequestEngineer || assignedTo;
+      
+      if (/^[0-9a-fA-F]{24}$/.test(engineerId)) {
+        const engineer = await User.findById(engineerId);
+        if (engineer && engineer.role === UserRole.FIELD_OPERATOR) {
+          updateData.ServiceEngineerName = engineer._id;
+          updateData.assignedTo = engineer._id; // For backward compatibility
+        } else {
+          return next(new AppError('Invalid service engineer ID or engineer does not have field operator role', 400));
+        }
+      } else {
+        return next(new AppError('Invalid service engineer ID format', 400));
+      }
+    }
+
+    // Handle scheduling
+    if (scheduledDate !== undefined) {
+      updateData.ServiceRequestDate = scheduledDate ? new Date(scheduledDate) : undefined;
+    }
+    if (serviceRequiredDate !== undefined) {
+      updateData.ServiceAttendedDate = serviceRequiredDate ? new Date(serviceRequiredDate) : undefined;
+    }
+
+    // Handle service request number (with duplicate check)
+    if (serviceRequestNumber !== undefined && serviceRequestNumber !== ticket.ServiceRequestNumber) {
+      if (serviceRequestNumber && serviceRequestNumber.trim() !== '') {
+        const existingTicket = await ServiceTicket.findOne({
+          ServiceRequestNumber: serviceRequestNumber,
+          _id: { $ne: ticket._id }
+        });
+        
+        if (existingTicket) {
+          return next(new AppError(`Ticket with service request number "${serviceRequestNumber}" already exists in the system`, 400));
+        }
+        updateData.ServiceRequestNumber = serviceRequestNumber.trim();
+      } else {
+        updateData.ServiceRequestNumber = undefined;
+      }
+    }
+
+    // Handle service request type
+    if (serviceRequestType !== undefined) {
+      updateData.serviceRequestType = serviceRequestType;
+    }
+
+    // Handle products
+    if (products !== undefined) {
+      if (Array.isArray(products)) {
+        const productIds = [];
+        for (const productId of products) {
+          if (/^[0-9a-fA-F]{24}$/.test(productId)) {
+            const product = await Product.findById(productId);
+            if (!product) {
+              return next(new AppError(`Product with ID ${productId} not found`, 404));
+            }
+            productIds.push(productId);
+          } else {
+            return next(new AppError(`Invalid product ID format: ${productId}`, 400));
+          }
+        }
+        updateData.products = productIds;
+      } else {
+        return next(new AppError('Products must be an array', 400));
+      }
+    }
+
+    // Handle service charge
+    if (serviceCharge !== undefined) {
+      updateData.serviceCharge = serviceCharge || 0;
+    }
+
+    // Handle status updates
+    const statusToUpdate = serviceRequestStatus || ServiceRequestStatus;
+    if (statusToUpdate) {
       const validStatuses = Object.values(TicketStatus);
-      if (!validStatuses.includes(req.body.serviceRequestStatus)) {
+      if (!validStatuses.includes(statusToUpdate)) {
         return next(new AppError(`Invalid ServiceRequestStatus. Must be one of: ${validStatuses.join(', ')}`, 400));
       }
       
-
-      
-      // Map serviceRequestStatus to ServiceRequestStatus for database update
-      req.body.ServiceRequestStatus = req.body.serviceRequestStatus;
-      delete req.body.serviceRequestStatus;
+      updateData.ServiceRequestStatus = statusToUpdate;
+      updateData.serviceRequestStatus = statusToUpdate; // For backward compatibility
       
       // Set completedDate if status is being changed to resolved or closed
-      if ((req.body.ServiceRequestStatus === TicketStatus.RESOLVED || req.body.ServiceRequestStatus === TicketStatus.CLOSED) && 
-          ticket.ServiceRequestStatus !== req.body.ServiceRequestStatus) {
-        req.body.completedDate = new Date();
+      if ((statusToUpdate === TicketStatus.RESOLVED || statusToUpdate === TicketStatus.CLOSED) && 
+          ticket.ServiceRequestStatus !== statusToUpdate) {
+        updateData.completedDate = new Date();
       }
     }
 
+    // Set default SLA deadline (72 hours for medium priority) if status is open
+    if (updateData.ServiceRequestStatus === TicketStatus.OPEN || 
+        (!updateData.ServiceRequestStatus && ticket.ServiceRequestStatus === TicketStatus.OPEN)) {
+      updateData.slaDeadline = new Date(Date.now() + 72 * 60 * 60 * 1000);
+    }
+
+
+
     const updatedTicket = await ServiceTicket.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updateData,
       { new: true, runValidators: true }
     )
       .populate('customer', 'name email phone customerType addresses')
-      .populate('products', 'name category brand')
-      .populate('assignedTo', 'firstName lastName email')
-      .populate('ServiceEngineerName', 'firstName lastName email');
+      .populate('products', 'name category brand modelNumber specifications')
+      .populate('assignedTo', 'firstName lastName email phone')
+      .populate('ServiceEngineerName', 'firstName lastName email phone')
+      .populate('createdBy', 'firstName lastName email');
 
 
 
@@ -537,8 +849,20 @@ export const updateServiceTicket = async (
     };
 
     res.status(200).json(response);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error updating service ticket:', error);
+    
+    // Enhanced error handling
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map((err: any) => err.message);
+      return next(new AppError(`Validation failed: ${validationErrors.join(', ')}`, 400));
+    }
+    
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return next(new AppError(`${field} already exists in the system`, 400));
+    }
+    
     next(error);
   }
 };
@@ -994,7 +1318,10 @@ export const bulkImportServiceTickets = async (
             priority: TicketPriority.MEDIUM,
             description: ticketData.ComplaintDescription || '',
             businessVertical: ticketData.CustomerType || 'retail',
-            scheduledDate: parseExcelDateTime(ticketData.RequestedDate)
+            scheduledDate: parseExcelDateTime(ticketData.RequestedDate),
+            
+            // Import tracking
+            uploadedViaExcel: true
           };
           
           const ticket = await ServiceTicket.create(ticketDataToCreate);
@@ -1251,6 +1578,229 @@ export const getServiceStats = async (
     };
 
     res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+}; 
+
+export const getCustomerEngines = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { customerId } = req.params;
+
+    if (!customerId) {
+      throw new AppError('Customer ID is required', 400);
+    }
+
+    // Find DG details for the customer
+    const dgDetails = await DGDetails.find({ customer: customerId })
+      .select('engineSerialNumber dgModel dgRatingKVA dgMake dgSerialNumbers alternatorMake alternatorSerialNumber commissioningDate warrantyStatus amcStatus cluster')
+      .lean();
+
+
+
+    // Transform the data to match frontend expectations
+    const engines = dgDetails.map(dg => ({
+      engineSerialNumber: dg.engineSerialNumber,
+      engineModel: dg.dgModel,
+      kva: dg.dgRatingKVA,
+      dgMake: dg.dgMake,
+      dgSerialNumber: dg.dgSerialNumbers,
+      alternatorMake: dg.alternatorMake,
+      alternatorSerialNumber: dg.alternatorSerialNumber,
+      commissioningDate: dg.commissioningDate,
+      warrantyStatus: dg.warrantyStatus,
+      amcStatus: dg.amcStatus,
+      cluster: dg.cluster
+    }));
+
+
+
+    res.status(200).json({
+      success: true,
+      data: {
+        engines,
+        count: engines.length
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getCustomerAddresses = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { customerId } = req.params;
+
+    if (!customerId) {
+      throw new AppError('Customer ID is required', 400);
+    }
+
+    // Find customer with addresses
+    const customer = await Customer.findById(customerId)
+      .select('addresses name')
+      .lean();
+
+    if (!customer) {
+      throw new AppError('Customer not found', 404);
+    }
+
+    // Transform addresses to match frontend expectations
+    const addresses = customer.addresses.map((addr, index) => ({
+      id: addr.id || index + 1,
+      address: addr.address,
+      state: addr.state,
+      district: addr.district,
+      pincode: addr.pincode,
+      isPrimary: addr.isPrimary,
+      gstNumber: addr.gstNumber,
+      fullAddress: `${addr.address}, ${addr.district || ''}, ${addr.state || ''} - ${addr.pincode || ''}`.replace(/,\s*,/g, ',').replace(/^,\s*/, '').replace(/,\s*$/, '')
+    }));
+
+    res.status(200).json({
+      success: true,
+      data: {
+        addresses,
+        count: addresses.length,
+        customerName: customer.name
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}; 
+
+// @desc    Update Excel Service Ticket with extended fields
+// @route   PUT /api/v1/services/:id/excel-update
+// @access  Private
+export const updateExcelServiceTicket = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const ticket = await ServiceTicket.findById(req.params.id);
+    if (!ticket) {
+      return next(new AppError('Service ticket not found', 404));
+    }
+
+    // Extract Excel-specific fields
+    const {
+      ServiceRequestNumber,
+      CustomerType,
+      CustomerName,
+      CustomerId,
+      EngineSerialNumber,
+      EngineModel,
+      KVA,
+      ServiceRequestDate,
+      ServiceAttendedDate,
+      HourMeterReading,
+      TypeofService,
+      SiteID,
+      SREngineer,
+      SREngineerId,
+      ComplaintCode,
+      ComplaintDescription,
+      ResolutionDescription,
+      eFSRNumber,
+      eFSRClosureDateAndTime,
+      ServiceRequestStatus,
+      OEMName
+    } = req.body;
+
+    // Prepare update data with Excel fields
+    const updateData: any = {};
+
+    // Excel-specific fields
+    if (ServiceRequestNumber !== undefined) {
+      updateData.ServiceRequestNumber = ServiceRequestNumber;
+    }
+    if (CustomerType !== undefined) {
+      updateData.CustomerType = CustomerType;
+    }
+    if (CustomerName !== undefined) {
+      updateData.CustomerName = CustomerName;
+    }
+    if (CustomerId !== undefined && CustomerId) {
+      updateData.customer = CustomerId; // Set the customer objectId
+    }
+    if (EngineSerialNumber !== undefined) {
+      updateData.EngineSerialNumber = EngineSerialNumber;
+    }
+    if (EngineModel !== undefined) {
+      updateData.EngineModel = EngineModel;
+    }
+    if (KVA !== undefined) {
+      updateData.KVA = KVA;
+    }
+    if (ServiceRequestDate !== undefined) {
+      updateData.ServiceRequestDate = ServiceRequestDate;
+    }
+    if (ServiceAttendedDate !== undefined) {
+      updateData.ServiceAttendedDate = ServiceAttendedDate;
+    }
+    if (HourMeterReading !== undefined) {
+      updateData.HourMeterReading = HourMeterReading;
+    }
+    if (TypeofService !== undefined) {
+      updateData.TypeofService = TypeofService;
+    }
+    if (SiteID !== undefined) {
+      updateData.SiteID = SiteID;
+    }
+    if (SREngineerId !== undefined && SREngineerId) {
+      updateData.ServiceEngineerName = SREngineerId; // Set the service engineer objectId in ServiceEngineerName field
+      updateData.assignedTo = SREngineerId; // Also set in assignedTo field for backward compatibility
+    }
+    if (ComplaintCode !== undefined) {
+      updateData.ComplaintCode = ComplaintCode;
+    }
+    if (ComplaintDescription !== undefined) {
+      updateData.ComplaintDescription = ComplaintDescription;
+    }
+    if (ResolutionDescription !== undefined) {
+      updateData.ResolutionDescription = ResolutionDescription;
+    }
+    if (eFSRNumber !== undefined) {
+      updateData.eFSRNumber = eFSRNumber;
+    }
+    if (eFSRClosureDateAndTime !== undefined) {
+      updateData.eFSRClosureDateAndTime = eFSRClosureDateAndTime;
+    }
+    if (ServiceRequestStatus !== undefined) {
+      updateData.ServiceRequestStatus = ServiceRequestStatus;
+      updateData.status = ServiceRequestStatus; // Also update the standard status field
+    }
+    if (OEMName !== undefined) {
+      updateData.OemName = OEMName;
+    }
+
+    // Update the ticket
+    const updatedTicket = await ServiceTicket.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    ).populate('ServiceEngineerName', 'firstName lastName email phone');
+
+    if (!updatedTicket) {
+      return next(new AppError('Failed to update service ticket', 500));
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        ticket: updatedTicket
+      },
+      message: 'Excel service ticket updated successfully'
+    });
   } catch (error) {
     next(error);
   }

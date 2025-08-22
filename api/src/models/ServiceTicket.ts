@@ -55,6 +55,9 @@ interface IServiceTicketSchema extends Document {
   typeOfVisit?: TypeOfVisit;
   natureOfWork?: NatureOfWork;
   subNatureOfWork?: SubNatureOfWork;
+  
+  // Import tracking
+  uploadedViaExcel?: boolean;
 }
 
 const partUsedSchema = new Schema({
@@ -231,6 +234,12 @@ const serviceTicketSchema = new Schema({
     trim: true
   },
   
+  // Import tracking
+  uploadedViaExcel: {
+    type: Boolean,
+    default: false
+  },
+  
   createdBy: {
     type: Schema.Types.ObjectId,
     ref: 'User',
@@ -288,22 +297,25 @@ serviceTicketSchema.virtual('slaStatus').get(function(this: IServiceTicketSchema
 serviceTicketSchema.pre('save', async function(this: IServiceTicketSchema, next) {
   if (this.isNew && (!this.ServiceRequestNumber || this.ServiceRequestNumber.trim() === '')) {
     // Auto-generate ServiceRequestNumber if not provided or empty
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2); // Last 2 digits of year (e.g., "25" for 2025)
+    const month = (now.getMonth() + 1).toString().padStart(2, '0'); // Month with leading zero (e.g., "08" for August)
     
     // Find the last service request number for this month
     const ServiceTicketModel = this.constructor as mongoose.Model<IServiceTicketSchema>;
     const lastTicket = await ServiceTicketModel.findOne({
-      ServiceRequestNumber: { $regex: `^SR-${year}${month}` }
+      ServiceRequestNumber: { $regex: `^SPS${year}${month}` }
     }).sort({ ServiceRequestNumber: -1 });
     
     let sequence = 1;
     if (lastTicket && lastTicket.ServiceRequestNumber) {
-      const lastSequence = parseInt(lastTicket.ServiceRequestNumber.split('-')[2]);
+      // Extract sequence from format SPS25080001
+      const sequencePart = lastTicket.ServiceRequestNumber.slice(-4); // Get last 4 digits
+      const lastSequence = parseInt(sequencePart);
       sequence = lastSequence + 1;
     }
     
-    const generatedNumber = `SR-${year}${month}-${String(sequence).padStart(4, '0')}`;
+    const generatedNumber = `SPS${year}${month}${String(sequence).padStart(4, '0')}`;
     this.ServiceRequestNumber = generatedNumber;
   }
   next();

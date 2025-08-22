@@ -30,6 +30,16 @@ class ApiClient {
       ...options,
     };
 
+    // Debug logging for API requests
+    if (options.body) {
+      console.log('=== DEBUG: API Request ===');
+      console.log('Endpoint:', endpoint);
+      console.log('Method:', options.method || 'GET');
+      console.log('Headers:', headers);
+      console.log('Body:', options.body);
+      console.log('========================================');
+    }
+
     const response = await fetch(`${this.baseURL}${endpoint}`, config);
 
     if (!response.ok) {
@@ -561,8 +571,17 @@ class ApiClient {
     getCustomerEngines: (customerId: string) =>
       this.makeRequest<{ success: boolean; data: { engines: any[]; count: number } }>(`/services/customer/${customerId}/engines`),
 
+    getCustomerAddresses: (customerId: string) =>
+      this.makeRequest<{ success: boolean; data: { addresses: any[]; count: number; customerName: string } }>(`/services/customer/${customerId}/addresses`),
+
     getStats: () =>
       this.makeRequest<{ success: boolean; data: { totalTickets: number; openTickets: number; resolvedTickets: number; closedTickets: number; overdueTickets: number; ticketsByPriority: any[]; avgResolutionHours: number } }>('/services/stats/overview'),
+
+    updateExcelTicket: (id: string, excelData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/services/${id}/excel-update`, {
+        method: 'PUT',
+        body: JSON.stringify(excelData),
+      }),
   };
 
   // Digital Service Report APIs

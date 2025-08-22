@@ -8,13 +8,17 @@ export interface CreateServiceTicketInput {
   requestSubmissionDate?: string;
   serviceRequiredDate: string;
   engineSerialNumber?: string;
+  engineModel?: string; // NEW: Engine model field
+  kva?: number | string; // NEW: KVA field (can be number or string)
   customerName?: string;
   serviceRequestEngineer?: string;
   complaintDescription?: string;
   businessVertical?: string;
+  selectedAddress?: string; // NEW: Selected address field
   siteIdentifier?: string;
   stateName?: string;
   siteLocation?: string;
+  typeOfService?: string; // NEW: Type of service field
   
   // Visit Details fields
   typeOfVisit?: TypeOfVisit;
@@ -23,11 +27,9 @@ export interface CreateServiceTicketInput {
 
   // Legacy fields for backward compatibility
   customer: string;
-  products?: string[]; // Add products array field
   serialNumber?: string;
   assignedTo?: string;
   scheduledDate?: string;
-  serviceCharge?: number;
   serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
   urgencyLevel?: 'low' | 'medium' | 'high' | 'critical';
   customerNotes?: string;
@@ -48,15 +50,19 @@ export interface UpdateServiceTicketInput {
   serviceRequestType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
   serviceRequiredDate?: string;
   engineSerialNumber?: string;
+  engineModel?: string; // NEW: Engine model field
+  kva?: number | string; // NEW: KVA field (can be number or string)
   customerName?: string;
   serviceRequestEngineer?: string;
   serviceRequestStatus?: TicketStatus;
   ServiceRequestStatus?: TicketStatus; // Also accept uppercase version for backward compatibility
   complaintDescription?: string;
   businessVertical?: string;
+  selectedAddress?: string; // NEW: Selected address field
   siteIdentifier?: string;
   stateName?: string;
   siteLocation?: string;
+  typeOfService?: string; // NEW: Type of service field
   
   // Visit Details fields
   typeOfVisit?: TypeOfVisit;
@@ -68,11 +74,9 @@ export interface UpdateServiceTicketInput {
   scheduledDate?: string;
   serviceReport?: string;
   customerSignature?: string;
-  serviceCharge?: number;
   serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
   urgencyLevel?: 'low' | 'medium' | 'high' | 'critical';
   serialNumber?: string;
-  products?: string[]; // Add products array field
   resolution?: string;
   workDuration?: number;
   customerFeedback?: {
@@ -219,6 +223,9 @@ const baseServiceTicketFields = {
     }
     return value;
   }),
+  engineModel: Joi.string().trim().allow(''),
+  kva: Joi.alternatives().try(Joi.number(), Joi.string()).allow(''),
+  typeOfService: Joi.string().trim().allow(''),
   customerName: Joi.string().max(200).trim(),
   serviceRequestEngineer: Joi.string().hex().length(24),
   serviceRequestStatus: Joi.string().valid(...Object.values(TicketStatus)),
@@ -243,7 +250,6 @@ const baseServiceTicketFields = {
 
   // Legacy fields
   customer: Joi.string().hex().length(24),
-  products: Joi.array().items(Joi.string().hex().length(24)), // Add products array field
   serialNumber: Joi.string().max(100).trim().allow(''),
   assignedTo: Joi.string().hex().length(24),
   scheduledDate: Joi.string().allow(''), // Allow string format for flexibility
@@ -251,7 +257,6 @@ const baseServiceTicketFields = {
   serviceReport: Joi.string().max(5000).allow(''),
   customerSignature: Joi.string().max(10000), // Base64 encoded signature
   slaDeadline: Joi.date().iso(),
-  serviceCharge: Joi.number().min(0).precision(2),
   urgencyLevel: Joi.string().valid('low', 'medium', 'high', 'critical'),
   serviceType: Joi.string().valid('installation', 'repair', 'maintenance', 'inspection', 'other')
 };
@@ -263,6 +268,9 @@ export const createServiceTicketSchema = Joi.object<CreateServiceTicketInput>({
   requestSubmissionDate: baseServiceTicketFields.requestSubmissionDate.default(() => new Date()),
   serviceRequiredDate: baseServiceTicketFields.serviceRequiredDate.required(),
   engineSerialNumber: baseServiceTicketFields.engineSerialNumber,
+  engineModel: baseServiceTicketFields.engineModel,
+  kva: baseServiceTicketFields.kva,
+  typeOfService: baseServiceTicketFields.typeOfService,
   customerName: baseServiceTicketFields.customerName.required(),
   serviceRequestEngineer: baseServiceTicketFields.serviceRequestEngineer.required(),
   complaintDescription: baseServiceTicketFields.complaintDescription.allow(''),
@@ -278,11 +286,9 @@ export const createServiceTicketSchema = Joi.object<CreateServiceTicketInput>({
 
   // Legacy fields for backward compatibility
   customer: baseServiceTicketFields.customer.required(),
-  products: baseServiceTicketFields.products, // Add products field
   serialNumber: baseServiceTicketFields.serialNumber,
   assignedTo: baseServiceTicketFields.assignedTo,
   scheduledDate: baseServiceTicketFields.scheduledDate,
-  serviceCharge: baseServiceTicketFields.serviceCharge,
   serviceType: baseServiceTicketFields.serviceType,
   urgencyLevel: baseServiceTicketFields.urgencyLevel,
   customerNotes: Joi.string().max(1000).allow(''),
@@ -304,6 +310,9 @@ export const updateServiceTicketSchema = Joi.object<UpdateServiceTicketInput>({
   serviceRequestType: baseServiceTicketFields.serviceRequestType,
   serviceRequiredDate: baseServiceTicketFields.serviceRequiredDate,
   engineSerialNumber: baseServiceTicketFields.engineSerialNumber,
+  engineModel: baseServiceTicketFields.engineModel,
+  kva: baseServiceTicketFields.kva,
+  typeOfService: baseServiceTicketFields.typeOfService,
   customerName: baseServiceTicketFields.customerName,
   serviceRequestEngineer: baseServiceTicketFields.serviceRequestEngineer,
   serviceRequestStatus: baseServiceTicketFields.serviceRequestStatus,
@@ -325,11 +334,9 @@ export const updateServiceTicketSchema = Joi.object<UpdateServiceTicketInput>({
   scheduledDate: baseServiceTicketFields.scheduledDate,
   serviceReport: baseServiceTicketFields.serviceReport,
   customerSignature: baseServiceTicketFields.customerSignature,
-  serviceCharge: baseServiceTicketFields.serviceCharge,
   serviceType: baseServiceTicketFields.serviceType,
   urgencyLevel: baseServiceTicketFields.urgencyLevel,
   serialNumber: baseServiceTicketFields.serialNumber,
-  products: baseServiceTicketFields.products,
   resolution: Joi.string().max(2000).allow(''),
   workDuration: Joi.number().min(0),
   customerFeedback: Joi.object({
