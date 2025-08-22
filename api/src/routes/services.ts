@@ -16,13 +16,16 @@ import {
   getServiceTicket,
   createServiceTicket,
   updateServiceTicket,
+  updateExcelServiceTicket,
   assignServiceTicket,
   completeServiceTicket,
   addPartsUsed,
   getServiceStats,
   updateServiceTicketStatus,
   bulkImportServiceTickets,
-  exportServiceTickets
+  exportServiceTickets,
+  getCustomerEngines,
+  getCustomerAddresses
 } from '../controllers/serviceController';
 
 const router = Router();
@@ -56,6 +59,9 @@ router.route('/:id')
   .put(validate(updateServiceTicketSchema), checkPermission('write'), updateServiceTicket)
   .delete(restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), deleteServiceTicket);
 
+// Excel-specific update route (must come before /:id/assign to avoid conflicts)
+router.put('/:id/excel-update', checkPermission('write'), updateExcelServiceTicket);
+
 // Service ticket actions
 router.post('/:id/assign', validate(assignServiceSchema), checkPermission('write'), assignServiceTicket);
 router.post('/:id/complete', validate(completeServiceSchema), checkPermission('write'), completeServiceTicket);
@@ -63,5 +69,9 @@ router.put('/:id/status', validate(updateServiceStatusSchema), checkPermission('
 
 // Statistics
 router.get('/stats/overview', checkPermission('read'), getServiceStats);
+
+// Customer data endpoints
+router.get('/customer/:customerId/engines', checkPermission('read'), getCustomerEngines);
+router.get('/customer/:customerId/addresses', checkPermission('read'), getCustomerAddresses);
 
 export default router; 

@@ -586,7 +586,7 @@ const createSampleData = async () => {
         product: createdProducts[0]._id,
         description: 'Generator not starting - suspected fuel system issue',
         priority: TicketPriority.HIGH,
-        status: TicketStatus.IN_PROGRESS,
+        status: TicketStatus.RESOLVED,
         assignedTo: createdUsers[2]._id, // Sarah Technician
         scheduledDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000), // 2 days from now
         serviceType: 'repair',
@@ -630,7 +630,7 @@ const createSampleData = async () => {
         product: createdProducts[0]._id,
         description: 'Installation of new generator at data center',
         priority: TicketPriority.HIGH,
-        status: TicketStatus.IN_PROGRESS,
+        status: TicketStatus.RESOLVED,
         assignedTo: createdUsers[2]._id,
         scheduledDate: new Date(Date.now() + 1 * 24 * 60 * 60 * 1000), // Tomorrow
         serviceType: 'installation',

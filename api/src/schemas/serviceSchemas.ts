@@ -1,5 +1,5 @@
 import Joi from 'joi';
-import { TicketStatus, TicketPriority } from '../types';
+import { TicketStatus, TicketPriority, TypeOfVisit, NatureOfWork, SubNatureOfWork } from '../types';
 
 // TypeScript interfaces for validation results
 export interface CreateServiceTicketInput {
@@ -8,27 +8,28 @@ export interface CreateServiceTicketInput {
   requestSubmissionDate?: string;
   serviceRequiredDate: string;
   engineSerialNumber?: string;
-  customerName: string;
-  magiecSystemCode?: string;
-  magiecCode?: string;
-  serviceRequestEngineer: string;
-  complaintDescription: string;
+  engineModel?: string; // NEW: Engine model field
+  kva?: number | string; // NEW: KVA field (can be number or string)
+  customerName?: string;
+  serviceRequestEngineer?: string;
+  complaintDescription?: string;
   businessVertical?: string;
-  invoiceRaised?: boolean;
+  selectedAddress?: string; // NEW: Selected address field
   siteIdentifier?: string;
   stateName?: string;
   siteLocation?: string;
+  typeOfService?: string; // NEW: Type of service field
+  
+  // Visit Details fields
+  typeOfVisit?: TypeOfVisit;
+  natureOfWork?: NatureOfWork;
+  subNatureOfWork?: SubNatureOfWork;
 
   // Legacy fields for backward compatibility
   customer: string;
-  product?: string;
-  products?: string[]; // Add products array field
   serialNumber?: string;
-  description: string;
-  priority?: TicketPriority;
   assignedTo?: string;
   scheduledDate?: string;
-  serviceCharge?: number;
   serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
   urgencyLevel?: 'low' | 'medium' | 'high' | 'critical';
   customerNotes?: string;
@@ -49,31 +50,33 @@ export interface UpdateServiceTicketInput {
   serviceRequestType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
   serviceRequiredDate?: string;
   engineSerialNumber?: string;
+  engineModel?: string; // NEW: Engine model field
+  kva?: number | string; // NEW: KVA field (can be number or string)
   customerName?: string;
-  magiecSystemCode?: string;
-  magiecCode?: string;
   serviceRequestEngineer?: string;
   serviceRequestStatus?: TicketStatus;
+  ServiceRequestStatus?: TicketStatus; // Also accept uppercase version for backward compatibility
   complaintDescription?: string;
   businessVertical?: string;
-  invoiceRaised?: boolean;
+  selectedAddress?: string; // NEW: Selected address field
   siteIdentifier?: string;
   stateName?: string;
   siteLocation?: string;
+  typeOfService?: string; // NEW: Type of service field
+  
+  // Visit Details fields
+  typeOfVisit?: TypeOfVisit;
+  natureOfWork?: NatureOfWork;
+  subNatureOfWork?: SubNatureOfWork;
 
   // Legacy fields for backward compatibility
-  description?: string;
-  priority?: TicketPriority;
-  status?: TicketStatus;
   assignedTo?: string;
   scheduledDate?: string;
   serviceReport?: string;
   customerSignature?: string;
-  serviceCharge?: number;
   serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
   urgencyLevel?: 'low' | 'medium' | 'high' | 'critical';
   serialNumber?: string;
-  products?: string[]; // Add products array field
   resolution?: string;
   workDuration?: number;
   customerFeedback?: {
@@ -97,11 +100,10 @@ export interface ServiceTicketQueryInput {
   limit?: number;
   sort?: string;
   search?: string;
-  status?: TicketStatus;
-  priority?: TicketPriority;
+  status?: TicketStatus; // Add status parameter
+  ServiceRequestStatus?: TicketStatus;
   assignedTo?: string;
   customer?: string;
-  product?: string;
   serviceType?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -113,7 +115,6 @@ export interface AssignServiceInput {
   assignedTo: string;
   scheduledDate: string;
   estimatedDuration?: number;
-  priority?: TicketPriority;
   notes?: string;
   requiredSkills?: string[];
   requiredTools?: string[];
@@ -152,7 +153,6 @@ export interface EscalateServiceInput {
   escalationLevel: 'level1' | 'level2' | 'level3' | 'management';
   escalatedTo: string;
   notes: string;
-  priority?: TicketPriority;
   urgency?: 'low' | 'medium' | 'high' | 'critical';
 }
 
@@ -183,32 +183,26 @@ export interface ServiceReportTemplateInput {
 }
 
 export interface BulkServiceImportInput {
-  // Standardized fields
-  serviceRequestNumber?: string; // Add serviceRequestNumber field
-  serviceRequestType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
-  serviceRequiredDate: string;
-  engineSerialNumber?: string;
-  customerName: string;
-  magiecSystemCode?: string;
-  magiecCode?: string;
-  serviceRequestEngineer: string;
-  complaintDescription: string;
-  businessVertical?: string;
-  invoiceRaised?: boolean;
-  siteIdentifier?: string;
-  stateName?: string;
-  siteLocation?: string;
-
-  // Legacy fields for backward compatibility
-  customerPhone?: string;
-  productName?: string;
-  serialNumber?: string;
-  description: string;
-  priority?: TicketPriority;
-  status?: TicketStatus; // Add status field
-  serviceType?: 'installation' | 'repair' | 'maintenance' | 'inspection' | 'other';
-  scheduledDate?: string;
-  assignedTechnician?: string;
+  // Excel fields based on new structure
+  SRNumber?: string;
+  CustomerType?: string;
+  CustomerName?: string;
+  EngineNo?: string;
+  ModelCode?: string;
+  KVA?: string;
+  
+  RequestedDate?: string;
+  AttendedHrs?: string;
+  SRType?: string;
+  SITEID?: string;
+  SREngineer?: string;
+  ComplaintCode?: string;
+  ComplaintDescription?: string;
+  ResolutionDesc?: string;
+  eFSRNo?: string;
+  eFSRClosureDateTime?: string;
+  SRStatus?: string;
+  OEMName?: string;
 }
 
 export interface UpdateServiceStatusInput {
@@ -229,49 +223,40 @@ const baseServiceTicketFields = {
     }
     return value;
   }),
+  engineModel: Joi.string().trim().allow(''),
+  kva: Joi.alternatives().try(Joi.number(), Joi.string()).allow(''),
+  typeOfService: Joi.string().trim().allow(''),
   customerName: Joi.string().max(200).trim(),
-  magiecSystemCode: Joi.string().max(50).trim().allow(''),
-  magiecCode: Joi.string().max(50).trim().allow(''),
   serviceRequestEngineer: Joi.string().hex().length(24),
   serviceRequestStatus: Joi.string().valid(...Object.values(TicketStatus)),
   complaintDescription: Joi.string().custom((value, helpers) => {
-    if (value) {
+    if (value && value.trim() !== '') {
       const wordCount = value.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
       if (wordCount > 500) {
         return helpers.error('any.invalid', { message: 'Description cannot exceed 500 words' });
       }
     }
     return value;
-  }).trim(),
+  }).trim().allow(''),
   businessVertical: Joi.string().max(100).trim().allow(''),
-  invoiceRaised: Joi.boolean(),
   siteIdentifier: Joi.string().max(100).trim().allow(''),
   stateName: Joi.string().max(100).trim().allow(''),
   siteLocation: Joi.string().max(500).trim().allow(''),
+  
+  // Visit Details fields
+  typeOfVisit: Joi.string().valid(...Object.values(TypeOfVisit)),
+  natureOfWork: Joi.string().valid(...Object.values(NatureOfWork)),
+  subNatureOfWork: Joi.string().valid(...Object.values(SubNatureOfWork)),
 
   // Legacy fields
   customer: Joi.string().hex().length(24),
-  product: Joi.string().hex().length(24),
-  products: Joi.array().items(Joi.string().hex().length(24)), // Add products array field
   serialNumber: Joi.string().max(100).trim().allow(''),
-  description: Joi.string().custom((value, helpers) => {
-    if (value) {
-      const wordCount = value.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
-      if (wordCount > 500) {
-        return helpers.error('any.invalid', { message: 'Description cannot exceed 500 words' });
-      }
-    }
-    return value;
-  }).trim(),
-  priority: Joi.string().valid(...Object.values(TicketPriority)),
-  status: Joi.string().valid(...Object.values(TicketStatus)),
   assignedTo: Joi.string().hex().length(24),
   scheduledDate: Joi.string().allow(''), // Allow string format for flexibility
   completedDate: Joi.date().iso(),
   serviceReport: Joi.string().max(5000).allow(''),
   customerSignature: Joi.string().max(10000), // Base64 encoded signature
   slaDeadline: Joi.date().iso(),
-  serviceCharge: Joi.number().min(0).precision(2),
   urgencyLevel: Joi.string().valid('low', 'medium', 'high', 'critical'),
   serviceType: Joi.string().valid('installation', 'repair', 'maintenance', 'inspection', 'other')
 };
@@ -283,28 +268,28 @@ export const createServiceTicketSchema = Joi.object<CreateServiceTicketInput>({
   requestSubmissionDate: baseServiceTicketFields.requestSubmissionDate.default(() => new Date()),
   serviceRequiredDate: baseServiceTicketFields.serviceRequiredDate.required(),
   engineSerialNumber: baseServiceTicketFields.engineSerialNumber,
+  engineModel: baseServiceTicketFields.engineModel,
+  kva: baseServiceTicketFields.kva,
+  typeOfService: baseServiceTicketFields.typeOfService,
   customerName: baseServiceTicketFields.customerName.required(),
-  magiecSystemCode: baseServiceTicketFields.magiecSystemCode,
-  magiecCode: baseServiceTicketFields.magiecCode,
   serviceRequestEngineer: baseServiceTicketFields.serviceRequestEngineer.required(),
-  complaintDescription: baseServiceTicketFields.complaintDescription.required(),
+  complaintDescription: baseServiceTicketFields.complaintDescription.allow(''),
   businessVertical: baseServiceTicketFields.businessVertical,
-  invoiceRaised: baseServiceTicketFields.invoiceRaised.default(false),
   siteIdentifier: baseServiceTicketFields.siteIdentifier,
   stateName: baseServiceTicketFields.stateName,
   siteLocation: baseServiceTicketFields.siteLocation,
+  
+  // Visit Details fields
+  typeOfVisit: baseServiceTicketFields.typeOfVisit,
+  natureOfWork: baseServiceTicketFields.natureOfWork,
+  subNatureOfWork: baseServiceTicketFields.subNatureOfWork,
 
   // Legacy fields for backward compatibility
   customer: baseServiceTicketFields.customer.required(),
-  product: baseServiceTicketFields.product,
-  products: baseServiceTicketFields.products, // Add products field
   serialNumber: baseServiceTicketFields.serialNumber,
-  description: baseServiceTicketFields.description.required(),
-  priority: baseServiceTicketFields.priority.default(TicketPriority.MEDIUM),
   assignedTo: baseServiceTicketFields.assignedTo,
   scheduledDate: baseServiceTicketFields.scheduledDate,
-  serviceCharge: baseServiceTicketFields.serviceCharge.default(0),
-  serviceType: baseServiceTicketFields.serviceType.default('repair'),
+  serviceType: baseServiceTicketFields.serviceType,
   urgencyLevel: baseServiceTicketFields.urgencyLevel,
   customerNotes: Joi.string().max(1000).allow(''),
   contactPerson: Joi.string().max(100),
@@ -325,36 +310,38 @@ export const updateServiceTicketSchema = Joi.object<UpdateServiceTicketInput>({
   serviceRequestType: baseServiceTicketFields.serviceRequestType,
   serviceRequiredDate: baseServiceTicketFields.serviceRequiredDate,
   engineSerialNumber: baseServiceTicketFields.engineSerialNumber,
+  engineModel: baseServiceTicketFields.engineModel,
+  kva: baseServiceTicketFields.kva,
+  typeOfService: baseServiceTicketFields.typeOfService,
   customerName: baseServiceTicketFields.customerName,
-  magiecSystemCode: baseServiceTicketFields.magiecSystemCode,
-  magiecCode: baseServiceTicketFields.magiecCode,
   serviceRequestEngineer: baseServiceTicketFields.serviceRequestEngineer,
   serviceRequestStatus: baseServiceTicketFields.serviceRequestStatus,
+  // Also accept uppercase version for backward compatibility
+  ServiceRequestStatus: baseServiceTicketFields.serviceRequestStatus,
   complaintDescription: baseServiceTicketFields.complaintDescription,
   businessVertical: baseServiceTicketFields.businessVertical,
-  invoiceRaised: baseServiceTicketFields.invoiceRaised,
   siteIdentifier: baseServiceTicketFields.siteIdentifier,
   stateName: baseServiceTicketFields.stateName,
   siteLocation: baseServiceTicketFields.siteLocation,
+  
+  // Visit Details fields
+  typeOfVisit: baseServiceTicketFields.typeOfVisit,
+  natureOfWork: baseServiceTicketFields.natureOfWork,
+  subNatureOfWork: baseServiceTicketFields.subNatureOfWork,
 
   // Legacy fields for backward compatibility
-  description: baseServiceTicketFields.description,
-  priority: baseServiceTicketFields.priority,
-  status: baseServiceTicketFields.status,
   assignedTo: baseServiceTicketFields.assignedTo,
   scheduledDate: baseServiceTicketFields.scheduledDate,
   serviceReport: baseServiceTicketFields.serviceReport,
   customerSignature: baseServiceTicketFields.customerSignature,
-  serviceCharge: baseServiceTicketFields.serviceCharge,
   serviceType: baseServiceTicketFields.serviceType,
   urgencyLevel: baseServiceTicketFields.urgencyLevel,
   serialNumber: baseServiceTicketFields.serialNumber,
-  products: baseServiceTicketFields.products, // Add products field
-  resolution: Joi.string().max(2000),
-  workDuration: Joi.number().min(0), // in hours
+  resolution: Joi.string().max(2000).allow(''),
+  workDuration: Joi.number().min(0),
   customerFeedback: Joi.object({
     rating: Joi.number().min(1).max(5),
-    comments: Joi.string().max(1000)
+    comments: Joi.string().max(1000).allow('')
   })
 });
 
@@ -378,11 +365,10 @@ export const serviceTicketQuerySchema = Joi.object<ServiceTicketQueryInput>({
   limit: Joi.number().integer().min(1).max(100).default(10),
   sort: Joi.string().default('-createdAt'),
   search: Joi.string().allow(''),
-  status: Joi.string().valid(...Object.values(TicketStatus)),
-  priority: Joi.string().valid(...Object.values(TicketPriority)),
+  status: Joi.string().valid(...Object.values(TicketStatus)), // Add status parameter
+  ServiceRequestStatus: Joi.string().valid(...Object.values(TicketStatus)), // Keep existing for backward compatibility
   assignedTo: Joi.string().optional().allow(''),
   customer: Joi.string().hex().length(24),
-  product: Joi.string().hex().length(24),
   serviceType: Joi.string(),
   dateFrom: Joi.date().iso(),
   dateTo: Joi.date().iso().greater(Joi.ref('dateFrom')),
@@ -395,7 +381,6 @@ export const assignServiceSchema = Joi.object<AssignServiceInput>({
   assignedTo: baseServiceTicketFields.assignedTo.required(),
   scheduledDate: baseServiceTicketFields.scheduledDate.required(),
   estimatedDuration: Joi.number().min(0.5).max(24), // in hours
-  priority: baseServiceTicketFields.priority,
   notes: Joi.string().max(500).allow(''),
   requiredSkills: Joi.array().items(Joi.string().max(50)),
   requiredTools: Joi.array().items(Joi.string().max(100))
@@ -445,7 +430,6 @@ export const escalateServiceSchema = Joi.object<EscalateServiceInput>({
   escalationLevel: Joi.string().valid('level1', 'level2', 'level3', 'management').required(),
   escalatedTo: Joi.string().hex().length(24).required(),
   notes: Joi.string().max(1000).required(),
-  priority: baseServiceTicketFields.priority,
   urgency: Joi.string().valid('low', 'medium', 'high', 'critical')
 });
 
@@ -488,41 +472,34 @@ export const serviceReportTemplateSchema = Joi.object<ServiceReportTemplateInput
   isActive: Joi.boolean().default(true)
 });
 
-// Bulk service import schema with standardized fields
+// Bulk service import schema with new Excel structure
 export const bulkServiceImportSchema = Joi.object({
   tickets: Joi.array().items(
     Joi.object<BulkServiceImportInput>({
-      // Standardized fields
-      serviceRequestNumber: Joi.string().allow(''), // Add serviceRequestNumber field
-      serviceRequestType: baseServiceTicketFields.serviceRequestType.default('repair'),
-      serviceRequiredDate: baseServiceTicketFields.serviceRequiredDate.required(),
-      engineSerialNumber: Joi.string().trim().allow(''), // Remove validation, allow any string or empty
-      customerName: baseServiceTicketFields.customerName.required(),
-      magiecSystemCode: baseServiceTicketFields.magiecSystemCode,
-      magiecCode: baseServiceTicketFields.magiecCode,
-      serviceRequestEngineer: Joi.string().required(), // Will be looked up by name
-      complaintDescription: baseServiceTicketFields.complaintDescription.required(),
-      businessVertical: baseServiceTicketFields.businessVertical,
-      invoiceRaised: baseServiceTicketFields.invoiceRaised.default(false),
-      siteIdentifier: baseServiceTicketFields.siteIdentifier,
-      stateName: baseServiceTicketFields.stateName,
-      siteLocation: baseServiceTicketFields.siteLocation,
-
-      // Legacy fields for backward compatibility
-      customerPhone: Joi.string().pattern(/^\+?[1-9]\d{1,14}$/),
-      productName: Joi.string(),
-      serialNumber: baseServiceTicketFields.serialNumber,
-      description: baseServiceTicketFields.description.required(),
-      priority: baseServiceTicketFields.priority.default(TicketPriority.MEDIUM),
-      status: baseServiceTicketFields.status.default('open'), // Add status field
-      serviceType: baseServiceTicketFields.serviceType.default('repair'),
-      scheduledDate: baseServiceTicketFields.scheduledDate,
-      assignedTechnician: Joi.string() // Will be looked up by name
+      // Excel fields based on new structure
+      SRNumber: Joi.string().allow(''),
+      CustomerType: Joi.string().allow(''),
+      CustomerName: Joi.string().allow(''),
+      EngineNo: Joi.string().allow(''),
+      ModelCode: Joi.string().allow(''),
+      KVA: Joi.string().allow(''),
+      RequestedDate: Joi.string().allow(''),
+      AttendedHrs: Joi.string().allow(''),
+      SRType: Joi.string().allow(''),
+      SITEID: Joi.string().allow(''),
+      SREngineer: Joi.string().allow(''),
+      ComplaintCode: Joi.string().allow(''),
+      ComplaintDescription: Joi.string().allow(''),
+      ResolutionDesc: Joi.string().allow(''),
+      eFSRNo: Joi.string().allow(''),
+      eFSRClosureDateTime: Joi.string().allow(''),
+      SRStatus: Joi.string().allow(''),
+      OEMName: Joi.string().allow('')
     })
-  ).min(0).max(500).required() // Changed from min(1) to min(0) to allow empty arrays
+  ).min(0).max(500).required()
 });
 
 // Update service status schema
 export const updateServiceStatusSchema = Joi.object<UpdateServiceStatusInput>({
-  status: Joi.string().valid('open', 'in_progress', 'resolved', 'closed', 'cancelled').required()
+  status: Joi.string().valid('open', 'resolved', 'closed').required()
 }); 

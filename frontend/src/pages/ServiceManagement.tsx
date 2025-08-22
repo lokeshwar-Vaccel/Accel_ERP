@@ -39,15 +39,18 @@ import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 import { Pagination } from '../components/ui/Pagination';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
-import { exportServiceTicketToPDF, exportMultipleTicketsToPDF, ServiceTicketPDFData } from '../utils/pdfExport';
+
 import DigitalServiceReport from '../components/DigitalServiceReport';
 import { MultiSelect } from '../components/ui/MultiSelect';
 import { MultiSelectRef } from '../components/ui/MultiSelect';
 
 // Types matching backend structure
-type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed' | 'cancelled';
+type TicketStatus = 'open' | 'resolved' | 'closed';
 type TicketPriority = 'low' | 'medium' | 'high' | 'critical';
 
+// New dropdown options
+type TypeOfVisit = 'oil_service' | 'courtesy_visit' | 'amc_visit' | 'spare' | 'fsc_visit' | 'paid_visit' | '';
+type TypeOfService = 'breakdown' | 'courtesy_visit' | 'free_service_coupon' | 'preventive_maintenance' | '';
 
 interface User {
   _id: string;
@@ -98,6 +101,27 @@ interface PartUsed {
 
 interface ServiceTicket {
   _id: string;
+  // New Excel fields from API response
+  ServiceRequestNumber?: string;
+  CustomerType?: string;
+  CustomerName?: string;
+  EngineSerialNumber?: string;
+  EngineModel?: string;
+  KVA?: string;
+  ServiceRequestDate?: string;
+  ServiceAttendedDate?: string;
+  HourMeterReading?: string;
+  TypeofService?: string;
+  SiteID?: string;
+  ServiceEngineerName?: string | User;
+  ComplaintCode?: string;
+  ComplaintDescription?: string;
+  ResolutionDescription?: string;
+  eFSRNumber?: string;
+  eFSRClosureDateAndTime?: string;
+  ServiceRequestStatus?: string;
+  OemName?: string;
+
   // Standardized fields
   serviceRequestNumber: string;
   serviceRequestType: string;
@@ -105,25 +129,19 @@ interface ServiceTicket {
   serviceRequiredDate: string;
   engineSerialNumber?: string;
   customerName: string;
-  magiecSystemCode?: string;
-  magiecCode?: string;
   serviceRequestEngineer: string | User;
   serviceRequestStatus: TicketStatus;
-  complaintDescription: string;
+  typeOfVisit?: TypeOfVisit;
+  typeOfService?: TypeOfService;
+  natureOfWork?: string;
+  subNatureOfWork?: string;
   businessVertical?: string;
-  invoiceRaised: boolean;
-  siteIdentifier?: string;
-  stateName?: string;
-  siteLocation?: string;
 
   // Legacy fields for backward compatibility
   ticketNumber: string;
   customer: string | Customer;
-  product?: string | Product;
   products?: string[] | Product[]; // Multiple products support
   serialNumber?: string;
-  description: string;
-  priority: TicketPriority;
   status: TicketStatus;
   assignedTo?: string | User;
   scheduledDate?: string;
@@ -131,6 +149,7 @@ interface ServiceTicket {
   partsUsed: PartUsed[];
   serviceReport?: string;
   customerSignature?: string;
+  complaintDescription?: string; // Keep for backward compatibility
 
   serviceCharge?: number;
   createdBy: string | User;
@@ -138,31 +157,29 @@ interface ServiceTicket {
   updatedAt: string;
   // Virtual fields
   turnaroundTime?: number;
-
+  // Import tracking
+  uploadedViaExcel?: boolean;
 }
 
 interface TicketFormData {
   // Standardized fields
+  serviceRequestNumber: string;
   serviceRequestType: string;
   serviceRequiredDate: string;
   engineSerialNumber?: string;
+  engineModel?: string; // New field for engine model
+  kva?: string; // New field for KVA rating
   customerName: string;
-  magiecSystemCode: string;
-  magiecCode: string;
   serviceRequestEngineer: string;
-  complaintDescription: string;
+  typeOfVisit: TypeOfVisit;
+  typeOfService: TypeOfService;
   businessVertical: string;
-  invoiceRaised: boolean;
-  siteIdentifier: string;
-  stateName: string;
-  siteLocation: string;
+  selectedAddress?: string; // New field for selected address
+  complaintDescription?: string; // New field for complaint description
 
   // Legacy fields for backward compatibility
   customer: string;
-  product?: string;
   products?: string[]; // New field for multiple products
-  description: string;
-  priority: TicketPriority;
   assignedTo: string;
   scheduledDate: string;
   serviceCharge: number;
@@ -188,18 +205,36 @@ interface Address {
 const ServiceManagement: React.FC = () => {
   const location = useLocation();
 
+  // Helper function to generate service request number for manual creation
+  const generateServiceRequestNumber = () => {
+    const now = new Date();
+    const year = now.getFullYear().toString().slice(-2); // Last 2 digits of year (e.g., "25" for 2025)
+    const month = (now.getMonth() + 1).toString().padStart(2, '0'); // Month with leading zero (e.g., "08" for August)
+    
+    // For manual creation, we'll use a simple counter starting from 0001
+    // In a real implementation, this would be fetched from database
+    const counter = 1; // This would be fetched from database to get the next available number for the current month
+    const counterStr = counter.toString().padStart(4, '0'); // e.g., "0001"
+    
+    // Format: SPS25080001 (SPS = company prefix, 25 = year, 08 = month, 0001 = sequence)
+    return `SPS${year}${month}${counterStr}`;
+  };
+
   // Core state
   const [tickets, setTickets] = useState<ServiceTicket[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [users, setUsers] = useState<User[]>([]);
+  const [oems, setOems] = useState<any[]>([]);
+  const [customerEngines, setCustomerEngines] = useState<any[]>([]);
+  const [customerAddresses, setCustomerAddresses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<TicketStatus | 'all'>('all');
-  const [priorityFilter, setPriorityFilter] = useState<TicketPriority | 'all'>('all');
+
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
 
   // Safeguard to ensure assigneeFilter is never undefined
@@ -213,6 +248,7 @@ const ServiceManagement: React.FC = () => {
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showExcelEditModal, setShowExcelEditModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showExcelUploadModal, setShowExcelUploadModal] = useState(false);
 
@@ -241,35 +277,83 @@ const ServiceManagement: React.FC = () => {
   const [selectedTicket, setSelectedTicket] = useState<ServiceTicket | null>(null);
   const [editingTicket, setEditingTicket] = useState<ServiceTicket | null>(null);
 
+  // Editable visit details state
+  const [editableVisitDetails, setEditableVisitDetails] = useState({
+    typeOfVisit: '',
+    typeOfService: '',
+    natureOfWork: '',
+    subNatureOfWork: ''
+  });
+  const [isEditingVisitDetails, setIsEditingVisitDetails] = useState(false);
+  const [updatingVisitDetails, setUpdatingVisitDetails] = useState(false);
+  const [visitDetailsHighlighted, setVisitDetailsHighlighted] = useState(false);
+
   // Current user for ticket creation
   const [currentUserId, setCurrentUserId] = useState<string>('');
+
+  // Stats state
+  const [serviceStats, setServiceStats] = useState({
+    totalTickets: 0,
+    openTickets: 0,
+    resolvedTickets: 0,
+    closedTickets: 0,
+    overdueTickets: 0
+  });
 
   // Form data
   const [ticketFormData, setTicketFormData] = useState<TicketFormData>({
     // Standardized fields
+    serviceRequestNumber: generateServiceRequestNumber(),
     serviceRequestType: '',
     serviceRequiredDate: new Date().toISOString().slice(0, 16),
     engineSerialNumber: '',
+    engineModel: '', // New field for engine model
+    kva: '', // New field for KVA rating
     customerName: '',
-    magiecSystemCode: '',
-    magiecCode: '',
     serviceRequestEngineer: '',
-    complaintDescription: '',
+    typeOfVisit: '',
+    typeOfService: '',
     businessVertical: '',
-    invoiceRaised: false,
-    siteIdentifier: '',
-    stateName: '',
-    siteLocation: '',
+    selectedAddress: '', // New field for selected address
 
     // Legacy fields for backward compatibility
     customer: '',
-    product: '',
-    description: '',
-    priority: 'medium',
+    products: [], // New field for multiple products
     assignedTo: '',
     scheduledDate: new Date().toISOString().split('T')[0],
     serviceCharge: 0
   });
+
+  // Excel-specific form data for editing Excel tickets
+  const [excelFormData, setExcelFormData] = useState({
+    ServiceRequestNumber: '',
+    CustomerType: '',
+    CustomerName: '',
+    CustomerId: '', // Add customer ID for API payload
+    EngineSerialNumber: '',
+    EngineModel: '',
+    KVA: '',
+    ServiceRequestDate: '',
+    ServiceAttendedDate: '',
+    HourMeterReading: '',
+    TypeofService: '',
+    SiteID: '',
+    SREngineer: '',
+    SREngineerId: '', // Add service engineer ID for API payload
+    ComplaintCode: '',
+    ComplaintDescription: '',
+    ResolutionDescription: '',
+    eFSRNumber: '',
+    eFSRClosureDateAndTime: '',
+    ServiceRequestStatus: 'open',
+    OEMName: ''
+  });
+
+  // Search terms for dropdowns
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [engineerSearchTerm, setEngineerSearchTerm] = useState('');
+  const [oemSearchTerm, setOemSearchTerm] = useState('');
+  const [serviceTypeSearchTerm, setServiceTypeSearchTerm] = useState('');
 
 
 
@@ -278,12 +362,26 @@ const ServiceManagement: React.FC = () => {
 
   // Dropdown state
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
+
   const [showAssigneeDropdown, setShowAssigneeDropdown] = useState(false);
 
 
   // Enhanced dropdown states for cascading dropdowns
   const [customerDropdown, setCustomerDropdown] = useState<DropdownState>({
+    isOpen: false,
+    searchTerm: '',
+    selectedIndex: 0,
+    filteredOptions: []
+  });
+
+  const [engineDropdown, setEngineDropdown] = useState<DropdownState>({
+    isOpen: false,
+    searchTerm: '',
+    selectedIndex: 0,
+    filteredOptions: []
+  });
+
+  const [addressDropdown, setAddressDropdown] = useState<DropdownState>({
     isOpen: false,
     searchTerm: '',
     selectedIndex: 0,
@@ -297,12 +395,7 @@ const ServiceManagement: React.FC = () => {
     filteredOptions: []
   });
 
-  const [priorityDropdown, setPriorityDropdown] = useState<DropdownState>({
-    isOpen: false,
-    searchTerm: '',
-    selectedIndex: 0,
-    filteredOptions: []
-  });
+
 
   const [assigneeDropdown, setAssigneeDropdown] = useState<DropdownState>({
     isOpen: false,
@@ -311,11 +404,17 @@ const ServiceManagement: React.FC = () => {
     filteredOptions: []
   });
 
+
+
   // Refs for dropdown focus management
   const customerDropdownRef = useRef<HTMLDivElement>(null);
+  const engineDropdownRef = useRef<HTMLDivElement>(null);
+  const addressDropdownRef = useRef<HTMLDivElement>(null);
   const productDropdownRef = useRef<HTMLDivElement>(null);
-  const priorityDropdownRef = useRef<HTMLDivElement>(null);
+
   const assigneeDropdownRef = useRef<HTMLDivElement>(null);
+  const typeOfVisitDropdownRef = useRef<HTMLDivElement>(null);
+  const typeOfServiceDropdownRef = useRef<HTMLDivElement>(null);
   const scheduledDateRef = useRef<HTMLInputElement>(null);
   const serialNumberRef = useRef<HTMLInputElement>(null);
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
@@ -351,7 +450,7 @@ const ServiceManagement: React.FC = () => {
     if (!loading) {
       fetchTickets();
     }
-  }, [currentPage, limit, searchTerm, statusFilter, priorityFilter, assigneeFilter]);
+  }, [currentPage, limit, searchTerm, statusFilter, assigneeFilter]);
 
   // Check for URL parameters to auto-open create modal
   useEffect(() => {
@@ -391,19 +490,63 @@ const ServiceManagement: React.FC = () => {
     }
   }, [users]);
 
-  // Form priority options (without 'all' option)
-  const formPriorityOptions = [
-    { value: 'low', label: 'Low' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'high', label: 'High' },
-    { value: 'critical', label: 'Critical' }
+  // Dropdown options for new fields
+  const typeOfVisitOptions = [
+    { value: 'oil_service', label: 'Oil Service' },
+    { value: 'courtesy_visit', label: 'Courtesy Visit' },
+    { value: 'amc_visit', label: 'AMC Visit' },
+    { value: 'spare', label: 'Spare' },
+    { value: 'fsc_visit', label: 'FSC Visit' },
+    { value: 'paid_visit', label: 'Paid Visit' }
   ];
 
+  const typeOfServiceOptions = [
+    { value: 'breakdown', label: 'Breakdown' },
+    { value: 'courtesy_visit', label: 'Courtesy Visit' },
+    { value: 'free_service_coupon', label: 'Free Service Coupon' },
+    { value: 'preventive_maintenance', label: 'Preventive Maintenance' }
+  ];
+
+
+
+  const natureOfWorkOptions = [
+    { value: 'oil_service', label: 'Oil Service' },
+    { value: 'site_visit', label: 'Site Visit' },
+    { value: 'breakdown', label: 'Breakdown' },
+    { value: 'installation', label: 'Installation' },
+    { value: 'dms_call', label: 'DMS Call' }
+  ];
+
+  const subNatureOfWorkOptions = [
+    { value: 'fsc', label: 'FSC' },
+    { value: 'amc', label: 'AMC' },
+    { value: 'paid', label: 'Paid' },
+    { value: 'courtesy_visit', label: 'Courtesy Visit' },
+    { value: 'warranty', label: 'Warranty' },
+    { value: 'pre_installation', label: 'Pre-Installation' },
+    { value: 'commissioning', label: 'Commissioning' },
+    { value: 'ev', label: 'EV' },
+    { value: 'logged', label: 'Logged' },
+    { value: 'without_logged', label: 'Without Logged' }
+  ];
+
+  // Enhanced dropdown states for Type of Visit and Type of Service
+  const [typeOfVisitDropdown, setTypeOfVisitDropdown] = useState<DropdownState>({
+    isOpen: false,
+    searchTerm: '',
+    selectedIndex: 0,
+    filteredOptions: typeOfVisitOptions
+  });
+
+  const [typeOfServiceDropdown, setTypeOfServiceDropdown] = useState<DropdownState>({
+    isOpen: false,
+    searchTerm: '',
+    selectedIndex: 0,
+    filteredOptions: typeOfServiceOptions
+  });
+
   useEffect(() => {
-    setPriorityDropdown(prev => ({
-      ...prev,
-      filteredOptions: formPriorityOptions
-    }));
+
   }, []);
 
   // Auto-open first dropdown when modal opens
@@ -466,14 +609,33 @@ const ServiceManagement: React.FC = () => {
     };
   }, [showCreateModal]);
 
+  const fetchServiceStats = async () => {
+    try {
+      const response = await apiClient.services.getStats();
+      if (response.success && response.data) {
+        setServiceStats({
+          totalTickets: response.data.totalTickets || 0,
+          openTickets: response.data.openTickets || 0,
+          resolvedTickets: response.data.resolvedTickets || 0,
+          closedTickets: response.data.closedTickets || 0,
+          overdueTickets: response.data.overdueTickets || 0
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching service stats:', error);
+    }
+  };
+
   const fetchAllData = async () => {
     setLoading(true);
     try {
       await Promise.all([
         fetchTickets(),
+        fetchServiceStats(),
         fetchCustomers(),
         fetchProducts(),
-        fetchFieldOperator()
+        fetchFieldOperator(),
+        fetchOEMs()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -484,7 +646,7 @@ const ServiceManagement: React.FC = () => {
 
   const fetchTickets = async () => {
     // Reset to page 1 when filters change (but not when page changes)
-    const hasFilterChanged = searchTerm || statusFilter !== 'all' || priorityFilter !== 'all' || assigneeFilter !== 'all';
+    const hasFilterChanged = searchTerm || statusFilter !== 'all' || assigneeFilter !== 'all';
     if (hasFilterChanged && currentPage !== 1) {
       setCurrentPage(1);
       return; // Don't fetch yet, let the page change trigger the fetch
@@ -508,9 +670,7 @@ const ServiceManagement: React.FC = () => {
         params.status = statusFilter;
       }
 
-      if (priorityFilter !== 'all') {
-        params.priority = priorityFilter;
-      }
+
 
       if (assigneeFilter !== 'all' && assigneeFilter && assigneeFilter.trim() !== '') {
         params.assignedTo = assigneeFilter;
@@ -711,6 +871,71 @@ const ServiceManagement: React.FC = () => {
     }
   };
 
+  const fetchOEMs = async () => {
+    try {
+      // For now, use hardcoded data until the API is properly set up
+      const hardcodedOEMs = [
+        { value: 'cummins', label: 'Cummins' },
+        { value: 'caterpillar', label: 'Caterpillar' },
+        { value: 'perkins', label: 'Perkins' },
+        { value: 'deutz', label: 'Deutz' },
+        { value: 'volvo_penta', label: 'Volvo Penta' },
+        { value: 'man', label: 'MAN' },
+        { value: 'scania', label: 'Scania' },
+        { value: 'mtu', label: 'MTU' },
+        { value: 'yanmar', label: 'Yanmar' },
+        { value: 'kubota', label: 'Kubota' },
+        { value: 'honda', label: 'Honda' },
+        { value: 'kohler', label: 'Kohler' },
+        { value: 'generac', label: 'Generac' },
+        { value: 'briggs_stratton', label: 'Briggs & Stratton' },
+        { value: 'other', label: 'Other' }
+      ];
+      setOems(hardcodedOEMs);
+    } catch (error) {
+      console.error('Error setting up OEMs:', error);
+      setOems([]);
+    }
+  };
+
+  const fetchCustomerData = async (customerId: string) => {
+    try {
+      // Fetch both engines and addresses in parallel
+      const [enginesResponse, addressesResponse] = await Promise.all([
+        apiClient.services.getCustomerEngines(customerId),
+        apiClient.services.getCustomerAddresses(customerId)
+      ]);
+
+      if (enginesResponse.success && enginesResponse.data.engines) {
+        setCustomerEngines(enginesResponse.data.engines);
+        setEngineDropdown(prev => ({
+          ...prev,
+          filteredOptions: enginesResponse.data.engines
+        }));
+      }
+
+      if (addressesResponse.success && addressesResponse.data.addresses) {
+        setCustomerAddresses(addressesResponse.data.addresses);
+        setAddressDropdown(prev => ({
+          ...prev,
+          filteredOptions: addressesResponse.data.addresses
+        }));
+      }
+    } catch (error) {
+      console.error('Error fetching customer data:', error);
+      setCustomerEngines([]);
+      setCustomerAddresses([]);
+      setEngineDropdown(prev => ({
+        ...prev,
+        filteredOptions: []
+      }));
+      setAddressDropdown(prev => ({
+        ...prev,
+        filteredOptions: []
+      }));
+    }
+  };
+
   // Helper functions
   const getUserName = (user: string | User | undefined): string => {
     if (!user) return '';
@@ -737,25 +962,23 @@ const ServiceManagement: React.FC = () => {
   const handleCreateTicket = () => {
     setTicketFormData({
       // Standardized fields
+      serviceRequestNumber: generateServiceRequestNumber(),
       serviceRequestType: '',
       serviceRequiredDate: new Date().toISOString().split('T')[0],
       engineSerialNumber: '',
+      engineModel: '', // New field for engine model
+      kva: '', // New field for KVA rating
       customerName: '',
-      magiecSystemCode: '',
-      magiecCode: '',
       serviceRequestEngineer: '',
-      complaintDescription: '',
+      typeOfVisit: '',
+      typeOfService: '',
       businessVertical: '',
-      invoiceRaised: false,
-      siteIdentifier: '',
-      stateName: '',
-      siteLocation: '',
+      selectedAddress: '', // New field for selected address
+      complaintDescription: '', // New field for complaint description
 
       // Legacy fields for backward compatibility
       customer: '',
-      product: '',
-      description: '',
-      priority: 'medium',
+      products: [], // New field for multiple products
       assignedTo: '',
       scheduledDate: new Date().toISOString().split('T')[0],
       serviceCharge: 0
@@ -764,70 +987,141 @@ const ServiceManagement: React.FC = () => {
     setShowCreateModal(true);
   };
 
-  const handleEditTicket = (ticket: ServiceTicket) => {
+  const handleEditTicket = async (ticket: ServiceTicket) => {
     setEditingTicket(ticket);
+    
+    // Get customer ID
+    const customerId = typeof ticket.customer === 'string' ? ticket.customer : ticket.customer._id;
+    
+    // Fetch customer data (engines and addresses) if customer exists
+    if (customerId) {
+      await fetchCustomerData(customerId);
+    }
+    
     setTicketFormData({
-      // Standardized fields
-      serviceRequestType: ticket.serviceRequestType || '',
-      serviceRequiredDate: ticket.serviceRequiredDate ? ticket.serviceRequiredDate.slice(0, 16) : new Date().toISOString().slice(0, 16),
-      engineSerialNumber: ticket.engineSerialNumber || '',
-      customerName: ticket.customerName || '',
-      magiecSystemCode: ticket.magiecSystemCode || '',
-      magiecCode: ticket.magiecCode || '',
+      // Standardized fields - handle both new Excel fields and standardized fields
+      serviceRequestNumber: ticket.ServiceRequestNumber || ticket.serviceRequestNumber || generateServiceRequestNumber(),
+      serviceRequestType: ticket.serviceRequestType || ticket.TypeofService || '',
+      serviceRequiredDate: ticket.serviceRequiredDate ? ticket.serviceRequiredDate.slice(0, 16) : (ticket.ServiceRequestDate ? new Date(ticket.ServiceRequestDate).toISOString().slice(0, 16) : new Date().toISOString().slice(0, 16)),
+      engineSerialNumber: ticket.EngineSerialNumber || ticket.engineSerialNumber || '',
+      engineModel: ticket.EngineModel || '', // New field for engine model
+      kva: ticket.KVA || '', // New field for KVA rating
+      customerName: ticket.CustomerName || ticket.customerName || '',
       serviceRequestEngineer: typeof ticket.serviceRequestEngineer === 'string' ? ticket.serviceRequestEngineer : ticket.serviceRequestEngineer?._id || '',
-      complaintDescription: ticket.complaintDescription || '',
-      businessVertical: ticket.businessVertical || '',
-      invoiceRaised: ticket.invoiceRaised || false,
-      siteIdentifier: ticket.siteIdentifier || '',
-      stateName: ticket.stateName || '',
-      siteLocation: ticket.siteLocation || '',
+      typeOfVisit: ticket.typeOfVisit || '',
+      typeOfService: (ticket.TypeofService || ticket.typeOfService || '') as TypeOfService || '',
+      businessVertical: ticket.CustomerType || ticket.businessVertical || '',
+      selectedAddress: '', // Will be populated after fetching customer data
+      complaintDescription: ticket.ComplaintDescription || ticket.complaintDescription || '', // New field for complaint description
 
       // Legacy fields for backward compatibility
-      customer: typeof ticket.customer === 'string' ? ticket.customer : ticket.customer._id,
-      product: typeof ticket.product === 'string' ? ticket.product || '' : ticket.product?._id || '',
-      description: ticket.description,
-      priority: ticket.priority,
+      customer: customerId,
+      products: Array.isArray(ticket.products) ? ticket.products.map(p => typeof p === 'string' ? p : p._id) : [],
       assignedTo: typeof ticket.assignedTo === 'string' ? ticket.assignedTo || '' : ticket.assignedTo?._id || '',
-      scheduledDate: ticket.scheduledDate ? ticket.scheduledDate.split('T')[0] : '',
+      scheduledDate: ticket.scheduledDate ? ticket.scheduledDate.split('T')[0] : (ticket.ServiceRequestDate ? new Date(ticket.ServiceRequestDate).toISOString().split('T')[0] : ''),
       serviceCharge: ticket.serviceCharge || 0
     });
 
+
+
     // Initialize dropdown states for edit mode
+    const customerName = typeof ticket.customer === 'string' ? customers.find(c => c._id === ticket.customer)?.name || '' : ticket.customer?.name || '';
+    const assigneeName = typeof ticket.assignedTo === 'string' ? users.find(u => u._id === ticket.assignedTo)?.fullName || '' : ticket.assignedTo?.fullName || '';
+    
     setCustomerDropdown({
       isOpen: false,
-      searchTerm: typeof ticket.customer === 'string' ? customers.find(c => c._id === ticket.customer)?.name || '' : ticket.customer?.name || '',
+      searchTerm: customerName,
       selectedIndex: 0,
       filteredOptions: customers
     });
 
+    setEngineDropdown({
+      isOpen: false,
+      searchTerm: ticket.EngineSerialNumber || ticket.engineSerialNumber || '',
+      selectedIndex: 0,
+      filteredOptions: customerEngines
+    });
+
+    setAddressDropdown({
+      isOpen: false,
+      searchTerm: '', // Will be populated after fetching customer data
+      selectedIndex: 0,
+      filteredOptions: customerAddresses
+    });
+
     setProductDropdown({
       isOpen: false,
-      searchTerm: typeof ticket.product === 'string' ? products.find(p => p._id === ticket.product)?.name || '' : ticket.product?.name || '',
+      searchTerm: Array.isArray(ticket.products) ? ticket.products.map(p => typeof p === 'string' ? p : p.name).join(', ') : '',
       selectedIndex: 0,
       filteredOptions: products
     });
 
-    setPriorityDropdown({
-      isOpen: false,
-      searchTerm: formPriorityOptions.find(p => p.value === ticket.priority)?.label || '',
-      selectedIndex: 0,
-      filteredOptions: formPriorityOptions
-    });
-
     setAssigneeDropdown({
       isOpen: false,
-      searchTerm: typeof ticket.assignedTo === 'string' ? users.find(u => u._id === ticket.assignedTo)?.fullName || '' : ticket.assignedTo?.fullName || '',
+      searchTerm: assigneeName,
       selectedIndex: 0,
       filteredOptions: users
     });
 
     setFormErrors({});
-    setShowEditModal(true);
+    
+    // Show appropriate edit modal based on ticket type
+    if (ticket.uploadedViaExcel) {
+      // Populate Excel form data
+      setExcelFormData({
+        ServiceRequestNumber: ticket.ServiceRequestNumber || ticket.serviceRequestNumber || '',
+        CustomerType: ticket.CustomerType || ticket.businessVertical || '',
+        CustomerName: ticket.CustomerName || ticket.customerName || '',
+        CustomerId: typeof ticket.customer === 'string' ? ticket.customer : ticket.customer?._id || '',
+        EngineSerialNumber: ticket.EngineSerialNumber || (ticket as any).engineSerialNumber || '',
+        EngineModel: ticket.EngineModel || '',
+        KVA: ticket.KVA || '',
+        ServiceRequestDate: ticket.ServiceRequestDate || ticket.serviceRequiredDate || '',
+        ServiceAttendedDate: ticket.ServiceAttendedDate || '',
+        HourMeterReading: ticket.HourMeterReading || '',
+        TypeofService: ticket.TypeofService || ticket.serviceRequestType || '',
+        SiteID: ticket.SiteID || '',
+        SREngineer: ticket.ServiceEngineerName && typeof ticket.ServiceEngineerName === 'object' 
+          ? `${(ticket.ServiceEngineerName as any).firstName} ${(ticket.ServiceEngineerName as any).lastName}`
+          : (ticket.ServiceEngineerName && typeof ticket.ServiceEngineerName === 'string' 
+              ? users.find(u => u._id === ticket.ServiceEngineerName)?.fullName || getUserName(ticket.assignedTo) || ''
+              : getUserName(ticket.assignedTo) || ''),
+        SREngineerId: ticket.ServiceEngineerName && typeof ticket.ServiceEngineerName === 'string' 
+          ? ticket.ServiceEngineerName 
+          : (typeof ticket.assignedTo === 'string' ? ticket.assignedTo : ticket.assignedTo?._id || ''),
+        ComplaintCode: ticket.ComplaintCode || '',
+        ComplaintDescription: ticket.ComplaintDescription || ticket.complaintDescription || '',
+        ResolutionDescription: ticket.ResolutionDescription || '',
+        eFSRNumber: ticket.eFSRNumber || '',
+        eFSRClosureDateAndTime: ticket.eFSRClosureDateAndTime || '',
+        ServiceRequestStatus: ticket.ServiceRequestStatus || ticket.status || 'open',
+        OEMName: ticket.OemName || ''
+      });
+      setShowExcelEditModal(true);
+      
+      // Initialize search terms with current values
+      setCustomerSearchTerm(excelFormData.CustomerName || '');
+      setEngineerSearchTerm(excelFormData.SREngineer || '');
+      setOemSearchTerm(excelFormData.OEMName || '');
+      setServiceTypeSearchTerm(excelFormData.TypeofService || '');
+    } else {
+      setShowEditModal(true);
+    }
   };
 
   const openDetailsModal = async (ticket: ServiceTicket) => {
     setSelectedTicket(ticket);
     setShowDetailsModal(true);
+    
+    // Reset editing state when opening modal
+    setIsEditingVisitDetails(false);
+    setEditableVisitDetails({
+      typeOfVisit: '',
+      typeOfService: '',
+      natureOfWork: '',
+      subNatureOfWork: ''
+    });
+    setVisitDetailsHighlighted(false);
 
     // Check if feedback exists for this ticket
     if (ticket.status === 'resolved') {
@@ -857,14 +1151,8 @@ const ServiceManagement: React.FC = () => {
     if (!ticketFormData.scheduledDate) {
       errors.scheduledDate = 'Scheduled Date is required';
     }
-    if (!ticketFormData.description.trim()) {
-      errors.description = 'Description is required';
-    }
-
-    // Check word count for description
-    const wordCount = ticketFormData.description.trim().split(/\s+/).filter((word: string) => word.length > 0).length;
-    if (wordCount > 500) {
-      errors.description = 'Description cannot exceed 500 words';
+    if (!ticketFormData.typeOfService || ticketFormData.typeOfService.trim() === '') {
+      errors.typeOfService = 'Type of Service is required';
     }
 
     // Validate engine serial number if provided
@@ -877,12 +1165,15 @@ const ServiceManagement: React.FC = () => {
       }
     }
 
+
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
   const handleSubmitTicket = async () => {
-    if (!validateTicketForm()) return;
+    if (!validateTicketForm()) {
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -892,10 +1183,7 @@ const ServiceManagement: React.FC = () => {
       const payload: any = {
         // Legacy fields for backward compatibility
         customer: ticketFormData.customer,
-        product: ticketFormData.product || undefined,
         products: ticketFormData.products || undefined, // Add products array
-        description: ticketFormData.description,
-        priority: ticketFormData.priority,
         serviceCharge: ticketFormData.serviceCharge || 0,
         scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined,
 
@@ -904,24 +1192,29 @@ const ServiceManagement: React.FC = () => {
         requestSubmissionDate: new Date().toISOString(), // Set current date as submission date
         serviceRequiredDate: ticketFormData.serviceRequiredDate ? new Date(ticketFormData.serviceRequiredDate).toISOString() : undefined,
         engineSerialNumber: ticketFormData.engineSerialNumber || undefined,
+        engineModel: ticketFormData.engineModel || '',
+        kva: ticketFormData.kva || '',
         customerName: customers.find(c => c._id === ticketFormData.customer)?.name || '',
-        magiecSystemCode: ticketFormData.magiecSystemCode || undefined,
-        magiecCode: ticketFormData.magiecCode || undefined,
         serviceRequestEngineer: ticketFormData.assignedTo || undefined,
-        complaintDescription: ticketFormData.description,
+        typeOfVisit: ticketFormData.typeOfVisit,
+        typeOfService: ticketFormData.typeOfService || '',
         businessVertical: ticketFormData.businessVertical || undefined,
-        invoiceRaised: ticketFormData.invoiceRaised,
-        siteIdentifier: ticketFormData.siteIdentifier || undefined,
-        stateName: ticketFormData.stateName || undefined,
-        siteLocation: ticketFormData.siteLocation || undefined
+        selectedAddress: ticketFormData.selectedAddress || undefined,
+        complaintDescription: ticketFormData.complaintDescription || undefined
       };
+
+
+
+
+
+
 
       // Only include assignedTo if it's not empty
       if (ticketFormData.assignedTo && ticketFormData.assignedTo.trim() !== '') {
         payload.assignedTo = ticketFormData.assignedTo;
       }
 
-      console.log('Creating service ticket with payload:', payload);
+  
       const response = await apiClient.services.create(payload);
 
       // Add the new ticket to the list
@@ -929,6 +1222,7 @@ const ServiceManagement: React.FC = () => {
         const newTicket = response.data.ticket || response.data;
         setTickets([newTicket, ...tickets]);
         fetchTickets();
+        fetchServiceStats(); // Refresh stats after creating ticket
       }
 
       setShowCreateModal(false);
@@ -946,55 +1240,101 @@ const ServiceManagement: React.FC = () => {
   };
 
   const handleUpdateTicket = async () => {
-    if (!validateTicketForm() || !editingTicket) return;
+    if (!editingTicket) return;
+    
+    // For Excel tickets, we don't need to validate the same way as manual tickets
+    if (!editingTicket.uploadedViaExcel && !validateTicketForm()) {
+      return;
+    }
 
     setSubmitting(true);
     try {
       setFormErrors({});
 
       // Format payload according to backend schema
-      const payload: any = {
-        // Legacy fields for backward compatibility
-        customer: ticketFormData.customer,
-        product: ticketFormData.product || undefined,
-        products: ticketFormData.products || undefined, // Add products array
-        description: ticketFormData.description,
-        priority: ticketFormData.priority,
-        serviceCharge: ticketFormData.serviceCharge || 0,
-        scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined,
+      let payload: any = {};
 
-        // Standardized fields
-        serviceRequestType: ticketFormData.serviceRequestType,
-        requestSubmissionDate: editingTicket?.requestSubmissionDate || new Date().toISOString(), // Preserve original submission date
-        serviceRequiredDate: ticketFormData.serviceRequiredDate ? new Date(ticketFormData.serviceRequiredDate).toISOString() : undefined,
-        engineSerialNumber: ticketFormData.engineSerialNumber || undefined,
-        customerName: customers.find(c => c._id === ticketFormData.customer)?.name || '',
-        magiecSystemCode: ticketFormData.magiecSystemCode || undefined,
-        magiecCode: ticketFormData.magiecCode || undefined,
-        serviceRequestEngineer: ticketFormData.assignedTo || undefined,
-        complaintDescription: ticketFormData.description,
-        businessVertical: ticketFormData.businessVertical || undefined,
-        invoiceRaised: ticketFormData.invoiceRaised,
-        siteIdentifier: ticketFormData.siteIdentifier || undefined,
-        stateName: ticketFormData.stateName || undefined,
-        siteLocation: ticketFormData.siteLocation || undefined
-      };
+      if (editingTicket.uploadedViaExcel) {
+        // For Excel tickets, use Excel form data
+        payload = {
+          // Excel fields
+          ServiceRequestNumber: excelFormData.ServiceRequestNumber,
+          CustomerType: excelFormData.CustomerType,
+          CustomerName: excelFormData.CustomerName,
+          CustomerId: excelFormData.CustomerId, // Send customer objectId
+          EngineSerialNumber: excelFormData.EngineSerialNumber,
+          EngineModel: excelFormData.EngineModel,
+          KVA: excelFormData.KVA,
+          ServiceRequestDate: excelFormData.ServiceRequestDate ? new Date(excelFormData.ServiceRequestDate).toISOString() : undefined,
+          ServiceAttendedDate: excelFormData.ServiceAttendedDate ? new Date(excelFormData.ServiceAttendedDate).toISOString() : undefined,
+          HourMeterReading: excelFormData.HourMeterReading,
+          TypeofService: excelFormData.TypeofService,
+          SiteID: excelFormData.SiteID,
+          SREngineer: excelFormData.SREngineer,
+          SREngineerId: excelFormData.SREngineerId, // Send service engineer objectId
+          ComplaintCode: excelFormData.ComplaintCode,
+          ComplaintDescription: excelFormData.ComplaintDescription,
+          ResolutionDescription: excelFormData.ResolutionDescription,
+          eFSRNumber: excelFormData.eFSRNumber,
+          eFSRClosureDateAndTime: excelFormData.eFSRClosureDateAndTime ? new Date(excelFormData.eFSRClosureDateAndTime).toISOString() : undefined,
+          ServiceRequestStatus: excelFormData.ServiceRequestStatus,
+          OEMName: excelFormData.OEMName
+        };
+      } else {
+        // For manual tickets, use regular form data
+        payload = {
+          // Legacy fields for backward compatibility
+          customer: ticketFormData.customer,
+          products: ticketFormData.products || undefined, // Add products array
+          serviceCharge: ticketFormData.serviceCharge || 0,
+          scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined,
 
-      // Only include assignedTo if it's not empty
-      if (ticketFormData.assignedTo && ticketFormData.assignedTo.trim() !== '') {
-        payload.assignedTo = ticketFormData.assignedTo;
+          // Standardized fields
+          serviceRequestType: ticketFormData.serviceRequestType,
+          requestSubmissionDate: editingTicket?.requestSubmissionDate || new Date().toISOString(), // Preserve original submission date
+          serviceRequiredDate: ticketFormData.serviceRequiredDate ? new Date(ticketFormData.serviceRequiredDate).toISOString() : undefined,
+          engineSerialNumber: ticketFormData.engineSerialNumber || undefined,
+          engineModel: ticketFormData.engineModel || '',
+          kva: ticketFormData.kva || '',
+          customerName: customers.find(c => c._id === ticketFormData.customer)?.name || '',
+          serviceRequestEngineer: ticketFormData.assignedTo || undefined,
+          typeOfVisit: ticketFormData.typeOfVisit,
+          typeOfService: ticketFormData.typeOfService || '',
+          businessVertical: ticketFormData.businessVertical || undefined,
+          selectedAddress: ticketFormData.selectedAddress || undefined,
+          complaintDescription: ticketFormData.complaintDescription || undefined
+        };
+
+        // Only include assignedTo if it's not empty
+        if (ticketFormData.assignedTo && ticketFormData.assignedTo.trim() !== '') {
+          payload.assignedTo = ticketFormData.assignedTo;
+        }
       }
 
 
-      const response = await apiClient.services.update(editingTicket._id, payload);
+
+      let response;
+      if (editingTicket.uploadedViaExcel) {
+        // Use the new Excel-specific API for Excel tickets
+        response = await apiClient.services.updateExcelTicket(editingTicket._id, payload);
+      } else {
+        // Use the regular update API for manual tickets
+        response = await apiClient.services.update(editingTicket._id, payload);
+      }
 
       // Update the ticket in the list
       if (response.success && response.data) {
         const updatedTicket = response.data.ticket || response.data;
         setTickets(tickets.map(t => t._id === editingTicket._id ? updatedTicket : t));
+        fetchServiceStats(); // Refresh stats after updating ticket
       }
 
-      setShowEditModal(false);
+      // Close appropriate modal based on ticket type
+      if (editingTicket.uploadedViaExcel) {
+        setShowExcelEditModal(false);
+      } else {
+        setShowEditModal(false);
+      }
       setEditingTicket(null);
       resetTicketForm();
     } catch (error: any) {
@@ -1012,26 +1352,23 @@ const ServiceManagement: React.FC = () => {
   const resetTicketForm = () => {
     setTicketFormData({
       // Standardized fields
+      serviceRequestNumber: generateServiceRequestNumber(),
       serviceRequestType: '',
       serviceRequiredDate: new Date().toISOString().slice(0, 16),
       engineSerialNumber: '',
+      engineModel: '', // New field for engine model
+      kva: '', // New field for KVA rating
       customerName: '',
-      magiecSystemCode: '',
-      magiecCode: '',
       serviceRequestEngineer: '',
-      complaintDescription: '',
+      typeOfVisit: '',
+      typeOfService: '',
       businessVertical: '',
-      invoiceRaised: false,
-      siteIdentifier: '',
-      stateName: '',
-      siteLocation: '',
+      selectedAddress: '', // New field for selected address
+      complaintDescription: '', // New field for complaint description
 
       // Legacy fields for backward compatibility
       customer: '',
-      product: '',
-      products: [], // Reset products array
-      description: '',
-      priority: 'medium',
+      products: [], // New field for multiple products
       assignedTo: '',
       scheduledDate: new Date().toISOString().split('T')[0],
       serviceCharge: 0
@@ -1039,8 +1376,10 @@ const ServiceManagement: React.FC = () => {
 
     // Reset dropdown states
     setCustomerDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
+    setEngineDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
+    setAddressDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
     setProductDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
-    setPriorityDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
+
     setAssigneeDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
   };
 
@@ -1051,33 +1390,16 @@ const ServiceManagement: React.FC = () => {
     switch (status) {
       case 'open':
         return 'bg-blue-100 text-blue-800';
-      case 'in_progress':
-        return 'bg-yellow-100 text-yellow-800';
       case 'resolved':
-        return 'bg-green-100 text-green-800';
+        return 'bg-yellow-100 text-yellow-800';
       case 'closed':
-        return 'bg-gray-100 text-gray-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
+        return 'bg-green-100 text-green-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const getPriorityColor = (priority: TicketPriority) => {
-    switch (priority) {
-      case 'critical':
-        return 'bg-red-100 text-red-800';
-      case 'high':
-        return 'bg-orange-100 text-orange-800';
-      case 'medium':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'low':
-        return 'bg-green-100 text-green-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
+
 
 
 
@@ -1086,7 +1408,14 @@ const ServiceManagement: React.FC = () => {
   };
 
   const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString('en-IN');
+    return new Date(dateString).toLocaleString('en-IN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
   };
 
   const getTimeRemaining = (deadline: string) => {
@@ -1107,27 +1436,27 @@ const ServiceManagement: React.FC = () => {
   const stats = [
     {
       title: 'Total Tickets',
-      value: totalDatas.toString(),
+      value: serviceStats.totalTickets.toString(),
       icon: <FileText className="w-6 h-6" />,
       color: 'blue'
     },
     {
       title: 'Open Tickets',
-      value: tickets.filter(t => t.status === 'open').length.toString(),
+      value: serviceStats.openTickets.toString(),
       icon: <AlertTriangle className="w-6 h-6" />,
       color: 'orange'
     },
     {
-      title: 'In Progress',
-      value: tickets.filter(t => t.status === 'in_progress').length.toString(),
-      icon: <Activity className="w-6 h-6" />,
-      color: 'yellow'
-    },
-    {
       title: 'Resolved Tickets',
-      value: tickets.filter(t => t.status === 'resolved').length.toString(),
+      value: serviceStats.resolvedTickets.toString(),
       icon: <CheckCircle className="w-6 h-6" />,
       color: 'green'
+    },
+    {
+      title: 'Closed Tickets',
+      value: serviceStats.closedTickets.toString(),
+      icon: <CheckCircle className="w-6 h-6" />,
+      color: 'gray'
     }
   ];
 
@@ -1135,20 +1464,11 @@ const ServiceManagement: React.FC = () => {
   const statusOptions = [
     { value: 'all', label: 'All Status' },
     { value: 'open', label: 'Open' },
-    { value: 'in_progress', label: 'In Progress' },
     { value: 'resolved', label: 'Resolved' },
-    { value: 'closed', label: 'Closed' },
-    { value: 'cancelled', label: 'Cancelled' }
+    { value: 'closed', label: 'Closed' }
   ];
 
-  // Priority options with labels
-  const priorityOptions = [
-    { value: 'all', label: 'All Priority' },
-    { value: 'critical', label: 'Critical' },
-    { value: 'high', label: 'High' },
-    { value: 'medium', label: 'Medium' },
-    { value: 'low', label: 'Low' }
-  ];
+
 
 
 
@@ -1157,10 +1477,7 @@ const ServiceManagement: React.FC = () => {
     return option ? option.label : 'All Status';
   };
 
-  const getPriorityLabel = (value: string) => {
-    const option = priorityOptions.find(opt => opt.value === value);
-    return option ? option.label : 'All Priority';
-  };
+
 
 
 
@@ -1175,6 +1492,112 @@ const ServiceManagement: React.FC = () => {
   };
 
 
+
+  const handleServiceRequestStatusUpdate = async (ticketId: string, newStatus: string) => {
+    try {
+      // Find the ticket to check if it has a product
+      const ticket = tickets.find(t => t._id === ticketId);
+      if (!ticket) {
+        throw new Error('Ticket not found');
+      }
+
+      // Update the ticket ServiceRequestStatus
+      const response = await apiClient.services.update(ticketId, { ServiceRequestStatus: newStatus });
+
+      if (response.success) {
+        // Update the ticket in the local state
+        setTickets(tickets.map(ticket =>
+          ticket._id === ticketId
+            ? { ...ticket, ServiceRequestStatus: newStatus, status: newStatus as TicketStatus }
+            : ticket
+        ));
+
+        // Update selected ticket if it's the same one
+        if (selectedTicket && selectedTicket._id === ticketId) {
+          setSelectedTicket({ ...selectedTicket, ServiceRequestStatus: newStatus, status: newStatus as TicketStatus });
+        }
+
+        // Refresh stats after status update
+        fetchServiceStats();
+
+        toast.success('Service Request Status updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error updating Service Request Status:', error);
+      toast.error('Failed to update Service Request Status. Please try again.');
+    }
+  };
+
+  const handleVisitDetailsUpdate = async () => {
+    if (!selectedTicket) return;
+
+    try {
+      setUpdatingVisitDetails(true);
+
+      const payload = {
+        typeOfVisit: editableVisitDetails.typeOfVisit,
+        typeOfService: editableVisitDetails.typeOfService,
+        natureOfWork: editableVisitDetails.natureOfWork,
+        subNatureOfWork: editableVisitDetails.subNatureOfWork
+      };
+
+      const response = await apiClient.services.update(selectedTicket._id, payload);
+
+      if (response.success) {
+        // Update the ticket in the local state
+        const updatedTicket = response.data.ticket || response.data;
+        setTickets(tickets.map(ticket =>
+          ticket._id === selectedTicket._id ? updatedTicket : ticket
+        ));
+
+        // Update selected ticket
+        setSelectedTicket(updatedTicket);
+
+        // Exit edit mode
+        setIsEditingVisitDetails(false);
+        
+        // Highlight the visit details section
+        setVisitDetailsHighlighted(true);
+        
+        // Remove highlight after 3 seconds
+        setTimeout(() => {
+          setVisitDetailsHighlighted(false);
+        }, 3000);
+        
+        // Refresh stats after updating visit details
+        fetchServiceStats();
+        
+        toast.success('Visit details updated successfully!');
+      }
+    } catch (error) {
+      console.error('Error updating visit details:', error);
+      toast.error('Failed to update visit details. Please try again.');
+    } finally {
+      setUpdatingVisitDetails(false);
+    }
+  };
+
+  const startEditingVisitDetails = () => {
+    if (!selectedTicket) return;
+    
+    setEditableVisitDetails({
+      typeOfVisit: selectedTicket.typeOfVisit || '',
+      typeOfService: selectedTicket.typeOfService || '',
+      natureOfWork: selectedTicket.natureOfWork || '',
+      subNatureOfWork: selectedTicket.subNatureOfWork || ''
+    });
+    setIsEditingVisitDetails(true);
+  };
+
+  const cancelEditingVisitDetails = () => {
+    setIsEditingVisitDetails(false);
+    setEditableVisitDetails({
+      typeOfVisit: '',
+      typeOfService: '',
+      natureOfWork: '',
+      subNatureOfWork: ''
+    });
+  };
 
   const handleStatusUpdate = async (ticketId: string, newStatus: TicketStatus) => {
     try {
@@ -1208,111 +1631,7 @@ const ServiceManagement: React.FC = () => {
     }
   };
 
-  const handleExportToPDF = async (ticket: ServiceTicket) => {
-    try {
-      const pdfData: ServiceTicketPDFData = {
-        ticketNumber: ticket.ticketNumber,
-        customer: {
-          name: getCustomerName(ticket.customer),
-          email: typeof ticket.customer === 'object' ? ticket.customer.email : undefined,
-          phone: typeof ticket.customer === 'object' ? ticket.customer.phone : '',
-          address: typeof ticket.customer === 'object' ? (ticket.customer as any).addresses.find((address: any) => address.isPrimary)?.address || 'No address available' : undefined,
-        },
-        product: ticket.product && typeof ticket.product === 'object' ? {
-          name: ticket.product.name,
-          category: ticket.product.category,
-          brand: ticket.product.brand,
-          modelNumber: ticket.product.modelNumber,
-          price: (() => {
-            // Try to get price from ticket product first
-            if (ticket.product && typeof ticket.product === 'object' && ticket.product.price) {
-              return ticket.product.price;
-            }
-            // If not available, find the product in the local products array
-            const productId = typeof ticket.product === 'string' ? ticket.product : ticket.product._id;
-            const foundProduct = products.find(p => p._id === productId);
-            return foundProduct?.price || 0;
-          })(),
-        } : undefined,
-        serialNumber: ticket.serialNumber,
-        description: ticket.description,
-        priority: ticket.priority,
-        status: ticket.status,
-        assignedTo: getUserName(ticket.assignedTo),
-        scheduledDate: ticket.scheduledDate,
-        completedDate: ticket.completedDate,
-        createdAt: ticket.createdAt,
-        serviceReport: ticket.serviceReport,
-        serviceCharge: ticket.serviceCharge || 0,
-        partsUsed: ticket.partsUsed?.map(part => ({
-          product: getProductName(part.product),
-          quantity: part.quantity,
-          serialNumbers: part.serialNumbers,
-        })),
-      };
 
-      await exportServiceTicketToPDF(pdfData);
-    } catch (error) {
-      console.error('Error exporting PDF:', error);
-      alert('Failed to export PDF. Please try again.');
-    }
-  };
-
-  const handleBulkExportToPDF = async () => {
-    if (tickets.length === 0) {
-      alert('No tickets to export');
-      return;
-    }
-
-    try {
-      // Convert all tickets to PDF data format
-      const pdfDataArray: ServiceTicketPDFData[] = tickets.map(ticket => ({
-        ticketNumber: ticket.ticketNumber,
-        customer: {
-          name: getCustomerName(ticket.customer),
-          email: typeof ticket.customer === 'object' ? ticket.customer.email : undefined,
-          phone: typeof ticket.customer === 'object' ? ticket.customer.phone : '',
-          address: typeof ticket.customer === 'object' ? (ticket.customer as any).addresses.find((address: any) => address.isPrimary)?.address || 'No address available' : undefined,
-        },
-        product: ticket.product && typeof ticket.product === 'object' ? {
-          name: ticket.product.name,
-          category: ticket.product.category,
-          price: (() => {
-            // Try to get price from ticket product first
-            if (ticket.product && typeof ticket.product === 'object' && ticket.product.price) {
-              return ticket.product.price;
-            }
-            // If not available, find the product in the local products array
-            const productId = typeof ticket.product === 'string' ? ticket.product : ticket.product._id;
-            const foundProduct = products.find(p => p._id === productId);
-            return foundProduct?.price || 0;
-          })(),
-        } : undefined,
-        serialNumber: ticket.serialNumber,
-        description: ticket.description,
-        priority: ticket.priority,
-        status: ticket.status,
-        assignedTo: getUserName(ticket.assignedTo),
-        scheduledDate: ticket.scheduledDate,
-        completedDate: ticket.completedDate,
-        createdAt: ticket.createdAt,
-        serviceReport: ticket.serviceReport,
-        serviceCharge: ticket.serviceCharge || 0,
-        partsUsed: ticket.partsUsed?.map(part => ({
-          product: getProductName(part.product),
-          quantity: part.quantity,
-          serialNumbers: part.serialNumbers,
-        })),
-      }));
-
-      // Export all tickets in a single PDF
-      await exportMultipleTicketsToPDF(pdfDataArray);
-
-    } catch (error) {
-      console.error('Error in bulk PDF export:', error);
-      alert('Failed to export PDF. Please try again.');
-    }
-  };
 
   // Excel upload functions
   const handleExcelUpload = () => {
@@ -1408,10 +1727,7 @@ const ServiceManagement: React.FC = () => {
           return defaultValue;
         };
 
-        // Debug helper to check what headers are available for a specific field
-        const debugFieldHeaders = (fieldName: string, possibleHeaders: string[]) => {
-          // Debug function - removed console logs
-        };
+
 
         // Helper function to convert Excel date to date only (for requestSubmissionDate)
         const convertExcelDateOnly = (dateValue: any) => {
@@ -1481,58 +1797,66 @@ const ServiceManagement: React.FC = () => {
           return new Date().toISOString();
         };
 
-        // Map the Excel headers to our standardized fields with flexible header matching
-        const mappedData = {
-          serviceRequestNumber: getFieldValue(['Service Request Number', 'SR Number', 'Service Request Number'], ''),
-          serviceRequestType: getFieldValue(['Service Request Type', 'SR Type', 'Service Type'], ''),
-          requestSubmissionDate: convertExcelDateOnly(getFieldValue(['Request Submission Date', 'Requested Date', 'Submission Date', 'Created Date', 'Request Date', 'Date Requested', 'Request Date', 'Submission Date', 'Created Date', 'Date Created'])),
-          serviceRequiredDate: convertExcelDateTime(getFieldValue(['Service Required Date', 'Service Required On Date', 'Required Date'])),
-          engineSerialNumber: getFieldValue(['Engine Serial Number', 'Engine Sr No', 'Serial Number'], ''),
-          customerName: getFieldValue(['Customer Name', 'Customer'], ''),
-          magiecSystemCode: getFieldValue(['MAGIEC (System Code or Identifier)', 'MAGIEC', 'System Code'], ''),
-          magiecCode: getFieldValue(['MAGIEC Code', 'MAGIEC Code'], ''),
-          serviceRequestEngineer: getFieldValue(['Service Request Engineer', 'SR Engineer', 'Engineer', 'Technician', 'Field Operator'], ''),
-          complaintDescription: getFieldValue(['Complaint Description', 'Complaint', 'Description', 'Issue'], ''),
-          businessVertical: getFieldValue(['Business Vertical', 'Vertical', 'Industry'], ''),
-          invoiceRaised: getFieldValue(['Invoice Raised (Yes/No)', 'Invoice Raised', 'Invoice'], 'No') === 'Yes',
-          siteIdentifier: getFieldValue(['Site Identifier', 'Site ID', 'Site'], ''),
-          stateName: getFieldValue(['State Name', 'State'], ''),
-          siteLocation: getFieldValue(['SiteLocation', 'Location', 'Site', 'Site Location', 'Location Address', 'Address'], ''),
-          // Legacy fields
-          description: getFieldValue(['Complaint Description', 'Complaint', 'Description', 'Issue'], ''),
-          priority: 'medium',
-          status: (() => {
-            const statusHeaders = ['Service Request Status', 'SR Status', 'Status', 'Ticket Status', 'State', 'Current Status', 'Status'];
-            const excelStatusValue = getFieldValue(statusHeaders, 'open');
+        // Helper function to convert Excel date with time to proper format
+        const convertExcelDateTimeWithTime = (dateValue: any) => {
+          if (!dateValue) return new Date().toISOString();
 
-            // Map Excel status to application status
-            let mappedStatus = 'open';
-            if (excelStatusValue) {
-              const statusMapping: { [key: string]: string } = {
-                'new': 'open',
-                'New': 'open',
-                'NEW': 'open',
-                'resolved': 'resolved',
-                'Resolved': 'resolved',
-                'RESOLVED': 'resolved',
-                'in progress': 'in_progress',
-                'In Progress': 'in_progress',
-                'IN PROGRESS': 'in_progress',
-                'closed': 'closed',
-                'Closed': 'closed',
-                'CLOSED': 'closed',
-                'cancelled': 'cancelled',
-                'Cancelled': 'cancelled',
-                'CANCELLED': 'cancelled'
-              };
-              mappedStatus = statusMapping[excelStatusValue] || 'open';
+          // If it's already a string in ISO format, return as is
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateValue)) {
+            return dateValue;
+          }
+
+          // If it's a string in YYYY-MM-DD HH:MM:SS format, convert to ISO
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/.test(dateValue)) {
+            return new Date(dateValue.replace(' ', 'T')).toISOString();
+          }
+
+          // If it's a string in YYYY-MM-DD format, add time
+          if (typeof dateValue === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+            return dateValue + 'T00:00:00.000Z';
+          }
+
+          // Handle Excel date numbers (Excel stores dates as numbers)
+          if (typeof dateValue === 'number') {
+            // Excel dates are days since 1900-01-01
+            const excelEpoch = new Date(1900, 0, 1);
+            const date = new Date(excelEpoch.getTime() + (dateValue - 2) * 24 * 60 * 60 * 1000);
+            return date.toISOString();
+          }
+
+          // If it's a Date object or other date string, convert it
+          try {
+            const date = new Date(dateValue);
+            if (!isNaN(date.getTime())) {
+              return date.toISOString();
             }
+          } catch (error) {
+            console.warn('Invalid date value:', dateValue, 'Error:', error);
+          }
+          return new Date().toISOString();
+        };
 
-            return mappedStatus;
-          })(),
-          serviceCharge: 0,
-          // Ensure dates are in proper format
-          scheduledDate: convertExcelDateTime(getFieldValue(['Service Required Date', 'Service Required On Date', 'Required Date']))
+        // Map the Excel headers to our new 19 fields structure
+        const mappedData = {
+          // Excel fields based on new structure
+          SRNumber: getFieldValue(['SRNumber', 'SR Number', 'Service Request Number', 'SR Number'], ''),
+          CustomerType: getFieldValue(['CustomerType', 'Customer Type', 'Customer Type'], ''),
+          CustomerName: getFieldValue(['CustomerName', 'Customer Name', 'Customer'], ''),
+          EngineNo: getFieldValue(['EngineNo', 'Engine No', 'Engine Number', 'Engine Serial Number'], ''),
+          ModelCode: getFieldValue(['ModelCode', 'Model Code', 'Model'], ''),
+          KVA: getFieldValue(['KVA', 'KVA Rating', 'KVA'], ''),
+          RequestedDate: convertExcelDateTimeWithTime(getFieldValue(['RequestedDate', 'Requested Date', 'Request Date', 'Service Required Date'])),
+          AttendedHrs: getFieldValue(['AttendedHrs', 'Attended Hours', 'Attended Hours'], ''),
+          SRType: getFieldValue(['SRType', 'SR Type', 'Service Request Type', 'Service Type'], ''),
+          SITEID: getFieldValue(['SITEID', 'Site ID', 'Site Identifier', 'Site'], ''),
+          SREngineer: getFieldValue(['SREngineer', 'SR Engineer', 'Service Request Engineer', 'Engineer', 'Technician'], ''),
+          ComplaintCode: getFieldValue(['ComplaintCode', 'Complaint Code', 'Complaint Code'], ''),
+          ComplaintDescription: getFieldValue(['ComplaintDescription', 'Complaint Description', 'Complaint', 'Description'], ''),
+          ResolutionDesc: getFieldValue(['ResolutionDesc', 'Resolution Description', 'Resolution', 'Resolution Desc'], ''),
+          eFSRNo: getFieldValue(['eFSRNo', 'eFSR Number', 'eFSR No'], ''),
+          eFSRClosureDateTime: convertExcelDateTimeWithTime(getFieldValue(['eFSRClosureDateTime', 'eFSR Closure Date Time', 'eFSR Closure Date'])),
+          SRStatus: getFieldValue(['SRStatus', 'SR Status', 'Service Request Status', 'Status'], 'open'),
+          OEMName: getFieldValue(['OEMName', 'OEM Name', 'OEM'], '')
         };
 
         return mappedData;
@@ -1541,20 +1865,23 @@ const ServiceManagement: React.FC = () => {
 
       setUploadProgress(20);
 
-      // Process all data without filtering - let backend handle missing customers and service engineers
+      // Process all data and map to new field structure
       const processedTickets = processedData.map((row, index) => {
         const rowNumber = index + 2; // Excel row number (1-based + header row)
         
-        // Return the processed data as is - backend will handle validation and creation
+        // Return the processed data with new field names for backend processing
         return {
           ...row,
-          // Keep the original names for backend processing
-          serviceRequestEngineer: row.serviceRequestEngineer || '',
-          customerName: row.customerName || ''
+          // Map to new field names for backend
+          SREngineer: row.SREngineer || '',
+          CustomerName: row.CustomerName || ''
         };
       });
 
       setUploadProgress(50);
+
+      
+      
 
       // Send all processed data to backend for import
       let successCount = 0;
@@ -1562,11 +1889,16 @@ const ServiceManagement: React.FC = () => {
 
       try {
         const response = await apiClient.services.bulkImport(processedTickets);
+  
 
         if (response.success) {
           successCount = response.data.importedCount || 0;
           if (response.data.errors && response.data.errors.length > 0) {
             creationErrors.push(...response.data.errors);
+          }
+          // Handle duplicates separately
+          if (response.data.duplicates && response.data.duplicates.length > 0) {
+            creationErrors.push(...response.data.duplicates);
           }
         } else {
           creationErrors.push({
@@ -1601,10 +1933,10 @@ const ServiceManagement: React.FC = () => {
       
       if (successCount > 0 && duplicateErrors.length > 0) {
         // Both imported and duplicates
-        toast.success(`${successCount} tickets added successfully | ⚠️ ${duplicateErrors.length} tickets already exist in system`);
+        toast.success(`✅ ${successCount} tickets added successfully | ⚠️ ${duplicateErrors.length} tickets already exist in system`);
       } else if (successCount > 0) {
         // Only imported
-        toast.success(`${successCount} tickets added successfully!`);
+        toast.success(`✅ ${successCount} tickets added successfully!`);
       } else if (duplicateErrors.length > 0) {
         // Only duplicates
         toast.error(`⚠️ ${duplicateErrors.length} tickets already exist in system - no new tickets added`);
@@ -1668,7 +2000,6 @@ const ServiceManagement: React.FC = () => {
       const params: any = {};
       if (searchTerm) params.search = searchTerm;
       if (statusFilter !== 'all') params.status = statusFilter;
-      if (priorityFilter !== 'all') params.priority = priorityFilter;
       if (assigneeFilter !== 'all') params.assignedTo = assigneeFilter;
 
       // Fetch data from API
@@ -1701,24 +2032,26 @@ const ServiceManagement: React.FC = () => {
           };
         }
 
-        // Auto-size columns
+        // Auto-size columns for new 19 fields
         const columnWidths = [
-          { wch: 20 }, // Service Request Number
-          { wch: 20 }, // Service Request Type
-          { wch: 15 }, // Request Submission Date
-          { wch: 15 }, // Service Required Date
-          { wch: 20 }, // Engine Serial Number
-          { wch: 25 }, // Customer Name
-          { wch: 25 }, // MAGIEC (System Code or Identifier)
-          { wch: 15 }, // MAGIEC Code
-          { wch: 25 }, // Service Request Engineer
-          { wch: 15 }, // Service Request Status
-          { wch: 30 }, // Complaint Description
-          { wch: 20 }, // Business Vertical
-          { wch: 15 }, // Invoice Raised (Yes/No)
-          { wch: 15 }, // Site Identifier
-          { wch: 15 }, // State Name
-          { wch: 25 }, // Site Location
+          { wch: 20 }, // SRNumber
+          { wch: 20 }, // CustomerType
+          { wch: 25 }, // CustomerName
+          { wch: 20 }, // EngineNo
+          { wch: 20 }, // ModelCode
+          { wch: 15 }, // KVA
+          { wch: 20 }, // RequestedDate
+          { wch: 20 }, // AttendedHrs
+          { wch: 20 }, // SRType
+          { wch: 20 }, // SITEID
+          { wch: 25 }, // SREngineer
+          { wch: 20 }, // ComplaintCode
+          { wch: 30 }, // ComplaintDescription
+          { wch: 30 }, // ResolutionDesc
+          { wch: 20 }, // eFSRNo
+          { wch: 25 }, // eFSRClosureDateTime
+          { wch: 20 }, // SRStatus
+          { wch: 20 }, // OEMName
         ];
         worksheet['!cols'] = columnWidths;
 
@@ -1747,7 +2080,7 @@ const ServiceManagement: React.FC = () => {
 
 
   // Enhanced dropdown handlers
-  const scrollToSelectedItem = (dropdownType: 'customer' | 'product' | 'priority' | 'assignee') => {
+  const scrollToSelectedItem = (dropdownType: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService') => {
     const dropdownState = getDropdownState(dropdownType);
     const containerId = `${dropdownType}-dropdown-container`;
     const selectedItemId = `${dropdownType}-item-${dropdownState.selectedIndex}`;
@@ -1771,8 +2104,87 @@ const ServiceManagement: React.FC = () => {
     }, 10);
   };
 
+  const moveToNextField = (currentType: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService') => {
+    // Move to next field in the form sequence for Tab navigation
+    switch (currentType) {
+      case 'customer':
+        setTimeout(() => {
+          // Focus the engine input
+          const engineInput = document.querySelector('input[placeholder="Search engine..."]') as HTMLInputElement;
+          if (engineInput) {
+            engineInput.focus();
+          }
+        }, 50);
+        break;
+      case 'engine':
+        setTimeout(() => {
+          // Focus the assignee input (skip address for now)
+          const assigneeInput = document.querySelector('input[placeholder="Search technician..."]') as HTMLInputElement;
+          if (assigneeInput) {
+            assigneeInput.focus();
+          }
+        }, 50);
+        break;
+      case 'address':
+        setTimeout(() => {
+          // Focus the Service Request Type field
+          const serviceRequestTypeInput = document.querySelector('input[placeholder="Enter service request type"]') as HTMLInputElement;
+          if (serviceRequestTypeInput) {
+            serviceRequestTypeInput.focus();
+          }
+        }, 50);
+        break;
+      case 'product':
+        setTimeout(() => {
+          // Focus the assignee input
+          const assigneeInput = document.querySelector('input[placeholder="Search technician..."]') as HTMLInputElement;
+          if (assigneeInput) {
+            assigneeInput.focus();
+          }
+        }, 50);
+        break;
+      case 'assignee':
+        setTimeout(() => {
+          // Focus the scheduled date input
+          scheduledDateRef.current?.focus();
+        }, 50);
+        break;
+      case 'typeOfVisit':
+        setTimeout(() => {
+          // Focus the Type of Service field
+          const typeOfServiceInput = document.querySelector('input[placeholder="Search type of service..."]') as HTMLInputElement;
+          if (typeOfServiceInput) {
+            typeOfServiceInput.focus();
+          }
+        }, 50);
+        break;
+      case 'typeOfService':
+        setTimeout(() => {
+          // Focus the Complaint Description textarea
+          const complaintDescriptionTextarea = document.getElementById('complaint-description-textarea') as HTMLTextAreaElement;
+          if (complaintDescriptionTextarea) {
+            complaintDescriptionTextarea.focus();
+          }
+        }, 50);
+        break;
+    }
+  };
+
+  // Function to handle scheduled date navigation to address dropdown
+  const moveFromScheduledDateToAddress = () => {
+    setTimeout(() => {
+      // Focus the address dropdown
+      const addressInput = document.querySelector('input[placeholder="Search address..."]') as HTMLInputElement;
+      if (addressInput) {
+        addressInput.focus();
+        // Open the address dropdown when focused
+        setAddressDropdown(prev => ({ ...prev, isOpen: true }));
+      }
+    }, 50);
+  };
+
   const handleDropdownKeyDown = (
-    dropdownType: 'customer' | 'product' | 'priority' | 'assignee',
+    dropdownType: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService',
     event: React.KeyboardEvent,
     options: any[],
     onSelect: (value: string) => void
@@ -1806,7 +2218,16 @@ const ServiceManagement: React.FC = () => {
         event.stopPropagation();
         if (options.length > 0 && dropdownState.selectedIndex >= 0) {
           const selectedOption = options[dropdownState.selectedIndex];
-          onSelect(selectedOption.value || selectedOption._id);
+          // Handle different object structures for different dropdown types
+          let valueToSelect;
+          if (dropdownType === 'address') {
+            valueToSelect = selectedOption.fullAddress;
+          } else if (dropdownType === 'engine') {
+            valueToSelect = selectedOption.engineSerialNumber;
+          } else {
+            valueToSelect = selectedOption.value || selectedOption._id;
+          }
+          onSelect(valueToSelect);
           setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
           moveToNextDropdown(dropdownType);
         }
@@ -1814,8 +2235,10 @@ const ServiceManagement: React.FC = () => {
       case 'Tab':
         event.preventDefault();
         event.stopPropagation();
-        // Tab only navigates to next field, doesn't select
-        moveToNextDropdown(dropdownType);
+        // Close current dropdown
+        setDropdownState(prev => ({ ...prev, isOpen: false }));
+        // Move to next field in the form sequence
+        moveToNextField(dropdownType);
         break;
       case 'Escape':
         event.preventDefault();
@@ -1825,25 +2248,31 @@ const ServiceManagement: React.FC = () => {
     }
   };
 
-  const getDropdownState = (type: 'customer' | 'product' | 'priority' | 'assignee') => {
+  const getDropdownState = (type: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService') => {
     switch (type) {
       case 'customer': return customerDropdown;
+      case 'engine': return engineDropdown;
+      case 'address': return addressDropdown;
       case 'product': return productDropdown;
-      case 'priority': return priorityDropdown;
       case 'assignee': return assigneeDropdown;
+      case 'typeOfVisit': return typeOfVisitDropdown;
+      case 'typeOfService': return typeOfServiceDropdown;
     }
   };
 
-  const getSetDropdownState = (type: 'customer' | 'product' | 'priority' | 'assignee') => {
+  const getSetDropdownState = (type: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService') => {
     switch (type) {
       case 'customer': return setCustomerDropdown;
+      case 'engine': return setEngineDropdown;
+      case 'address': return setAddressDropdown;
       case 'product': return setProductDropdown;
-      case 'priority': return setPriorityDropdown;
       case 'assignee': return setAssigneeDropdown;
+      case 'typeOfVisit': return setTypeOfVisitDropdown;
+      case 'typeOfService': return setTypeOfServiceDropdown;
     }
   };
 
-  const moveToNextDropdown = (currentType: 'customer' | 'product' | 'priority' | 'assignee') => {
+  const moveToNextDropdown = (currentType: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService') => {
     // Close current dropdown
     const setCurrentDropdown = getSetDropdownState(currentType);
     setCurrentDropdown(prev => ({ ...prev, isOpen: false }));
@@ -1852,23 +2281,36 @@ const ServiceManagement: React.FC = () => {
     switch (currentType) {
       case 'customer':
         setTimeout(() => {
-          // Focus and open the MultiSelect component for products
-          if (multiSelectRef.current) {
-            multiSelectRef.current.open();
+          // Open engine dropdown after customer selection
+          setEngineDropdown(prev => ({ ...prev, isOpen: true }));
+          // Focus the engine input
+          const engineInput = document.querySelector('input[placeholder="Search engine..."]') as HTMLInputElement;
+          if (engineInput) {
+            engineInput.focus();
           }
         }, 50);
+        break;
+      case 'engine':
+        setTimeout(() => {
+          // Move to assignee dropdown after engine selection (skip address)
+          setAssigneeDropdown(prev => ({ ...prev, isOpen: true }));
+          // Focus the assignee input
+          const assigneeInput = document.querySelector('input[placeholder="Search technician..."]') as HTMLInputElement;
+          if (assigneeInput) {
+            assigneeInput.focus();
+          }
+        }, 50);
+        break;
+      case 'address':
+        setTimeout(() => {
+          // Move to Service Request Type field after address selection
+          const serviceRequestTypeInput = document.querySelector('input[placeholder="Enter service request type"]') as HTMLInputElement;
+          if (serviceRequestTypeInput) {
+            serviceRequestTypeInput.focus();
+          }
+        }, 100);
         break;
       case 'product':
-        setTimeout(() => {
-          setPriorityDropdown(prev => ({ ...prev, isOpen: true }));
-          // Focus the priority input
-          const priorityInput = document.querySelector('input[placeholder="Select priority..."]') as HTMLInputElement;
-          if (priorityInput) {
-            priorityInput.focus();
-          }
-        }, 50);
-        break;
-      case 'priority':
         setTimeout(() => {
           setAssigneeDropdown(prev => ({ ...prev, isOpen: true }));
           // Focus the assignee input
@@ -1883,11 +2325,31 @@ const ServiceManagement: React.FC = () => {
           scheduledDateRef.current?.focus();
         }, 50);
         break;
+      case 'typeOfVisit':
+        setTimeout(() => {
+          // Move to Type of Service dropdown after Type of Visit selection
+          setTypeOfServiceDropdown(prev => ({ ...prev, isOpen: true }));
+          // Focus the Type of Service input
+          const typeOfServiceInput = document.querySelector('input[placeholder="Search type of service..."]') as HTMLInputElement;
+          if (typeOfServiceInput) {
+            typeOfServiceInput.focus();
+          }
+        }, 50);
+        break;
+      case 'typeOfService':
+        setTimeout(() => {
+          // Move to Complaint Description after Type of Service selection
+          const complaintDescriptionTextarea = document.getElementById('complaint-description-textarea') as HTMLTextAreaElement;
+          if (complaintDescriptionTextarea) {
+            complaintDescriptionTextarea.focus();
+          }
+        }, 50);
+        break;
     }
   };
 
   const handleDropdownSearch = (
-    type: 'customer' | 'product' | 'priority' | 'assignee',
+    type: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService',
     searchTerm: string
   ) => {
     const setDropdownState = getSetDropdownState(type);
@@ -1898,23 +2360,43 @@ const ServiceManagement: React.FC = () => {
       case 'customer':
         originalOptions = customers;
         break;
+      case 'engine':
+        originalOptions = customerEngines;
+        break;
+      case 'address':
+        originalOptions = customerAddresses;
+        break;
       case 'product':
         originalOptions = products;
         break;
-      case 'priority':
-        originalOptions = formPriorityOptions;
-        break;
       case 'assignee':
         originalOptions = users;
+        break;
+      case 'typeOfVisit':
+        originalOptions = typeOfVisitOptions;
+        break;
+      case 'typeOfService':
+        originalOptions = typeOfServiceOptions;
         break;
     }
 
     // Filter from original data
     const filtered = originalOptions.filter((option: any) => {
       const searchText = searchTerm.toLowerCase();
-      const optionText = (option.name || option.label || option.fullName || '').toLowerCase();
-      const partNumber = (option.modelNumber || '').toLowerCase();
+      let optionText = '';
+      
+      // Handle different object structures for different dropdown types
+      if (type === 'address') {
+        optionText = (option.fullAddress || '').toLowerCase();
+      } else if (type === 'engine') {
+        optionText = (option.engineSerialNumber || '').toLowerCase();
+        const partNumber = (option.engineModel || '').toLowerCase();
       return optionText.includes(searchText) || partNumber.includes(searchText);
+      } else {
+        optionText = (option.name || option.label || option.fullName || '').toLowerCase();
+      }
+      
+      return optionText.includes(searchText);
     });
 
     setDropdownState(prev => ({
@@ -1926,7 +2408,7 @@ const ServiceManagement: React.FC = () => {
   };
 
   const handleDropdownFocus = (
-    type: 'customer' | 'product' | 'priority' | 'assignee'
+    type: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService'
   ) => {
     const setDropdownState = getSetDropdownState(type);
 
@@ -1936,32 +2418,170 @@ const ServiceManagement: React.FC = () => {
       case 'customer':
         originalOptions = customers;
         break;
+      case 'engine':
+        originalOptions = customerEngines;
+        break;
+      case 'address':
+        originalOptions = customerAddresses;
+        break;
       case 'product':
         originalOptions = products;
-        break;
-      case 'priority':
-        originalOptions = formPriorityOptions;
         break;
       case 'assignee':
         originalOptions = users;
         break;
+      case 'typeOfVisit':
+        originalOptions = typeOfVisitOptions;
+        break;
+      case 'typeOfService':
+        originalOptions = typeOfServiceOptions;
+        break;
     }
 
-    // Reset dropdown to show all original options
+    // Reset dropdown to show all original options, but preserve existing search term if dropdown is already open
     setDropdownState(prev => ({
       ...prev,
       isOpen: true,
-      searchTerm: '',
+      searchTerm: prev.isOpen ? prev.searchTerm : '',
       filteredOptions: originalOptions,
       selectedIndex: 0
     }));
   };
 
   const handleDropdownSelect = (
-    type: 'customer' | 'product' | 'priority' | 'assignee',
+    type: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService',
     value: string
   ) => {
     const setDropdownState = getSetDropdownState(type);
+
+    // Handle customer selection - fetch engines
+    if (type === 'customer') {
+      // Find the selected customer to get their type
+      const selectedCustomer = customers.find(c => c._id === value);
+      
+      setTicketFormData(prev => ({
+        ...prev,
+        customer: value,
+        engineSerialNumber: '', // Reset engine when customer changes
+        engineModel: '', // Reset engine model when customer changes
+        kva: '', // Reset KVA when customer changes
+        businessVertical: selectedCustomer?.customerType || '', // Auto-populate with customer type
+        selectedAddress: '' // New field for selected address
+      }));
+      
+      // Fetch engines and addresses for this customer
+      fetchCustomerData(value);
+      
+      // Clear error for this field when selected
+      if (formErrors.customer) {
+        setFormErrors(prev => ({ ...prev, customer: '' }));
+      }
+      
+      // Close current dropdown
+      setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
+      
+      // Move to next dropdown after selection
+      moveToNextDropdown(type);
+      return;
+    }
+
+    // Handle engine selection - auto-populate fields
+    if (type === 'engine') {
+      const selectedEngine = customerEngines.find(engine => engine.engineSerialNumber === value);
+
+      
+      if (selectedEngine) {
+        setTicketFormData(prev => {
+          const newData = {
+            ...prev,
+            engineSerialNumber: selectedEngine.engineSerialNumber,
+            engineModel: selectedEngine.engineModel || '', // Auto-populate engine model
+            kva: selectedEngine.kva || '', // Auto-populate KVA rating
+            // Preserve the customer's businessVertical, don't override with engine's vertical
+            businessVertical: prev.businessVertical || selectedEngine.businessVertical || ''
+          };
+
+          return newData;
+        });
+      }
+      
+      // Clear error for this field when selected
+      if (formErrors.engineSerialNumber) {
+        setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
+      }
+      
+      // Close current dropdown
+      setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
+      
+      // Move to next dropdown after selection
+      moveToNextDropdown(type);
+      return;
+    }
+
+    // Handle address selection
+    if (type === 'address') {
+      setTicketFormData(prev => ({
+        ...prev,
+        selectedAddress: value
+      }));
+      
+      // Clear error for this field when selected
+      if (formErrors.selectedAddress) {
+        setFormErrors(prev => ({ ...prev, selectedAddress: '' }));
+      }
+      
+      // Close current dropdown
+      setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
+      
+      // Move to Service Request Type field after selection
+      setTimeout(() => {
+        const serviceRequestTypeInput = document.querySelector('input[placeholder="Enter service request type"]') as HTMLInputElement;
+        if (serviceRequestTypeInput) {
+          serviceRequestTypeInput.focus();
+        }
+      }, 100);
+      return;
+    }
+
+    // Handle Type of Visit selection
+    if (type === 'typeOfVisit') {
+      setTicketFormData(prev => ({
+        ...prev,
+        typeOfVisit: value as TypeOfVisit
+      }));
+      
+      // Clear error for this field when selected
+      if (formErrors.typeOfVisit) {
+        setFormErrors(prev => ({ ...prev, typeOfVisit: '' }));
+      }
+      
+      // Close current dropdown
+      setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
+      
+      // Move to next dropdown after selection
+      moveToNextDropdown(type);
+      return;
+    }
+
+    // Handle Type of Service selection
+    if (type === 'typeOfService') {
+      setTicketFormData(prev => ({
+        ...prev,
+        typeOfService: value as TypeOfService
+      }));
+      
+      // Clear error for this field when selected
+      if (formErrors.typeOfService) {
+        setFormErrors(prev => ({ ...prev, typeOfService: '' }));
+      }
+      
+      // Close current dropdown
+      setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
+      
+      // Move to next field after selection
+      moveToNextDropdown(type);
+      return;
+    }
 
     // For products, check if the selected product is in stock
     if (type === 'product') {
@@ -1972,18 +2592,14 @@ const ServiceManagement: React.FC = () => {
       }
     }
 
-    // Update form data
+    // Update form data for other types
     setTicketFormData(prev => ({
       ...prev,
-      [type === 'customer' ? 'customer' :
-        type === 'product' ? 'product' :
-          type === 'priority' ? 'priority' : 'assignedTo']: value
+      [type === 'product' ? 'product' : 'assignedTo']: value
     }));
 
     // Clear error for this field when selected
-    const errorField = type === 'customer' ? 'customer' :
-      type === 'product' ? 'product' :
-        type === 'priority' ? 'priority' : 'assignedTo';
+    const errorField = type === 'product' ? 'product' : 'assignedTo';
     if (formErrors[errorField]) {
       setFormErrors(prev => ({ ...prev, [errorField]: '' }));
     }
@@ -2001,14 +2617,16 @@ const ServiceManagement: React.FC = () => {
       const target = event.target as HTMLElement;
       if (!target.closest('.dropdown-container')) {
         setShowStatusDropdown(false);
-        setShowPriorityDropdown(false);
         setShowAssigneeDropdown(false);
 
         // Close enhanced dropdowns
         setCustomerDropdown(prev => ({ ...prev, isOpen: false }));
+        setEngineDropdown(prev => ({ ...prev, isOpen: false }));
+        setAddressDropdown(prev => ({ ...prev, isOpen: false }));
         setProductDropdown(prev => ({ ...prev, isOpen: false }));
-        setPriorityDropdown(prev => ({ ...prev, isOpen: false }));
         setAssigneeDropdown(prev => ({ ...prev, isOpen: false }));
+        setTypeOfVisitDropdown(prev => ({ ...prev, isOpen: false }));
+        setTypeOfServiceDropdown(prev => ({ ...prev, isOpen: false }));
       }
     };
 
@@ -2087,7 +2705,6 @@ const ServiceManagement: React.FC = () => {
             <button
               onClick={() => {
                 setShowStatusDropdown(!showStatusDropdown);
-                setShowPriorityDropdown(false);
                 setShowAssigneeDropdown(false);
               }}
               className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
@@ -2114,37 +2731,7 @@ const ServiceManagement: React.FC = () => {
             )}
           </div>
 
-          {/* Priority Custom Dropdown */}
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => {
-                setShowPriorityDropdown(!showPriorityDropdown);
-                setShowStatusDropdown(false);
-                setShowAssigneeDropdown(false);
-              }}
-              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-            >
-              <span className="text-gray-700 truncate mr-1">{getPriorityLabel(priorityFilter)}</span>
-              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showPriorityDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showPriorityDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                {priorityOptions.map((option) => (
-                  <button
-                    key={option.value}
-                    onClick={() => {
-                      setPriorityFilter(option.value as TicketPriority | 'all');
-                      setShowPriorityDropdown(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${priorityFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                      }`}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+
 
           {/* Assignee Custom Dropdown */}
           <div className="relative dropdown-container">
@@ -2152,7 +2739,6 @@ const ServiceManagement: React.FC = () => {
               onClick={() => {
                 setShowAssigneeDropdown(!showAssigneeDropdown);
                 setShowStatusDropdown(false);
-                setShowPriorityDropdown(false);
               }}
               className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
             >
@@ -2206,29 +2792,69 @@ const ServiceManagement: React.FC = () => {
 
       {/* Tickets Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto max-w-full">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ticket
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Service Request Number
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer & Service Type
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  Customer Type
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Priority & Status
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Customer Name
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Assigned To
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Engine Serial Number
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Service Date
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  Engine Model
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Site Info
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[80px]">
+                  KVA
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[140px]">
+                  Service Request Date
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[140px]">
+                  Service Attended Date
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  Hour Meter Reading
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[130px]">
+                  Type of Service
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
+                  Site ID
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Service Engineer Name
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  Complaint Code
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Complaint Description
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Resolution Description
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  eFSR Number
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[180px]">
+                  eFSR Closure Date And Time
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[150px]">
+                  Service Request Status
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[120px]">
+                  OEM Name
+                </th>
+
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider min-w-[100px]">
                   Actions
                 </th>
               </tr>
@@ -2236,7 +2862,7 @@ const ServiceManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center">
+                  <td colSpan={20} className="px-6 py-8 text-center">
                     <div className="flex flex-col items-center justify-center space-y-3">
                       <LoadingSpinner size="lg" />
                       <p className="text-gray-500 text-sm">Loading tickets...</p>
@@ -2245,99 +2871,95 @@ const ServiceManagement: React.FC = () => {
                 </tr>
               ) : filteredTickets.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No tickets found</td>
+                  <td colSpan={20} className="px-6 py-8 text-center text-gray-500">No tickets found</td>
                 </tr>
               ) : (
                 filteredTickets.map((ticket) => (
                   <tr key={ticket._id} className="hover:bg-gray-50">
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-blue-600">{ticket.ticketNumber}</div>
-                        <div className="text-xs text-gray-900 font-medium">
-                          {ticket.description?.length > 50
-                            ? `${ticket.description.substring(0, 50)}...`
-                            : ticket.description}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          Created {formatDate(ticket.createdAt)}
-                        </div>
+                      <div className="text-sm font-medium text-blue-600">{ticket.ServiceRequestNumber || ticket.ticketNumber || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{ticket.CustomerType || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900 max-w-[150px] truncate" title={ticket.CustomerName || getCustomerName(ticket.customer) || '-'}>
+                        {ticket.CustomerName || getCustomerName(ticket.customer) || '-'}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-xs font-medium text-gray-900">{getCustomerName(ticket.customer)}</div>
-                        {ticket.serviceRequestType && (
-                          <div className="text-xs text-gray-600 capitalize">{ticket.serviceRequestType}</div>
-                        )}
-                        {ticket.engineSerialNumber && (
-                          <div className="text-xs text-gray-500">Engine: {ticket.engineSerialNumber}</div>
-                        )}
-                      </div>
+                      <div className="text-xs text-gray-900">{ticket.EngineSerialNumber || ticket.engineSerialNumber || '-'}</div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="space-y-1">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(ticket.priority)}`}>
-                          {ticket.priority.charAt(0).toUpperCase() + ticket.priority.slice(1)}
-                        </span>
-                        <br />
-                        <div className="flex items-center space-x-1">
-                          <select
-                            value={ticket.status}
-                            onChange={(e) => handleStatusUpdate(ticket._id, e.target.value as TicketStatus)}
-                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${getStatusColor(ticket.status)}`}
-                          >
-                            <option value="open">Open</option>
-                            <option value="in_progress">In Progress</option>
-                            <option value="resolved">Resolved</option>
-                            <option value="closed">Closed</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
-
-                        </div>
+                      <div className="text-xs text-gray-900">{ticket.EngineModel || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{ticket.KVA || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">
+                        {ticket.ServiceRequestDate ? formatDateTime(ticket.ServiceRequestDate) : (ticket.serviceRequiredDate ? formatDateTime(ticket.serviceRequiredDate) : '-')}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-xs text-gray-900">
-                        {(() => {
-                          const userName = getUserName(ticket.assignedTo);
-                          return userName || (
-                            <span className="text-gray-400 italic">Unassigned</span>
-                          );
-                        })()}
+                        {ticket.ServiceAttendedDate ? formatDateTime(ticket.ServiceAttendedDate) : (ticket.ServiceRequestDate ? formatDateTime(ticket.ServiceRequestDate) : '-')}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-xs text-gray-900 space-y-1">
-                        {ticket.serviceRequiredDate && (
-                          <div>
-                            <span className="text-blue-600 font-medium">{formatDateTime(ticket.serviceRequiredDate)}</span>
-                          </div>
-                        )}
-                        {!ticket.requestSubmissionDate && !ticket.serviceRequiredDate && (
-                          <span className="text-gray-400 italic">-</span>
-                        )}
+                      <div className="text-xs text-gray-900">{ticket.HourMeterReading || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{ticket.TypeofService || ticket.serviceRequestType || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{ticket.SiteID || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">
+                        {ticket.ServiceEngineerName && typeof ticket.ServiceEngineerName === 'object' && 'firstName' in ticket.ServiceEngineerName 
+                          ? `${(ticket.ServiceEngineerName as any).firstName} ${(ticket.ServiceEngineerName as any).lastName}`
+                          : getUserName(ticket.assignedTo) || '-'
+                        }
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="space-y-1">
-                        {ticket.siteIdentifier && (
-                          <div className="text-xs text-gray-900">
-                            <span className="font-medium">Site ID:</span> {ticket.siteIdentifier}
-                          </div>
-                        )}
-                        {ticket.siteLocation && (
-                          <div className="text-xs text-gray-600">
-                            <span className="font-medium">Location:</span> {ticket.siteLocation}
-                          </div>
-                        )}
-                        {ticket.stateName && (
-                          <div className="text-xs text-gray-600">
-                            <span className="font-medium">State:</span> {ticket.stateName}
-                          </div>
-                        )}
-                        {!ticket.siteIdentifier && !ticket.siteLocation && (
-                          <span className="text-gray-400 italic text-xs">-</span>
-                        )}
+                      <div className="text-xs text-gray-900">{ticket.ComplaintCode || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900 max-w-[150px] truncate" title={ticket.ComplaintDescription || ticket.complaintDescription || '-'}>
+                        {ticket.ComplaintDescription || ticket.complaintDescription || '-'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900 max-w-[150px] truncate" title={ticket.ResolutionDescription || '-'}>
+                        {ticket.ResolutionDescription || '-'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">{ticket.eFSRNumber || '-'}</div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900">
+                        {ticket.eFSRClosureDateAndTime ? formatDateTime(ticket.eFSRClosureDateAndTime) : '-'}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center space-x-1">
+                        <select
+                          value={ticket.ServiceRequestStatus || ticket.status || 'open'}
+                          onChange={(e) => handleServiceRequestStatusUpdate(ticket._id, e.target.value)}
+                          className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full border-0 cursor-pointer focus:ring-2 focus:ring-blue-500 ${getStatusColor((ticket.ServiceRequestStatus || ticket.status || 'open') as TicketStatus)}`}
+                        >
+                          <option value="open">Open</option>
+                          <option value="resolved">Resolved</option>
+                          <option value="closed">Closed</option>
+                        </select>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-900 max-w-[150px] truncate" title={ticket.OemName || '-'}>
+                        {ticket.OemName || '-'}
                       </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
@@ -2362,7 +2984,7 @@ const ServiceManagement: React.FC = () => {
 
                         <button
                           onClick={() => handleEditTicket(ticket)}
-                          className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
+                          className="p-1 rounded transition-colors text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50"
                           title="Edit Ticket"
                         >
                           <Edit className="w-4 h-4" />
@@ -2439,7 +3061,7 @@ const ServiceManagement: React.FC = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Enhanced Customer Dropdown */}
                 <div className="relative dropdown-container" ref={customerDropdownRef} id="customer-dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2500,94 +3122,73 @@ const ServiceManagement: React.FC = () => {
                   )}
                 </div>
 
-                {/* Multi-Select Product Dropdown - Spans 2 columns on large screens */}
-                <div className="lg:col-span-2">
-                  <MultiSelect
-                    ref={multiSelectRef}
-                    label="Products (Multi-Select)"
-                    options={products.map(product => ({
-                      value: product._id,
-                      label: product.name,
-                      category: product.category,
-                      brand: product.brand,
-                      modelNumber: product.modelNumber,
-                      partNumber: product.modelNumber, // Use modelNumber as partNumber
-                      availableStock: product.stockQuantity || 0 // Use stockQuantity as availableStock
-                    }))}
-                    value={ticketFormData.products || []}
-                    onChange={(selectedValues) => {
-                      setTicketFormData(prev => ({ ...prev, products: selectedValues }));
-                      // Clear error when user selects
-                      if (formErrors.products) {
-                        setFormErrors(prev => ({ ...prev, products: '' }));
-                      }
-                    }}
-                    placeholder="Search by name or part number..."
-                    error={formErrors.products}
-                    searchable={true}
-                    maxHeight={200}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Enhanced Priority Dropdown */}
-                <div className="relative dropdown-container" ref={priorityDropdownRef} id="priority-dropdown-container">
+                {/* Enhanced Engine Dropdown */}
+                <div className="relative dropdown-container" ref={engineDropdownRef} id="engine-dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Priority *
+                    Engine Serial Number
                   </label>
                   <div className="relative">
                     <input
                       type="text"
-                      value={priorityDropdown.searchTerm || (ticketFormData.priority ? formPriorityOptions.find(p => p.value === ticketFormData.priority)?.label || '' : '')}
+                      value={engineDropdown.searchTerm || ticketFormData.engineSerialNumber || ''}
                       onChange={(e) => {
-                        setPriorityDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                        handleDropdownSearch('priority', e.target.value);
+                        setEngineDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                        handleDropdownSearch('engine', e.target.value);
                         // Clear error when user starts typing
-                        if (formErrors.priority) {
-                          setFormErrors(prev => ({ ...prev, priority: '' }));
+                        if (formErrors.engineSerialNumber) {
+                          setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
                         }
                       }}
-                      onKeyDown={(e) => handleDropdownKeyDown('priority', e, priorityDropdown.filteredOptions, (value) => handleDropdownSelect('priority', value))}
-                      onFocus={() => handleDropdownFocus('priority')}
+                      onKeyDown={(e) => handleDropdownKeyDown('engine', e, engineDropdown.filteredOptions, (value) => handleDropdownSelect('engine', value))}
+                      onFocus={() => handleDropdownFocus('engine')}
                       onBlur={() => {
                         // Delay closing to allow for clicks on dropdown items
                         setTimeout(() => {
-                          setPriorityDropdown(prev => ({ ...prev, isOpen: false }));
+                          setEngineDropdown(prev => ({ ...prev, isOpen: false }));
                         }, 200);
                       }}
-                      placeholder="Select priority..."
-                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.priority ? 'border-red-500' : 'border-gray-300'
-                        } ${priorityDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                      placeholder="Search engine..."
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.engineSerialNumber ? 'border-red-500' : 'border-gray-300'
+                        } ${engineDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
                     />
                     <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                   </div>
 
-                  {priorityDropdown.isOpen && (
+                  {engineDropdown.isOpen && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                      {priorityDropdown.filteredOptions.length > 0 ? (
-                        priorityDropdown.filteredOptions.map((priority, index) => (
+                      {engineDropdown.filteredOptions.length > 0 ? (
+                        engineDropdown.filteredOptions.map((engine, index) => (
                           <button
-                            key={priority.value}
-                            id={`priority-item-${index}`}
+                            key={engine.engineSerialNumber}
+                            id={`engine-item-${index}`}
                             type="button"
-                            onClick={() => handleDropdownSelect('priority', priority.value)}
-                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === priorityDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                            onClick={() => handleDropdownSelect('engine', engine.engineSerialNumber)}
+                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === engineDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
                               }`}
                           >
-                            <div className="font-medium">{priority.label}</div>
+                            <div className="font-medium">{engine.engineSerialNumber}</div>
+                            <div className="text-xs text-gray-500">
+                              {engine.engineModel && `Model: ${engine.engineModel}`}
+                              {engine.kva && ` | KVA: ${engine.kva}`}
+                              {engine.siteId && ` | Site: ${engine.siteId}`}
+                            </div>
                           </button>
                         ))
                       ) : (
-                        <div className="px-3 py-2 text-gray-500 text-sm">No priorities found</div>
+                        <div className="px-3 py-2 text-gray-500 text-sm">
+                          {ticketFormData.customer ? 'No engines found for this customer' : 'Select a customer first'}
+                        </div>
                       )}
                     </div>
                   )}
-                  {formErrors.priority && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.priority}</p>
+                  {formErrors.engineSerialNumber && (
+                    <p className="text-red-500 text-xs mt-1">{formErrors.engineSerialNumber}</p>
                   )}
                 </div>
+              </div>
 
+              {/* Second Row - Assignee and Scheduled Date */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Enhanced Assignee Dropdown */}
                 <div className="relative dropdown-container" ref={assigneeDropdownRef} id="assignee-dropdown-container">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2672,7 +3273,8 @@ const ServiceManagement: React.FC = () => {
                       if (e.key === 'Tab' && !e.shiftKey) {
                         e.preventDefault();
                         e.stopPropagation();
-                        descriptionRef.current?.focus();
+                        // Focus the address dropdown
+                        moveFromScheduledDateToAddress();
                       }
                       // Open date picker on Enter key
                       if (e.key === 'Enter') {
@@ -2691,45 +3293,82 @@ const ServiceManagement: React.FC = () => {
 
 
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description *
-                </label>
-                <textarea
-                  ref={descriptionRef}
-                  value={ticketFormData.description}
-                  onChange={(e) => {
-                    setTicketFormData({ ...ticketFormData, description: e.target.value });
-                    // Clear error when user starts typing
-                    if (formErrors.description) {
-                      setFormErrors(prev => ({ ...prev, description: '' }));
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Tab' && !e.shiftKey) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      // Focus the service request type input
-                      const serviceRequestTypeInput = document.querySelector('input[placeholder="Enter service request type"]') as HTMLInputElement;
-                      if (serviceRequestTypeInput) {
-                        serviceRequestTypeInput.focus();
-                      }
-                    }
-                  }}
-                  rows={4}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.description ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  placeholder="Describe in detail..."
-                />
-                {formErrors.description && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">
-                  {ticketFormData.description.trim().split(/\s+/).filter((word: string) => word.length > 0).length}/500 words
-                </p>
+
+
+              {/* Address Dropdown Row */}
+              <div className="grid grid-cols-1 gap-4">
+                {/* Enhanced Address Dropdown */}
+                <div className="relative dropdown-container" ref={addressDropdownRef} id="address-dropdown-container">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Customer Address
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={addressDropdown.searchTerm || ticketFormData.selectedAddress || ''}
+                      onChange={(e) => {
+                        setAddressDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                        handleDropdownSearch('address', e.target.value);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Tab' && !e.shiftKey) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Focus the Service Request Type field
+                          const serviceRequestTypeInput = document.querySelector('input[placeholder="Enter service request type"]') as HTMLInputElement;
+                          if (serviceRequestTypeInput) {
+                            serviceRequestTypeInput.focus();
+                          }
+                        } else {
+                          handleDropdownKeyDown('address', e, addressDropdown.filteredOptions, (value) => handleDropdownSelect('address', value));
+                        }
+                      }}
+                      onFocus={() => {
+                        handleDropdownFocus('address');
+                        // Ensure the dropdown opens when focused
+                        setAddressDropdown(prev => ({ ...prev, isOpen: true }));
+                      }}
+                      onBlur={() => {
+                        // Delay closing to allow for clicks on dropdown items
+                        setTimeout(() => {
+                          setAddressDropdown(prev => ({ ...prev, isOpen: false }));
+                        }, 200);
+                      }}
+                      placeholder="Search address..."
+                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${addressDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-300'}`}
+                    />
+                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  </div>
+
+                  {addressDropdown.isOpen && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                      {addressDropdown.filteredOptions.length > 0 ? (
+                        addressDropdown.filteredOptions.map((address, index) => (
+                          <button
+                            key={address.id}
+                            id={`address-item-${index}`}
+                            type="button"
+                            onClick={() => handleDropdownSelect('address', address.fullAddress)}
+                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === addressDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                              }`}
+                          >
+                            <div className="font-medium">{address.fullAddress}</div>
+                            <div className="text-xs text-gray-500">
+                              {address.isPrimary && 'Primary Address'}
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-gray-500 text-sm">
+                          {ticketFormData.customer ? 'No addresses found for this customer' : 'Select a customer first'}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* New Standardized Fields Section */}
+              {/* Service Request Details Section - Input Fields */}
               <div className="border-t border-gray-200 pt-4">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Service Request Details</h3>
 
@@ -2737,12 +3376,23 @@ const ServiceManagement: React.FC = () => {
                   {/* Service Request Type */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Service Request Type *
+                      Service Request Type
                     </label>
                     <input
                       type="text"
                       value={ticketFormData.serviceRequestType}
                       onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequestType: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Tab' && !e.shiftKey) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Focus the Service Required Date field
+                          const serviceRequiredDateInput = document.querySelector('input[placeholder="Select date and time"]') as HTMLInputElement;
+                          if (serviceRequiredDateInput) {
+                            serviceRequiredDateInput.focus();
+                          }
+                        }
+                      }}
                       className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter service request type"
                     />
@@ -2762,6 +3412,15 @@ const ServiceManagement: React.FC = () => {
                         (e.target as HTMLInputElement).showPicker?.();
                       }}
                       onKeyDown={(e) => {
+                        if (e.key === 'Tab' && !e.shiftKey) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Focus the Type of Visit input field
+                          const typeOfVisitInput = document.querySelector('input[placeholder="Search type of visit..."]') as HTMLInputElement;
+                          if (typeOfVisitInput) {
+                            typeOfVisitInput.focus();
+                          }
+                        }
                         // Open date picker on Enter key
                         if (e.key === 'Enter') {
                           (e.target as HTMLInputElement).showPicker?.();
@@ -2772,56 +3431,9 @@ const ServiceManagement: React.FC = () => {
                     />
                   </div>
 
-                  {/* Engine Serial Number */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Engine Serial Number
-                    </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.engineSerialNumber}
-                      onChange={(e) => {
-                        setTicketFormData({ ...ticketFormData, engineSerialNumber: e.target.value });
-                        // Clear error when user starts typing
-                        if (formErrors.engineSerialNumber) {
-                          setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
-                        }
-                      }}
-                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.engineSerialNumber ? 'border-red-500' : 'border-gray-300'}`}
-                      placeholder="Enter engine serial number (6-12 characters)"
-                    />
-                    {formErrors.engineSerialNumber && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.engineSerialNumber}</p>
-                    )}
-                  </div>
 
-                  {/* MAGIEC System Code */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      MAGIEC
-                    </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.magiecSystemCode}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, magiecSystemCode: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter MAGIEC"
-                    />
-                  </div>
 
-                  {/* MAGIEC Code */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      MAGIEC Code
-                    </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.magiecCode}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, magiecCode: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter MAGIEC code"
-                    />
-                  </div>
+
 
                   {/* Business Vertical */}
                   <div>
@@ -2832,221 +3444,263 @@ const ServiceManagement: React.FC = () => {
                       type="text"
                       value={ticketFormData.businessVertical}
                       onChange={(e) => setTicketFormData({ ...ticketFormData, businessVertical: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter vertical"
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                      placeholder="Auto-populated from customer type"
+                      readOnly
                     />
                   </div>
 
                   {/* Site Identifier */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Site ID
-                    </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.siteIdentifier}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, siteIdentifier: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter site ID"
-                    />
-                  </div>
 
-                  {/* State Name */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      State Name
-                    </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.stateName}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, stateName: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter state name"
-                    />
-                  </div>
 
-                  {/* Site Location */}
-                  <div>
+                  {/* Enhanced Type of Visit Dropdown */}
+                  <div className="relative dropdown-container" ref={typeOfVisitDropdownRef} id="type-of-visit-dropdown-container">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Site Location
+                      Type of Visit
                     </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.siteLocation}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, siteLocation: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter site location"
-                    />
-                  </div>
-
-                  {/* Invoice Raised */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Invoice Raised
-                    </label>
-                    <div className="flex items-center space-x-4">
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          name="invoiceRaised"
-                          value="true"
-                          checked={ticketFormData.invoiceRaised === true}
-                          onChange={(e) => setTicketFormData({ ...ticketFormData, invoiceRaised: e.target.value === 'true' })}
-                          className="mr-2"
-                        />
-                        <span className="text-sm">Yes</span>
-                      </label>
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          name="invoiceRaised"
-                          value="false"
-                          checked={ticketFormData.invoiceRaised === false}
-                          onChange={(e) => setTicketFormData({ ...ticketFormData, invoiceRaised: e.target.value === 'true' })}
-                          className="mr-2"
-                        />
-                        <span className="text-sm">No</span>
-                      </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={typeOfVisitDropdown.searchTerm || (ticketFormData.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === ticketFormData.typeOfVisit)?.label || '' : '')}
+                        onChange={(e) => {
+                          setTypeOfVisitDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                          handleDropdownSearch('typeOfVisit', e.target.value);
+                          // Clear error when user starts typing
+                          if (formErrors.typeOfVisit) {
+                            setFormErrors(prev => ({ ...prev, typeOfVisit: '' }));
+                          }
+                        }}
+                        onKeyDown={(e) => handleDropdownKeyDown('typeOfVisit', e, typeOfVisitDropdown.filteredOptions, (value) => handleDropdownSelect('typeOfVisit', value))}
+                        onFocus={() => handleDropdownFocus('typeOfVisit')}
+                        onBlur={() => {
+                          // Delay closing to allow for clicks on dropdown items
+                          setTimeout(() => {
+                            setTypeOfVisitDropdown(prev => ({ ...prev, isOpen: false }));
+                          }, 200);
+                        }}
+                        placeholder="Search type of visit..."
+                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.typeOfVisit ? 'border-red-500' : 'border-gray-300'
+                          } ${typeOfVisitDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                      />
+                      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     </div>
+
+                    {typeOfVisitDropdown.isOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                        {typeOfVisitDropdown.filteredOptions.length > 0 ? (
+                          typeOfVisitDropdown.filteredOptions.map((option, index) => (
+                            <button
+                              key={option.value}
+                              id={`type-of-visit-item-${index}`}
+                              type="button"
+                              onClick={() => handleDropdownSelect('typeOfVisit', option.value)}
+                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === typeOfVisitDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                                }`}
+                            >
+                              <div className="font-medium">{option.label}</div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-500 text-sm">No options found</div>
+                        )}
+                      </div>
+                    )}
+                    {formErrors.typeOfVisit && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.typeOfVisit}</p>
+                    )}
+                  </div>
+
+
+
+                  {/* Enhanced Type of Service Dropdown */}
+                  <div className="relative dropdown-container" ref={typeOfServiceDropdownRef} id="type-of-service-dropdown-container">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Type of Service
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={typeOfServiceDropdown.searchTerm || (ticketFormData.typeOfService ? typeOfServiceOptions.find(opt => opt.value === ticketFormData.typeOfService)?.label || '' : '')}
+                        onChange={(e) => {
+                          setTypeOfServiceDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                          handleDropdownSearch('typeOfService', e.target.value);
+                          // Clear error when user starts typing
+                          if (formErrors.typeOfService) {
+                            setFormErrors(prev => ({ ...prev, typeOfService: '' }));
+                          }
+                        }}
+                        onKeyDown={(e) => handleDropdownKeyDown('typeOfService', e, typeOfServiceDropdown.filteredOptions, (value) => handleDropdownSelect('typeOfService', value))}
+                        onFocus={() => handleDropdownFocus('typeOfService')}
+                        onBlur={() => {
+                          // Delay closing to allow for clicks on dropdown items
+                          setTimeout(() => {
+                            setTypeOfServiceDropdown(prev => ({ ...prev, isOpen: false }));
+                          }, 200);
+                        }}
+                        placeholder="Search type of service..."
+                        className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.typeOfService ? 'border-red-500' : 'border-gray-300'
+                          } ${typeOfServiceDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                      />
+                      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    </div>
+
+                    {typeOfServiceDropdown.isOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                        {typeOfServiceDropdown.filteredOptions.length > 0 ? (
+                          typeOfServiceDropdown.filteredOptions.map((option, index) => (
+                            <button
+                              key={option.value}
+                              id={`type-of-service-item-${index}`}
+                              type="button"
+                              onClick={() => handleDropdownSelect('typeOfService', option.value)}
+                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === typeOfServiceDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                                }`}
+                            >
+                              <div className="font-medium">{option.label}</div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-500 text-sm">No options found</div>
+                        )}
+                      </div>
+                    )}
+                    {formErrors.typeOfService && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.typeOfService}</p>
+                    )}
+                  </div>
+
+                  {/* Complaint Description */}
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Complaint Description
+                    </label>
+                    <textarea
+                      id="complaint-description-textarea"
+                      value={ticketFormData.complaintDescription || ''}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, complaintDescription: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Tab' && !e.shiftKey) {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          // Focus the Create Ticket button
+                          const createTicketButton = document.getElementById('create-ticket-button') as HTMLButtonElement;
+                          if (createTicketButton) {
+                            createTicketButton.focus();
+                          }
+                        }
+                      }}
+                      rows={3}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      placeholder="Enter complaint description..."
+                    />
+                  </div>
+
+                </div>
+              </div>
+
+              {/* Selected Data Display Section */}
+              <div className="border-t border-gray-200 pt-4">
+                <h3 className="text-lg font-medium text-gray-900 mb-4">Selected Data</h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {/* Selected Address */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Selected Address
+                    </label>
+                    <input
+                      type="text"
+                      value={ticketFormData.selectedAddress || 'No address selected'}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                      readOnly
+                    />
+                  </div>
+
+                  {/* Engine Model */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Engine Model
+                    </label>
+                    <input
+                      type="text"
+                      value={(() => {
+                        const selectedEngine = customerEngines.find(engine => engine.engineSerialNumber === ticketFormData.engineSerialNumber);
+                        return selectedEngine?.engineModel || 'No engine selected';
+                      })()}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                      readOnly
+                    />
+                  </div>
+
+                  {/* KVA Rating */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      KVA Rating
+                    </label>
+                    <input
+                      type="text"
+                      value={(() => {
+                        const selectedEngine = customerEngines.find(engine => engine.engineSerialNumber === ticketFormData.engineSerialNumber);
+                        return selectedEngine?.kva ? `${selectedEngine.kva} KVA` : 'No engine selected';
+                      })()}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                      readOnly
+                    />
+                  </div>
+
+                  {/* DG Make */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      DG Make
+                    </label>
+                    <input
+                      type="text"
+                      value={(() => {
+                        const selectedEngine = customerEngines.find(engine => engine.engineSerialNumber === ticketFormData.engineSerialNumber);
+                        return selectedEngine?.dgMake || 'No engine selected';
+                      })()}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                      readOnly
+                    />
+                  </div>
+
+                  {/* DG Serial Number */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      DG Serial Number
+                    </label>
+                    <input
+                      type="text"
+                      value={(() => {
+                        const selectedEngine = customerEngines.find(engine => engine.engineSerialNumber === ticketFormData.engineSerialNumber);
+                        return selectedEngine?.dgSerialNumber || 'No engine selected';
+                      })()}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                      readOnly
+                    />
+                  </div>
+
+                  {/* Alternator Make */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Alternator Make
+                    </label>
+                    <input
+                      type="text"
+                      value={(() => {
+                        const selectedEngine = customerEngines.find(engine => engine.engineSerialNumber === ticketFormData.engineSerialNumber);
+                        return selectedEngine?.alternatorMake || 'No engine selected';
+                      })()}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                      readOnly
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Service Charge Field */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Service Charge (₹)
-                </label>
-                <input
-                  type="number"
-                  value={ticketFormData.serviceCharge}
-                  onChange={(e) => setTicketFormData({ ...ticketFormData, serviceCharge: Number(e.target.value) || 0 })}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Tab' && !e.shiftKey) {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      // Focus the first customer input to complete the cycle
-                      const customerInput = document.querySelector('input[placeholder="Search customer..."]') as HTMLInputElement;
-                      if (customerInput) {
-                        customerInput.focus();
-                      }
-                    }
-                  }}
-                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter service charge"
-                  min="0"
-                  step="0.01"
-                />
-              </div>
 
-              {/* Cost Summary */}
-              {(ticketFormData.product || (ticketFormData.products && ticketFormData.products.length > 0) || ticketFormData.serviceCharge > 0) && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-                  <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
-                    <TrendingUp className="w-4 h-4 mr-2" />
-                    Cost Summary
-                  </h3>
-                  <div className="space-y-2">
-                    {/* Single product (legacy support) */}
-                    {ticketFormData.product && !ticketFormData.products?.length && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">
-                          {(() => {
-                            const product = products.find(p => p._id === ticketFormData.product);
-                            if (!product) return 'Selected Product';
-                            return (
-                              <>
-                                {product.name}
-                                {product.modelNumber && (
-                                  <span className="text-xs text-gray-400 ml-1">(Part: {product.modelNumber})</span>
-                                )}
-                                {product.stockQuantity !== undefined && (
-                                  <span className={`text-xs ml-1 ${product.stockQuantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    Stock: {product.stockQuantity}
-                                  </span>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </span>
-                        <span className="text-sm font-medium text-gray-900">
-                          ₹{products.find(p => p._id === ticketFormData.product)?.price || 0}
-                        </span>
-                      </div>
-                    )}
-                    
-                    {/* Multiple products */}
-                    {ticketFormData.products && ticketFormData.products.length > 0 && (
-                      <>
-                        {ticketFormData.products.map((productId) => {
-                          const product = products.find(p => p._id === productId);
-                          return product ? (
-                            <div key={productId} className="flex justify-between items-center">
-                              <span className="text-sm text-gray-600">
-                                {product.name}
-                                {product.modelNumber && (
-                                  <span className="text-xs text-gray-400 ml-1">(Part: {product.modelNumber})</span>
-                                )}
-                                {product.stockQuantity !== undefined && (
-                                  <span className={`text-xs ml-1 ${product.stockQuantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    Stock: {product.stockQuantity}
-                                  </span>
-                                )}
-                              </span>
-                              <span className="text-sm font-medium text-gray-900">
-                                ₹{product.price || 0}
-                              </span>
-                            </div>
-                          ) : null;
-                        })}
-                      </>
-                    )}
-                    
-                    {ticketFormData.serviceCharge > 0 && (
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Service Charge</span>
-                        <span className="text-sm font-medium text-gray-900">
-                          ₹{ticketFormData.serviceCharge}
-                        </span>
-                      </div>
-                    )}
-                    
-                    {(ticketFormData.product || (ticketFormData.products && ticketFormData.products.length > 0) || ticketFormData.serviceCharge > 0) && (
-                      <div className="border-t border-gray-200 pt-2 mt-2">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm font-medium text-gray-900">Total</span>
-                          <span className="text-sm font-bold text-blue-600">
-                            ₹{(() => {
-                              let total = 0;
-                              
-                              // Add single product cost (legacy support)
-                              if (ticketFormData.product && !ticketFormData.products?.length) {
-                                const product = products.find(p => p._id === ticketFormData.product);
-                                total += product?.price || 0;
-                              }
-                              
-                              // Add multiple products cost
-                              if (ticketFormData.products && ticketFormData.products.length > 0) {
-                                ticketFormData.products.forEach(productId => {
-                                  const product = products.find(p => p._id === productId);
-                                  if (product) {
-                                    total += product.price || 0;
-                                  }
-                                });
-                              }
-                              
-                              // Add service charge
-                              total += ticketFormData.serviceCharge || 0;
-                              
-                              return total;
-                            })()}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
+
+
 
               <div className="flex space-x-3 pt-4">
                 <button
@@ -3060,6 +3714,7 @@ const ServiceManagement: React.FC = () => {
                   Cancel
                 </button>
                 <button
+                  id="create-ticket-button"
                   type="submit"
                   disabled={submitting}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
@@ -3082,8 +3737,8 @@ const ServiceManagement: React.FC = () => {
       {/* Edit Ticket Modal */}
       {showEditModal && editingTicket && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <h2 className="text-xl font-semibold text-gray-900">Edit Service Ticket</h2>
               <button
                 onClick={() => setShowEditModal(false)}
@@ -3093,7 +3748,7 @@ const ServiceManagement: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleUpdateTicket(); }} className="p-4 space-y-3">
+            <form onSubmit={(e) => { e.preventDefault(); handleUpdateTicket(); }} className="p-6 space-y-4">
               {formErrors.general && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">
                   <p className="text-red-600 text-sm">{formErrors.general}</p>
@@ -3104,361 +3759,137 @@ const ServiceManagement: React.FC = () => {
                 <p className="text-blue-800 text-sm font-medium">Ticket: {editingTicket.ticketNumber}</p>
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                {/* Enhanced Customer Dropdown */}
-                <div className="relative dropdown-container" ref={customerDropdownRef} id="customer-dropdown-container">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Customer *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={customerDropdown.searchTerm || (ticketFormData.customer ? customers.find(c => c._id === ticketFormData.customer)?.name || '' : '')}
-                      onChange={(e) => {
-                        setCustomerDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                        handleDropdownSearch('customer', e.target.value);
-                        // Clear error when user starts typing
-                        if (formErrors.customer) {
-                          setFormErrors(prev => ({ ...prev, customer: '' }));
-                        }
-                      }}
-                      onKeyDown={(e) => handleDropdownKeyDown('customer', e, customerDropdown.filteredOptions, (value) => handleDropdownSelect('customer', value))}
-                      onFocus={() => handleDropdownFocus('customer')}
-                      onBlur={() => {
-                        // Delay closing to allow for clicks on dropdown items
-                        setTimeout(() => {
-                          setCustomerDropdown(prev => ({ ...prev, isOpen: false }));
-                        }, 200);
-                      }}
-                      placeholder="Search customer..."
-                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.customer ? 'border-red-500' : 'border-gray-300'
-                        } ${customerDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                    />
-                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  </div>
-
-                  {customerDropdown.isOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                      {customerDropdown.filteredOptions.length > 0 ? (
-                        customerDropdown.filteredOptions.map((customer, index) => (
-                          <button
-                            key={customer._id}
-                            id={`customer-item-${index}`}
-                            type="button"
-                            onClick={() => handleDropdownSelect('customer', customer._id)}
-                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === customerDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
-                              }`}
-                          >
-                            <div className="font-medium">{customer.name}</div>
-                            {customer.email && (
-                              <div className="text-xs text-gray-500">{customer.email}</div>
-                            )}
-                          </button>
-                        ))
-                      ) : (
-                        <div className="px-3 py-2 text-gray-500 text-sm">No customers found</div>
-                      )}
+              {/* Main Form Layout - Two Columns */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Left Column */}
+                <div className="space-y-4">
+                  {/* Customer Dropdown */}
+                  <div className="relative dropdown-container" ref={customerDropdownRef} id="customer-dropdown-container">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Customer *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={customerDropdown.searchTerm || (ticketFormData.customer ? customers.find(c => c._id === ticketFormData.customer)?.name || '' : '')}
+                        onChange={(e) => {
+                          setCustomerDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                          handleDropdownSearch('customer', e.target.value);
+                          if (formErrors.customer) {
+                            setFormErrors(prev => ({ ...prev, customer: '' }));
+                          }
+                        }}
+                        onKeyDown={(e) => handleDropdownKeyDown('customer', e, customerDropdown.filteredOptions, (value) => handleDropdownSelect('customer', value))}
+                        onFocus={() => handleDropdownFocus('customer')}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            setCustomerDropdown(prev => ({ ...prev, isOpen: false }));
+                          }, 200);
+                        }}
+                        placeholder="Search customer..."
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.customer ? 'border-red-500' : 'border-gray-300'
+                          } ${customerDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                      />
+                      <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     </div>
-                  )}
-                  {formErrors.customer && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.customer}</p>
-                  )}
-                </div>
 
-                {/* Enhanced Product Dropdown - Spans 2 columns on large screens */}
-                <div className="relative dropdown-container lg:col-span-2" ref={productDropdownRef} id="product-dropdown-container" style={{ zIndex: 1000 }}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Product
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={productDropdown.searchTerm || (ticketFormData.product ? (() => {
-                        const product = products.find(p => p._id === ticketFormData.product);
-                        if (!product) return '';
-                        return product.modelNumber ? `${product.name} (Part: ${product.modelNumber})` : product.name;
-                      })() : '')}
-                      onChange={(e) => {
-                        setProductDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                        handleDropdownSearch('product', e.target.value);
-                        // Clear error when user starts typing
-                        if (formErrors.product) {
-                          setFormErrors(prev => ({ ...prev, product: '' }));
-                        }
-                      }}
-                      onKeyDown={(e) => handleDropdownKeyDown('product', e, productDropdown.filteredOptions, (value) => handleDropdownSelect('product', value))}
-                      onFocus={() => handleDropdownFocus('product')}
-                      onBlur={() => {
-                        // Delay closing to allow for clicks on dropdown items
-                        setTimeout(() => {
-                          setProductDropdown(prev => ({ ...prev, isOpen: false }));
-                        }, 200);
-                      }}
-                      placeholder="Search by name or part number..."
-                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.product ? 'border-red-500' : 'border-gray-300'
-                        } ${productDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                    />
-                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  </div>
-
-                  {productDropdown.isOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-[1001] max-h-60 overflow-y-auto min-w-full" style={{ minWidth: '100%', maxWidth: 'none' }}>
-                      {productDropdown.filteredOptions.length > 0 ? (
-                        productDropdown.filteredOptions.map((product, index) => {
-                          const isInStock = (product.stockQuantity || 0) > 0;
-                          const stockQuantity = product.stockQuantity || 0;
-
-                          return (
+                    {customerDropdown.isOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                        {customerDropdown.filteredOptions.length > 0 ? (
+                          customerDropdown.filteredOptions.map((customer, index) => (
                             <button
-                              key={product._id}
-                              id={`product-item-${index}`}
+                              key={customer._id}
+                              id={`customer-item-${index}`}
                               type="button"
-                              onClick={() => !isInStock ? null : handleDropdownSelect('product', product._id)}
-                              disabled={!isInStock}
-                              className={`w-full px-3 py-2 text-left transition-colors ${!isInStock
-                                ? 'text-gray-400 cursor-not-allowed bg-gray-50'
-                                : index === productDropdown.selectedIndex
-                                  ? 'bg-blue-100 text-blue-900 hover:bg-blue-50'
-                                  : 'text-gray-700 hover:bg-blue-50'
+                              onClick={() => handleDropdownSelect('customer', customer._id)}
+                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === customerDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
                                 }`}
                             >
-                              <div className="flex justify-between items-start gap-2">
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-medium truncate">{product.name}</div>
-                                  <div className="text-xs text-gray-500 truncate">{product.category}</div>
-                                  {product.modelNumber && (
-                                    <div className="text-xs text-gray-400 truncate">Part: {product.modelNumber}</div>
-                                  )}
-                                </div>
-                                <div className="flex flex-col items-end space-y-1 flex-shrink-0">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full whitespace-nowrap ${isInStock
-                                    ? 'bg-green-100 text-green-700 border border-green-200'
-                                    : 'bg-red-100 text-red-700 border border-red-200'
-                                    }`}>
-                                    {isInStock ? `${stockQuantity} in stock` : 'Out of stock'}
-                                  </span>
-                                  {product.price && (
-                                    <span className="text-xs text-gray-600 font-medium whitespace-nowrap">
-                                      ₹{product.price}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
+                              <div className="font-medium">{customer.name}</div>
+                              {customer.email && (
+                                <div className="text-xs text-gray-500">{customer.email}</div>
+                              )}
                             </button>
-                          );
-                        })
-                      ) : (
-                        <div className="px-3 py-2 text-gray-500 text-sm">No products found</div>
-                      )}
-                    </div>
-                  )}
-                  {formErrors.product && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.product}</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Enhanced Priority Dropdown */}
-                <div className="relative dropdown-container" ref={priorityDropdownRef} id="priority-dropdown-container">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Priority *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={priorityDropdown.searchTerm || (ticketFormData.priority ? formPriorityOptions.find(p => p.value === ticketFormData.priority)?.label || '' : '')}
-                      onChange={(e) => {
-                        setPriorityDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                        handleDropdownSearch('priority', e.target.value);
-                        // Clear error when user starts typing
-                        if (formErrors.priority) {
-                          setFormErrors(prev => ({ ...prev, priority: '' }));
-                        }
-                      }}
-                      onKeyDown={(e) => handleDropdownKeyDown('priority', e, priorityDropdown.filteredOptions, (value) => handleDropdownSelect('priority', value))}
-                      onFocus={() => handleDropdownFocus('priority')}
-                      onBlur={() => {
-                        // Delay closing to allow for clicks on dropdown items
-                        setTimeout(() => {
-                          setPriorityDropdown(prev => ({ ...prev, isOpen: false }));
-                        }, 200);
-                      }}
-                      placeholder="Select priority..."
-                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.priority ? 'border-red-500' : 'border-gray-300'
-                        } ${priorityDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                    />
-                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-500 text-sm">No customers found</div>
+                        )}
+                      </div>
+                    )}
+                    {formErrors.customer && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.customer}</p>
+                    )}
                   </div>
 
-                  {priorityDropdown.isOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                      {priorityDropdown.filteredOptions.length > 0 ? (
-                        priorityDropdown.filteredOptions.map((priority, index) => (
-                          <button
-                            key={priority.value}
-                            id={`priority-item-${index}`}
-                            type="button"
-                            onClick={() => handleDropdownSelect('priority', priority.value)}
-                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === priorityDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
-                              }`}
-                          >
-                            <div className="font-medium">{priority.label}</div>
-                          </button>
-                        ))
-                      ) : (
-                        <div className="px-3 py-2 text-gray-500 text-sm">No priorities found</div>
-                      )}
+                  {/* Assign To Dropdown */}
+                  <div className="relative dropdown-container" ref={assigneeDropdownRef} id="assignee-dropdown-container">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Assign To *
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={assigneeDropdown.searchTerm || (ticketFormData.assignedTo ? users.find(u => u._id === ticketFormData.assignedTo)?.fullName || '' : '')}
+                        onChange={(e) => {
+                          setAssigneeDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                          handleDropdownSearch('assignee', e.target.value);
+                          if (formErrors.assignedTo) {
+                            setFormErrors(prev => ({ ...prev, assignedTo: '' }));
+                          }
+                        }}
+                        onKeyDown={(e) => handleDropdownKeyDown('assignee', e, assigneeDropdown.filteredOptions, (value) => handleDropdownSelect('assignee', value))}
+                        onFocus={() => handleDropdownFocus('assignee')}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            setAssigneeDropdown(prev => ({ ...prev, isOpen: false }));
+                          }, 200);
+                        }}
+                        placeholder="Search technician..."
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.assignedTo ? 'border-red-500' : 'border-gray-300'
+                          } ${assigneeDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                      />
+                      <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     </div>
-                  )}
-                  {formErrors.priority && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.priority}</p>
-                  )}
-                </div>
 
-                {/* Enhanced Assignee Dropdown */}
-                <div className="relative dropdown-container" ref={assigneeDropdownRef} id="assignee-dropdown-container">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Assign To *
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={assigneeDropdown.searchTerm || (ticketFormData.assignedTo ? users.find(u => u._id === ticketFormData.assignedTo)?.fullName || '' : '')}
-                      onChange={(e) => {
-                        setAssigneeDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                        handleDropdownSearch('assignee', e.target.value);
-                        // Clear error when user starts typing
-                        if (formErrors.assignedTo) {
-                          setFormErrors(prev => ({ ...prev, assignedTo: '' }));
-                        }
-                      }}
-                      onKeyDown={(e) => handleDropdownKeyDown('assignee', e, assigneeDropdown.filteredOptions, (value) => handleDropdownSelect('assignee', value))}
-                      onFocus={() => handleDropdownFocus('assignee')}
-                      onBlur={() => {
-                        // Delay closing to allow for clicks on dropdown items
-                        setTimeout(() => {
-                          setAssigneeDropdown(prev => ({ ...prev, isOpen: false }));
-                        }, 200);
-                      }}
-                      placeholder="Search technician..."
-                      className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.assignedTo ? 'border-red-500' : 'border-gray-300'
-                        } ${assigneeDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
-                    />
-                    <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    {assigneeDropdown.isOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                        {assigneeDropdown.filteredOptions.length > 0 ? (
+                          assigneeDropdown.filteredOptions.map((user, index) => (
+                            <button
+                              key={user._id}
+                              id={`assignee-item-${index}`}
+                              type="button"
+                              onClick={() => handleDropdownSelect('assignee', user._id)}
+                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === assigneeDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                                }`}
+                            >
+                              <div className="font-medium">{getUserName(user)}</div>
+                              {user.email && (
+                                <div className="text-xs text-gray-500">{user.email}</div>
+                              )}
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-500 text-sm">No technicians found</div>
+                        )}
+                      </div>
+                    )}
+                    {formErrors.assignedTo && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.assignedTo}</p>
+                    )}
                   </div>
 
-                  {assigneeDropdown.isOpen && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                      {assigneeDropdown.filteredOptions.length > 0 ? (
-                        assigneeDropdown.filteredOptions.map((user, index) => (
-                          <button
-                            key={user._id}
-                            id={`assignee-item-${index}`}
-                            type="button"
-                            onClick={() => handleDropdownSelect('assignee', user._id)}
-                            className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === assigneeDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
-                              }`}
-                          >
-                            <div className="font-medium">{getUserName(user)}</div>
-                            {user.email && (
-                              <div className="text-xs text-gray-500">{user.email}</div>
-                            )}
-                          </button>
-                        ))
-                      ) : (
-                        <div className="px-3 py-2 text-gray-500 text-sm">No technicians found</div>
-                      )}
-                    </div>
-                  )}
-                  {formErrors.assignedTo && (
-                    <p className="text-red-500 text-xs mt-1">{formErrors.assignedTo}</p>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Scheduled Date
-                  </label>
-                  <input
-                    type="date"
-                    value={ticketFormData.scheduledDate}
-                    onChange={(e) => setTicketFormData({ ...ticketFormData, scheduledDate: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              {/* Standardized Fields Section */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Service Request Details</h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {/* Service Request Type */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Service Request Type *
+                      Service Request Type
                     </label>
                     <input
                       type="text"
                       value={ticketFormData.serviceRequestType}
                       onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequestType: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Enter service request type"
-                    />
-                  </div>
-
-                  {/* Service Required Date */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Service Required Date *
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={ticketFormData.serviceRequiredDate ? ticketFormData.serviceRequiredDate.replace('Z', '') : ''}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequiredDate: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-
-                  {/* Engine Serial Number */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Engine Serial Number
-                    </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.engineSerialNumber}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, engineSerialNumber: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter engine serial number"
-                    />
-                  </div>
-
-                  {/* MAGIEC */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      MAGIEC
-                    </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.magiecSystemCode}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, magiecSystemCode: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter MAGIEC"
-                    />
-                  </div>
-
-                  {/* MAGIEC Code */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      MAGIEC Code
-                    </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.magiecCode}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, magiecCode: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter MAGIEC code"
                     />
                   </div>
 
@@ -3471,113 +3902,184 @@ const ServiceManagement: React.FC = () => {
                       type="text"
                       value={ticketFormData.businessVertical}
                       onChange={(e) => setTicketFormData({ ...ticketFormData, businessVertical: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter vertical"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                      placeholder="Auto-populated from customer type"
+                      readOnly
                     />
                   </div>
 
-                  {/* Site ID */}
+                  {/* Type of Visit */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Site ID
+                      Type of Visit
                     </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.siteIdentifier}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, siteIdentifier: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter site ID"
-                    />
+                    <select
+                      value={ticketFormData.typeOfVisit}
+                      onChange={(e) => {
+                        setTicketFormData({ ...ticketFormData, typeOfVisit: e.target.value as TypeOfVisit });
+                        if (formErrors.typeOfVisit) {
+                          setFormErrors(prev => ({ ...prev, typeOfVisit: '' }));
+                        }
+                      }}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.typeOfVisit ? 'border-red-500' : 'border-gray-300'}`}
+                    >
+                      <option value="">Select Type of Visit</option>
+                      {typeOfVisitOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {formErrors.typeOfVisit && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.typeOfVisit}</p>
+                    )}
                   </div>
 
-                  {/* State Name */}
+                  {/* Complaint Description */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      State Name
+                      Complaint Description
                     </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.stateName}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, stateName: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter state name"
+                    <textarea
+                      value={ticketFormData.complaintDescription || ''}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, complaintDescription: e.target.value })}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      placeholder="Enter complaint description..."
                     />
                   </div>
+                </div>
 
-                  {/* Site Location */}
-                  <div>
+                {/* Right Column */}
+                <div className="space-y-4">
+                  {/* Engine Serial Number */}
+                  <div className="relative dropdown-container" ref={engineDropdownRef} id="engine-dropdown-container">
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Site Location
+                      Engine Serial Number
                     </label>
-                    <input
-                      type="text"
-                      value={ticketFormData.siteLocation}
-                      onChange={(e) => setTicketFormData({ ...ticketFormData, siteLocation: e.target.value })}
-                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Enter site location"
-                    />
-                  </div>
-
-                  {/* Invoice Raised */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Invoice Raised
-                    </label>
-                    <div className="flex space-x-4">
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          name="invoiceRaised"
-                          value="true"
-                          checked={ticketFormData.invoiceRaised === true}
-                          onChange={(e) => setTicketFormData({ ...ticketFormData, invoiceRaised: e.target.value === 'true' })}
-                          className="mr-2"
-                        />
-                        Yes
-                      </label>
-                      <label className="flex items-center">
-                        <input
-                          type="radio"
-                          name="invoiceRaised"
-                          value="false"
-                          checked={ticketFormData.invoiceRaised === false}
-                          onChange={(e) => setTicketFormData({ ...ticketFormData, invoiceRaised: e.target.value === 'true' })}
-                          className="mr-2"
-                        />
-                        No
-                      </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={engineDropdown.searchTerm || ticketFormData.engineSerialNumber || ''}
+                        onChange={(e) => {
+                          setEngineDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                          handleDropdownSearch('engine', e.target.value);
+                          if (formErrors.engineSerialNumber) {
+                            setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
+                          }
+                        }}
+                        onKeyDown={(e) => handleDropdownKeyDown('engine', e, engineDropdown.filteredOptions, (value) => handleDropdownSelect('engine', value))}
+                        onFocus={() => handleDropdownFocus('engine')}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            setEngineDropdown(prev => ({ ...prev, isOpen: false }));
+                          }, 200);
+                        }}
+                        placeholder="Search engine..."
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${formErrors.engineSerialNumber ? 'border-red-500' : 'border-gray-300'
+                          } ${engineDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                      />
+                      <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     </div>
+
+                    {engineDropdown.isOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                        {engineDropdown.filteredOptions.length > 0 ? (
+                          engineDropdown.filteredOptions.map((engine, index) => (
+                            <button
+                              key={engine.engineSerialNumber}
+                              id={`engine-item-${index}`}
+                              type="button"
+                              onClick={() => handleDropdownSelect('engine', engine.engineSerialNumber)}
+                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === engineDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
+                                }`}
+                            >
+                              <div className="font-medium">{engine.engineSerialNumber}</div>
+                              <div className="text-xs text-gray-500">
+                                {engine.engineModel && `Model: ${engine.engineModel}`}
+                                {engine.kva && ` | KVA: ${engine.kva}`}
+                                {engine.siteId && ` | Site: ${engine.siteId}`}
+                              </div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-500 text-sm">
+                            {ticketFormData.customer ? 'No engines found for this customer' : 'Select a customer first'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {formErrors.engineSerialNumber && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.engineSerialNumber}</p>
+                    )}
+                  </div>
+
+                  {/* Scheduled Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Scheduled Date
+                    </label>
+                    <input
+                      type="date"
+                      value={ticketFormData.scheduledDate}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, scheduledDate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  {/* Service Required Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Service Required Date *
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={ticketFormData.serviceRequiredDate ? ticketFormData.serviceRequiredDate.replace('Z', '') : ''}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, serviceRequiredDate: e.target.value })}
+                      onFocus={(e) => {
+                        (e.target as HTMLInputElement).showPicker?.();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          (e.target as HTMLInputElement).showPicker?.();
+                        }
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Select date and time"
+                    />
+                  </div>
+
+                  {/* Type of Service */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Type of Service
+                    </label>
+                    <select
+                      value={ticketFormData.typeOfService}
+                      onChange={(e) => {
+                        setTicketFormData({ ...ticketFormData, typeOfService: e.target.value as TypeOfService });
+                        if (formErrors.typeOfService) {
+                          setFormErrors(prev => ({ ...prev, typeOfService: '' }));
+                        }
+                      }}
+                      className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.typeOfService ? 'border-red-500' : 'border-gray-300'}`}
+                    >
+                      <option value="">Select Type of Service</option>
+                      {typeOfServiceOptions.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {formErrors.typeOfService && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.typeOfService}</p>
+                    )}
                   </div>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description *
-                </label>
-                <textarea
-                  value={ticketFormData.description}
-                  onChange={(e) => {
-                    setTicketFormData({ ...ticketFormData, description: e.target.value });
-                    // Clear error when user starts typing
-                    if (formErrors.description) {
-                      setFormErrors(prev => ({ ...prev, description: '' }));
-                    }
-                  }}
-                  rows={4}
-                  className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.description ? 'border-red-500' : 'border-gray-300'
-                    }`}
-                  placeholder="Describe in detail..."
-                />
-                {formErrors.description && (
-                  <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">
-                  {ticketFormData.description.trim().split(/\s+/).filter((word: string) => word.length > 0).length}/500 words
-                </p>
-              </div>
-
-              <div className="flex space-x-3 pt-4">
+              {/* Footer Buttons */}
+              <div className="flex space-x-3 pt-6 border-t border-gray-200">
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
@@ -3600,6 +4102,8 @@ const ServiceManagement: React.FC = () => {
                   )}
                 </button>
               </div>
+
+
             </form>
           </div>
         </div>
@@ -3623,6 +4127,58 @@ const ServiceManagement: React.FC = () => {
             </div>
 
             <div className="p-4 space-y-3">
+              {/* Service Request Information */}
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-blue-900 mb-3 flex items-center">
+                  <FileText className="w-5 h-5 mr-2" />
+                  Service Request Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Service Request Number</p>
+                    <p className="text-lg font-bold text-blue-900">{selectedTicket.ServiceRequestNumber || selectedTicket.ticketNumber}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Customer Type</p>
+                    <p className="text-lg font-semibold text-blue-900">{selectedTicket.CustomerType || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Type of Service</p>
+                    <p className="text-lg font-semibold text-blue-900">{selectedTicket.TypeofService || selectedTicket.serviceRequestType || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-blue-700 uppercase tracking-wide">Site ID</p>
+                    <p className="text-lg font-semibold text-blue-900">{selectedTicket.SiteID || 'Not specified'}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Engine Information */}
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-green-900 mb-3 flex items-center">
+                  <Wrench className="w-5 h-5 mr-2" />
+                  Engine Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide">Engine Serial Number</p>
+                    <p className="text-lg font-semibold text-green-900">{selectedTicket.EngineSerialNumber || selectedTicket.engineSerialNumber || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide">Engine Model</p>
+                    <p className="text-lg font-semibold text-green-900">{selectedTicket.EngineModel || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide">KVA Rating</p>
+                    <p className="text-lg font-semibold text-green-900">{selectedTicket.KVA || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide">Hour Meter Reading</p>
+                    <p className="text-lg font-semibold text-green-900">{selectedTicket.HourMeterReading || 'Not specified'}</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Ticket Overview */}
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
                 {/* Customer Information */}
@@ -3659,147 +4215,258 @@ const ServiceManagement: React.FC = () => {
                   )}
                 </div>
 
-                {/* Product Information */}
-                <div className="bg-gray-50 p-6 rounded-lg">
-                  <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
-                    <Package className="w-5 h-5 mr-2" />
-                    Product Details
+                {/* Service Engineer Information */}
+                <div className="bg-purple-50 p-6 rounded-lg">
+                  <h3 className="text-lg font-medium text-purple-900 mb-4 flex items-center">
+                    <User className="w-5 h-5 mr-2" />
+                    Service Engineer Details
                   </h3>
-                  {selectedTicket.products && Array.isArray(selectedTicket.products) && selectedTicket.products.length > 0 ? (
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">Products ({selectedTicket.products.length})</h4>
-                      {selectedTicket.products.map((product, index) => {
-                        const productData = typeof product === 'string' 
-                          ? products.find(p => p._id === product)
-                          : product;
-                        
-                        return productData ? (
-                          <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white">
-                            <div className="flex justify-between items-start">
-                              <div className="flex-1">
-                                <div className="font-medium text-gray-900">{productData.name}</div>
-                                <div className="text-sm text-gray-500 capitalize">{productData.category}</div>
-                                {productData.modelNumber && (
-                                  <div className="text-sm text-blue-600">Part: {productData.modelNumber}</div>
-                                )}
-                                {productData.brand && (
-                                  <div className="text-sm text-gray-500">Brand: {productData.brand}</div>
-                                )}
-                              </div>
-                              <div className="text-right">
-                                {productData.price && (
-                                  <div className="font-medium text-green-600">₹{productData.price}</div>
-                                )}
-                                {productData.stockQuantity !== undefined && (
-                                  <div className={`text-xs ${productData.stockQuantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                    Stock: {productData.stockQuantity}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ) : null;
-                      })}
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-xs text-gray-600">Assigned Engineer</p>
+                      <p className="font-medium text-purple-900">
+                        {selectedTicket.ServiceEngineerName && typeof selectedTicket.ServiceEngineerName === 'object' && 'firstName' in selectedTicket.ServiceEngineerName 
+                          ? `${(selectedTicket.ServiceEngineerName as any).firstName} ${(selectedTicket.ServiceEngineerName as any).lastName}`
+                          : getUserName(selectedTicket.assignedTo) || getUserName(selectedTicket.serviceRequestEngineer) || 'Unassigned'
+                        }
+                      </p>
                     </div>
-                  ) : selectedTicket.product && typeof selectedTicket.product === 'object' ? (
-                    <div className="space-y-2">
+                    {selectedTicket.ServiceEngineerName && typeof selectedTicket.ServiceEngineerName === 'object' && (selectedTicket.ServiceEngineerName as any).email && (
                       <div>
-                        <p className="text-xs text-gray-600">Product</p>
-                        <p className="font-medium">{selectedTicket.product.name}</p>
+                        <p className="text-xs text-gray-600">Engineer Email</p>
+                        <p className="font-medium text-purple-900">{(selectedTicket.ServiceEngineerName as any).email}</p>
                       </div>
+                    )}
+                    {selectedTicket.ServiceEngineerName && typeof selectedTicket.ServiceEngineerName === 'object' && (selectedTicket.ServiceEngineerName as any).phone && (
                       <div>
-                        <p className="text-xs text-gray-600">Category</p>
-                        <p className="font-medium capitalize">{selectedTicket.product.category}</p>
+                        <p className="text-xs text-gray-600">Engineer Phone</p>
+                        <p className="font-medium text-purple-900">{(selectedTicket.ServiceEngineerName as any).phone}</p>
                       </div>
-                      {selectedTicket.product.modelNumber && (
-                        <div>
-                          <p className="text-xs text-gray-600">Part Number</p>
-                          <p className="font-medium">{selectedTicket.product.modelNumber}</p>
-                        </div>
-                      )}
-                      {selectedTicket.product.brand && (
-                        <div>
-                          <p className="text-xs text-gray-600">Brand</p>
-                          <p className="font-medium">{selectedTicket.product.brand}</p>
-                        </div>
-                      )}
-                      {selectedTicket.product.price && (
-                        <div>
-                          <p className="text-xs text-gray-600">Price</p>
-                          <p className="font-medium text-green-600">₹{selectedTicket.product.price}</p>
-                        </div>
-                      )}
-                      {selectedTicket.serialNumber && (
-                        <div>
-                          <p className="text-xs text-gray-600">Serial Number</p>
-                          <p className="font-medium">{selectedTicket.serialNumber}</p>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-gray-500">No products assigned</p>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {/* Ticket Status */}
                 <div className="bg-gray-50 p-6 rounded-lg">
                   <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
                     <Activity className="w-5 h-5 mr-2" />
-                    Status & Priority
+                    Service Request Status & Priority
                   </h3>
                   <div className="space-y-3">
                     <div>
-                      <p className="text-xs text-gray-600">Status</p>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedTicket.status)}`}>
-                        {selectedTicket.status.replace('_', ' ').charAt(0).toUpperCase() + selectedTicket.status.replace('_', ' ').slice(1)}
+                      <p className="text-xs text-gray-600">Service Request Status</p>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor((selectedTicket.ServiceRequestStatus || selectedTicket.status) as TicketStatus)}`}>
+                        {(selectedTicket.ServiceRequestStatus || selectedTicket.status || 'open').replace('_', ' ').charAt(0).toUpperCase() + (selectedTicket.ServiceRequestStatus || selectedTicket.status || 'open').replace('_', ' ').slice(1)}
                       </span>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-600">Priority</p>
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getPriorityColor(selectedTicket.priority)}`}>
-                        {selectedTicket.priority.charAt(0).toUpperCase() + selectedTicket.priority.slice(1)}
-                      </span>
+                      <p className="text-xs text-gray-600">OEM Name</p>
+                      <p className="font-medium">{selectedTicket.OemName || 'Not specified'}</p>
                     </div>
-
-                    <div>
-                      <p className="text-xs text-gray-600">Assigned To</p>
-                      <p className="font-medium">{getUserName(selectedTicket.assignedTo) || 'Unassigned'}</p>
-                    </div>
-                    {selectedTicket.serviceCharge && selectedTicket.serviceCharge > 0 && (
-                      <div>
-                        <p className="text-xs text-gray-600">Service Charge</p>
-                        <p className="font-medium text-green-600">₹{selectedTicket.serviceCharge}</p>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
 
               {/* Timeline Information */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div>
-                  <h4 className="text-sm font-medium text-gray-600">Created</h4>
-                  <p className="text-lg font-medium">{formatDateTime(selectedTicket.createdAt)}</p>
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-indigo-900 mb-3 flex items-center">
+                  <Clock className="w-5 h-5 mr-2" />
+                  Timeline Information
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Created</p>
+                    <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.createdAt)}</p>
+                  </div>
+                  {selectedTicket.ServiceRequestDate && (
+                    <div>
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Service Request Date</p>
+                      <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.ServiceRequestDate)}</p>
+                    </div>
+                  )}
+                  {selectedTicket.ServiceAttendedDate && (
+                    <div>
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Service Attended Date</p>
+                      <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.ServiceAttendedDate)}</p>
+                    </div>
+                  )}
+                  {selectedTicket.scheduledDate && (
+                    <div>
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Scheduled</p>
+                      <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.scheduledDate)}</p>
+                    </div>
+                  )}
+                  {selectedTicket.completedDate && (
+                    <div>
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">Completed</p>
+                      <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.completedDate)}</p>
+                    </div>
+                  )}
+                  {selectedTicket.eFSRClosureDateAndTime && (
+                    <div>
+                      <p className="text-xs font-medium text-indigo-700 uppercase tracking-wide">eFSR Closure Date</p>
+                      <p className="text-lg font-semibold text-indigo-900">{formatDateTime(selectedTicket.eFSRClosureDateAndTime)}</p>
+                    </div>
+                  )}
                 </div>
-                {selectedTicket.scheduledDate && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-600">Scheduled</h4>
-                    <p className="text-lg font-medium">{formatDateTime(selectedTicket.scheduledDate)}</p>
-                  </div>
-                )}
-                {selectedTicket.completedDate && (
-                  <div>
-                    <h4 className="text-sm font-medium text-gray-600">Completed</h4>
-                    <p className="text-lg font-medium">{formatDateTime(selectedTicket.completedDate)}</p>
-                  </div>
-                )}
               </div>
 
-              {/* Description */}
-              <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-3">Description</h3>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-gray-700 whitespace-pre-wrap">{selectedTicket.description}</p>
+              {/* Complaint & Resolution Details */}
+              {(selectedTicket.ComplaintDescription || selectedTicket.ResolutionDescription || selectedTicket.ComplaintCode || selectedTicket.eFSRNumber) && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-orange-900 mb-3 flex items-center">
+                    <MessageSquare className="w-5 h-5 mr-2" />
+                    Complaint & Resolution Details
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    {selectedTicket.ComplaintCode && (
+                      <div>
+                        <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">Complaint Code</p>
+                        <p className="text-lg font-semibold text-orange-900">{selectedTicket.ComplaintCode}</p>
+                      </div>
+                    )}
+                    {selectedTicket.eFSRNumber && (
+                      <div>
+                        <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">eFSR Number</p>
+                        <p className="text-lg font-semibold text-orange-900">{selectedTicket.eFSRNumber}</p>
+                      </div>
+                    )}
+                    {selectedTicket.ComplaintDescription && (
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">Complaint Description</p>
+                        <p className="text-lg font-semibold text-orange-900">{selectedTicket.ComplaintDescription}</p>
+                      </div>
+                    )}
+                    {selectedTicket.ResolutionDescription && (
+                      <div className="md:col-span-2 lg:col-span-4">
+                        <p className="text-xs font-medium text-orange-700 uppercase tracking-wide">Resolution Description</p>
+                        <p className="text-lg font-semibold text-orange-900">{selectedTicket.ResolutionDescription}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Visit Details */}
+              <div className="transition-all duration-500 ease-in-out bg-green-50 border-2 border-green-300 rounded-lg p-4 shadow-lg">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-lg font-medium flex items-center transition-colors duration-500 text-green-800">
+                    <MapPin className="w-5 h-5 mr-2 transition-colors duration-500 text-green-600" />
+                    Visit Details
+                    <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      ✓ Active
+                    </span>
+                  </h3>
+                  {!isEditingVisitDetails ? (
+                    <button
+                      onClick={startEditingVisitDetails}
+                      className="px-3 py-1 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-1"
+                    >
+                      <Edit className="w-4 h-4" />
+                      <span>Edit</span>
+                    </button>
+                  ) : (
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={handleVisitDetailsUpdate}
+                        disabled={updatingVisitDetails}
+                        className="px-3 py-1 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:bg-gray-400 transition-colors flex items-center space-x-1"
+                      >
+                        {updatingVisitDetails ? (
+                          <>
+                            <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin"></div>
+                            <span>Saving...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            <span>Save</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={cancelEditingVisitDetails}
+                        disabled={updatingVisitDetails}
+                        className="px-3 py-1 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 disabled:bg-gray-400 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Type of Visit
+                    </label>
+                    {isEditingVisitDetails ? (
+                      <select
+                        value={editableVisitDetails.typeOfVisit}
+                        onChange={(e) => setEditableVisitDetails(prev => ({ ...prev, typeOfVisit: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select Type of Visit</option>
+                        {typeOfVisitOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="font-medium transition-colors duration-500 text-green-700">
+                        {selectedTicket.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === selectedTicket.typeOfVisit)?.label : 'Not specified'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Nature of Work
+                    </label>
+                    {isEditingVisitDetails ? (
+                      <select
+                        value={editableVisitDetails.natureOfWork}
+                        onChange={(e) => setEditableVisitDetails(prev => ({ ...prev, natureOfWork: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select Nature of Work</option>
+                        {natureOfWorkOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="font-medium transition-colors duration-500 text-green-700">
+                        {selectedTicket.natureOfWork ? natureOfWorkOptions.find(opt => opt.value === selectedTicket.natureOfWork)?.label : 'Not specified'}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Sub Nature of Work
+                    </label>
+                    {isEditingVisitDetails ? (
+                      <select
+                        value={editableVisitDetails.subNatureOfWork}
+                        onChange={(e) => setEditableVisitDetails(prev => ({ ...prev, subNatureOfWork: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Select Sub Nature of Work</option>
+                        {subNatureOfWorkOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="font-medium transition-colors duration-500 text-green-700">
+                        {selectedTicket.subNatureOfWork ? subNatureOfWorkOptions.find(opt => opt.value === selectedTicket.subNatureOfWork)?.label : 'Not specified'}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -3868,25 +4535,23 @@ const ServiceManagement: React.FC = () => {
               <div className="bg-gray-50 p-4 rounded-lg">
                 <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
                   <Settings className="w-5 h-5 mr-2" />
-                  Update Status
+                  Update Service Request Status
                 </h3>
                 <div className="flex items-center space-x-3">
-                  <span className="text-sm text-gray-600">Current Status:</span>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedTicket.status)}`}>
-                    {selectedTicket.status.replace('_', ' ').charAt(0).toUpperCase() + selectedTicket.status.replace('_', ' ').slice(1)}
+                  <span className="text-sm text-gray-600">Current Service Request Status:</span>
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor((selectedTicket.ServiceRequestStatus || selectedTicket.status) as TicketStatus)}`}>
+                    {(selectedTicket.ServiceRequestStatus || selectedTicket.status || 'open').replace('_', ' ').charAt(0).toUpperCase() + (selectedTicket.ServiceRequestStatus || selectedTicket.status || 'open').replace('_', ' ').slice(1)}
                   </span>
                   <span className="text-sm text-gray-600">→</span>
                   <div className="flex items-center space-x-2">
                     <select
-                      value={selectedTicket.status}
-                      onChange={(e) => handleStatusUpdate(selectedTicket._id, e.target.value as TicketStatus)}
+                      value={selectedTicket.ServiceRequestStatus || selectedTicket.status || 'open'}
+                      onChange={(e) => handleServiceRequestStatusUpdate(selectedTicket._id, e.target.value)}
                       className="px-3 py-1 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       <option value="open">Open</option>
-                      <option value="in_progress">In Progress</option>
                       <option value="resolved">Resolved</option>
                       <option value="closed">Closed</option>
-                      <option value="cancelled">Cancelled</option>
                     </select>
 
                   </div>
@@ -3895,16 +4560,6 @@ const ServiceManagement: React.FC = () => {
 
               {/* Action Buttons */}
               <div className="flex space-x-3 pt-4 border-t border-gray-200">
-                <button
-                  onClick={() => {
-                    setShowDetailsModal(false);
-                    handleEditTicket(selectedTicket);
-                  }}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-                >
-                  <Edit className="w-4 h-4" />
-                  <span>Edit Ticket</span>
-                </button>
                 {selectedTicket.status === 'resolved' && (
                   <button
                     onClick={() => {
@@ -3918,13 +4573,6 @@ const ServiceManagement: React.FC = () => {
                   </button>
                 )}
 
-                <button
-                  onClick={() => handleExportToPDF(selectedTicket)}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors flex items-center space-x-2"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Export PDF</span>
-                </button>
                 {selectedTicket.status === 'resolved' && ticketsWithFeedback.has(selectedTicket._id) && (
                   <button
                     onClick={() => handleViewFeedback(selectedTicket._id)}
@@ -3939,8 +4587,6 @@ const ServiceManagement: React.FC = () => {
           </div>
         </div>
       )}
-
-
 
       {/* Digital Service Report Modal */}
       {showDigitalReportModal && selectedTicket && (
@@ -3985,6 +4631,8 @@ const ServiceManagement: React.FC = () => {
                       <FileText className="w-5 h-5 mr-2 text-blue-600" />
                       File Selection
                     </h3>
+                    
+
 
                     <div className="space-y-4">
                       <div>
@@ -4405,6 +5053,558 @@ const ServiceManagement: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Excel Edit Ticket Modal */}
+      {showExcelEditModal && editingTicket && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl m-4 max-h-[95vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900">Edit Excel Service Ticket</h2>
+                <p className="text-sm text-gray-600">Editing ticket uploaded via Excel - All fields available</p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowExcelEditModal(false);
+                  setEditingTicket(null);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleUpdateTicket(); }} className="p-6 space-y-6">
+              {formErrors.general && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-red-600 text-sm">{formErrors.general}</p>
+                </div>
+              )}
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <p className="text-blue-800 text-sm font-medium">Excel Ticket: {editingTicket.ServiceRequestNumber || editingTicket.ticketNumber}</p>
+                <p className="text-blue-600 text-xs">This ticket was uploaded via Excel and has extended field support</p>
+              </div>
+
+              {/* Excel Fields Section */}
+              <div className="border-t border-gray-200 pt-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <FileText className="w-5 h-5 mr-2 text-blue-600" />
+                  Excel Service Request Fields
+                </h3>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Service Request Number */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Service Request Number
+                    </label>
+                    <input
+                      type="text"
+                      value={excelFormData.ServiceRequestNumber}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, ServiceRequestNumber: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter service request number"
+                    />
+                  </div>
+
+                  {/* Customer Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Customer Type
+                    </label>
+                    <input
+                      type="text"
+                      value={excelFormData.CustomerType}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, CustomerType: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter customer type"
+                    />
+                  </div>
+
+                  {/* Customer Name */}
+                  <div className="relative dropdown-container">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Customer Name
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={customerSearchTerm || excelFormData.CustomerName}
+                        onChange={(e) => setCustomerSearchTerm(e.target.value)}
+                        onFocus={() => {
+                          // Show dropdown options when focused
+                          const dropdown = document.getElementById('excel-customer-dropdown');
+                          if (dropdown) dropdown.classList.remove('hidden');
+                          // Clear search term to show all customers
+                          setCustomerSearchTerm('');
+                        }}
+                        onBlur={() => {
+                          // Hide dropdown after a delay to allow clicks
+                          setTimeout(() => {
+                            const dropdown = document.getElementById('excel-customer-dropdown');
+                            if (dropdown) dropdown.classList.add('hidden');
+                          }, 200);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        placeholder="Search customer..."
+                      />
+                      <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    </div>
+                    
+                    {/* Dropdown Options */}
+                    <div 
+                      id="excel-customer-dropdown"
+                      className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto hidden"
+                    >
+                      {customers
+                        .filter(customer => 
+                          customerSearchTerm === '' || 
+                          customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase())
+                        )
+                        .map((customer) => (
+                          <button
+                            key={customer._id}
+                            type="button"
+                            onClick={() => {
+                              setExcelFormData({ 
+                                ...excelFormData, 
+                                CustomerName: customer.name,
+                                CustomerId: customer._id 
+                              });
+                              setCustomerSearchTerm('');
+                              document.getElementById('excel-customer-dropdown')?.classList.add('hidden');
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-gray-700"
+                          >
+                            <div className="font-medium">{customer.name}</div>
+                            {customer.email && (
+                              <div className="text-xs text-gray-500">{customer.email}</div>
+                            )}
+                          </button>
+                        ))}
+                      {customers.filter(customer => 
+                        customerSearchTerm === '' || 
+                        customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase())
+                      ).length === 0 && (
+                        <div className="px-3 py-2 text-gray-500 text-sm">No customers found</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Engine Serial Number */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Engine Serial Number
+                    </label>
+                    <input
+                      type="text"
+                      value={excelFormData.EngineSerialNumber}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, EngineSerialNumber: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter engine serial number"
+                    />
+                  </div>
+
+                  {/* Engine Model */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Engine Model
+                    </label>
+                    <input
+                      type="text"
+                      value={excelFormData.EngineModel}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, EngineModel: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter engine model"
+                    />
+                  </div>
+
+                  {/* KVA Rating */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      KVA Rating
+                    </label>
+                    <input
+                      type="text"
+                      value={excelFormData.KVA}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, KVA: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter KVA rating"
+                    />
+                  </div>
+
+                  {/* Service Request Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Service Request Date
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={excelFormData.ServiceRequestDate ? new Date(excelFormData.ServiceRequestDate).toISOString().slice(0, 16) : ''}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, ServiceRequestDate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Select date and time"
+                    />
+                  </div>
+
+                  {/* Service Attended Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Service Attended Date
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={excelFormData.ServiceAttendedDate ? new Date(excelFormData.ServiceAttendedDate).toISOString().slice(0, 16) : ''}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, ServiceAttendedDate: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Select date and time"
+                    />
+                  </div>
+
+                  {/* Hour Meter Reading */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Hour Meter Reading
+                    </label>
+                    <input
+                      type="text"
+                      value={excelFormData.HourMeterReading}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, HourMeterReading: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter hour meter reading"
+                    />
+                  </div>
+
+                  {/* Type of Service */}
+                  <div className="relative dropdown-container">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Type of Service
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={serviceTypeSearchTerm || excelFormData.TypeofService}
+                        onChange={(e) => setServiceTypeSearchTerm(e.target.value)}
+                        onFocus={() => {
+                          // Show dropdown options when focused
+                          const dropdown = document.getElementById('excel-service-type-dropdown');
+                          if (dropdown) dropdown.classList.remove('hidden');
+                          // Clear search term to show all service types
+                          setServiceTypeSearchTerm('');
+                        }}
+                        onBlur={() => {
+                          // Hide dropdown after a delay to allow clicks
+                          setTimeout(() => {
+                            const dropdown = document.getElementById('excel-service-type-dropdown');
+                            if (dropdown) dropdown.classList.add('hidden');
+                          }, 200);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        placeholder="Search type of service..."
+                      />
+                      <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    </div>
+                    
+                    {/* Dropdown Options */}
+                    <div 
+                      id="excel-service-type-dropdown"
+                      className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto hidden"
+                    >
+                      {typeOfServiceOptions
+                        .filter(option => 
+                          serviceTypeSearchTerm === '' || 
+                          option.label.toLowerCase().includes(serviceTypeSearchTerm.toLowerCase())
+                        )
+                        .map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              setExcelFormData({ ...excelFormData, TypeofService: option.label });
+                              setServiceTypeSearchTerm('');
+                              document.getElementById('excel-service-type-dropdown')?.classList.add('hidden');
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-gray-700"
+                          >
+                            <div className="font-medium">{option.label}</div>
+                          </button>
+                        ))}
+                      {typeOfServiceOptions.filter(option => 
+                        serviceTypeSearchTerm === '' || 
+                        option.label.toLowerCase().includes(serviceTypeSearchTerm.toLowerCase())
+                      ).length === 0 && (
+                        <div className="px-3 py-2 text-gray-500 text-sm">No service types found</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Site ID */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Site ID
+                    </label>
+                    <input
+                      type="text"
+                      value={excelFormData.SiteID}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, SiteID: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter site ID"
+                    />
+                  </div>
+
+                  {/* Service Engineer Name */}
+                  <div className="relative dropdown-container">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Service Engineer Name
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={engineerSearchTerm || excelFormData.SREngineer}
+                        onChange={(e) => setEngineerSearchTerm(e.target.value)}
+                        onFocus={() => {
+                          // Show dropdown options when focused
+                          const dropdown = document.getElementById('excel-engineer-dropdown');
+                          if (dropdown) dropdown.classList.remove('hidden');
+                          // Clear search term to show all engineers
+                          setEngineerSearchTerm('');
+                        }}
+                        onBlur={() => {
+                          // Hide dropdown after a delay to allow clicks
+                          setTimeout(() => {
+                            const dropdown = document.getElementById('excel-engineer-dropdown');
+                            if (dropdown) dropdown.classList.add('hidden');
+                          }, 200);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        placeholder="Search service engineer..."
+                      />
+                      <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    </div>
+                    
+                    {/* Dropdown Options */}
+                    <div 
+                      id="excel-engineer-dropdown"
+                      className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto hidden"
+                    >
+                      {users
+                        .filter(user => 
+                          engineerSearchTerm === '' || 
+                          getUserName(user).toLowerCase().includes(engineerSearchTerm.toLowerCase())
+                        )
+                        .map((user) => (
+                          <button
+                            key={user._id}
+                            type="button"
+                            onClick={() => {
+                              setExcelFormData({ 
+                                ...excelFormData, 
+                                SREngineer: getUserName(user),
+                                SREngineerId: user._id 
+                              });
+                              setEngineerSearchTerm('');
+                              document.getElementById('excel-engineer-dropdown')?.classList.add('hidden');
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-gray-700"
+                          >
+                            <div className="font-medium">{getUserName(user)}</div>
+                            {user.email && (
+                              <div className="text-xs text-gray-500">{user.email}</div>
+                            )}
+                          </button>
+                        ))}
+                      {users.filter(user => 
+                        engineerSearchTerm === '' || 
+                        getUserName(user).toLowerCase().includes(engineerSearchTerm.toLowerCase())
+                      ).length === 0 && (
+                        <div className="px-3 py-2 text-gray-500 text-sm">No service engineers found</div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Complaint Code */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Complaint Code
+                    </label>
+                    <input
+                      type="text"
+                      value={excelFormData.ComplaintCode}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, ComplaintCode: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter complaint code"
+                    />
+                  </div>
+
+                  {/* Complaint Description */}
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Complaint Description
+                    </label>
+                    <textarea
+                      value={excelFormData.ComplaintDescription}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, ComplaintDescription: e.target.value })}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      placeholder="Enter complaint description"
+                    />
+                  </div>
+
+                  {/* Resolution Description */}
+                  <div className="md:col-span-2 lg:col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Resolution Description
+                    </label>
+                    <textarea
+                      value={excelFormData.ResolutionDescription}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, ResolutionDescription: e.target.value })}
+                      rows={3}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                      placeholder="Enter resolution description"
+                    />
+                  </div>
+
+                  {/* eFSR Number */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      eFSR Number
+                    </label>
+                    <input
+                      type="text"
+                      value={excelFormData.eFSRNumber}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, eFSRNumber: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter eFSR number"
+                    />
+                  </div>
+
+                  {/* eFSR Closure Date and Time */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      eFSR Closure Date and Time
+                    </label>
+                    <input
+                      type="datetime-local"
+                      value={excelFormData.eFSRClosureDateAndTime ? new Date(excelFormData.eFSRClosureDateAndTime).toISOString().slice(0, 16) : ''}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, eFSRClosureDateAndTime: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Select date and time"
+                    />
+                  </div>
+
+                  {/* Service Request Status */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Service Request Status
+                    </label>
+                    <select
+                      value={excelFormData.ServiceRequestStatus}
+                      onChange={(e) => setExcelFormData({ ...excelFormData, ServiceRequestStatus: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="open">Open</option>
+                      <option value="resolved">Resolved</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </div>
+
+                  {/* OEM Name */}
+                  <div className="relative dropdown-container">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      OEM Name
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={oemSearchTerm || excelFormData.OEMName}
+                        onChange={(e) => setOemSearchTerm(e.target.value)}
+                        onFocus={() => {
+                          // Show dropdown options when focused
+                          const dropdown = document.getElementById('excel-oem-dropdown');
+                          if (dropdown) dropdown.classList.remove('hidden');
+                          // Clear search term to show all OEMs
+                          setOemSearchTerm('');
+                        }}
+                        onBlur={() => {
+                          // Hide dropdown after a delay to allow clicks
+                          setTimeout(() => {
+                            const dropdown = document.getElementById('excel-oem-dropdown');
+                            if (dropdown) dropdown.classList.add('hidden');
+                          }, 200);
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        placeholder="Search OEM..."
+                      />
+                      <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    </div>
+                    
+                    {/* Dropdown Options */}
+                    <div 
+                      id="excel-oem-dropdown"
+                      className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto hidden"
+                    >
+                      {oems
+                        .filter(option => 
+                          oemSearchTerm === '' || 
+                          option.label.toLowerCase().includes(oemSearchTerm.toLowerCase())
+                        )
+                        .map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => {
+                              setExcelFormData({ ...excelFormData, OEMName: option.label });
+                              setOemSearchTerm('');
+                              document.getElementById('excel-oem-dropdown')?.classList.add('hidden');
+                            }}
+                            className="w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-gray-700"
+                          >
+                            <div className="font-medium">{option.label}</div>
+                          </button>
+                        ))}
+                      {oems.filter(option => 
+                        oemSearchTerm === '' || 
+                        option.label.toLowerCase().includes(oemSearchTerm.toLowerCase())
+                      ).length === 0 && (
+                        <div className="px-3 py-2 text-gray-500 text-sm">No OEMs found</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Buttons */}
+              <div className="flex space-x-3 pt-6 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowExcelEditModal(false);
+                    setEditingTicket(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
+                >
+                  {submitting ? (
+                    <>
+                      <LoadingSpinner size="sm" className="text-white" />
+                      <span>Updating Excel Ticket...</span>
+                    </>
+                  ) : (
+                    'Update Excel Ticket'
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

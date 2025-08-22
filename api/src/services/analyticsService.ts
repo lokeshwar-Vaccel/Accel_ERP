@@ -68,7 +68,6 @@ export interface TicketAnalytics {
   closedTickets: number;
   avgTAT: number;
   slaCompliance: number;
-  priorityBreakdown: Record<string, number>;
   statusBreakdown: Record<string, number>;
   tatDistribution: Array<{ range: string; count: number }>;
   monthlyTrend: Array<{ month: string; tickets: number; closed: number }>;
@@ -169,12 +168,12 @@ export class AnalyticsService {
       avgResolutionTime
     ] = await Promise.all([
       ServiceTicket.countDocuments({ ...dateQuery, status: TicketStatus.OPEN }),
-      ServiceTicket.countDocuments({ ...dateQuery, status: TicketStatus.IN_PROGRESS }),
+      ServiceTicket.countDocuments({ ...dateQuery, ServiceRequestStatus: TicketStatus.RESOLVED }),
       ServiceTicket.countDocuments({ ...dateQuery, status: TicketStatus.RESOLVED }),
       ServiceTicket.countDocuments({ 
         ...dateQuery, 
         slaDeadline: { $lt: new Date() },
-        status: { $in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] }
+        ServiceRequestStatus: { $in: [TicketStatus.OPEN] }
       }),
       ServiceTicket.aggregate([
         { $match: { ...dateQuery, status: TicketStatus.RESOLVED, completedDate: { $exists: true } } },
@@ -363,10 +362,10 @@ export class AnalyticsService {
       .sort({ createdAt: -1 });
 
     const totalTickets = tickets.length;
-    const closedTickets = tickets.filter(t => t.status === TicketStatus.RESOLVED).length;
+    const closedTickets = tickets.filter(t => t.ServiceRequestStatus === TicketStatus.RESOLVED).length;
 
     // Calculate TAT distribution
-    const resolvedTickets = tickets.filter(t => t.status === TicketStatus.RESOLVED && t.completedDate);
+    const resolvedTickets = tickets.filter(t => t.ServiceRequestStatus === TicketStatus.RESOLVED && t.completedDate);
     const tatDistribution = [
       { range: '0-1 days', count: 0 },
       { range: '1-3 days', count: 0 },
@@ -390,20 +389,16 @@ export class AnalyticsService {
     // Calculate SLA compliance
     const overdueTickets = tickets.filter(t => 
       t.slaDeadline && new Date() > new Date(t.slaDeadline) && 
-      [TicketStatus.OPEN, TicketStatus.IN_PROGRESS].includes(t.status)
+      t.ServiceRequestStatus && [TicketStatus.OPEN].includes(t.ServiceRequestStatus as TicketStatus)
     ).length;
 
     const slaCompliance = totalTickets > 0 ? 
       Math.round(((totalTickets - overdueTickets) / totalTickets) * 100) : 100;
 
-    // Priority and status breakdown
-    const priorityBreakdown = tickets.reduce((acc: any, ticket) => {
-      acc[ticket.priority] = (acc[ticket.priority] || 0) + 1;
-      return acc;
-    }, {});
-
+    // Status breakdown
     const statusBreakdown = tickets.reduce((acc: any, ticket) => {
-      acc[ticket.status] = (acc[ticket.status] || 0) + 1;
+      const status = ticket.ServiceRequestStatus || 'unknown';
+      acc[status] = (acc[status] || 0) + 1;
       return acc;
     }, {});
 
@@ -417,7 +412,7 @@ export class AnalyticsService {
           avgTAT: {
             $avg: {
               $cond: [
-                { $and: [{ $eq: ['$status', TicketStatus.RESOLVED] }, { $ne: ['$completedDate', null] }] },
+                { $and: [{ $eq: ['$ServiceRequestStatus', TicketStatus.RESOLVED] }, { $ne: ['$completedDate', null] }] },
                 { $divide: [{ $subtract: ['$completedDate', '$createdAt'] }, 1000 * 60 * 60 * 24] },
                 null
               ]
@@ -461,7 +456,7 @@ export class AnalyticsService {
           },
           tickets: { $sum: 1 },
           closed: {
-            $sum: { $cond: [{ $eq: ['$status', TicketStatus.RESOLVED] }, 1, 0] }
+            $sum: { $cond: [{ $eq: ['$ServiceRequestStatus', TicketStatus.RESOLVED] }, 1, 0] }
           }
         }
       },
@@ -473,7 +468,6 @@ export class AnalyticsService {
       closedTickets,
       avgTAT: Math.round(avgTAT * 100) / 100,
       slaCompliance,
-      priorityBreakdown,
       statusBreakdown,
       tatDistribution,
       monthlyTrend: monthlyTrend.map(item => ({

@@ -28,10 +28,10 @@ export const getDashboardOverview = async (
 
     // Get critical metrics
     const openTickets = await ServiceTicket.countDocuments({ status: TicketStatus.OPEN });
-    const inProgressTickets = await ServiceTicket.countDocuments({ status: TicketStatus.IN_PROGRESS });
+    const resolvedTickets = await ServiceTicket.countDocuments({ ServiceRequestStatus: TicketStatus.RESOLVED });
     const overdueTickets = await ServiceTicket.countDocuments({ 
       slaDeadline: { $lt: new Date() },
-      status: { $in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS] }
+              ServiceRequestStatus: { $in: [TicketStatus.OPEN] }
     });
 
     // Get new leads count
@@ -87,9 +87,9 @@ export const getDashboardOverview = async (
 
         // Critical metrics
         openTickets,
-        inProgressTickets,
+        resolvedTickets,
         overdueTickets,
-        pendingTickets: openTickets + inProgressTickets, // Combined pending tickets for frontend
+        pendingTickets: openTickets + resolvedTickets, // Combined pending tickets for frontend
         newLeads,
         qualifiedLeads,
         activeAMCs,
@@ -109,7 +109,7 @@ export const getDashboardOverview = async (
 
         // Calculated metrics
         ticketResolutionRate: totalTickets > 0 ? 
-          Math.round(((totalTickets - openTickets - inProgressTickets) / totalTickets) * 100) : 0,
+          Math.round(((totalTickets - openTickets - resolvedTickets) / totalTickets) * 100) : 0,
         amcRenewalRate: totalAMCs > 0 ? 
           Math.round((activeAMCs / totalAMCs) * 100) : 0
       }
@@ -151,10 +151,9 @@ export const getRecentActivities = async (
       ...recentTickets.map(ticket => ({
         type: 'ticket',
         id: ticket._id,
-        title: `New Service Ticket: ${ticket.ticketNumber}`,
-        description: ticket.description,
-        status: ticket.status,
-        priority: ticket.priority,
+        title: `New Service Ticket: ${ticket.ServiceRequestNumber}`,
+        description: ticket.ComplaintDescription,
+        status: ticket.ServiceRequestStatus,
         date: (ticket as any).createdAt,
         customer: (ticket.customer as any)?.name,
         assignedTo: (ticket.assignedTo as any) ? 
@@ -207,7 +206,7 @@ export const getMonthlyStats = async (
           count: { $sum: 1 },
           resolved: {
             $sum: {
-              $cond: [{ $eq: ['$status', TicketStatus.RESOLVED] }, 1, 0]
+              $cond: [{ $eq: ['$ServiceRequestStatus', TicketStatus.RESOLVED] }, 1, 0]
             }
           }
         }
