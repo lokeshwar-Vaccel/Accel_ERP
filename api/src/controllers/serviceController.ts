@@ -650,6 +650,8 @@ export const updateServiceTicket = async (
       selectedAddress,
       typeOfService,
       typeOfVisit,
+      natureOfWork,
+      subNatureOfWork,
       businessVertical,
       complaintDescription,
       serviceRequestEngineer,
@@ -706,13 +708,19 @@ export const updateServiceTicket = async (
       updateData.SiteID = selectedAddress !== null ? selectedAddress.trim() : undefined;
     }
     if (typeOfService !== undefined) {
-      if (!typeOfService || typeOfService.trim() === '') {
-        return next(new AppError('Type of service cannot be empty', 400));
-      }
-      updateData.TypeofService = typeOfService.trim();
+      updateData.TypeofService = typeOfService && typeOfService.trim() !== '' ? typeOfService.trim() : undefined;
     }
     if (typeOfVisit !== undefined) {
       updateData.typeOfVisit = typeOfVisit;
+      console.log('Setting typeOfVisit:', typeOfVisit);
+    }
+    if (natureOfWork !== undefined) {
+      updateData.natureOfWork = natureOfWork;
+      console.log('Setting natureOfWork:', natureOfWork);
+    }
+    if (subNatureOfWork !== undefined) {
+      updateData.subNatureOfWork = subNatureOfWork;
+      console.log('Setting subNatureOfWork:', subNatureOfWork);
     }
     if (businessVertical !== undefined) {
       updateData.CustomerType = businessVertical;
@@ -1713,21 +1721,33 @@ export const updateExcelServiceTicket = async (
       eFSRNumber,
       eFSRClosureDateAndTime,
       ServiceRequestStatus,
-      OEMName
+      OEMName,
+      // Additional fields that might be sent
+      typeOfVisit,
+      natureOfWork,
+      subNatureOfWork
     } = req.body;
 
     // Prepare update data with Excel fields
     const updateData: any = {};
 
+    // Debug logging
+    console.log('=== DEBUG: Excel Update Request ===');
+    console.log('Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('Ticket ID:', req.params.id);
+
     // Excel-specific fields
     if (ServiceRequestNumber !== undefined) {
       updateData.ServiceRequestNumber = ServiceRequestNumber;
+      console.log('Setting ServiceRequestNumber:', ServiceRequestNumber);
     }
     if (CustomerType !== undefined) {
       updateData.CustomerType = CustomerType;
+      console.log('Setting CustomerType:', CustomerType);
     }
     if (CustomerName !== undefined) {
       updateData.CustomerName = CustomerName;
+      console.log('Setting CustomerName:', CustomerName);
     }
     if (CustomerId !== undefined && CustomerId) {
       updateData.customer = CustomerId; // Set the customer objectId
@@ -1782,8 +1802,18 @@ export const updateExcelServiceTicket = async (
     if (OEMName !== undefined) {
       updateData.OemName = OEMName;
     }
+    
+    // Handle additional fields
+    if (typeOfVisit !== undefined) {
+      updateData.typeOfVisit = typeOfVisit;
+    }
+    if (natureOfWork !== undefined) {
+      updateData.natureOfWork = natureOfWork;
+    }
+    if (subNatureOfWork !== undefined) {
+      updateData.subNatureOfWork = subNatureOfWork;
+    }
 
-    // Update the ticket
     const updatedTicket = await ServiceTicket.findByIdAndUpdate(
       req.params.id,
       updateData,
