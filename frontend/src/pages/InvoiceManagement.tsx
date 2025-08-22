@@ -35,7 +35,7 @@ import PageHeader from '../components/ui/PageHeader';
 import { Tooltip } from '../components/ui/Tooltip';
 import ConfirmationModal from '../components/ui/ConfirmationModal';
 import { apiClient } from '../utils/api';
-import { RootState } from '../redux/store';
+import { RootState } from 'store';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import toast from 'react-hot-toast';

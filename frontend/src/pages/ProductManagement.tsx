@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Package, DollarSign, TrendingDown, TrendingUp, X, ChevronDown, Settings, MapPin, Hash, Filter, IndianRupee } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
-import { RootState } from 'redux/store';
+import { RootState } from '../store';
 import { useSelector } from 'react-redux';
 import { Pagination } from 'components/ui/Pagination';
 import toast from 'react-hot-toast';
