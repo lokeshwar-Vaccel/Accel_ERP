@@ -1156,8 +1156,8 @@ const DGProformaManagement: React.FC = () => {
             ),
             customer: (
               <div>
-                <div className="font-medium text-gray-900">{pi.customer.name}</div>
-                <div className="text-sm text-gray-500">{pi.customer.email}</div>
+                <div className="font-medium text-gray-900">{pi.customer?.name}</div>
+                <div className="text-sm text-gray-500">{pi.customer?.email}</div>
               </div>
             ),
             issueDate: formatDate(pi.issueDate),
@@ -1272,9 +1272,7 @@ const DGProformaManagement: React.FC = () => {
                     <select
                       value={formData.customerId}
                       onChange={(e) => {
-                        const customer = customers.find(c => c._id === e.target.value);
-                        console.log('Selected customer:', customer);
-                        
+                        const customer = customers.find(c => c._id === e.target.value);                        
                         if (customer) {
                           // Build comprehensive customer address with fallbacks
                           const customerAddress = {
@@ -1283,8 +1281,6 @@ const DGProformaManagement: React.FC = () => {
                             district: customer.district || customer.tehsil || 'Unknown District',
                             pincode: customer.pinCode || '123456' // Use a valid-looking default
                           };
-                          
-                          console.log('Setting customer address:', customerAddress);
                           
                           setFormData(prev => ({
                             ...prev,

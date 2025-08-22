@@ -1731,23 +1731,16 @@ export const updateExcelServiceTicket = async (
     // Prepare update data with Excel fields
     const updateData: any = {};
 
-    // Debug logging
-    console.log('=== DEBUG: Excel Update Request ===');
-    console.log('Request Body:', JSON.stringify(req.body, null, 2));
-    console.log('Ticket ID:', req.params.id);
 
     // Excel-specific fields
     if (ServiceRequestNumber !== undefined) {
       updateData.ServiceRequestNumber = ServiceRequestNumber;
-      console.log('Setting ServiceRequestNumber:', ServiceRequestNumber);
     }
     if (CustomerType !== undefined) {
       updateData.CustomerType = CustomerType;
-      console.log('Setting CustomerType:', CustomerType);
     }
     if (CustomerName !== undefined) {
       updateData.CustomerName = CustomerName;
-      console.log('Setting CustomerName:', CustomerName);
     }
     if (CustomerId !== undefined && CustomerId) {
       updateData.customer = CustomerId; // Set the customer objectId
