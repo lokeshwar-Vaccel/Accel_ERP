@@ -1227,7 +1227,11 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const handleEditInvoice = (invoice: Invoice) => {
-    navigate(`/billing/edit/${invoice._id}`);
+    if (invoice.invoiceType === 'purchase') {
+      navigate(`/purchase-invoice/edit/${invoice._id}`);
+    } else {
+      navigate(`/billing/edit/${invoice._id}`);
+    }
   };
 
   // Quotation handlers
@@ -1237,7 +1241,7 @@ const InvoiceManagement: React.FC = () => {
 
   // Purchase Invoice handlers
   const handleCreatePurchaseInvoice = () => {
-    navigate('/billing/create', { state: { invoiceType: 'purchase' } });
+    navigate('/purchase-invoice/create');
   };
 
   const handleViewQuotation = (quotation: any) => {
@@ -1689,6 +1693,16 @@ const InvoiceManagement: React.FC = () => {
 
     // Only show payment-related actions for sales invoices
     if (invoice.invoiceType === 'sale' || invoice.invoiceType === 'purchase') {
+
+      // Edit Invoice - Available for all invoices except cancelled
+      // if (invoice.status !== 'cancelled') {
+      //   actions.push({
+      //     icon: <Edit className="w-4 h-4" />,
+      //     label: 'Edit',
+      //     action: () => handleEditInvoice(invoice),
+      //     color: 'text-blue-600 hover:text-blue-900 hover:bg-blue-50'
+      //   });
+      // }
 
       // Edit Status - Available for all invoices except cancelled
       if (invoice.status !== 'cancelled') {
@@ -4098,7 +4112,7 @@ const InvoiceManagement: React.FC = () => {
                           {invoiceType === 'purchase' ? invoice?.supplier?.name : invoice.customer?.name}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {invoiceType === 'purchase' ? invoice.supplierEmail : invoice.customer?.email}
+                          {invoiceType === 'purchase' ? invoice.supplierEmail || invoice?.supplier?.email : invoice.customer?.email}
                         </div>
                       </div>
                     </td>
@@ -4274,7 +4288,7 @@ const InvoiceManagement: React.FC = () => {
                     // For purchase invoices: Show supplier
                     <div className="text-sm text-gray-600">
                       <p className="font-medium">{selectedInvoice?.supplier?.name || 'N/A'}</p>
-                      {selectedInvoice?.supplierEmail && <p>Email: {selectedInvoice?.supplierEmail}</p>}
+                      {(selectedInvoice?.supplierEmail || selectedInvoice?.supplier?.email) && <p>Email: {selectedInvoice?.supplierEmail || selectedInvoice?.supplier?.email}</p>}
                       {selectedInvoice?.supplierAddress && (
                         <>
                           <p className="mt-2 font-medium text-gray-700">Address:</p>

@@ -358,6 +358,9 @@ class ApiClient {
     getAll: (params?: any) =>
       this.makeRequest<{ success: boolean; data: { invoices: any[],pagination: any } }>(`/invoices${params ? `?${new URLSearchParams(params)}` : ''}`),
 
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/invoices/${id}`),
+
     create: (invoiceData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/invoices', {
         method: 'POST',
@@ -391,7 +394,7 @@ class ApiClient {
 
     sendReminder: (id: string) =>
       this.makeRequest<{ success: boolean; message: string }>(`/invoices/${id}/send-reminder`, {
-        method: 'POST',
+        method: 'PUT',
       }),
   };
 
