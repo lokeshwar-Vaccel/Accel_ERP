@@ -21,6 +21,9 @@ const storage = multer.diskStorage({
   }
 });
 
+// Memory storage for Excel/CSV files to ensure buffer is available
+const memoryStorage = multer.memoryStorage();
+
 // File filter
 const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
   // Allow images and common document types
@@ -34,17 +37,37 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
     'application/msword',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv',
+    'application/csv',
+    'text/comma-separated-values',
+    'application/vnd.ms-excel.sheet.macroEnabled.12'
   ];
 
+  // Check if file type is explicitly allowed
   if (allowedTypes.includes(file.mimetype)) {
     cb(null, true);
-  } else {
-    cb(new Error(`File type ${file.mimetype} is not allowed`));
+    return;
   }
+
+  // Special handling for CSV files that might be detected as octet-stream
+  if (file.mimetype === 'application/octet-stream' && 
+      (file.originalname.endsWith('.csv') || file.originalname.endsWith('.xlsx') || file.originalname.endsWith('.xls'))) {
+    cb(null, true);
+    return;
+  }
+
+  // Check file extension as fallback
+  const fileExtension = file.originalname.toLowerCase();
+  if (fileExtension.endsWith('.csv') || fileExtension.endsWith('.xlsx') || fileExtension.endsWith('.xls')) {
+    cb(null, true);
+    return;
+  }
+
+  cb(new Error(`File type ${file.mimetype} is not allowed`));
 };
 
-// Configure multer
+// Configure multer with disk storage
 const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
@@ -54,8 +77,21 @@ const upload = multer({
   }
 });
 
+// Configure multer with memory storage for Excel/CSV files
+const uploadExcel = multer({
+  storage: memoryStorage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit
+    files: 1 // Only 1 file for Excel uploads
+  }
+});
+
 // Middleware for single file upload
 export const uploadSingle = upload.single('file');
+
+// Middleware for Excel/CSV file upload (memory storage)
+export const uploadExcelSingle = uploadExcel.single('file');
 
 // Middleware for multiple files upload
 export const uploadMultiple = upload.array('files', 10);
@@ -65,6 +101,23 @@ export const uploadFields = upload.fields([
   { name: 'photos', maxCount: 5 },
   { name: 'attachments', maxCount: 5 }
 ]);
+
+// Middleware for QR code image upload
+export const uploadQrCode = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    // Only allow image files for QR codes
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed for QR codes'));
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit for QR codes
+    files: 1 // Only 1 file per request
+  }
+}).single('qrCodeImage');
 
 // Helper function to get file URL
 export const getFileUrl = (filename: string): string => {

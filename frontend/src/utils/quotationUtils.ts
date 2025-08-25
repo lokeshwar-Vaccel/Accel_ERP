@@ -17,6 +17,32 @@ export interface QuotationItem {
   totalPrice: number;
 }
 
+// New interface for service charges
+export interface ServiceCharge {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  discountedAmount: number;
+  taxRate: number;
+  taxAmount: number;
+  totalPrice: number;
+  uom?: string; // Add UOM field
+}
+
+// New interface for battery buy back
+export interface BatteryBuyBack {
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  discount: number;
+  discountedAmount: number;
+  taxRate: number;
+  taxAmount: number;
+  totalPrice: number;
+  uom?: string; // Add UOM field
+}
+
 export interface QuotationCustomer {
   _id?: string;
   name: string;
@@ -41,6 +67,7 @@ export interface QuotationCompany {
 
 export interface QuotationData {
   quotationNumber?: string;
+  subject?: string; // Subject/Sub field for quotation
   issueDate?: Date;
   validUntil?: Date;
   validityPeriod?: number;
@@ -54,7 +81,15 @@ export interface QuotationData {
   };
   company?: QuotationCompany;
   location?: string;
+  // Service Ticket related fields
+  engineSerialNumber?: string; // Engine Serial Number from ServiceTicket
+  kva?: string; // KVA rating from ServiceTicket
+  hourMeterReading?: string; // Hour Meter Reading from ServiceTicket
+  serviceRequestDate?: Date; // Service Request Date from ServiceTicket
   items: QuotationItem[];
+  // New fields for service charges and battery buy back
+  serviceCharges: ServiceCharge[];
+  batteryBuyBack: BatteryBuyBack;
   subtotal: number;
   totalDiscount: number;
   overallDiscount?: number; // Overall discount percentage
@@ -64,12 +99,14 @@ export interface QuotationData {
   roundOff: number;
   notes?: string;
   terms?: string;
+  qrCodeImage?: File | string; // QR code image file or base64 string
   billToAddress?: {
     address: string;
     state: string;
     district: string;
     pincode: string;
     addressId?: number;
+    gstNumber?: string;
   };
   shipToAddress?: {
     address: string;
@@ -77,8 +114,18 @@ export interface QuotationData {
     district: string;
     pincode: string;
     addressId?: number;
+    gstNumber?: string;
   };
   assignedEngineer?: string; // Add assigned engineer field
+  // Payment fields
+  paidAmount?: number;
+  remainingAmount?: number;
+  paymentStatus?: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentMethod?: string;
+  paymentDate?: Date;
+  // Additional fields for display
+  status?: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
+  dgEnquiry?: string;
   // Quotation reference fields for invoices created from quotations
   sourceQuotation?: string;
   quotationPaymentDetails?: {
@@ -107,6 +154,8 @@ export interface CalculationResult {
   grandTotal: number;
   roundOff: number;
   items: QuotationItem[];
+  serviceCharges: ServiceCharge[];
+  batteryBuyBack: BatteryBuyBack | null;
 }
 
 // Validation Functions
@@ -121,6 +170,11 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
       errors.push({ field: 'customer.name', message: 'Customer name is required' });
     }
   }
+
+  // Subject validation
+  // if (!data.subject || (typeof data.subject === 'string' && !data.subject.trim())) {
+  //   errors.push({ field: 'subject', message: 'Subject is required' });
+  // }
 
   // Location validation
   if (!data.location || (typeof data.location === 'string' && !data.location.trim())) {
@@ -201,11 +255,17 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
 };
 
 // Calculation Functions
-export const calculateQuotationTotals = (items: QuotationItem[], overallDiscount: number = 0): CalculationResult => {
+export const calculateQuotationTotals = (
+  items: QuotationItem[], 
+  serviceCharges: ServiceCharge[] = [], 
+  batteryBuyBack: BatteryBuyBack | null = null,
+  overallDiscount: number = 0
+): CalculationResult => {
   let subtotal = 0;
   let totalDiscount = 0;
   let totalTax = 0;
 
+  // Calculate main items
   const calculatedItems = items.map(item => {
     // Ensure all values are numbers
     const quantity = Number(item.quantity) || 0;
@@ -233,14 +293,72 @@ export const calculateQuotationTotals = (items: QuotationItem[], overallDiscount
     };
   });
 
-  // Calculate grand total before overall discount
+  // Calculate service charges
+  const calculatedServiceCharges = serviceCharges.map(service => {
+    const quantity = Number(service.quantity) || 0;
+    const unitPrice = Number(service.unitPrice) || 0;
+    const discountRate = Number(service.discount) || 0;
+    const taxRate = Number(service.taxRate) || 0;
+
+    const itemSubtotal = quantity * unitPrice;
+    const discountAmount = (discountRate / 100) * itemSubtotal;
+    const discountedAmount = itemSubtotal - discountAmount;
+    const taxAmount = (taxRate / 100) * discountedAmount;
+    const totalPrice = discountedAmount + taxAmount;
+
+    // Accumulate totals
+    subtotal += itemSubtotal;
+    totalDiscount += discountAmount;
+    totalTax += taxAmount;
+
+    return {
+      ...service,
+      discountedAmount: discountAmount,
+      taxAmount: taxAmount,
+      totalPrice: totalPrice
+    };
+  });
+
+  // Calculate battery buy back (deduction from total)
+  let calculatedBatteryBuyBack = null;
+  if (batteryBuyBack) {
+    const quantity = Number(batteryBuyBack.quantity) || 0;
+    const unitPrice = Number(batteryBuyBack.unitPrice) || 0;
+    const discountRate = Number(batteryBuyBack.discount) || 0;
+    const taxRate = Number(batteryBuyBack.taxRate) || 0;
+
+    const itemSubtotal = quantity * unitPrice;
+    const discountAmount = (discountRate / 100) * itemSubtotal;
+    const discountedAmount = itemSubtotal - discountAmount;
+    const taxAmount = (taxRate / 100) * discountedAmount;
+    const totalPrice = discountedAmount + taxAmount;
+
+    // For battery buy back, we DON'T add to subtotal since it's a deduction
+    // Instead, we'll subtract it from the final grand total
+    // We still need to track the discount and tax for the battery buy back itself
+    // But these don't affect the main calculation
+
+    calculatedBatteryBuyBack = {
+      ...batteryBuyBack,
+      discountedAmount: discountAmount,
+      taxAmount: taxAmount,
+      totalPrice: totalPrice
+    };
+  }
+
+  // Calculate grand total before overall discount and battery buy back
   const grandTotalBeforeOverallDiscount = subtotal - totalDiscount + totalTax;
   
   // Calculate overall discount amount as percentage of grand total
   const overallDiscountAmount = (overallDiscount / 100) * grandTotalBeforeOverallDiscount;
   
   // Apply overall discount to grand total
-  const grandTotal = grandTotalBeforeOverallDiscount - overallDiscountAmount;
+  let grandTotal = grandTotalBeforeOverallDiscount - overallDiscountAmount;
+  
+  // Subtract battery buy back amount from grand total (it's a deduction)
+  if (calculatedBatteryBuyBack) {
+    grandTotal -= calculatedBatteryBuyBack.totalPrice;
+  }
   const roundOff = 0; // No rounding for now
 
   return {
@@ -251,7 +369,9 @@ export const calculateQuotationTotals = (items: QuotationItem[], overallDiscount
     totalTax: totalTax,
     grandTotal,
     roundOff,
-    items: calculatedItems
+    items: calculatedItems,
+    serviceCharges: calculatedServiceCharges,
+    batteryBuyBack: calculatedBatteryBuyBack
   };
 };
 
@@ -263,10 +383,16 @@ export const transformQuotationData = (data: any): QuotationData => {
   validUntil.setDate(validUntil.getDate() + validityPeriod);
 
   // Calculate totals
-  const calculationResult = calculateQuotationTotals(data.items || [], data.overallDiscount || 0);
+  const calculationResult = calculateQuotationTotals(
+    data.items || [], 
+    data.serviceCharges || [], 
+    data.batteryBuyBack || null,
+    data.overallDiscount || 0
+  );
 
   return {
     quotationNumber: data.quotationNumber,
+    subject: data.subject || '',
     issueDate,
     validUntil,
     validityPeriod,
@@ -286,6 +412,18 @@ export const transformQuotationData = (data: any): QuotationData => {
       bankDetails: data.company?.bankDetails
     },
     items: calculationResult.items,
+    // New fields for service charges and battery buy back
+    serviceCharges: data.serviceCharges || [],
+    batteryBuyBack: data.batteryBuyBack || {
+      description: 'Battery Buy Back',
+      quantity: 1,
+      unitPrice: 0,
+      discount: 0,
+      discountedAmount: 0,
+      taxRate: 0,
+      taxAmount: 0,
+      totalPrice: 0
+    },
     subtotal: calculationResult.subtotal,
     totalDiscount: calculationResult.totalDiscount,
     overallDiscount: calculationResult.overallDiscount,
@@ -322,6 +460,7 @@ export const isValidNumber = (value: any): boolean => {
 // Error Message Functions
 export const getFieldErrorMessage = (field: string): string => {
   const errorMessages: Record<string, string> = {
+    // 'subject': 'Subject is required',
     'customer.name': 'Customer name is required',
     'customer.email': 'Please enter a valid email address',
     'customer.phone': 'Please enter a valid phone number',
@@ -351,6 +490,7 @@ export const getFieldErrorMessage = (field: string): string => {
 export const sanitizeQuotationData = (data: any): any => {
   return {
     ...data,
+    subject: String(data.subject || '').trim(),
     customer: data.customer ? {
       _id: data.customer._id || undefined, // Preserve customer ID
       name: String(data.customer.name || '').trim(),
@@ -367,6 +507,11 @@ export const sanitizeQuotationData = (data: any): any => {
       pan: String(data.company.pan || '').trim(),
       bankDetails: data.company.bankDetails
     } : undefined,
+    // Service Ticket related fields
+    engineSerialNumber: String(data.engineSerialNumber || '').trim(),
+    kva: String(data.kva || '').trim(),
+    hourMeterReading: String(data.hourMeterReading || '').trim(),
+    serviceRequestDate: data.serviceRequestDate ? new Date(data.serviceRequestDate) : undefined,
     items: Array.isArray(data.items) ? data.items.map((item: any) => ({
       product: String(item.product || '').trim(),
       description: String(item.description || '').trim(),
@@ -379,8 +524,24 @@ export const sanitizeQuotationData = (data: any): any => {
       discount: Number(item.discount) || 0,
       taxRate: Number(item.taxRate) || 0
     })) : [],
+    // New fields for service charges and battery buy back
+    serviceCharges: Array.isArray(data.serviceCharges) ? data.serviceCharges.map((service: any) => ({
+      description: String(service.description || '').trim(),
+      quantity: Number(service.quantity) || 1,
+      unitPrice: Number(service.unitPrice) || 0,
+      discount: Number(service.discount) || 0,
+      taxRate: Number(service.taxRate) || 18
+    })) : [],
+    batteryBuyBack: data.batteryBuyBack ? {
+      description: String(data.batteryBuyBack.description || 'Battery Buy Back').trim(),
+      quantity: Number(data.batteryBuyBack.quantity) || 1,
+      unitPrice: Number(data.batteryBuyBack.unitPrice) || 0,
+      discount: Number(data.batteryBuyBack.discount) || 0,
+      taxRate: Number(data.batteryBuyBack.taxRate) || 18
+    } : undefined,
     notes: String(data.notes || '').trim(),
     terms: String(data.terms || '').trim(),
+    qrCodeImage: data.qrCodeImage,
     billToAddress: data.billToAddress,
     shipToAddress: data.shipToAddress
   };
@@ -388,6 +549,7 @@ export const sanitizeQuotationData = (data: any): any => {
 
 // Default Values
 export const getDefaultQuotationData = (): Partial<QuotationData> => ({
+  subject: '', // Default subject
   customer: {
     _id: '',
     name: '',
@@ -408,8 +570,20 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
     email: '',
     pan: '',
   },
+  // Service Ticket related fields
+  engineSerialNumber: '',
+  kva: '',
+  hourMeterReading: '',
+  serviceRequestDate: undefined,
   issueDate: new Date(),
   validityPeriod: 30,
+  validUntil: (() => {
+    const date = new Date();
+    // Ensure we're working with local time to avoid timezone issues
+    const localDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    localDate.setDate(localDate.getDate() + 30);
+    return localDate;
+  })(),
   items: [{
     product: '',
     description: '',
@@ -425,6 +599,31 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
     taxAmount: 0,
     totalPrice: 0
   }],
+  // New fields for service charges and battery buy back
+  serviceCharges: [
+    {
+      description: 'Additional Service charges',
+      quantity: 1,
+      unitPrice: 0,
+      discount: 0,
+      discountedAmount: 0,
+      taxRate: 18, // Default GST rate
+      taxAmount: 0,
+      totalPrice: 0,
+      uom: 'nos'
+    }
+  ],
+  batteryBuyBack: {
+    description: 'Battery Buy Back',
+    quantity: 1,
+    unitPrice: 0,
+    discount: 0,
+    discountedAmount: 0,
+    taxRate: 18, // Default GST rate
+    taxAmount: 0,
+    totalPrice: 0,
+    uom: 'nos'
+  },
   subtotal: 0,
   totalDiscount: 0,
   overallDiscount: 0,
@@ -432,21 +631,30 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
   totalTax: 0,
   grandTotal: 0,
   roundOff: 0,
-  notes: '',
-  terms: '',
-  billToAddress: {
-    address: '',
-    state: '',
-    district: '',
-    pincode: ''
-  },
-  shipToAddress: {
-    address: '',
-    state: '',
-    district: '',
-    pincode: ''
-  },
-  assignedEngineer: ''
+      notes: '',
+    terms: '',
+    qrCodeImage: undefined,
+        billToAddress: {
+      address: '',
+      state: '',
+      district: '',
+      pincode: '',
+      gstNumber: ''
+    },
+    shipToAddress: {
+      address: '',
+      state: '',
+      district: '',
+      pincode: '',
+      gstNumber: ''
+    },
+  assignedEngineer: '',
+  // Payment fields
+  paidAmount: 0,
+  remainingAmount: 0,
+  paymentStatus: 'pending' as const,
+  paymentMethod: undefined,
+  paymentDate: undefined
 });
 
 // Export all functions

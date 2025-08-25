@@ -299,7 +299,15 @@ export const getServiceTickets = async (
     }
     
     if (customer) {
-      query.customer = customer;
+      // Handle both string and ObjectId customer references
+      if (mongoose.Types.ObjectId.isValid(customer)) {
+        query.customer = new mongoose.Types.ObjectId(customer);
+        console.log('Customer filter: Using ObjectId:', customer);
+      } else {
+        query.customer = customer;
+        console.log('Customer filter: Using string:', customer);
+      }
+      console.log('Final customer query:', query.customer);
     }
     
     if (dateFrom || dateTo) {
@@ -307,6 +315,9 @@ export const getServiceTickets = async (
       if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
       if (dateTo) query.createdAt.$lte = new Date(dateTo);
     }
+
+    console.log('Service tickets query:', JSON.stringify(query, null, 2));
+    console.log('Query parameters:', { page, limit, sort, search, priority, customer, dateFrom, dateTo, slaStatus, status, assignedTo });
 
     let tickets: any[] = [];
     let total = 0;
@@ -324,6 +335,24 @@ export const getServiceTickets = async (
       .skip((Number(page) - 1) * Number(limit));
 
     total = await ServiceTicket.countDocuments(query);
+
+    console.log(`Found ${tickets.length} tickets out of ${total} total`);
+    if (customer) {
+      console.log(`Filtered by customer: ${customer}`);
+      console.log('Sample tickets:', tickets.slice(0, 2).map(t => ({ 
+        _id: t._id, 
+        customer: t.customer?._id || t.customer,
+        customerName: t.customer?.name || 'N/A',
+        EngineSerialNumber: t.EngineSerialNumber || 'N/A',
+        HourMeterReading: t.HourMeterReading || 'N/A',
+        ServiceRequestDate: t.ServiceRequestDate || 'N/A'
+      })));
+      
+      // Log the first few tickets in detail to see the structure
+      if (tickets.length > 0) {
+        console.log('First ticket full structure:', JSON.stringify(tickets[0], null, 2));
+      }
+    }
 
     // Process tickets to include primary address
     const processedTickets = tickets.map((ticket: any) => {

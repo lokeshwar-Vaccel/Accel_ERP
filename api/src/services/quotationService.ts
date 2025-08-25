@@ -19,11 +19,14 @@ export interface ValidationResult {
 export interface CalculationResult {
   subtotal: number;
   totalDiscount: number;
-  overallDiscount: number;
+  overallDiscount: number; // Overall discount percentage
+  overallDiscountAmount: number; // Calculated overall discount amount
   totalTax: number;
   grandTotal: number;
   roundOff: number;
   items: IQuotation['items'];
+  serviceCharges: IQuotation['serviceCharges'];
+  batteryBuyBack: IQuotation['batteryBuyBack'] | undefined;
 }
 
 export class QuotationService {
@@ -118,7 +121,12 @@ export class QuotationService {
   /**
    * Calculate quotation totals with precision
    */
-  static calculateQuotationTotals(items: IQuotation['items'] | undefined, overallDiscount: number = 0): CalculationResult {
+  static calculateQuotationTotals(
+    items: IQuotation['items'] | undefined, 
+    serviceCharges: IQuotation['serviceCharges'] | undefined = [], 
+    batteryBuyBack: IQuotation['batteryBuyBack'] | undefined = undefined,
+    overallDiscount: number = 0
+  ): CalculationResult {
     let subtotal = 0;
     let totalDiscount = 0;
     let totalTax = 0;
@@ -128,10 +136,13 @@ export class QuotationService {
         subtotal: 0,
         totalDiscount: 0,
         overallDiscount: 0,
+        overallDiscountAmount: 0,
         totalTax: 0,
         grandTotal: 0,
         roundOff: 0,
-        items: []
+        items: [],
+        serviceCharges: serviceCharges || [],
+        batteryBuyBack: batteryBuyBack || undefined
       };
     }
 
@@ -162,24 +173,99 @@ export class QuotationService {
       };
     });
 
-    // Calculate grand total before overall discount
-    const grandTotalBeforeOverallDiscount = subtotal - totalDiscount + totalTax;
+    // Calculate service charges
+    if (serviceCharges && serviceCharges.length > 0) {
+      serviceCharges.forEach(service => {
+        const quantity = Number(service.quantity) || 0;
+        const unitPrice = Number(service.unitPrice) || 0;
+        const discountRate = Number(service.discount) || 0;
+        const taxRate = Number(service.taxRate) || 0;
+
+        const itemSubtotal = quantity * unitPrice;
+        const discountAmount = (discountRate / 100) * itemSubtotal;
+        const discountedAmount = itemSubtotal - discountAmount;
+        const taxAmount = (taxRate / 100) * discountedAmount;
+
+        // Accumulate totals
+        subtotal += itemSubtotal;
+        totalDiscount += discountAmount;
+        totalTax += taxAmount;
+      });
+    }
+
+    // Calculate battery buy back (deduction from total)
+    if (batteryBuyBack) {
+      const quantity = Number(batteryBuyBack.quantity) || 0;
+      const unitPrice = Number(batteryBuyBack.unitPrice) || 0;
+      const discountRate = Number(batteryBuyBack.discount) || 0;
+      const taxRate = Number(batteryBuyBack.taxRate) || 0;
+
+      const itemSubtotal = quantity * unitPrice;
+      const discountAmount = (discountRate / 100) * itemSubtotal;
+      const discountedAmount = itemSubtotal - discountAmount;
+      const taxAmount = (taxRate / 100) * discountedAmount;
+
+      // For battery buy back, we DON'T add to subtotal since it's a deduction
+      // We'll subtract it from the final grand total instead
+      // We still need to track the discount and tax for the battery buy back itself
+    }
+
+    // Calculate grand total before overall discount and battery buy back
+    // Include service charges in the calculation
+    let grandTotalBeforeOverallDiscount = subtotal - totalDiscount + totalTax;
+    
+    // Add service charges to the total before overall discount
+    if (serviceCharges && serviceCharges.length > 0) {
+      serviceCharges.forEach(service => {
+        const quantity = Number(service.quantity) || 0;
+        const unitPrice = Number(service.unitPrice) || 0;
+        const discountRate = Number(service.discount) || 0;
+        const taxRate = Number(service.taxRate) || 0;
+
+        const itemSubtotal = quantity * unitPrice;
+        const discountAmount = (discountRate / 100) * itemSubtotal;
+        const discountedAmount = itemSubtotal - discountAmount;
+        const taxAmount = (taxRate / 100) * discountedAmount;
+        const totalPrice = discountedAmount + taxAmount;
+        
+        grandTotalBeforeOverallDiscount += totalPrice;
+      });
+    }
     
     // Calculate overall discount amount as percentage of grand total
     const overallDiscountAmount = (overallDiscount / 100) * grandTotalBeforeOverallDiscount;
     
     // Apply overall discount to grand total
-    const grandTotal = grandTotalBeforeOverallDiscount - overallDiscountAmount;
+    let grandTotal = grandTotalBeforeOverallDiscount - overallDiscountAmount;
+    
+    // Subtract battery buy back amount from grand total (it's a deduction)
+    if (batteryBuyBack) {
+      const quantity = Number(batteryBuyBack.quantity) || 0;
+      const unitPrice = Number(batteryBuyBack.unitPrice) || 0;
+      const discountRate = Number(batteryBuyBack.discount) || 0;
+      const taxRate = Number(batteryBuyBack.taxRate) || 0;
+
+      const itemSubtotal = quantity * unitPrice;
+      const discountAmount = (discountRate / 100) * itemSubtotal;
+      const discountedAmount = itemSubtotal - discountAmount;
+      const taxAmount = (taxRate / 100) * discountedAmount;
+      const totalPrice = discountedAmount + taxAmount;
+      
+      grandTotal -= totalPrice;
+    }
     const roundOff = 0; // No rounding for now
 
     return {
       subtotal: this.roundTo2Decimals(subtotal),
       totalDiscount: this.roundTo2Decimals(totalDiscount),
-      overallDiscount: this.roundTo2Decimals(overallDiscountAmount),
+      overallDiscount: overallDiscount, // Keep the percentage
+      overallDiscountAmount: this.roundTo2Decimals(overallDiscountAmount), // Add the calculated amount
       totalTax: this.roundTo2Decimals(totalTax),
       grandTotal: this.roundTo2Decimals(grandTotal),
       roundOff,
-      items: calculatedItems || []
+      items: calculatedItems || [],
+      serviceCharges: serviceCharges || [],
+      batteryBuyBack: batteryBuyBack || undefined
     };
   }
 
@@ -189,6 +275,7 @@ export class QuotationService {
   static sanitizeQuotationData(data: any): Partial<IQuotation> {
     return {
       ...data,
+      subject: String(data.subject || '').trim(),
       customer: data.customer || undefined, // Customer is now a reference ID
       company: data?.company ? {
         name: String(data.company?.name || '').trim(),
@@ -199,6 +286,11 @@ export class QuotationService {
         bankDetails: data.company?.bankDetails
       } : undefined,
       location: String(data.location || '').trim(), // Added location sanitization
+      // Service Ticket related fields
+      engineSerialNumber: String(data.engineSerialNumber || '').trim(),
+      kva: String(data.kva || '').trim(),
+      hourMeterReading: String(data.hourMeterReading || '').trim(),
+      serviceRequestDate: data.serviceRequestDate ? new Date(data.serviceRequestDate) : undefined,
       items: Array.isArray(data.items) ? data.items.map((item: any) => ({
         product: String(item.product || '').trim(),
         description: String(item.description || '').trim(),
@@ -209,8 +301,38 @@ export class QuotationService {
         discount: Number(item.discount) || 0,
         taxRate: Number(item.taxRate) || 0
       })) : [],
+      // New fields for service charges and battery buy back
+      serviceCharges: Array.isArray(data.serviceCharges) ? data.serviceCharges.map((service: any) => ({
+        description: String(service.description || '').trim(),
+        quantity: Number(service.quantity) || 1,
+        unitPrice: Number(service.unitPrice) || 0,
+        discount: Number(service.discount) || 0,
+        discountedAmount: Number(service.discountedAmount) || 0,
+        taxRate: Number(service.taxRate) || 28,
+        taxAmount: Number(service.taxAmount) || 0,
+        totalPrice: Number(service.totalPrice) || 0
+      })) : [],
+      batteryBuyBack: data.batteryBuyBack ? {
+        description: String(data.batteryBuyBack.description || 'Battery Buy Back').trim(),
+        quantity: Number(data.batteryBuyBack.quantity) || 1,
+        unitPrice: Number(data.batteryBuyBack.unitPrice) || 0,
+        discount: Number(data.batteryBuyBack.discount) || 0,
+        discountedAmount: Number(data.batteryBuyBack.discountedAmount) || 0,
+        taxRate: Number(data.batteryBuyBack.taxRate) || 28,
+        taxAmount: Number(data.batteryBuyBack.taxAmount) || 0,
+        totalPrice: Number(data.batteryBuyBack.totalPrice) || 0
+      } : undefined,
       notes: String(data.notes || '').trim(),
-      terms: String(data.terms || '').trim()
+      terms: String(data.terms || '').trim(),
+      qrCodeImage: data.qrCodeImage || undefined, // Include QR code image
+      // Include calculated totals to ensure backend has the correct values
+      subtotal: Number(data.subtotal) || 0,
+      totalDiscount: Number(data.totalDiscount) || 0,
+      totalTax: Number(data.totalTax) || 0,
+      overallDiscount: Number(data.overallDiscount) || 0,
+      overallDiscountAmount: Number(data.overallDiscountAmount) || 0,
+      grandTotal: Number(data.grandTotal) || 0,
+      roundOff: Number(data.roundOff) || 0
     };
   }
 
@@ -460,7 +582,7 @@ export class QuotationService {
       throw new Error('Quotation items are required for validation');
     }
     
-    const calculatedTotals = this.calculateQuotationTotals(quotation.items, quotation.overallDiscount || 0);
+            const calculatedTotals = this.calculateQuotationTotals(quotation.items, quotation.serviceCharges, quotation.batteryBuyBack, quotation.overallDiscount || 0);
     
     const tolerance = 0.01; // Allow for small rounding differences
     

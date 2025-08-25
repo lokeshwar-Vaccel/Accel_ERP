@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Package, DollarSign, TrendingDown, TrendingUp, X, ChevronDown, Settings, MapPin, Hash, Filter, IndianRupee } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Package, DollarSign, TrendingDown, TrendingUp, X, ChevronDown, Settings, MapPin, Hash, Filter, IndianRupee, Zap, Eye, Upload } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
 import { RootState } from '../store';
 import { useSelector } from 'react-redux';
 import { Pagination } from 'components/ui/Pagination';
 import toast from 'react-hot-toast';
+import { DGProduct, ProductCategory } from '../types';
+import DGProductFormModal from '../components/DGProductFormModal';
+import DGProductImportModal from '../components/DGProductImportModal';
 
 export interface Product {
   _id: string;
@@ -39,7 +42,6 @@ export interface Product {
   maxStockLevel?: number; // Added
 }
 
-
 interface ProductFormData {
   name: string;
   description: string;
@@ -52,6 +54,10 @@ interface ProductFormData {
 }
 
 const ProductManagement: React.FC = () => {
+  // Active tab state
+  const [activeTab, setActiveTab] = useState<'spare' | 'dg'>('spare');
+  
+  // Spare Products State
   const [products, setProducts] = useState<Product[]>([]); // paginated for table
   const [allProductsForAvg, setAllProductsForAvg] = useState<Product[]>([]); // all for avg price
   const [activeProducts, setActiveProducts] = useState<Product[]>([]); // all for avg price
@@ -67,6 +73,18 @@ const ProductManagement: React.FC = () => {
   const [totalDatas, setTotalDatas] = useState(0);
   const [sort, setSort] = useState('name');
 
+  // DG Products State
+  const [dgProducts, setDgProducts] = useState<DGProduct[]>([]);
+  const [dgLoading, setDgLoading] = useState(false);
+  const [dgSearchTerm, setDgSearchTerm] = useState('');
+  const [dgStatusFilter, setDgStatusFilter] = useState('all');
+  const [dgCurrentPage, setDgCurrentPage] = useState(1);
+  const [dgLimit, setDgLimit] = useState(10);
+  const [dgTotalPages, setDgTotalPages] = useState(0);
+  const [dgTotalDatas, setDgTotalDatas] = useState(0);
+  const [dgSort, setDgSort] = useState('createdAt');
+  const [dgActiveCount, setDgActiveCount] = useState(0);
+
   // Custom dropdown states
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
@@ -77,15 +95,20 @@ const ProductManagement: React.FC = () => {
 
   // Modal states
   const [showProductModal, setShowProductModal] = useState(false);
+  const [showDGProductModal, setShowDGProductModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedDGProduct, setSelectedDGProduct] = useState<DGProduct | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [productToDelete, setProductToDelete] = useState<Product | null>(null);
+  const [productToDelete, setProductToDelete] = useState<Product | DGProduct | null>(null);
   const [locations, setLocations] = useState<any[]>([]);
   const [rooms, setRooms] = useState<any[]>([]);
   const [racks, setRacks] = useState<any[]>([]);
   const [filteredRooms, setFilteredRooms] = useState<any[]>([]);
   const [filteredRacks, setFilteredRacks] = useState<any[]>([]);
+  const [showViewProductModal, setShowViewProductModal] = useState(false);
+  const [viewingProduct, setViewingProduct] = useState<DGProduct | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -124,23 +147,33 @@ const ProductManagement: React.FC = () => {
     'genset', 'spare_part', 'accessory'
   ];
 
+
+
   const handlePageChange = (page: number) => {
-    setCurrentPage(page);
+    if (activeTab === 'spare') {
+      setCurrentPage(page);
+    } else {
+      setDgCurrentPage(page);
+    }
   };
 
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
 
   // Sorting state
-  const [sortField, setSortField] = useState('all');
-  const [sortOrder, setSortOrder] = useState('asc');
+  const [sortField, setSortField] = useState<string>('all');
+  const [sortOrder, setSortOrder] = useState<string>('asc');
 
   // Collapsible filter panel state
   const [showFilters, setShowFilters] = useState(false);
 
   useEffect(() => {
-    fetchProducts();
-  }, []);
+    if (activeTab === 'spare') {
+      fetchProducts();
+    } else {
+      fetchDGProducts();
+    }
+  }, [activeTab]);
 
   // Update sort param when sortField or sortOrder changes
   useEffect(() => {
@@ -151,6 +184,13 @@ const ProductManagement: React.FC = () => {
       setSort(sortParam);
     }
   }, [sortField, sortOrder]);
+
+  // Refetch DG products when pagination parameters change
+  useEffect(() => {
+    if (activeTab === 'dg') {
+      fetchDGProducts();
+    }
+  }, [dgCurrentPage, dgLimit, dgSort, dgSearchTerm, dgStatusFilter]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -200,6 +240,12 @@ const ProductManagement: React.FC = () => {
     setShowProductModal(true);
   };
 
+  const openAddDGProductModal = () => {
+    setIsEditing(false);
+    setSelectedDGProduct(null);
+    setShowDGProductModal(true);
+  };
+
   const openEditProductModal = (product: Product) => {
     setIsEditing(true);
     setSelectedProduct(product);
@@ -231,6 +277,17 @@ const ProductManagement: React.FC = () => {
 
     setFormErrors({});
     setShowProductModal(true);
+  };
+
+  const openEditDGProductModal = (product: DGProduct) => {
+    setIsEditing(true);
+    setSelectedDGProduct(product);
+    setShowDGProductModal(true);
+  };
+
+  const openViewDGProductModal = (product: any | DGProduct) => {
+    setViewingProduct(product);
+    setShowViewProductModal(true);
   };
 
   const closeProductModal = () => {
@@ -266,7 +323,17 @@ const ProductManagement: React.FC = () => {
     setFormErrors({});
   };
 
-  const openDeleteConfirm = (product: Product) => {
+  const closeDGProductModal = () => {
+    setShowDGProductModal(false);
+    setSelectedDGProduct(null);
+  };
+
+  const closeViewProductModal = () => {
+    setShowViewProductModal(false);
+    setViewingProduct(null);
+  };
+
+  const openDeleteConfirm = (product: Product | DGProduct) => {
     setProductToDelete(product);
     setShowDeleteConfirm(true);
   };
@@ -274,6 +341,99 @@ const ProductManagement: React.FC = () => {
   const closeDeleteConfirm = () => {
     setShowDeleteConfirm(false);
     setProductToDelete(null);
+  };
+
+  // DG Product handlers
+  const handleDGProductSubmit = async (data: Partial<DGProduct>) => {
+    setSubmitting(true);
+    try {
+      // Add createdBy field to the data
+      const productData = {
+        ...data,
+        createdBy: currentUser
+      };
+
+      if (isEditing && selectedDGProduct) {
+        await apiClient.dgProducts.update(selectedDGProduct._id, productData);
+        toast.success('DG Product updated successfully');
+      } else {
+        await apiClient.dgProducts.create(productData);
+        toast.success('DG Product created successfully');
+      }
+      
+      await fetchDGProducts();
+      closeDGProductModal();
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to save DG Product');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const fetchDGProducts = async () => {
+    const params: any = {
+      page: dgCurrentPage,
+      limit: dgLimit,
+      sortBy: dgSort,
+      search: dgSearchTerm,
+      ...(dgStatusFilter !== 'all' && {
+        isActive: dgStatusFilter === 'active' ? true : false,
+      }),
+    };
+
+    try {
+      setDgLoading(true);
+      const response = await apiClient.dgProducts.getAll(params);
+      
+      // Handle new pagination structure
+      if (response.success && response.data) {
+        const responseData = response.data as any;
+        const { products, pagination, stats } = responseData;
+        
+        // Update pagination state
+        setDgCurrentPage(pagination.currentPage);
+        setDgLimit(pagination.limit);
+        setDgTotalDatas(pagination.totalCount);
+        setDgTotalPages(pagination.totalPages);
+        
+        // Update active count from stats
+        if (stats && typeof stats.activeCount === 'number') {
+          setDgActiveCount(stats.activeCount);
+        } else {
+          // Fallback: calculate from current products if stats not available
+          const activeCount = Array.isArray(products) ? products.filter(p => p.isActive).length : 0;
+          setDgActiveCount(activeCount);
+        }
+        
+        // Update products
+        if (Array.isArray(products)) {
+          setDgProducts(products);
+        } else {
+          setDgProducts([]);
+        }
+      } else {
+        // Fallback for old response structure
+        setDgCurrentPage(response.pagination?.page || 1);
+        setDgLimit(response.pagination?.limit || 10);
+        setDgTotalDatas(response.pagination?.total || 0);
+        setDgTotalPages(response.pagination?.pages || 0);
+        
+        let products: any[] = [];
+        if (response.data) {
+          if (Array.isArray(response.data)) {
+            products = response.data;
+          } else if ((response.data as any).products && Array.isArray((response.data as any).products)) {
+            products = (response.data as any).products;
+          }
+        }
+        setDgProducts(products);
+      }
+    } catch (error) {
+      console.error('Error fetching DG products:', error);
+      setDgProducts([]);
+    } finally {
+      setDgLoading(false);
+    }
   };
 
   // Form validation
@@ -436,10 +596,18 @@ const ProductManagement: React.FC = () => {
 
     setSubmitting(true);
     try {
-      await apiClient.products.delete(productToDelete._id);
-      await fetchProducts();
+      if ('kva' in productToDelete) {
+        // This is a DG Product
+        await apiClient.dgProducts.delete(productToDelete._id);
+        await fetchDGProducts();
+        toast.success('DG Product deleted successfully');
+      } else {
+        // This is a regular Product
+        await apiClient.products.delete(productToDelete._id);
+        await fetchProducts();
+        toast.success('Product deleted successfully');
+      }
       closeDeleteConfirm();
-      toast.success('Product deleted successfully');
     } catch (err: any) {
       console.error('Error deleting product:', err);
       if (err.response && err.response.data && err.response.data.message) {
@@ -557,7 +725,6 @@ const ProductManagement: React.FC = () => {
     }
   };
 
-
   const fetchRacks = async () => {
     try {
       const response = await apiClient.stock.getRacks();
@@ -578,8 +745,6 @@ const ProductManagement: React.FC = () => {
   };
 
   const fetchProducts = async () => {
-    
-
     const params: any = {
       page: currentPage,
       limit,
@@ -652,8 +817,10 @@ const ProductManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchProducts();
-    fetchAllProductsForAvg();
+    if (activeTab === 'spare') {
+      fetchProducts();
+      fetchAllProductsForAvg();
+    }
   }, [currentPage, limit, sort, searchTerm, statusFilter, categoryFilter]);
 
   const filteredProducts = Array.isArray(products) ? products.filter(product => {
@@ -705,7 +872,7 @@ const ProductManagement: React.FC = () => {
     setStatusFilter('all');
   };
 
-   const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all' || sortField !== 'all' || searchTerm;
+  const hasActiveFilters = categoryFilter !== 'all' || statusFilter !== 'all' || sortField !== 'all' || searchTerm;
 
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
@@ -713,351 +880,118 @@ const ProductManagement: React.FC = () => {
         title="Product Management"
         subtitle="Manage your product catalog and inventory"
       >
-        <button
-          onClick={openAddProductModal}
-          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-        >
-          <Plus className="w-4 h-4" />
-          <span className="text-sm">Add Product</span>
-        </button>
+        <div className="flex space-x-2">
+          {activeTab === 'spare' && <button
+            onClick={openAddProductModal}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <Package className="w-4 h-4" />
+            <span className="text-sm">Add Spare Product</span>
+          </button>}
+          {activeTab === 'dg' && <button
+            onClick={openAddDGProductModal}
+            className="bg-gradient-to-r from-orange-600 to-orange-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-orange-700 hover:to-orange-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <Zap className="w-4 h-4" />
+            <span className="text-sm">Add DG Product</span>
+          </button>}
+          {activeTab === 'dg' && <button
+                onClick={() => setShowImportModal(true)}
+                className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+              >
+                <Upload className="w-4 h-4" />
+                <span className="text-sm">Import Excel</span>
+              </button>}
+        </div>
       </PageHeader>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Total Products</p>
-              <p className="text-xl font-bold text-gray-900">{totalDatas}</p>
-            </div>
-            <Package className="w-6 h-6 text-blue-600" />
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Active Products</p>
-              <p className="text-xl font-bold text-green-600">
-              {totalDatas}
-                {/* {Array.isArray(products) ? products.filter(p => p.isActive).length : 0} */}
-              </p>
-            </div>
-            <TrendingUp className="w-6 h-6 text-green-600" />
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Categories</p>
-              <p className="text-xl font-bold text-purple-600">{categories.length}</p>
-            </div>
-            <Package className="w-6 h-6 text-purple-600" />
-          </div>
-        </div>
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-600">Avg Price</p>
-              <p className="text-xl font-bold text-orange-600">
-                ₹{allProductsForAvg.length > 0
-                  ? (allProductsForAvg.reduce((acc, p) => acc + (p.price || 0), 0) / allProductsForAvg.length).toFixed(2)
-                  : 0}
-              </p>
-            </div>
-            <IndianRupee className="w-6 h-6 text-orange-600" />
-          </div>
-        </div>
-      </div>
-
-      {/* Filters Button */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
-        {/* Primary Search Bar */}
-        <div className="p-3 border-b border-gray-100">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex-1 relative">
-              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
+      {/* Tab Navigation */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8 px-6">
             <button
-              onClick={() => setShowFilters(v => !v)}
-              className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-xs font-medium flex items-center gap-1.5"
+              onClick={() => setActiveTab('spare')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'spare'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
             >
-              <Filter className="w-3.5 h-3.5" />
-              Filters
-              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+              <div className="flex items-center space-x-2">
+                <Package className="w-4 h-4" />
+                <span>Spare Products</span>
+              </div>
             </button>
-          </div>
+            <button
+              onClick={() => setActiveTab('dg')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'dg'
+                  ? 'border-orange-500 text-orange-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <Zap className="w-4 h-4" />
+                <span>DG Products</span>
+              </div>
+            </button>
+          </nav>
         </div>
-        {/* Collapsible Filter Panel */}
-        {showFilters && (
-          <div className="px-6 py-6 bg-gray-50">
-            {/* Main Filter Controls */}
-            <div className="grid grid-cols-5 gap-4 mb-6">
-              {/* Sort By */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Sort By</label>
-                <select
-                  value={sortField}
-                  onChange={e => setSortField(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
-                >
-                  <option value="all">Select Field</option>
-                  <option value="name">Product Name</option>
-                  <option value="partNo">Part Number</option>
-                  <option value="price">Unit Price</option>
-                </select>
-              </div>
-
-              {/* Sort Order */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Sort Order</label>
-                <select
-                  value={sortOrder}
-                  onChange={e => setSortOrder(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
-                >
-                  <option value="asc">Ascending (A-Z)</option>
-                  <option value="desc">Descending (Z-A)</option>
-                </select>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
-                {/* Category Custom Dropdown */}
-                <div className="relative dropdown-container">
-                  <button
-                    onClick={() => {
-                      setShowCategoryDropdown(!showCategoryDropdown);
-                      setShowStatusDropdown(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  >
-                    <span className="text-gray-700 truncate mr-1">{getCategoryLabel(categoryFilter)}</span>
-                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCategoryDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showCategoryDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                      {categoryOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setCategoryFilter(option.value);
-                            setShowCategoryDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-                {/* Status Custom Dropdown */}
-                <div className="relative dropdown-container">
-                  <button
-                    onClick={() => {
-                      setShowStatusDropdown(!showStatusDropdown);
-                      setShowCategoryDropdown(false);
-                    }}
-                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  >
-                    <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
-                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showStatusDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                      {statusOptions.map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setStatusFilter(option.value);
-                            setShowStatusDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-end">
-              <button
-                onClick={clearAllFilters}
-                disabled={!hasActiveFilters}
-                className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                  hasActiveFilters
-                    ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
-                    : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                }`}
-              >
-                Clear All Filters
-              </button>
-            </div>
-
-
-            </div>
-
-          </div>
-        )}
-        {/* Active Filters Chips */}
-        {hasActiveFilters && (
-          <div className="px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-t border-gray-100">
-            <div className="flex items-center text-sm text-gray-600">
-              {/* <span className="font-medium">{filteredProducts.length}</span>
-              <span className="mx-1">of</span>
-              <span>{filteredProducts.length}</span>
-              <span className="ml-1">items found</span> */}
-            </div>
-          <div className="mt-4 flex flex-wrap gap-2 items-center">
-          <span className="text-xs text-gray-500">Active filters:</span>
-          {categoryFilter !== 'all' && (
-            <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded-full text-xs flex items-center">
-              {getCategoryLabel(categoryFilter)}
-              <button onClick={() => setCategoryFilter('all')} className="ml-1 text-purple-500 hover:text-purple-700">×</button>
-            </span>
+        
+        <div className="p-6">
+          {activeTab === 'spare' ? (
+            <SpareProductsTab
+              products={products}
+              loading={loading}
+              searchTerm={searchTerm}
+              setSearchTerm={setSearchTerm}
+              categoryFilter={categoryFilter}
+              setCategoryFilter={setCategoryFilter}
+              statusFilter={statusFilter}
+              setStatusFilter={setStatusFilter}
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalDatas={totalDatas}
+              filteredProducts={filteredProducts}
+              openEditProductModal={openEditProductModal}
+              openDeleteConfirm={openDeleteConfirm}
+              showFilters={showFilters}
+              setShowFilters={setShowFilters}
+              sortField={sortField}
+              setSortField={setSortField}
+              sortOrder={sortOrder}
+              setSortOrder={setSortOrder}
+              categoryOptions={categoryOptions}
+              statusOptions={statusOptions}
+              getCategoryLabel={getCategoryLabel}
+              getStatusLabel={getStatusLabel}
+              hasActiveFilters={hasActiveFilters as boolean}
+              clearAllFilters={clearAllFilters}
+              handlePageChange={handlePageChange}
+              limit={limit}
+            />
+          ) : (
+            <DGProductsTab
+              dgProducts={dgProducts}
+              loading={dgLoading}
+              searchTerm={dgSearchTerm}
+              setSearchTerm={setDgSearchTerm}
+              statusFilter={dgStatusFilter}
+              setStatusFilter={setDgStatusFilter}
+              currentPage={dgCurrentPage}
+              totalPages={dgTotalPages}
+              totalDatas={dgTotalDatas}
+              openEditProductModal={openEditDGProductModal}
+              openViewProductModal={openViewDGProductModal}
+              openDeleteConfirm={openDeleteConfirm}
+              handlePageChange={handlePageChange}
+              limit={dgLimit}
+              setShowImportModal={setShowImportModal}
+              dgActiveCount={dgActiveCount}
+            />
           )}
-          {statusFilter !== 'all' && (
-            <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded-full text-xs flex items-center">
-              {getStatusLabel(statusFilter)}
-              <button onClick={() => setStatusFilter('all')} className="ml-1 text-blue-500 hover:text-blue-700">×</button>
-            </span>
-          )}
-          {sortField !== 'all' && (
-            <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs flex items-center">
-              {(() => {
-                let label = '';
-                if (sortField === 'name') label = 'Product Name';
-                else if (sortField === 'partNo') label = 'Part No';
-                else if (sortField === 'price') label = 'Price';
-                return `${label} - ${sortOrder === 'asc' ? 'A-Z (Ascending)' : 'Z-A (Descending)'}`;
-              })()}
-              <button onClick={() => setSortField('all')} className="ml-1 text-green-500 hover:text-green-700">×</button>
-            </span>
-          )}
-          {searchTerm && (
-            <span className="bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full text-xs flex items-center">
-              {`Search: "${searchTerm}"`}
-              <button onClick={() => setSearchTerm('')} className="ml-1 text-yellow-500 hover:text-yellow-700">×</button>
-            </span>
-          )}
-        </div>
-        </div>)
-        }
-      </div>
-
-
-      {/* Products Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part No</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Stock</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UOM</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GNDP</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPCB No</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {loading ? (
-                <tr>
-                  <td colSpan={11} className="px-6 py-8 text-center text-gray-500">Loading products...</td>
-                </tr>
-              ) : filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={11} className="px-6 py-8 text-center text-gray-500">No products found</td>
-                </tr>
-              ) : (
-                filteredProducts.map((product) => (
-                  <tr key={product._id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap uppercase">
-                      <div>
-                        <div className="text-xs font-medium text-gray-900">{product.name}</div>
-                        {/* <div className="text-xs text-gray-500">Code: {product.productCode || 'N/A'}</div> */}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.partNo}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.category}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.brand || 'N/A'}</td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
-                      ₹{product?.price?.toFixed(2)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product.minStockLevel}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product.maxStockLevel  }
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product?.uom || 'N/A'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                    ₹{product.gndp?.toFixed(2) || 'N/A'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {product.cpcbNo || 'N/A'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap uppercase">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${product.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                        {product.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
-                      <div className="flex items-center space-x-2">
-                        <button
-                          onClick={() => openEditProductModal(product)}
-                          className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
-                          title="Edit Product"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => openDeleteConfirm(product)}
-                          className="text-red-600 hover:text-red-900 p-2 rounded-lg hover:bg-red-50 transition-colors"
-                          title="Delete Product"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
         </div>
       </div>
-
-      <Pagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={handlePageChange}
-        totalItems={totalDatas}
-        itemsPerPage={limit}
-      />
-
 
       {/* Product Form Modal */}
       {showProductModal && (
@@ -1542,6 +1476,171 @@ const ProductManagement: React.FC = () => {
         </div>
       )}
 
+      {/* DG Product Form Modal */}
+      {showDGProductModal && (
+        <DGProductFormModal
+          isOpen={showDGProductModal}
+          onClose={closeDGProductModal}
+          onSubmit={handleDGProductSubmit}
+          product={selectedDGProduct}
+          isEditing={isEditing}
+        />
+      )}
+
+      {/* DG Product View Modal */}
+      {showViewProductModal && viewingProduct && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl w-[800px] max-h-[90vh] m-4 overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-orange-100 to-orange-200 rounded-lg flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-orange-600" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">DG Product Details</h2>
+                  <p className="text-sm text-gray-500">View complete product information</p>
+                </div>
+              </div>
+              <button
+                onClick={closeViewProductModal}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Basic Information */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Basic Information</h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Subject</label>
+                    <p className="text-sm text-gray-900 font-medium">{viewingProduct.subject}</p>
+                  </div>
+                  
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Status</label>
+                    <div className="flex items-center space-x-2">
+                      <div className={`w-2 h-2 rounded-full ${viewingProduct.isActive ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                      <span className="text-sm text-gray-900">{viewingProduct.isActive ? 'Active' : 'Inactive'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Created Date</label>
+                  <p className="text-sm text-gray-900">{new Date(viewingProduct.createdAt).toLocaleDateString()}</p>
+                </div>
+
+                {viewingProduct.description && (
+                  <div>
+                    <label className="text-xs text-gray-500 uppercase tracking-wide font-medium">Description</label>
+                    <p className="text-sm text-gray-900 leading-relaxed">{viewingProduct.description}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* DG Specifications */}
+              <div className="bg-blue-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Zap className="w-5 h-5 text-blue-600 mr-2" />
+                  DG Specifications
+                </h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">KVA Rating</label>
+                    <p className="text-sm text-gray-900 font-medium">{viewingProduct.kva}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Phase</label>
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
+                      viewingProduct.phase === 'single' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-blue-100 text-blue-800'
+                    }`}>
+                      {viewingProduct.phase} Phase
+                    </span>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Annexure Rating</label>
+                    <p className="text-sm text-gray-900 font-medium">{viewingProduct.annexureRating}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">DG Model</label>
+                    <p className="text-sm text-gray-900 font-medium">{viewingProduct.dgModel}</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Number of Cylinders</label>
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-pink-100 text-pink-800">
+                      {viewingProduct.numberOfCylinders} {viewingProduct.numberOfCylinders === 1 ? 'Cylinder' : 'Cylinders'}
+                    </span>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                    <p className="text-sm text-gray-900 font-medium">{viewingProduct.subject}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Generated Specifications */}
+              <div className="bg-green-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Settings className="w-5 h-5 text-green-600 mr-2" />
+                  Complete Specifications
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                    <p className="text-sm text-gray-900 leading-relaxed">
+                      Offer for the Supply of {viewingProduct.kva} kVA ({viewingProduct.phase === 'single' ? '1P' : '3P'}) Genset confirming to latest CPCB IV+ emission norms.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Annexure Rating</label>
+                    <p className="text-sm text-gray-900 leading-relaxed">
+                      {viewingProduct.kva} Kva ({viewingProduct.phase === 'single' ? '1P' : '3P'})
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Model & Cylinder</label>
+                    <p className="text-sm text-gray-900 leading-relaxed">
+                      {viewingProduct.dgModel} & CYL-{viewingProduct.numberOfCylinders}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Product Description</label>
+                    <p className="text-sm text-gray-900 leading-relaxed">
+                      {viewingProduct.description || `Supply of ${viewingProduct.kva} kVA ${viewingProduct.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${viewingProduct.numberOfCylinders} cylinder engine, model ${viewingProduct.dgModel}, coupled with ${viewingProduct.kva} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={closeViewProductModal}
+                className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  closeViewProductModal();
+                  openEditDGProductModal(viewingProduct);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Edit Product
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && productToDelete && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1551,10 +1650,16 @@ const ProductManagement: React.FC = () => {
                 <Trash2 className="w-6 h-6 text-red-600" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900 text-center mb-2">
-                Delete Product
+                Delete {('kva' in productToDelete) ? 'DG Product' : 'Product'}
               </h3>
               <p className="text-gray-600 text-center mb-6">
-                Are you sure you want to delete <strong>{productToDelete.name}</strong>?
+                Are you sure you want to delete <strong>{
+                  'name' in productToDelete && productToDelete.name 
+                    ? productToDelete.name 
+                    : 'subject' in productToDelete && productToDelete.subject 
+                      ? productToDelete.subject 
+                      : 'DG Product'
+                }</strong>?
                 This action cannot be undone.
               </p>
               <div className="flex space-x-3">
@@ -1569,13 +1674,657 @@ const ProductManagement: React.FC = () => {
                   disabled={submitting}
                   className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
                 >
-                  {submitting ? 'Deleting...' : 'Delete Product'}
+                  {submitting ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* DG Product Import Modal */}
+      <DGProductImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        onImportSuccess={() => {
+          fetchDGProducts();
+          setShowImportModal(false);
+        }}
+      />
+    </div>
+  );
+};
+
+// Spare Products Tab Component
+const SpareProductsTab: React.FC<{
+  products: Product[];
+  loading: boolean;
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+  categoryFilter: string;
+  setCategoryFilter: (filter: string) => void;
+  statusFilter: string;
+  setStatusFilter: (filter: string) => void;
+  currentPage: number;
+  totalPages: number;
+  totalDatas: number;
+  filteredProducts: Product[];
+  openEditProductModal: (product: Product) => void;
+  openDeleteConfirm: (product: Product) => void;
+  showFilters: boolean;
+  setShowFilters: (show: boolean) => void;
+  sortField: string;
+  setSortField: (field: string) => void;
+  sortOrder: string;
+  setSortOrder: (order: string) => void;
+  categoryOptions: { value: string; label: string }[];
+  statusOptions: { value: string; label: string }[];
+  getCategoryLabel: (value: string) => string;
+  getStatusLabel: (value: string) => string;
+  hasActiveFilters: boolean;
+  clearAllFilters: () => void;
+  handlePageChange: (page: number) => void;
+  limit: number;
+}> = ({
+  products,
+  loading,
+  searchTerm,
+  setSearchTerm,
+  categoryFilter,
+  setCategoryFilter,
+  statusFilter,
+  setStatusFilter,
+  currentPage,
+  totalPages,
+  totalDatas,
+  filteredProducts,
+  openEditProductModal,
+  openDeleteConfirm,
+  showFilters,
+  setShowFilters,
+  sortField,
+  setSortField,
+  sortOrder,
+  setSortOrder,
+  categoryOptions,
+  statusOptions,
+  getCategoryLabel,
+  getStatusLabel,
+  hasActiveFilters,
+  clearAllFilters,
+  handlePageChange,
+  limit
+}) => {
+  const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
+
+  const categories = Array.isArray(products) ? [...new Set(products.map(p => p.category))] : [];
+
+  return (
+    <div className="space-y-4">
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600">Total Spare Products</p>
+              <p className="text-xl font-bold text-gray-900">{totalDatas}</p>
+            </div>
+            <Package className="w-6 h-6 text-blue-600" />
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600">Active Products</p>
+              <p className="text-xl font-bold text-green-600">{totalDatas}</p>
+            </div>
+            <TrendingUp className="w-6 h-6 text-green-600" />
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600">Categories</p>
+              <p className="text-xl font-bold text-purple-600">{categories.length}</p>
+            </div>
+            <Package className="w-6 h-6 text-purple-600" />
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600">Avg Price</p>
+              <p className="text-xl font-bold text-orange-600">
+                ₹{products.length > 0
+                  ? (products.reduce((acc, p) => acc + (p.price || 0), 0) / products.length).toFixed(2)
+                  : 0}
+              </p>
+            </div>
+            <IndianRupee className="w-6 h-6 text-orange-600" />
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
+        <div className="p-3 border-b border-gray-100">
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 relative">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search spare products..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-md hover:bg-blue-100 transition-colors border border-blue-200 text-xs font-medium flex items-center gap-1.5"
+            >
+              <Filter className="w-3.5 h-3.5" />
+              Filters
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+        </div>
+        
+        {showFilters && (
+          <div className="px-6 py-6 bg-gray-50">
+            <div className="grid grid-cols-5 gap-4 mb-6">
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Sort By</label>
+                <select
+                  value={sortField}
+                  onChange={e => setSortField(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
+                >
+                  <option value="all">Select Field</option>
+                  <option value="name">Product Name</option>
+                  <option value="partNo">Part Number</option>
+                  <option value="price">Unit Price</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-sm font-medium text-gray-700">Sort Order</label>
+                <select
+                  value={sortOrder}
+                  onChange={e => setSortOrder(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white transition-colors"
+                >
+                  <option value="asc">Ascending (A-Z)</option>
+                  <option value="desc">Descending (Z-A)</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Category</label>
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => {
+                      setShowCategoryDropdown(!showCategoryDropdown);
+                      setShowStatusDropdown(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  >
+                    <span className="text-gray-700 truncate mr-1">{getCategoryLabel(categoryFilter)}</span>
+                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCategoryDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showCategoryDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {categoryOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setCategoryFilter(option.value);
+                            setShowCategoryDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${categoryFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                <div className="relative dropdown-container">
+                  <button
+                    onClick={() => {
+                      setShowStatusDropdown(!showStatusDropdown);
+                      setShowCategoryDropdown(false);
+                    }}
+                    className="w-full flex items-center justify-between px-3 py-2 text-sm text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  >
+                    <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
+                    <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showStatusDropdown && (
+                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+                      {statusOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => {
+                            setStatusFilter(option.value);
+                            setShowStatusDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              <div className="flex items-end">
+                <button
+                  onClick={clearAllFilters}
+                  disabled={!hasActiveFilters}
+                  className={`w-full px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
+                    hasActiveFilters
+                      ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100'
+                      : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
+                  }`}
+                >
+                  Clear All Filters
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Products Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part No</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Max Stock</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UOM</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GNDP</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">CPCB No</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {loading ? (
+                <tr>
+                  <td colSpan={12} className="px-6 py-8 text-center text-gray-500">Loading spare products...</td>
+                </tr>
+              ) : filteredProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="px-6 py-8 text-center text-gray-500">No spare products found</td>
+                </tr>
+              ) : (
+                filteredProducts.map((product) => (
+                  <tr key={product._id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 whitespace-nowrap uppercase">
+                      <div>
+                        <div className="text-xs font-medium text-gray-900">{product.name}</div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{product.partNo}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.category}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600 uppercase">{product.brand || 'N/A'}</td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs font-medium text-gray-900">
+                      ₹{product?.price?.toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                      {product.minStockLevel}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                      {product.maxStockLevel}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                      {product?.uom || 'N/A'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                      ₹{product.gndp?.toFixed(2) || 'N/A'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                      {product.cpcbNo || 'N/A'}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap uppercase">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${product.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                        {product.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-xs font-medium">
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => openEditProductModal(product)}
+                          className="text-blue-600 hover:text-blue-900 p-2 rounded-lg hover:bg-blue-50 transition-colors"
+                          title="Edit Product"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => openDeleteConfirm(product)}
+                          className="text-red-600 hover:text-red-900 p-2 rounded-lg hover:bg-red-50 transition-colors"
+                          title="Delete Product"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
+        totalItems={totalDatas}
+        itemsPerPage={limit}
+      />
+    </div>
+  );
+};
+
+// DG Products Tab Component
+const DGProductsTab: React.FC<{
+  dgProducts: DGProduct[];
+  loading: boolean;
+  searchTerm: string;
+  setSearchTerm: (term: string) => void;
+  statusFilter: string;
+  setStatusFilter: (filter: string) => void;
+  currentPage: number;
+  totalPages: number;
+  totalDatas: number;
+  openEditProductModal: (product: DGProduct) => void;
+  openViewProductModal: (product: any | DGProduct) => void;
+  openDeleteConfirm: (product: DGProduct) => void;
+  handlePageChange: (page: number) => void;
+  limit: number;
+  setShowImportModal: (show: boolean) => void;
+  dgActiveCount: number;
+}> = ({
+  dgProducts,
+  loading,
+  searchTerm,
+  setSearchTerm,
+  statusFilter,
+  setStatusFilter,
+  currentPage,
+  totalPages,
+  totalDatas,
+  openEditProductModal,
+  openViewProductModal,
+  openDeleteConfirm,
+  handlePageChange,
+  limit,
+  setShowImportModal,
+  dgActiveCount
+}) => {
+  const filteredDGProducts = dgProducts.filter(product => {
+    const matchesSearch = (product.description && product.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (product.subject && product.subject.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (product.kva && product.kva.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (product.dgModel && product.dgModel.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesStatus = statusFilter === 'all' ||
+      (statusFilter === 'active' && product.isActive) ||
+      (statusFilter === 'inactive' && !product.isActive);
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const dgStatusOptions = [
+    { value: 'all', label: 'All Status' },
+    { value: 'active', label: 'Active' },
+    { value: 'inactive', label: 'Inactive' }
+  ];
+
+  const getDGStatusLabel = (value: string) => {
+    const option = dgStatusOptions.find(opt => opt.value === value);
+    return option ? option.label : 'All Status';
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600">Total DG Products</p>
+              <p className="text-xl font-bold text-gray-900">{totalDatas}</p>
+            </div>
+            <Zap className="w-6 h-6 text-orange-600" />
+          </div>
+        </div>
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600">Active DG Products</p>
+              <p className="text-xl font-bold text-green-600">
+                {dgActiveCount}
+              </p>
+            </div>
+            <TrendingUp className="w-6 h-6 text-green-600" />
+          </div>
+        </div>
+
+        {/* <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-gray-600">Avg Price</p>
+              <p className="text-xl font-bold text-orange-600">
+                ₹{dgProducts.length > 0
+                  ? (dgProducts.reduce((acc, p) => acc + (p.price || 0), 0) / dgProducts.length).toFixed(2)
+                  : 0}
+              </p>
+            </div>
+            <IndianRupee className="w-6 h-6 text-orange-600" />
+          </div>
+        </div> */}
+      </div>
+
+      {/* Search and Filters */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 relative">
+            <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+            <input
+              type="text"
+              placeholder="Search DG products..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pl-8 pr-3 py-1.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+          </div>
+          <div className="flex space-x-2">
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="px-3 py-1.5 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+            >
+              {dgStatusOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* DG Products Table */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Zap className="w-5 h-5 text-orange-600" />
+              <h3 className="text-lg font-semibold text-gray-900">DG Products</h3>
+              <span className="px-2 py-1 text-xs font-medium bg-orange-100 text-orange-800 rounded-full">
+                {filteredDGProducts.length} {filteredDGProducts.length === 1 ? 'product' : 'products'}
+              </span>
+            </div>
+            <div className="flex items-center space-x-3">
+              
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <span>Showing</span>
+                <span className="font-medium text-gray-900">{filteredDGProducts.length}</span>
+                <span>of</span>
+                <span className="font-medium text-gray-900">{totalDatas}</span>
+                <span>DG products</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="min-w-full border border-gray-300">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-16">
+                  S.No
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-48">
+                  Subject
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
+                  Annexure Rating
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-24">
+                  KVA
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-20">
+                  Phase
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
+                  Model & Cylinder
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-64">
+                  Product Description
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-24">
+                  Model
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-28">
+                  Cylinders
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider border border-gray-300 w-32">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {loading ? (
+                <tr>
+                  <td colSpan={10} className="px-6 py-8 text-center text-gray-500">Loading DG products...</td>
+                </tr>
+              ) : filteredDGProducts.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-6 py-8 text-center text-gray-500">No DG products found</td>
+                </tr>
+              ) : (
+                filteredDGProducts.map((product, index) => (
+                  <tr key={product._id} className="hover:bg-gray-50">
+                    <td className="px-3 py-3 border border-gray-300 text-xs font-medium text-gray-900 text-center">
+                      {(currentPage - 1) * limit + index + 1}
+                    </td>
+                    <td className="px-3 py-3 border border-gray-300">
+                      <div className="text-xs text-gray-900 font-medium leading-tight">
+                        Offer for the Supply of {product.kva} kVA ({product.phase === 'single' ? '1P' : '3P'}) Genset confirming to latest CPCB IV+ emission norms.
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 border border-gray-300">
+                      <div className="text-xs text-gray-900 font-medium leading-tight">
+                        {product.kva} Kva ({product.phase === 'single' ? '1P' : '3P'})
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 border border-gray-300">
+                      <div className="text-xs text-gray-900 font-medium text-center">
+                        {product.kva}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 border border-gray-300">
+                      <div className="text-xs text-gray-900 font-medium text-center">
+                        {product.phase === 'single' ? '1P' : '3P'}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 border border-gray-300">
+                      <div className="text-xs text-gray-900 font-medium leading-tight">
+                        {product.dgModel} & CYL-{product.numberOfCylinders}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 border border-gray-300">
+                      <div className="text-xs text-gray-900 leading-tight max-w-xs">
+                        {product.description || `Supply of ${product.kva} kVA ${product.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${product.numberOfCylinders} cylinder engine, model ${product.dgModel}, coupled with ${product.kva} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 border border-gray-300">
+                      <div className="text-xs text-gray-900 font-medium text-center">
+                        {product.dgModel}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 border border-gray-300">
+                      <div className="text-xs text-gray-900 font-medium text-center">
+                        {product.numberOfCylinders}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3 border border-gray-300">
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => openViewProductModal(product)}
+                          className="text-green-600 hover:text-green-900 p-1.5 rounded hover:bg-green-50 transition-colors"
+                          title="View Product"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => openEditProductModal(product)}
+                          className="text-blue-600 hover:text-blue-900 p-1.5 rounded hover:bg-blue-50 transition-colors"
+                          title="Edit Product"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => openDeleteConfirm(product)}
+                          className="text-red-600 hover:text-red-900 p-1.5 rounded hover:bg-red-50 transition-colors"
+                          title="Delete Product"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
+        totalItems={totalDatas}
+        itemsPerPage={limit}
+      />
     </div>
   );
 };

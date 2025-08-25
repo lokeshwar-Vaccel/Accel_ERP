@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Types } from 'mongoose';
 
 export interface IQuotation extends Document {
   quotationNumber: string;
+  subject?: string; // Subject/Sub field for quotation
   invoiceId?: string | Types.ObjectId;
   issueDate: Date;
   validUntil: Date;
@@ -21,6 +22,11 @@ export interface IQuotation extends Document {
     };
   };
   location?: string | Types.ObjectId;
+  // Service Ticket related fields
+  engineSerialNumber?: string; // Engine Serial Number from ServiceTicket
+  kva?: string; // KVA rating from ServiceTicket
+  hourMeterReading?: string; // Hour Meter Reading from ServiceTicket
+  serviceRequestDate?: Date; // Service Request Date from ServiceTicket
   items: Array<{
     product: string;
     description: string;
@@ -36,6 +42,27 @@ export interface IQuotation extends Document {
     taxAmount: number;
     totalPrice: number;
   }>;
+  // New fields for service charges and battery buy back
+  serviceCharges: Array<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+    discountedAmount: number;
+    taxRate: number;
+    taxAmount: number;
+    totalPrice: number;
+  }>;
+  batteryBuyBack: {
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+    discountedAmount: number;
+    taxRate: number;
+    taxAmount: number;
+    totalPrice: number;
+  };
   subtotal: number;
   totalDiscount: number;
   overallDiscount?: number;
@@ -45,6 +72,7 @@ export interface IQuotation extends Document {
   roundOff: number;
   notes?: string;
   terms?: string;
+  qrCodeImage?: string; // QR code image URL or base64 string
   validityPeriod: number;
   billToAddress?: {
     address: string;
@@ -52,6 +80,7 @@ export interface IQuotation extends Document {
     district: string;
     pincode: string;
     addressId?: number;
+    gstNumber?: string;
   };
   shipToAddress?: {
     address: string;
@@ -59,6 +88,7 @@ export interface IQuotation extends Document {
     district: string;
     pincode: string;
     addressId?: number;
+    gstNumber?: string;
   };
   dgEnquiry?: string;
   assignedEngineer?: string | Types.ObjectId;
@@ -88,10 +118,12 @@ export interface IPopulatedQuotation extends Omit<IQuotation, 'customer'> {
       gstNumber?: string;
     }>;
   };
+  // Service Ticket related fields will be available from the main IQuotation interface
 }
 
 const QuotationSchema = new Schema<IQuotation>({
   quotationNumber: { type: String, unique: true },
+  subject: { type: String, default: '' },
   invoiceId: { type: Schema.Types.ObjectId, ref: 'Invoice' },
   issueDate: { type: Date, },
   validUntil: { type: Date, },
@@ -112,6 +144,11 @@ const QuotationSchema = new Schema<IQuotation>({
     },
   },
   location: { type: Schema.Types.ObjectId, ref: 'StockLocation' }, // Added location field as reference
+  // Service Ticket related fields
+  engineSerialNumber: { type: String },
+  kva: { type: String },
+  hourMeterReading: { type: String },
+  serviceRequestDate: { type: Date },
   items: [
     {
       product: { type: String, },
@@ -129,6 +166,29 @@ const QuotationSchema = new Schema<IQuotation>({
       totalPrice: { type: Number, },
     },
   ],
+  // New fields for service charges and battery buy back
+  serviceCharges: [
+    {
+      description: { type: String, required: true },
+      quantity: { type: Number, required: true },
+      unitPrice: { type: Number, required: true },
+      discount: { type: Number, default: 0 },
+      discountedAmount: { type: Number, default: 0 }, // Made optional, will be calculated
+      taxRate: { type: Number, required: true },
+      taxAmount: { type: Number, default: 0 }, // Made optional, will be calculated
+      totalPrice: { type: Number, default: 0 }, // Made optional, will be calculated
+    },
+  ],
+  batteryBuyBack: {
+    description: { type: String, required: true },
+    quantity: { type: Number, required: true },
+    unitPrice: { type: Number, required: true },
+    discount: { type: Number, default: 0 },
+    discountedAmount: { type: Number, default: 0 }, // Made optional, will be calculated
+    taxRate: { type: Number, required: true },
+    taxAmount: { type: Number, default: 0 }, // Made optional, will be calculated
+    totalPrice: { type: Number, default: 0 }, // Made optional, will be calculated
+  },
   subtotal: { type: Number, },
   totalDiscount: { type: Number, },
   overallDiscount: { type: Number, required: false },
@@ -138,22 +198,25 @@ const QuotationSchema = new Schema<IQuotation>({
   roundOff: { type: Number, },
   notes: { type: String },
   terms: { type: String },
+  qrCodeImage: { type: String }, // QR code image URL or base64 string
   validityPeriod: { type: Number, },
   billToAddress: {
     address: { type: String, trim: true },
     state: { type: String, trim: true },
     district: { type: String, trim: true },
     pincode: { type: String, trim: true },
-    addressId: { type: Number }
+    addressId: { type: Number },
+    gstNumber: { type: String, trim: true, maxlength: [50, 'GST number cannot exceed 50 characters'] }
   },
   shipToAddress: {
     address: { type: String, trim: true },
     state: { type: String, trim: true },
     district: { type: String, trim: true },
     pincode: { type: String, trim: true },
-    addressId: { type: Number }
+    addressId: { type: Number },
+    gstNumber: { type: String, trim: true, maxlength: [50, 'GST number cannot exceed 50 characters'] }
   },
-  dgEnquiry: { type: Schema.Types.ObjectId, ref: 'DGEnquiry', required: false },
+  dgEnquiry: { type: Schema.Types.ObjectId, ref: 'DGEnquiry', required: false } as any,
   assignedEngineer: { type: Schema.Types.ObjectId, ref: 'User', required: false },
   // Payment fields - same structure as Invoice model
   paidAmount: { type: Number, default: 0, min: 0 },
@@ -175,17 +238,89 @@ const QuotationSchema = new Schema<IQuotation>({
   },
 });
 
-// Pre-save middleware to calculate overallDiscountAmount
+// Pre-save middleware to calculate all required fields
 QuotationSchema.pre('save', function(next) {
-  // Calculate overallDiscountAmount if overallDiscount is set
-  if (this.overallDiscount && this.overallDiscount > 0) {
-    // Calculate grand total before overall discount
-    const grandTotalBeforeOverallDiscount = this.subtotal + this.totalTax - this.totalDiscount;
-    this.overallDiscountAmount = Math.round((this.overallDiscount / 100) * grandTotalBeforeOverallDiscount * 100) / 100;
-  } else {
-    this.overallDiscountAmount = 0;
+  const doc = this as any; // Type assertion to access dynamic properties
+  
+  // --- Service Charges calculation ---
+  if (doc.serviceCharges && doc.serviceCharges.length > 0) {
+    doc.serviceCharges.forEach((service: any) => {
+      const itemSubtotal = service.quantity * service.unitPrice;
+      const discountAmount = (service.discount / 100) * itemSubtotal;
+      const discountedAmount = itemSubtotal - discountAmount;
+      const taxAmount = (service.taxRate / 100) * discountedAmount;
+      const totalPrice = discountedAmount + taxAmount;
+      
+      service.discountedAmount = Math.round(discountAmount * 100) / 100;
+      service.taxAmount = Math.round(taxAmount * 100) / 100;
+      service.totalPrice = Math.round(totalPrice * 100) / 100;
+    });
   }
+
+  // --- Battery Buy Back calculation ---
+  if (doc.batteryBuyBack) {
+    const itemSubtotal = doc.batteryBuyBack.quantity * doc.batteryBuyBack.unitPrice;
+    const discountAmount = (doc.batteryBuyBack.discount / 100) * itemSubtotal;
+    const discountedAmount = itemSubtotal - discountAmount;
+    const taxAmount = (doc.batteryBuyBack.taxRate / 100) * discountedAmount;
+    const totalPrice = discountedAmount + taxAmount;
+    
+    doc.batteryBuyBack.discountedAmount = Math.round(discountAmount * 100) / 100;
+    doc.batteryBuyBack.taxAmount = Math.round(taxAmount * 100) / 100;
+    doc.batteryBuyBack.totalPrice = Math.round(totalPrice * 100) / 100;
+  }
+
+  // --- Overall Discount calculation ---
+  if (doc.overallDiscount && doc.overallDiscount > 0) {
+    let grandTotalBeforeOverallDiscount = doc.subtotal + doc.totalTax - doc.totalDiscount;
+
+    if (doc.serviceCharges && doc.serviceCharges.length > 0) {
+      doc.serviceCharges.forEach((service: any) => {
+        grandTotalBeforeOverallDiscount += service.totalPrice;
+      });
+    }
+    
+    doc.overallDiscountAmount =
+      Math.round((doc.overallDiscount / 100) * grandTotalBeforeOverallDiscount * 100) / 100;
+  } else {
+    doc.overallDiscountAmount = 0;
+  }
+
+  // --- Grand Total calculation ---
+  let grandTotal = doc.subtotal + doc.totalTax - doc.totalDiscount;
+
+  if (doc.serviceCharges && doc.serviceCharges.length > 0) {
+    doc.serviceCharges.forEach((service: any) => {
+      grandTotal += service.totalPrice;
+    });
+  }
+
+  if (doc.overallDiscountAmount && doc.overallDiscountAmount > 0) {
+    grandTotal -= doc.overallDiscountAmount;
+  }
+
+  if (doc.batteryBuyBack && doc.batteryBuyBack.totalPrice) {
+    grandTotal -= doc.batteryBuyBack.totalPrice;
+  }
+
+  doc.grandTotal = Math.round(grandTotal * 100) / 100;
+
+  // --- Remaining Amount calculation ---
+  // remainingAmount = grandTotal - paidAmount
+  if (!doc.paidAmount) doc.paidAmount = 0;
+  doc.remainingAmount = Math.max(0, Math.round((doc.grandTotal - doc.paidAmount) * 100) / 100);
+
+  // --- Auto set paymentStatus based on amounts ---
+  if (doc.paidAmount === 0) {
+    doc.paymentStatus = 'pending';
+  } else if (doc.paidAmount < doc.grandTotal) {
+    doc.paymentStatus = 'partial';
+  } else if (doc.paidAmount >= doc.grandTotal) {
+    doc.paymentStatus = 'paid';
+  }
+
   next();
 });
+
 
 export const Quotation = mongoose.model<IQuotation>('Quotation', QuotationSchema); 

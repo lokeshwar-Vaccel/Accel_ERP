@@ -12,7 +12,8 @@ import {
   Edit,
   FileText,
   CheckCircle,
-  Package
+  Package,
+  QrCode
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import PageHeader from '../components/ui/PageHeader';
@@ -111,6 +112,8 @@ const InvoiceFormPage: React.FC = () => {
 
   console.log("quotationData:",quotationData);
   
+  // 🎯 CHECK IF INVOICE IS FROM QUOTATION
+  const isFromQuotation = quotationData?.sourceQuotation ? true : false;
 
   // 🎯 GET INVOICE TYPE TITLE FOR DISPLAY
   const getInvoiceTypeTitle = (): string => {
@@ -137,6 +140,12 @@ const InvoiceFormPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
+  // Engine serial number dropdown states
+  const [showEngineSerialDropdown, setShowEngineSerialDropdown] = useState(false);
+  const [engineSerialSearchTerm, setEngineSerialSearchTerm] = useState('');
+  const [highlightedEngineSerialIndex, setHighlightedEngineSerialIndex] = useState(-1);
+  const [dgDetailsWithServiceData, setDgDetailsWithServiceData] = useState<any[]>([]);
+
   // Custom dropdown states
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
@@ -156,7 +165,25 @@ const InvoiceFormPage: React.FC = () => {
     validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
     validityPeriod: 30,
     notes: '',
-    terms: ''
+    terms: '',
+    // New fields from quotation
+    subject: 'SPARES INVOICE FOR DG SET',
+    engineSerialNumber: '',
+    kva: '',
+    hourMeterReading: '',
+    serviceRequestDate: undefined,
+    qrCodeImage: '',
+    serviceCharges: [],
+    batteryBuyBack: {
+      description: '',
+      quantity: 0,
+      unitPrice: 0,
+      discount: 0,
+      discountedAmount: 0,
+      taxRate: 0,
+      taxAmount: 0,
+      totalPrice: 0
+    }
     // Note: Quotation data will be set in useEffect after loading
   });
   const [errors, setErrors] = useState<ValidationError[]>([]);
@@ -205,6 +232,61 @@ const InvoiceFormPage: React.FC = () => {
   const UOM_OPTIONS = [
     'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'
   ];
+
+  // QR Code states
+  const [qrCodePreview, setQrCodePreview] = useState<string>('');
+  const [qrCodeImage, setQrCodeImage] = useState<File | null>(null);
+
+  // QR Code handlers
+  const handleQrCodeUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setQrCodeImage(file);
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        setQrCodePreview(result);
+        setFormData({ ...formData, qrCodeImage: result });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleQrCodeDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.currentTarget.classList.add('border-blue-400', 'bg-blue-50');
+  };
+
+  const handleQrCodeDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50');
+  };
+
+  const handleQrCodeDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50');
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.type.startsWith('image/')) {
+        setQrCodeImage(file);
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const result = event.target?.result as string;
+          setQrCodePreview(result);
+          setFormData({ ...formData, qrCodeImage: result });
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  };
+
+  const removeQrCode = () => {
+    setQrCodeImage(null);
+    setQrCodePreview('');
+    setFormData({ ...formData, qrCodeImage: '' });
+  };
 
   // Initialize data
   useEffect(() => {
@@ -291,7 +373,12 @@ const InvoiceFormPage: React.FC = () => {
       const isFromQuotation = quotationData.sourceQuotation;
       
       // Recalculate totals when quotation data is loaded
-      const recalculatedData = calculateQuotationTotals(quotationData.items || [], quotationData.overallDiscount || 0);
+      const recalculatedData = calculateQuotationTotals(
+        quotationData.items || [], 
+        quotationData.serviceCharges || [], 
+        quotationData.batteryBuyBack || null,
+        quotationData.overallDiscount || 0
+      );
       
       console.log('InvoiceForm: Original quotation items:', quotationData.items);
       console.log('InvoiceForm: Recalculated data:', recalculatedData);
@@ -326,6 +413,24 @@ const InvoiceFormPage: React.FC = () => {
           totalTax: recalculatedData.totalTax,
           grandTotal: recalculatedData.grandTotal,
           roundOff: recalculatedData.roundOff,
+          // New fields from quotation
+          subject: quotationData.subject || '',
+          engineSerialNumber: quotationData.engineSerialNumber || '',
+          kva: quotationData.kva || '',
+          hourMeterReading: quotationData.hourMeterReading || '',
+          serviceRequestDate: quotationData.serviceRequestDate ? new Date(quotationData.serviceRequestDate) : undefined,
+          qrCodeImage: quotationData.qrCodeImage || '',
+          serviceCharges: quotationData.serviceCharges || [],
+          batteryBuyBack: quotationData.batteryBuyBack || {
+            description: '',
+            quantity: 0,
+            unitPrice: 0,
+            discount: 0,
+            discountedAmount: 0,
+            taxRate: 0,
+            taxAmount: 0,
+            totalPrice: 0
+          },
           // Add quotation reference fields if this is from a quotation
           ...(isFromQuotation && {
             sourceQuotation: quotationData.sourceQuotation,
@@ -353,6 +458,13 @@ const InvoiceFormPage: React.FC = () => {
         setTimeout(() => {
           loadAllStockForLocation();
         }, 500);
+      }
+
+      // Initialize QR Code preview if available from quotation
+      if (quotationData.qrCodeImage) {
+        setQrCodePreview(quotationData.qrCodeImage);
+        // Note: We can't restore the original file, but we can show the preview
+        console.log('InvoiceForm: QR Code image loaded from quotation');
       }
     }
   }, [quotationData, loading, customers, addresses]);
@@ -392,7 +504,12 @@ const InvoiceFormPage: React.FC = () => {
     if (formData.items && formData.items.length > 0 && !loading) {
       console.log('InvoiceForm: Recalculating totals for current items:', formData.items);
       
-      const recalculatedData = calculateQuotationTotals(formData.items, formData.overallDiscount || 0);
+      const recalculatedData = calculateQuotationTotals(
+        formData.items, 
+        formData.serviceCharges || [], 
+        formData.batteryBuyBack || null,
+        formData.overallDiscount || 0
+      );
       
       // Only update if there are significant differences to avoid infinite loops
       if (
@@ -412,7 +529,7 @@ const InvoiceFormPage: React.FC = () => {
         }));
       }
     }
-  }, [formData.items, formData.overallDiscount, loading]);
+  }, [formData.items, formData.serviceCharges, formData.batteryBuyBack, formData.overallDiscount, loading]);
 
   // Load stock data when location is available and products are loaded
   useEffect(() => {
@@ -598,6 +715,87 @@ const InvoiceFormPage: React.FC = () => {
     } catch (error) {
       console.error('Error fetching field operators:', error);
       setFieldOperators([]);
+    }
+  };
+
+  // Fetch DG details for the selected customer
+  const fetchDgDetailsForCustomer = async (customerId: string) => {
+    try {
+      console.log('Fetching DG details for customer:', customerId);
+
+      // Fetch customer's dgDetails for engine information
+      const dgResponse = await apiClient.services.getCustomerEngines(customerId);
+      console.log('Full DG Response:', dgResponse);
+      const dgData = dgResponse.data as any;
+      console.log('DG Data:', dgData);
+      const dgDetails = dgData.engines || dgData || [];
+      console.log('DG Details array:', dgDetails);
+      console.log('DG Details length:', dgDetails.length);
+
+      // Log basic info for debugging
+      if (dgDetails.length > 0) {
+        console.log('DG Details found:', dgDetails.length);
+        console.log('Sample DG detail:', {
+          engineSerialNumber: dgDetails[0].engineSerialNumber,
+          kva: dgDetails[0].kva
+        });
+      }
+
+      // If no DG details found, set empty data and return early
+      if (!dgDetails || dgDetails.length === 0) {
+        console.log('No DG details found for customer');
+        setDgDetailsWithServiceData([]);
+        return;
+      }
+
+      try {
+        // Fetch service tickets filtered by customer
+        console.log('Fetching service tickets with params:', {
+          limit: 100,
+          page: 1,
+          customer: customerId
+        });
+
+        const serviceResponse = await apiClient.services.getAll({
+          limit: 100,
+          page: 1,
+          customer: customerId
+        });
+
+        const serviceData = serviceResponse.data as any;
+        const customerServiceTickets = serviceData.tickets || serviceData || [];
+        console.log('Service tickets found:', customerServiceTickets.length);
+
+        // Combine dgDetails with service ticket data
+        const combinedData = dgDetails.map((dg: any) => {
+          // Find matching service ticket for this engine
+          const matchingServiceTicket = customerServiceTickets.find((ticket: any) =>
+            ticket.EngineSerialNumber === dg.engineSerialNumber
+          );
+
+          return {
+            ...dg,
+            // Service ticket data if available
+            HourMeterReading: matchingServiceTicket?.HourMeterReading || '',
+            ServiceRequestDate: matchingServiceTicket?.ServiceRequestDate || null
+          };
+        });
+
+        console.log('Combined data ready:', combinedData.length, 'items');
+        setDgDetailsWithServiceData(combinedData);
+      } catch (serviceError) {
+        console.warn('Could not fetch service tickets, using only DG details:', serviceError);
+        // If service tickets fail, still show DG details without service data
+        const dgOnlyData = dgDetails.map((dg: any) => ({
+          ...dg,
+          HourMeterReading: '',
+          ServiceRequestDate: null
+        }));
+        setDgDetailsWithServiceData(dgOnlyData);
+      }
+    } catch (error) {
+      console.error('Error fetching customer DG details:', error);
+      setDgDetailsWithServiceData([]);
     }
   };
 
@@ -831,7 +1029,12 @@ const InvoiceFormPage: React.FC = () => {
       }
 
       // Recalculate totals with current overall discount
-      const calculationResult = calculateQuotationTotals(newItems, prev.overallDiscount || 0);
+      const calculationResult = calculateQuotationTotals(
+        newItems, 
+        prev.serviceCharges || [], 
+        prev.batteryBuyBack || null,
+        prev.overallDiscount || 0
+      );
 
       return {
         ...prev,
@@ -910,7 +1113,12 @@ const InvoiceFormPage: React.FC = () => {
       }
 
       // Recalculate totals with current overall discount
-      const calculationResult = calculateQuotationTotals(updatedItems, prev.overallDiscount || 0);
+      const calculationResult = calculateQuotationTotals(
+        updatedItems, 
+        prev.serviceCharges || [], 
+        prev.batteryBuyBack || null,
+        prev.overallDiscount || 0
+      );
 
       return {
         ...prev,
@@ -1239,6 +1447,24 @@ const InvoiceFormPage: React.FC = () => {
         invoiceType: invoiceType, // Use the actual invoice type
         location: sanitizedData.location || '',
         notes: sanitizedData.notes || '',
+        // New fields from quotation
+        subject: sanitizedData.subject || '',
+        engineSerialNumber: sanitizedData.engineSerialNumber || '',
+        kva: sanitizedData.kva || '',
+        hourMeterReading: sanitizedData.hourMeterReading || '',
+        serviceRequestDate: sanitizedData.serviceRequestDate ? new Date(sanitizedData.serviceRequestDate).toISOString() : undefined,
+        qrCodeImage: sanitizedData.qrCodeImage || '',
+        serviceCharges: sanitizedData.serviceCharges || [],
+        batteryBuyBack: sanitizedData.batteryBuyBack || {
+          description: '',
+          quantity: 0,
+          unitPrice: 0,
+          discount: 0,
+          discountedAmount: 0,
+          taxRate: 0,
+          taxAmount: 0,
+          totalPrice: 0
+        },
         items: (sanitizedData.items || []).map((item: any) => ({
           product: item.product,
           description: item.description,
@@ -2082,11 +2308,13 @@ const InvoiceFormPage: React.FC = () => {
                   type="text"
                   value={locationSearchTerm || getLocationLabel(formData.location || '')}
                   onChange={(e) => {
+                    if (isFromQuotation) return; // Disable editing when from quotation
                     setLocationSearchTerm(e.target.value);
                     if (!showLocationDropdown) setShowLocationDropdown(true);
                     setHighlightedLocationIndex(-1);
                   }}
                   onFocus={() => {
+                    if (isFromQuotation) return; // Disable dropdown when from quotation
                     setShowLocationDropdown(true);
                     setHighlightedLocationIndex(-1);
                     if (!locationSearchTerm && formData.location) {
@@ -2094,15 +2322,20 @@ const InvoiceFormPage: React.FC = () => {
                     }
                   }}
                   autoComplete="off"
-                  onKeyDown={handleLocationKeyDown}
+                  onKeyDown={isFromQuotation ? undefined : handleLocationKeyDown}
                   placeholder="Search location or press ↓ to open"
                   data-field="location"
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  disabled={isFromQuotation}
+                  className={`w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg transition-colors ${
+                    isFromQuotation 
+                      ? 'bg-gray-100 text-gray-600 cursor-not-allowed' 
+                      : 'focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                  }`}
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
                 </div>
-                {showLocationDropdown && (
+                {showLocationDropdown && !isFromQuotation && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
                     <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
                       <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
@@ -2155,6 +2388,12 @@ const InvoiceFormPage: React.FC = () => {
                   </div>
                 )}
               </div>
+              {isFromQuotation && (
+                <p className="mt-1 text-sm text-blue-600 bg-blue-50 p-2 rounded-md border border-blue-200">
+                  ℹ️ Location field is locked because this invoice is being created from a quotation. 
+                  The location cannot be changed.
+                </p>
+              )}
             </div>
 
             <div>
@@ -2166,23 +2405,30 @@ const InvoiceFormPage: React.FC = () => {
                   type="text"
                   value={customerSearchTerm || getCustomerLabel((formData.customer?._id || formData?.customer || '') as string)}
                   onChange={(e) => {
+                    if (isFromQuotation) return; // Disable editing when from quotation
                     setCustomerSearchTerm(e.target.value);
                     if (!showCustomerDropdown) setShowCustomerDropdown(true);
                     setHighlightedCustomerIndex(-1);
                   }}
                   onFocus={() => {
+                    if (isFromQuotation) return; // Disable dropdown when from quotation
                     setShowCustomerDropdown(true);
                     setHighlightedCustomerIndex(-1);
                   }}
-                  onKeyDown={handleCustomerKeyDown}
+                  onKeyDown={isFromQuotation ? undefined : handleCustomerKeyDown}
                   placeholder={isPurchaseInvoice ? "Search supplier or press ↓ to open" : "Search customer or press ↓ to open"}
                   data-field="customer"
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  disabled={isFromQuotation}
+                  className={`w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg transition-colors ${
+                    isFromQuotation 
+                      ? 'bg-gray-100 text-gray-600 cursor-not-allowed' 
+                      : 'focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
+                  }`}
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerDropdown ? 'rotate-180' : ''}`} />
                 </div>
-                {showCustomerDropdown && (
+                {showCustomerDropdown && !isFromQuotation && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
                     <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
                       <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
@@ -2232,6 +2478,9 @@ const InvoiceFormPage: React.FC = () => {
                           setCustomerSearchTerm('');
                           setHighlightedCustomerIndex(-1);
                           setAddresses(customer.addresses || []);
+                          
+                          // Fetch DG details for the selected customer
+                          fetchDgDetailsForCustomer(customer._id);
                         }}
                         className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.customer?._id === customer._id ? 'bg-blue-100 text-blue-800' :
                           highlightedCustomerIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
@@ -2247,6 +2496,12 @@ const InvoiceFormPage: React.FC = () => {
                   </div>
                 )}
               </div>
+              {isFromQuotation && (
+                <p className="mt-1 text-sm text-blue-600 bg-blue-50 p-2 rounded-md border border-blue-200">
+                  ℹ️ Customer field is locked because this invoice is being created from a quotation. 
+                  The customer cannot be changed.
+                </p>
+              )}
             </div>
 
             {/* Bill To and Ship To Addresses */}
@@ -2668,8 +2923,277 @@ const InvoiceFormPage: React.FC = () => {
 
           </div>
 
+          {/* New Quotation Fields */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Subject
+              </label>
+              <input
+                type="text"
+                value={formData.subject || ''}
+                onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                placeholder="Enter invoice subject"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+            </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Engine Serial Number
+              </label>
+              <div className="relative dropdown-container">
+                <input
+                  type="text"
+                  value={engineSerialSearchTerm || formData.engineSerialNumber || ''}
+                  onChange={(e) => {
+                    setEngineSerialSearchTerm(e.target.value);
+                    if (!showEngineSerialDropdown) setShowEngineSerialDropdown(true);
+                    setHighlightedEngineSerialIndex(-1);
+                  }}
+                  onFocus={() => {
+                    if (dgDetailsWithServiceData.length > 0) {
+                      setShowEngineSerialDropdown(true);
+                      setHighlightedEngineSerialIndex(-1);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      if (!showEngineSerialDropdown) {
+                        setShowEngineSerialDropdown(true);
+                        setHighlightedEngineSerialIndex(0);
+                      } else {
+                        const newIndex = highlightedEngineSerialIndex < dgDetailsWithServiceData.length - 1 ? highlightedEngineSerialIndex + 1 : 0;
+                        setHighlightedEngineSerialIndex(newIndex);
+                      }
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      if (!showEngineSerialDropdown) {
+                        setShowEngineSerialDropdown(true);
+                        setHighlightedEngineSerialIndex(dgDetailsWithServiceData.length - 1);
+                      } else {
+                        const newIndex = highlightedEngineSerialIndex > 0 ? highlightedEngineSerialIndex - 1 : dgDetailsWithServiceData.length - 1;
+                        setHighlightedEngineSerialIndex(newIndex);
+                      }
+                    } else if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (showEngineSerialDropdown && highlightedEngineSerialIndex >= 0 && dgDetailsWithServiceData[highlightedEngineSerialIndex]) {
+                        const selectedTicket = dgDetailsWithServiceData[highlightedEngineSerialIndex];
+                        setFormData({
+                          ...formData,
+                          engineSerialNumber: selectedTicket.engineSerialNumber || '',
+                          kva: selectedTicket.kva ? String(selectedTicket.kva) : '',
+                          hourMeterReading: selectedTicket.HourMeterReading || '',
+                          serviceRequestDate: selectedTicket.ServiceRequestDate ? new Date(selectedTicket.ServiceRequestDate) : undefined
+                        });
+                        setShowEngineSerialDropdown(false);
+                        setEngineSerialSearchTerm('');
+                        setHighlightedEngineSerialIndex(-1);
+                      }
+                    } else if (e.key === 'Escape') {
+                      setShowEngineSerialDropdown(false);
+                      setHighlightedEngineSerialIndex(-1);
+                    }
+                  }}
+                  placeholder="Select engine serial number"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEngineSerialDropdown ? 'rotate-180' : ''}`} />
+                </div>
+                {showEngineSerialDropdown && dgDetailsWithServiceData.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                    <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                      <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                      <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                      <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                    </div>
+                    <button
+                      onClick={() => {
+                        setFormData({
+                          ...formData,
+                          engineSerialNumber: '',
+                          kva: '',
+                          hourMeterReading: '',
+                          serviceRequestDate: undefined
+                        });
+                        setShowEngineSerialDropdown(false);
+                        setEngineSerialSearchTerm('');
+                      }}
+                      className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm text-gray-700"
+                    >
+                      Clear selection
+                    </button>
+                    {dgDetailsWithServiceData
+                      .filter(ticket =>
+                        ticket.engineSerialNumber &&
+                        ticket.engineSerialNumber.toLowerCase().includes(engineSerialSearchTerm.toLowerCase())
+                      )
+                      .map((ticket, index) => (
+                        <button
+                          key={ticket._id}
+                          onClick={() => {
+                            setFormData({
+                              ...formData,
+                              engineSerialNumber: ticket.engineSerialNumber || '',
+                              kva: ticket.kva ? String(ticket.kva) : '',
+                              hourMeterReading: ticket.HourMeterReading || '',
+                              serviceRequestDate: ticket.ServiceRequestDate ? new Date(ticket.ServiceRequestDate) : undefined
+                            });
+                            setShowEngineSerialDropdown(false);
+                            setEngineSerialSearchTerm('');
+                            setHighlightedEngineSerialIndex(-1);
+                          }}
+                          className={`w-full px-3 py-2 text-left transition-colors text-sm ${highlightedEngineSerialIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                            'text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <div className="font-medium">{ticket.engineSerialNumber}</div>
+                          <div className="text-xs text-gray-500">
+                            {ticket.kva && `KVA: ${ticket.kva}`}
+                            {ticket.HourMeterReading && ` • HMR: ${ticket.HourMeterReading}`}
+                            {ticket.ServiceRequestDate && ` • Date: ${new Date(ticket.ServiceRequestDate).toLocaleDateString()}`}
+                          </div>
+                        </button>
+                      ))}
 
+                    {dgDetailsWithServiceData.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                        No DG details found for this customer
+                      </div>
+                    )}
+
+                    {dgDetailsWithServiceData.length > 0 && dgDetailsWithServiceData.filter(ticket =>
+                      ticket.engineSerialNumber &&
+                      ticket.engineSerialNumber.toLowerCase().includes(engineSerialSearchTerm.toLowerCase())
+                    ).length === 0 && (
+                      <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                        No engine serial numbers match your search
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-gray-500 mt-2">
+                Select an engine serial number from customer's DG details to auto-populate KVA, Hour Meter Reading, and Service Request Date
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                KVA Rating
+              </label>
+              <input
+                type="text"
+                value={formData.kva || ''}
+                onChange={(e) => setFormData({ ...formData, kva: e.target.value })}
+                placeholder="Auto-populated from service ticket"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-gray-50"
+                readOnly
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Hour Meter Reading
+              </label>
+              <input
+                type="text"
+                value={formData.hourMeterReading || ''}
+                onChange={(e) => setFormData({ ...formData, hourMeterReading: e.target.value })}
+                placeholder="Auto-populated from service ticket"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-gray-50"
+                readOnly
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Service Request Date
+              </label>
+              <input
+                type="date"
+                value={formatDateForInput(formData.serviceRequestDate)}
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setFormData({ ...formData, serviceRequestDate: new Date(e.target.value) });
+                  } else {
+                    setFormData({ ...formData, serviceRequestDate: undefined });
+                  }
+                }}
+                placeholder="Auto-populated from service ticket"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-gray-50"
+                readOnly
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                QR Code Image <span className="text-gray-400 font-normal">(Optional)</span>
+              </label>
+              <div className="space-y-3">
+                {!qrCodePreview ? (
+                  <div
+                    className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors"
+                    onDragOver={handleQrCodeDragOver}
+                    onDragLeave={handleQrCodeDragLeave}
+                    onDrop={handleQrCodeDrop}
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleQrCodeUpload}
+                      className="hidden"
+                      id="qr-code-upload"
+                    />
+                    <label
+                      htmlFor="qr-code-upload"
+                      className="cursor-pointer flex flex-col items-center space-y-2"
+                    >
+                      <QrCode className="w-12 h-12 text-gray-400" />
+                      <div className="text-sm text-gray-600">
+                        <span className="font-medium text-blue-600 hover:text-blue-500">
+                          Click to upload
+                        </span>{' '}
+                        or drag and drop
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        PNG, JPG, JPEG up to 5MB
+                      </div>
+                    </label>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="relative inline-block">
+                      <img
+                        src={qrCodePreview}
+                        alt="QR Code Preview"
+                        className="max-w-xs max-h-64 rounded-lg border border-gray-200 shadow-sm"
+                      />
+                      <button
+                        type="button"
+                        onClick={removeQrCode}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                        title="Remove QR Code"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    {qrCodeImage && <div className="text-sm text-gray-600">
+                      <strong>File:</strong> {qrCodeImage?.name}
+                      <br />
+                      <strong>Size:</strong> {qrCodeImage?.size ? (qrCodeImage.size / 1024 / 1024).toFixed(2) : '0'} MB
+                    </div>}
+                  </div>
+                )}
+
+                <p className="text-sm text-gray-500 mt-2">
+                  Upload a QR code image that will be included in the invoice
+                </p>
+              </div>
+            </div>
+          </div>
 
           {/* Stock Reduction Option - Conditional based on invoice type */}
           {!isDeliveryChallan && (
@@ -3250,6 +3774,726 @@ const InvoiceFormPage: React.FC = () => {
             {/* Excel-style Table */}
           </div>
 
+          {/* Service Charges Section */}
+          <div className="p-5 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Service Charges</h3>
+              <button
+                onClick={() => {
+                  setFormData(prev => {
+                    const newServiceCharges = [
+                      ...(prev.serviceCharges || []),
+                      {
+                        description: 'Additional Service charges',
+                        quantity: 1,
+                        unitPrice: 0,
+                        discount: 0,
+                        discountedAmount: 0,
+                        taxRate: 18, // Default GST rate
+                        taxAmount: 0,
+                        totalPrice: 0
+                      }
+                    ];
+                    
+                    // Recalculate totals including new service charge
+                    const calculationResult = calculateQuotationTotals(
+                      prev.items || [],
+                      newServiceCharges,
+                      prev.batteryBuyBack || null,
+                      prev.overallDiscount || 0
+                    );
+                    
+                    return {
+                      ...prev,
+                      serviceCharges: newServiceCharges,
+                      subtotal: calculationResult.subtotal,
+                      totalDiscount: calculationResult.totalDiscount,
+                      totalTax: calculationResult.totalTax,
+                      grandTotal: calculationResult.grandTotal
+                    };
+                  });
+                }}
+                type="button"
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Service Charge</span>
+              </button>
+            </div>
+
+            {/* Service Charges Table */}
+            <div className="border border-gray-300 rounded-lg bg-white shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <div className="bg-gray-100 border-b border-gray-300 min-w-[1000px]">
+                  <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                    style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">GST %</div>
+                    <div className="p-3 text-center bg-gray-200">Total</div>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-gray-200 min-w-[1000px]">
+                  {(formData.serviceCharges || []).map((service, index) => (
+                    <div key={index} className="grid group hover:bg-blue-50 transition-colors bg-white"
+                      style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                      
+                      {/* Description */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="text"
+                          value={service.description}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            newServiceCharges[index].description = e.target.value;
+                            setFormData(prev => {
+                              const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                              // Recalculate totals including service charges
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                newServiceCharges,
+                                updatedData.batteryBuyBack || null,
+                                updatedData.overallDiscount || 0
+                              );
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                          placeholder="Service description..."
+                        />
+                      </div>
+
+                      {/* Quantity */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={service.quantity}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            const quantity = parseFloat(e.target.value) || 1;
+                            const unitPrice = newServiceCharges[index].unitPrice || 0;
+                            const discount = newServiceCharges[index].discount || 0;
+                            const taxRate = newServiceCharges[index].taxRate || 0;
+                            
+                            // Calculate new totals
+                            const itemSubtotal = quantity * unitPrice;
+                            const discountAmount = (discount / 100) * itemSubtotal;
+                            const discountedAmount = itemSubtotal - discountAmount;
+                            const taxAmount = (taxRate / 100) * discountedAmount;
+                            const totalPrice = discountedAmount + taxAmount;
+                            
+                            newServiceCharges[index] = {
+                              ...newServiceCharges[index],
+                              quantity,
+                              discountedAmount: discountAmount,
+                              taxAmount: taxAmount,
+                              totalPrice: totalPrice
+                            };
+                            
+                            setFormData(prev => {
+                              const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                              // Recalculate totals including service charges
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                newServiceCharges,
+                                updatedData.batteryBuyBack || null,
+                                updatedData.overallDiscount || 0
+                              );
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                        />
+                      </div>
+
+                      {/* Unit Price */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={service.unitPrice}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            const unitPrice = parseFloat(e.target.value) || 0;
+                            const quantity = newServiceCharges[index].quantity || 1;
+                            const discount = newServiceCharges[index].discount || 0;
+                            const taxRate = newServiceCharges[index].taxRate || 0;
+                            
+                            // Calculate new totals
+                            const itemSubtotal = quantity * unitPrice;
+                            const discountAmount = (discount / 100) * itemSubtotal;
+                            const discountedAmount = itemSubtotal - discountAmount;
+                            const taxAmount = (taxRate / 100) * discountedAmount;
+                            const totalPrice = discountedAmount + taxAmount;
+                            
+                            newServiceCharges[index] = {
+                              ...newServiceCharges[index],
+                              unitPrice,
+                              discountedAmount: discountAmount,
+                              taxAmount: taxAmount,
+                              totalPrice: totalPrice
+                            };
+                            
+                            setFormData(prev => {
+                              const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                              // Recalculate totals including service charges
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                newServiceCharges,
+                                updatedData.batteryBuyBack || null,
+                                updatedData.overallDiscount || 0
+                              );
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                        />
+                      </div>
+
+                      {/* Discount */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={service.discount}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            const discount = parseFloat(e.target.value) || 0;
+                            const quantity = newServiceCharges[index].quantity || 1;
+                            const unitPrice = newServiceCharges[index].unitPrice || 0;
+                            const taxRate = newServiceCharges[index].taxRate || 0;
+                            
+                            // Calculate new totals
+                            const itemSubtotal = quantity * unitPrice;
+                            const discountAmount = (discount / 100) * itemSubtotal;
+                            const discountedAmount = itemSubtotal - discountAmount;
+                            const taxAmount = (taxRate / 100) * discountedAmount;
+                            const totalPrice = discountedAmount + taxAmount;
+                            
+                            newServiceCharges[index] = {
+                              ...newServiceCharges[index],
+                              discount,
+                              discountedAmount: discountAmount,
+                              taxAmount: taxAmount,
+                              totalPrice: totalPrice
+                            };
+                            
+                            setFormData(prev => {
+                              const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                              // Recalculate totals including service charges
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                newServiceCharges,
+                                updatedData.batteryBuyBack || null,
+                                updatedData.overallDiscount || 0
+                              );
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                        />
+                      </div>
+
+                      {/* Tax Rate */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={service.taxRate}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            const taxRate = parseFloat(e.target.value) || 0;
+                            const quantity = newServiceCharges[index].quantity || 1;
+                            const unitPrice = newServiceCharges[index].unitPrice || 0;
+                            const discount = newServiceCharges[index].discount || 0;
+                            
+                            // Calculate new totals
+                            const itemSubtotal = quantity * unitPrice;
+                            const discountAmount = (discount / 100) * itemSubtotal;
+                            const discountedAmount = itemSubtotal - discountAmount;
+                            const taxAmount = (taxRate / 100) * discountedAmount;
+                            const totalPrice = discountedAmount + taxAmount;
+                            
+                            newServiceCharges[index] = {
+                              ...newServiceCharges[index],
+                              taxRate,
+                              taxAmount: taxAmount,
+                              totalPrice: totalPrice
+                            };
+                            
+                            setFormData(prev => {
+                              const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                              // Recalculate totals including service charges
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                newServiceCharges,
+                                updatedData.batteryBuyBack || null,
+                                updatedData.overallDiscount || 0
+                              );
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                        />
+                      </div>
+
+                      {/* Total */}
+                      <div className="p-2 text-center">
+                        <div className="text-sm font-medium text-blue-600">
+                          ₹{service.totalPrice?.toFixed(2) || '0.00'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Remove Service Charge Button */}
+            {(formData.serviceCharges || []).length > 0 && (
+              <div className="mt-3 flex justify-end">
+                <button
+                  onClick={() => {
+                    setFormData(prev => {
+                      const newServiceCharges = (prev.serviceCharges || []).slice(0, -1);
+                      
+                      // Recalculate totals excluding removed service charge
+                      const calculationResult = calculateQuotationTotals(
+                        prev.items || [],
+                        newServiceCharges,
+                        prev.batteryBuyBack || null,
+                        prev.overallDiscount || 0
+                      );
+                      
+                      return {
+                        ...prev,
+                        serviceCharges: newServiceCharges,
+                        subtotal: calculationResult.subtotal,
+                        totalDiscount: calculationResult.totalDiscount,
+                        totalTax: calculationResult.totalTax,
+                        grandTotal: calculationResult.grandTotal
+                      };
+                    });
+                  }}
+                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition-colors"
+                >
+                  Remove Last Service Charge
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Battery Buy Back Section */}
+          <div className="p-5 border-t border-gray-200">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">Battery Buy Back (Deduction from Total)</h3>
+              <button
+                onClick={() => {
+                  setFormData(prev => {
+                    const newBatteryBuyBack = {
+                      description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                      quantity: 1,
+                      unitPrice: 0,
+                      discount: 0,
+                      discountedAmount: 0,
+                      taxRate: 18, // Default GST rate
+                      taxAmount: 0,
+                      totalPrice: 0
+                    };
+                    
+                    // Recalculate totals including battery buy back
+                    const calculationResult = calculateQuotationTotals(
+                      prev.items || [],
+                      prev.serviceCharges || [],
+                      newBatteryBuyBack,
+                      prev.overallDiscount || 0
+                    );
+                    
+                    return {
+                      ...prev,
+                      batteryBuyBack: newBatteryBuyBack,
+                      subtotal: calculationResult.subtotal,
+                      totalDiscount: calculationResult.totalDiscount,
+                      totalTax: calculationResult.totalTax,
+                      grandTotal: calculationResult.grandTotal
+                    };
+                  });
+                }}
+                type="button"
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Battery Buy Back</span>
+              </button>
+            </div>
+
+            {/* Battery Buy Back Table */}
+            {formData.batteryBuyBack && formData.batteryBuyBack.description ? (
+              <div className="border border-gray-300 rounded-lg bg-white shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <div className="bg-gray-100 border-b border-gray-300 min-w-[1000px]">
+                    <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                      style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">GST %</div>
+                      <div className="p-3 text-center bg-gray-200">Total</div>
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-gray-200 min-w-[1000px]">
+                    <div className="grid group hover:bg-blue-50 transition-colors bg-white"
+                      style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                      
+                      {/* Description */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="text"
+                          value={formData.batteryBuyBack.description}
+                          onChange={(e) => {
+                            setFormData(prev => {
+                              const newBatteryBuyBack = {
+                                ...prev.batteryBuyBack!,
+                                description: e.target.value
+                              };
+                              
+                              // Recalculate totals including battery buy back
+                              const calculationResult = calculateQuotationTotals(
+                                prev.items || [],
+                                prev.serviceCharges || [],
+                                newBatteryBuyBack,
+                                prev.overallDiscount || 0
+                              );
+                              
+                              return {
+                                ...prev,
+                                batteryBuyBack: newBatteryBuyBack,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                          placeholder="Battery Buy Back"
+                        />
+                      </div>
+
+                      {/* Quantity */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          value={formData.batteryBuyBack.quantity}
+                          onChange={(e) => {
+                            setFormData(prev => {
+                              const quantity = parseFloat(e.target.value) || 1;
+                              const unitPrice = prev.batteryBuyBack?.unitPrice || 0;
+                              const discount = prev.batteryBuyBack?.discount || 0;
+                              const taxRate = prev.batteryBuyBack?.taxRate || 0;
+                              
+                              // Calculate new totals
+                              const itemSubtotal = quantity * unitPrice;
+                              const discountAmount = (discount / 100) * itemSubtotal;
+                              const discountedAmount = itemSubtotal - discountAmount;
+                              const taxAmount = (taxRate / 100) * discountedAmount;
+                              const totalPrice = discountedAmount + taxAmount;
+                              
+                              const newBatteryBuyBack = {
+                                ...prev.batteryBuyBack!,
+                                quantity,
+                                discountedAmount: discountAmount,
+                                taxAmount: taxAmount,
+                                totalPrice: totalPrice
+                              };
+                              
+                              // Recalculate totals including battery buy back
+                              const calculationResult = calculateQuotationTotals(
+                                prev.items || [],
+                                prev.serviceCharges || [],
+                                newBatteryBuyBack,
+                                prev.overallDiscount || 0
+                              );
+                              
+                              return {
+                                ...prev,
+                                batteryBuyBack: newBatteryBuyBack,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                        />
+                      </div>
+
+                      {/* Unit Price */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={formData.batteryBuyBack.unitPrice}
+                          onChange={(e) => {
+                            setFormData(prev => {
+                              const unitPrice = parseFloat(e.target.value) || 0;
+                              const quantity = prev.batteryBuyBack?.quantity || 1;
+                              const discount = prev.batteryBuyBack?.discount || 0;
+                              const taxRate = prev.batteryBuyBack?.taxRate || 0;
+                              
+                              // Calculate new totals
+                              const itemSubtotal = quantity * unitPrice;
+                              const discountAmount = (discount / 100) * itemSubtotal;
+                              const discountedAmount = itemSubtotal - discountAmount;
+                              const taxAmount = (taxRate / 100) * discountedAmount;
+                              const totalPrice = discountedAmount + taxAmount;
+                              
+                              const newBatteryBuyBack = {
+                                ...prev.batteryBuyBack!,
+                                unitPrice,
+                                discountedAmount: discountAmount,
+                                taxAmount: taxAmount,
+                                totalPrice: totalPrice
+                              };
+                              
+                              // Recalculate totals including battery buy back
+                              const calculationResult = calculateQuotationTotals(
+                                prev.items || [],
+                                prev.serviceCharges || [],
+                                newBatteryBuyBack,
+                                prev.overallDiscount || 0
+                              );
+                              
+                              return {
+                                ...prev,
+                                batteryBuyBack: newBatteryBuyBack,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                        />
+                      </div>
+
+                      {/* Discount */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={formData.batteryBuyBack.discount}
+                          onChange={(e) => {
+                            setFormData(prev => {
+                              const discount = parseFloat(e.target.value) || 0;
+                              const quantity = prev.batteryBuyBack?.quantity || 1;
+                              const unitPrice = prev.batteryBuyBack?.unitPrice || 0;
+                              const taxRate = prev.batteryBuyBack?.taxRate || 0;
+                              
+                              // Calculate new totals
+                              const itemSubtotal = quantity * unitPrice;
+                              const discountAmount = (discount / 100) * itemSubtotal;
+                              const discountedAmount = itemSubtotal - discountAmount;
+                              const taxAmount = (taxRate / 100) * discountedAmount;
+                              const totalPrice = discountedAmount + taxAmount;
+                              
+                              const newBatteryBuyBack = {
+                                ...prev.batteryBuyBack!,
+                                discount,
+                                discountedAmount: discountAmount,
+                                taxAmount: taxAmount,
+                                totalPrice: totalPrice
+                              };
+                              
+                              // Recalculate totals including battery buy back
+                              const calculationResult = calculateQuotationTotals(
+                                prev.items || [],
+                                prev.serviceCharges || [],
+                                newBatteryBuyBack,
+                                prev.overallDiscount || 0
+                              );
+                              
+                              return {
+                                ...prev,
+                                batteryBuyBack: newBatteryBuyBack,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                        />
+                      </div>
+
+                      {/* Tax Rate */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="0.01"
+                          value={formData.batteryBuyBack.taxRate}
+                          onChange={(e) => {
+                            setFormData(prev => {
+                              const taxRate = parseFloat(e.target.value) || 0;
+                              const quantity = prev.batteryBuyBack?.quantity || 1;
+                              const unitPrice = prev.batteryBuyBack?.unitPrice || 0;
+                              const discount = prev.batteryBuyBack?.discount || 0;
+                              
+                              // Calculate new totals
+                              const itemSubtotal = quantity * unitPrice;
+                              const discountAmount = (discount / 100) * itemSubtotal;
+                              const discountedAmount = itemSubtotal - discountAmount;
+                              const taxAmount = (taxRate / 100) * discountedAmount;
+                              const totalPrice = discountedAmount + taxAmount;
+                              
+                              const newBatteryBuyBack = {
+                                ...prev.batteryBuyBack!,
+                                taxRate,
+                                taxAmount: taxAmount,
+                                totalPrice: totalPrice
+                              };
+                              
+                              // Recalculate totals including battery buy back
+                              const calculationResult = calculateQuotationTotals(
+                                prev.items || [],
+                                prev.serviceCharges || [],
+                                newBatteryBuyBack,
+                                prev.overallDiscount || 0
+                              );
+                              
+                              return {
+                                ...prev,
+                                batteryBuyBack: newBatteryBuyBack,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                        />
+                      </div>
+
+                      {/* Total */}
+                      <div className="p-2 text-center">
+                        <div className="text-sm font-medium text-red-600">
+                          ₹{formData.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
+                <p>No battery buy back added yet</p>
+                <p className="text-sm">Click "Add Battery Buy Back" to add battery buy back item</p>
+              </div>
+            )}
+
+            {/* Remove Battery Buy Back Button */}
+            {formData.batteryBuyBack && formData.batteryBuyBack.description && (
+              <div className="mt-3 flex justify-end">
+                <button
+                  onClick={() => {
+                    setFormData(prev => {
+                      const newBatteryBuyBack = {
+                        description: '',
+                        quantity: 0,
+                        unitPrice: 0,
+                        discount: 0,
+                        discountedAmount: 0,
+                        taxRate: 0,
+                        taxAmount: 0,
+                        totalPrice: 0
+                      };
+                      
+                      // Recalculate totals excluding battery buy back
+                      const calculationResult = calculateQuotationTotals(
+                        prev.items || [],
+                        prev.serviceCharges || [],
+                        newBatteryBuyBack,
+                        prev.overallDiscount || 0
+                      );
+                      
+                      return {
+                        ...prev,
+                        batteryBuyBack: newBatteryBuyBack,
+                        subtotal: calculationResult.subtotal,
+                        totalDiscount: calculationResult.totalDiscount,
+                        totalTax: calculationResult.totalTax,
+                        grandTotal: calculationResult.grandTotal
+                      };
+                    });
+                  }}
+                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm transition-colors"
+                >
+                  Remove Battery Buy Back
+                </button>
+              </div>
+            )}
+
+            {/* Note about Battery Buy Back */}
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                💡 <strong>Note:</strong> Battery Buy Back is a deduction from the total. Use negative values (e.g., -500) to reduce the grand total.
+              </p>
+            </div>
+          </div>
+
           {/* Notes */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
@@ -3300,7 +4544,12 @@ const InvoiceFormPage: React.FC = () => {
                         console.log('Overall discount changed to:', value);
                         setFormData(prev => {
                           // Calculate totals with the new overall discount
-                          const calculationResult = calculateQuotationTotals(prev.items || [], value);
+                          const calculationResult = calculateQuotationTotals(
+                            prev.items || [], 
+                            prev.serviceCharges || [], 
+                            prev.batteryBuyBack || null,
+                            value
+                          );
                           console.log('Calculation result:', calculationResult);
                           const updatedData = {
                             ...prev,
@@ -3352,6 +4601,26 @@ const InvoiceFormPage: React.FC = () => {
                   <span className="text-gray-600">Subtotal:</span>
                   <span className="font-medium">₹{formData.subtotal?.toFixed(2) || '0.00'}</span>
                 </div>
+                
+                {/* Service Charges Subtotal */}
+                {formData.serviceCharges && formData.serviceCharges.length > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Service Charges:</span>
+                    <span className="font-medium">₹{(() => {
+                      const serviceTotal = (formData.serviceCharges || []).reduce((sum, service) => sum + (service.totalPrice || 0), 0);
+                      return serviceTotal.toFixed(2);
+                    })()}</span>
+                  </div>
+                )}
+                
+                {/* Battery Buy Back Subtotal */}
+                {formData.batteryBuyBack && formData.batteryBuyBack.description && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Battery Buy Back (Deduction):</span>
+                    <span className="font-medium text-red-600">-₹{(formData.batteryBuyBack.totalPrice || 0).toFixed(2)}</span>
+                  </div>
+                )}
+                
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Total Tax:</span>
                   <span className="font-medium">₹{formData.totalTax?.toFixed(2) || '0.00'}</span>

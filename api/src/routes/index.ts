@@ -3,6 +3,7 @@ import authRoutes from './auth';
 import userRoutes from './users';
 import customerRoutes from './customers';
 import productRoutes from './products';
+import dgProductRoutes from './dgProducts';
 import stockRoutes from './stock';
 import serviceRoutes from './services';
 import amcRoutes from './amc';
@@ -32,6 +33,7 @@ import oemOrdersRoutes from './oemOrders';
 import dgReportsRoutes from './dgReports';
 import dgQuotationsRoutes from './dgQuotations';
 import purchaseOrderPaymentRoutes from './purchaseOrderPayments';
+import qrCodeRoutes from './qrCode';
 
 const router = Router();
 
@@ -70,6 +72,7 @@ router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
 router.use('/customers', customerRoutes);
 router.use('/products', productRoutes);
+router.use('/dg-products', dgProductRoutes);
 router.use('/stock', stockRoutes);
 router.use('/services', serviceRoutes);
 router.use('/amc', amcRoutes);
@@ -99,5 +102,6 @@ router.use('/oem-orders', oemOrdersRoutes);
 router.use('/dg-reports', dgReportsRoutes);
 router.use('/dg-quotations', dgQuotationsRoutes);
 router.use('/purchase-order-payments', purchaseOrderPaymentRoutes);
+router.use('/qr-code', qrCodeRoutes);
 
 export default router;

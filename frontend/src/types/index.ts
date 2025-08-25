@@ -117,10 +117,28 @@ export interface Product {
   updatedAt: string;
 }
 
+export interface DGProduct {
+  _id: string;
+  description?: string;
+  isActive: boolean;
+  kva: string;
+  phase: 'single' | 'three';
+  annexureRating: string;
+  dgModel: string;
+  numberOfCylinders: number;
+  subject: string;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export enum ProductCategory {
   GENSET = 'genset',
   SPARE_PART = 'spare_part',
-  ACCESSORY = 'accessory'
+  ACCESSORY = 'accessory',
+  DG_PRODUCT = 'dg_product',
+  DG_SPARE = 'dg_spare',
+  DG_ACCESSORY = 'dg_accessory'
 }
 
 export interface Warranty {

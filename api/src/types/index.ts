@@ -115,7 +115,10 @@ export enum StockTransactionType {
 export enum ProductCategory {
   GENSET = 'genset',
   SPARE_PART = 'spare_part',
-  ACCESSORY = 'accessory'
+  ACCESSORY = 'accessory',
+  DG_PRODUCT = 'dg_product',
+  DG_SPARE = 'dg_spare',
+  DG_ACCESSORY = 'dg_accessory'
 }
 
 // Stock Unit Type
@@ -257,6 +260,22 @@ export interface IProduct extends Document {
   stockUnit?: StockUnit;
 }
 
+// DG Product Interface
+export interface IDGProduct {
+  _id: string;
+  description?: string;
+  isActive: boolean;
+  kva: string;
+  phase: 'single' | 'three';
+  annexureRating: string;
+  dgModel: string;
+  numberOfCylinders: number;
+  subject: string;
+  createdBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 // Stock Location Interface
 export interface IStockLocation extends Document {
   name: string;
@@ -265,6 +284,7 @@ export interface IStockLocation extends Document {
   contactPerson?: string;
   phone?: string;
   isActive: boolean;
+  gstNumber?: string;
 }
 
 // Room Interface

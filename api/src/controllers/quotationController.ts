@@ -242,7 +242,8 @@ export const downloadQuotationPDF = async (
 export const getQuotationById = async (req: Request, res: Response, next: NextFunction) => {
   try {
     const quotation = await Quotation.findById(req.params.id)
-      .populate('location', 'name address type') // Populate location details
+      .populate('location', 'name address type gstNumber') // Populate location details including GST
+      .populate('customer', 'name email phone pan addresses') // Populate customer details including addresses
       .populate('assignedEngineer', 'firstName lastName email phone'); // Populate assigned engineer details
     if (!quotation) {
       res.status(404).json({ message: 'Quotation not found' });
@@ -265,8 +266,8 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
 
     const [quotations, total] = await Promise.all([
       Quotation.find()
-        .populate('location', 'name address type') // populate location details
-        .populate('customer', 'name email phone pan') // populate customer details
+        .populate('location', 'name address type gstNumber') // populate location details including GST
+        .populate('customer', 'name email phone pan addresses') // populate customer details including addresses
         .populate('assignedEngineer', 'firstName lastName email phone') // populate assigned engineer details
         .skip(skip)
         .limit(limit)
@@ -297,6 +298,9 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
 
     // Step 1: Sanitize input data
     const sanitizedData = sanitizeQuotationData(data);
+
+    console.log("Sanitized data:", sanitizedData);
+    
     
     // Step 2: Validate required fields
     const validationResult = validateQuotationData(sanitizedData);
@@ -339,6 +343,8 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
 
     // Step 5: Calculate financial details
     const calculationResult = calculateQuotationTotals(sanitizedData.items, sanitizedData.overallDiscount || 0);
+
+    console.log("Calculation result:", calculationResult);
     
     // Step 6: Validate financial calculations
     if (calculationResult.grandTotal <= 0) {
@@ -362,10 +368,13 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
       items: calculationResult.items,
       // Set default payment values
       paidAmount: sanitizedData.paidAmount || 0,
-      remainingAmount: calculationResult.grandTotal - (sanitizedData.paidAmount || 0),
+      remainingAmount: calculationResult.remainingAmount,
       paymentStatus: sanitizedData.paidAmount && sanitizedData.paidAmount > 0 ? 'partial' : 'pending',
       status: sanitizedData.status || 'draft'
     };
+
+    console.log("QuotationData:", quotationData);
+    
 
     // Step 8: Save to database
     const quotation = new Quotation(quotationData);
@@ -373,7 +382,8 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
 
     // Step 9: Populate location and assigned engineer, then return success response
     const populatedQuotation = await Quotation.findById(quotation._id)
-      .populate('location', 'name address type')
+      .populate('location', 'name address type gstNumber')
+      .populate('customer', 'name email phone pan addresses')
       .populate('assignedEngineer', 'firstName lastName email phone');
 
     return res.status(201).json({
@@ -492,14 +502,16 @@ const sanitizeQuotationData = (data: any): any => {
       state: String(data.billToAddress.state || '').trim(),
       district: String(data.billToAddress.district || '').trim(),
       pincode: String(data.billToAddress.pincode || '').trim(),
-      addressId: data.billToAddress.addressId
+      addressId: data.billToAddress.addressId,
+      gstNumber: String(data.billToAddress.gstNumber || '').trim()
     } : undefined,
     shipToAddress: data.shipToAddress ? {
       address: String(data.shipToAddress.address || '').trim(),
       state: String(data.shipToAddress.state || '').trim(),
       district: String(data.shipToAddress.district || '').trim(),
       pincode: String(data.shipToAddress.pincode || '').trim(),
-      addressId: data.shipToAddress.addressId
+      addressId: data.shipToAddress.addressId,
+      gstNumber: String(data.shipToAddress.gstNumber || '').trim()
     } : undefined,
     company: data.company ? {
       name: String(data.company.name || '').trim(),
@@ -664,6 +676,7 @@ const calculateQuotationTotals = (items: any[], overallDiscount: number = 0): an
   
   // Apply overall discount to grand total
   const grandTotal = grandTotalBeforeOverallDiscount - overallDiscountAmount;
+  const remainingAmount = grandTotal;
   const roundOff = 0; // No rounding for now
 
   return {
@@ -673,6 +686,7 @@ const calculateQuotationTotals = (items: any[], overallDiscount: number = 0): an
     overallDiscountAmount: roundTo2Decimals(overallDiscountAmount),
     totalTax: roundTo2Decimals(totalTax),
     grandTotal: roundTo2Decimals(grandTotal),
+    remainingAmount: roundTo2Decimals(remainingAmount),
     roundOff,
     items: calculatedItems
   };
@@ -913,7 +927,9 @@ export const sendQuotationEmailToCustomer = async (
     // Allow sending draft quotations - this will update their status to 'sent'
 
     // Generate email subject and content
-    const subject = `Quotation ${quotation.quotationNumber} - ${quotation.company?.name || 'Sun Power Services'}`;
+    const subject = quotation.subject 
+      ? `${quotation.subject} - Quotation ${quotation.quotationNumber}`
+      : `Quotation ${quotation.quotationNumber} - ${quotation.company?.name || 'Sun Power Services'}`;
     
     console.log('Generating email content for quotation:', {
       quotationNumber: quotation.quotationNumber,
@@ -923,7 +939,7 @@ export const sendQuotationEmailToCustomer = async (
       subject: subject
     });
     
-    // Create HTML email content
+    // Create comprehensive HTML email content
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -931,18 +947,54 @@ export const sendQuotationEmailToCustomer = async (
           <meta charset="UTF-8">
           <title>Quotation ${quotation.quotationNumber}</title>
           <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 800px; margin: 0 auto; padding: 20px; }
-            .header { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
-            .company-info { background: #e9ecef; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
-            .customer-info { background: #f8f9fa; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
-            .quotation-details { background: #fff; padding: 20px; border: 1px solid #dee2e6; border-radius: 5px; margin-bottom: 20px; }
-            .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-            .items-table th, .items-table td { border: 1px solid #dee2e6; padding: 10px; text-align: left; }
-            .items-table th { background: #f8f9fa; }
-            .totals { background: #f8f9fa; padding: 15px; border-radius: 5px; }
-            .footer { text-align: center; margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 5px; }
-            .btn { display: inline-block; padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border-radius: 5px; }
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; background-color: #f5f5f5; margin: 0; padding: 0; }
+            .container { max-width: 900px; margin: 0 auto; padding: 20px; background-color: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 25px; border-radius: 10px; margin-bottom: 25px; text-align: center; }
+            .header h1 { margin: 0; font-size: 28px; }
+            .header p { margin: 8px 0; opacity: 0.9; }
+            .quotation-subject { background: #e3f2fd; padding: 15px; border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #2196f3; }
+            .company-info { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e9ecef; }
+            .customer-info { background: #f8f9fa; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #e9ecef; }
+            .addresses-section { display: flex; gap: 20px; margin-bottom: 20px; }
+            .address-box { flex: 1; background: #fff; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; }
+            .quotation-details { background: #fff; padding: 20px; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 20px; }
+            .section-title { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 8px; margin-bottom: 15px; font-size: 18px; }
+            .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+            .items-table th, .items-table td { border: 1px solid #dee2e6; padding: 12px; text-align: left; }
+            .items-table th { background: #34495e; color: white; font-weight: 600; }
+            .items-table tr:nth-child(even) { background-color: #f8f9fa; }
+            .items-table tr:hover { background-color: #e3f2fd; }
+            .calculation-summary { background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border: 1px solid #dee2e6; }
+            .calculation-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #e9ecef; }
+            .calculation-row:last-child { border-bottom: none; font-weight: bold; font-size: 18px; color: #2c3e50; }
+            .calculation-row.total-row { background: #e8f5e8; padding: 12px; border-radius: 5px; margin-top: 10px; }
+            .footer { text-align: center; margin-top: 30px; padding: 25px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 10px; }
+            .contact-info { background: rgba(255,255,255,0.1); padding: 15px; border-radius: 8px; margin-top: 15px; }
+            .highlight { background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 15px 0; }
+            .payment-status { display: inline-block; padding: 8px 16px; border-radius: 20px; font-weight: bold; text-transform: uppercase; font-size: 12px; }
+            .payment-status.pending { background: #fff3cd; color: #856404; }
+            .payment-status.partial { background: #d1ecf1; color: #0c5460; }
+            .payment-status.paid { background: #d4edda; color: #155724; }
+            
+            /* Mobile responsiveness */
+            @media (max-width: 768px) {
+              .container { padding: 15px; margin: 10px; }
+              .header { padding: 20px; }
+              .header h1 { font-size: 24px; }
+              .addresses-section { flex-direction: column; }
+              .items-table { font-size: 12px; }
+              .items-table th, .items-table td { padding: 8px; }
+              .calculation-row { flex-direction: column; text-align: center; }
+              .calculation-row span:first-child { margin-bottom: 5px; }
+            }
+            
+            /* Print styles */
+            @media print {
+              body { background-color: white; }
+              .container { box-shadow: none; border: 1px solid #ccc; }
+              .header { background: #667eea !important; -webkit-print-color-adjust: exact; }
+              .footer { background: #667eea !important; -webkit-print-color-adjust: exact; }
+            }
           </style>
         </head>
         <body>
@@ -951,39 +1003,81 @@ export const sendQuotationEmailToCustomer = async (
               <h1>Quotation ${quotation.quotationNumber}</h1>
               <p><strong>Issue Date:</strong> ${new Date(quotation.issueDate).toLocaleDateString()}</p>
               <p><strong>Valid Until:</strong> ${new Date(quotation.validUntil).toLocaleDateString()}</p>
-              <p><strong>Status:</strong> ${quotation.status}</p>
+              <p><strong>Status:</strong> <span class="payment-status ${quotation.status}">${quotation.status}</span></p>
+              <p><strong>Payment Status:</strong> <span class="payment-status ${quotation.paymentStatus}">${quotation.paymentStatus}</span></p>
             </div>
 
+            ${quotation.subject ? `
+            <div class="quotation-subject">
+              <h3 style="margin: 0 0 10px 0; color: #1976d2;">Subject</h3>
+              <p style="margin: 0; font-size: 16px; font-weight: 500;">${quotation.subject}</p>
+            </div>
+            ` : ''}
+
             <div class="company-info">
-              <h3>Company Information</h3>
+              <h3 class="section-title">Company Information</h3>
               <p><strong>${quotation.company?.name || 'Sun Power Services'}</strong></p>
               <p>${quotation.company?.address || 'Address not available'}</p>
               <p>Phone: ${quotation.company?.phone || 'N/A'}</p>
               <p>Email: ${quotation.company?.email || 'N/A'}</p>
+              ${quotation.company?.pan ? `<p>PAN: ${quotation.company.pan}</p>` : ''}
+              ${quotation.company?.bankDetails ? `
+                <div style="margin-top: 15px; padding: 15px; background: white; border-radius: 5px; border: 1px solid #dee2e6;">
+                  <h4 style="margin: 0 0 10px 0; color: #2c3e50;">Bank Details</h4>
+                  <p style="margin: 5px 0;"><strong>Bank:</strong> ${quotation.company.bankDetails.bankName || 'N/A'}</p>
+                  <p style="margin: 5px 0;"><strong>Account:</strong> ${quotation.company.bankDetails.accountNo || 'N/A'}</p>
+                  <p style="margin: 5px 0;"><strong>IFSC:</strong> ${quotation.company.bankDetails.ifsc || 'N/A'}</p>
+                  <p style="margin: 5px 0;"><strong>Branch:</strong> ${quotation.company.bankDetails.branch || 'N/A'}</p>
+                </div>
+              ` : ''}
             </div>
 
             <div class="customer-info">
-              <h3>Customer Information</h3>
+              <h3 class="section-title">Customer Information</h3>
               <p><strong>${quotation.customer?.name}</strong></p>
               <p>Phone: ${quotation.customer?.phone || 'N/A'}</p>
               <p>Email: ${quotation.customer?.email}</p>
+              ${quotation.customer?.pan ? `<p>PAN: ${quotation.customer.pan}</p>` : ''}
             </div>
 
+            ${(quotation.billToAddress || quotation.shipToAddress) ? `
+            <div class="addresses-section">
+              ${quotation.billToAddress ? `
+                <div class="address-box">
+                  <h4 style="margin: 0 0 10px 0; color: #2c3e50;">Bill To Address</h4>
+                  <p style="margin: 5px 0;">${quotation.billToAddress.address}</p>
+                  <p style="margin: 5px 0;">${quotation.billToAddress.district}, ${quotation.billToAddress.state} - ${quotation.billToAddress.pincode}</p>
+                </div>
+              ` : ''}
+              ${quotation.shipToAddress ? `
+                <div class="address-box">
+                  <h4 style="margin: 0 0 10px 0; color: #2c3e50;">Ship To Address</h4>
+                  <p style="margin: 5px 0;">${quotation.billToAddress.address}</p>
+                  <p style="margin: 5px 0;">${quotation.billToAddress.district}, ${quotation.billToAddress.state} - ${quotation.billToAddress.pincode}</p>
+                </div>
+              ` : ''}
+            </div>
+            ` : ''}
+
             <div class="quotation-details">
-              <h3>Quotation Details</h3>
+              <h3 class="section-title">Quotation Details</h3>
               ${quotation.notes ? `<p><strong>Notes:</strong> ${quotation.notes}</p>` : ''}
               ${quotation.terms ? `<p><strong>Terms:</strong> ${quotation.terms}</p>` : ''}
             </div>
 
-            <h3>Items</h3>
+            <h3 class="section-title">Items</h3>
             <table class="items-table">
               <thead>
                 <tr>
-                  <th>Description</th>
+                  <th>Product/Description</th>
+                  <th>HSN Code</th>
+                  <th>Part No.</th>
                   <th>Quantity</th>
                   <th>Unit Price</th>
                   <th>Discount</th>
+                  <th>Discounted Amount</th>
                   <th>Tax Rate</th>
+                  <th>Tax Amount</th>
                   <th>Total</th>
                 </tr>
               </thead>
@@ -991,27 +1085,171 @@ export const sendQuotationEmailToCustomer = async (
                 ${quotation.items.map((item: any) => `
                   <tr>
                     <td>${item.description || item.product || 'N/A'}</td>
+                    <td>${item.hsnCode || item.hsnNumber || 'N/A'}</td>
+                    <td>${item.partNo || 'N/A'}</td>
                     <td>${item.quantity} ${item.uom || 'nos'}</td>
                     <td>₹${item.unitPrice?.toFixed(2) || '0.00'}</td>
                     <td>${item.discount || 0}%</td>
+                    <td>₹${item.discountedAmount?.toFixed(2) || '0.00'}</td>
                     <td>${item.taxRate || 0}%</td>
+                    <td>₹${item.taxAmount?.toFixed(2) || '0.00'}</td>
                     <td>₹${item.totalPrice?.toFixed(2) || '0.00'}</td>
                   </tr>
                 `).join('')}
               </tbody>
             </table>
 
-            <div class="totals">
-              <p><strong>Subtotal:</strong> ₹${quotation.subtotal?.toFixed(2) || '0.00'}</p>
-              <p><strong>Total Discount:</strong> ₹${quotation.totalDiscount?.toFixed(2) || '0.00'}</p>
-              <p><strong>Total Tax:</strong> ₹${quotation.totalTax?.toFixed(2) || '0.00'}</p>
-              <p><strong>Grand Total:</strong> ₹${quotation.grandTotal?.toFixed(2) || '0.00'}</p>
+            ${quotation.serviceCharges && quotation.serviceCharges.length > 0 ? `
+            <h3 class="section-title">Service Charges</h3>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>Quantity</th>
+                  <th>Unit Price</th>
+                  <th>Discount</th>
+                  <th>Discounted Amount</th>
+                  <th>Tax Rate</th>
+                  <th>Tax Amount</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${quotation.serviceCharges.map((service: any) => `
+                  <tr>
+                    <td>${service.description}</td>
+                    <td>${service.quantity}</td>
+                    <td>₹${service.unitPrice?.toFixed(2) || '0.00'}</td>
+                    <td>${service.discount || 0}%</td>
+                    <td>₹${service.discountedAmount?.toFixed(2) || '0.00'}</td>
+                    <td>${service.taxRate || 0}%</td>
+                    <td>₹${service.taxAmount?.toFixed(2) || '0.00'}</td>
+                    <td>₹${service.totalPrice?.toFixed(2) || '0.00'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+            ` : ''}
+
+            ${quotation.batteryBuyBack ? `
+            <h3 class="section-title">Battery Buy-Back</h3>
+            <table class="items-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>Quantity</th>
+                  <th>Unit Price</th>
+                  <th>Discount</th>
+                  <th>Discounted Amount</th>
+                  <th>Tax Rate</th>
+                  <th>Tax Amount</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>${quotation.batteryBuyBack.description}</td>
+                  <td>${quotation.batteryBuyBack.quantity}</td>
+                  <td>₹${quotation.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}</td>
+                  <td>${quotation.batteryBuyBack.discount || 0}%</td>
+                  <td>₹${quotation.batteryBuyBack.discountedAmount?.toFixed(2) || '0.00'}</td>
+                  <td>${quotation.batteryBuyBack.taxRate || 0}%</td>
+                  <td>₹${quotation.batteryBuyBack.taxAmount?.toFixed(2) || '0.00'}</td>
+                  <td>₹${quotation.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}</td>
+                </tr>
+              </tbody>
+            </table>
+            ` : ''}
+
+            <div class="calculation-summary">
+              <h3 class="section-title">Calculation Summary</h3>
+              
+              <div class="calculation-row">
+                <span>Items Subtotal:</span>
+                <span>₹${quotation.subtotal?.toFixed(2) || '0.00'}</span>
+              </div>
+              
+              ${quotation.serviceCharges && quotation.serviceCharges.length > 0 ? `
+              <div class="calculation-row">
+                <span>Service Charges Total:</span>
+                <span>₹${quotation.serviceCharges.reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
+              </div>
+              ` : ''}
+              
+              <div class="calculation-row">
+                <span>Total Tax:</span>
+                <span>₹${quotation.totalTax?.toFixed(2) || '0.00'}</span>
+              </div>
+              
+              <div class="calculation-row">
+                <span>Total Discount:</span>
+                <span>₹${quotation.totalDiscount?.toFixed(2) || '0.00'}</span>
+              </div>
+              
+              ${quotation.overallDiscount && quotation.overallDiscount > 0 ? `
+              <div class="calculation-row">
+                <span>Overall Discount (${quotation.overallDiscount}%):</span>
+                <span>-₹${quotation.overallDiscountAmount?.toFixed(2) || '0.00'}</span>
+              </div>
+              ` : ''}
+              
+              ${quotation.batteryBuyBack && quotation.batteryBuyBack.totalPrice ? `
+              <div class="calculation-row">
+                <span>Battery Buy-Back Credit:</span>
+                <span>-₹${quotation.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}</span>
+              </div>
+              ` : ''}
+              
+              <div class="calculation-row total-row">
+                <span>Grand Total:</span>
+                <span>₹${quotation.grandTotal?.toFixed(2) || '0.00'}</span>
+              </div>
+              
+              ${quotation.roundOff && quotation.roundOff !== 0 ? `
+              <div class="calculation-row">
+                <span>Round Off:</span>
+                <span>₹${quotation.roundOff?.toFixed(2) || '0.00'}</span>
+              </div>
+              ` : ''}
+              
+              ${quotation.paidAmount && quotation.paidAmount > 0 ? `
+              <div class="calculation-row">
+                <span>Paid Amount:</span>
+                <span>₹${quotation.paidAmount?.toFixed(2) || '0.00'}</span>
+              </div>
+              <div class="calculation-row">
+                <span>Remaining Amount:</span>
+                <span>₹${quotation.remainingAmount?.toFixed(2) || '0.00'}</span>
+              </div>
+              ` : ''}
             </div>
 
+            ${quotation.validityPeriod ? `
+            <div class="highlight">
+              <p style="margin: 0;"><strong>Validity:</strong> This quotation is valid for ${quotation.validityPeriod} days from the issue date.</p>
+            </div>
+            ` : ''}
+
+            ${quotation.paymentMethod ? `
+            <div class="highlight">
+              <p style="margin: 0;"><strong>Payment Method:</strong> ${quotation.paymentMethod.replace('_', ' ').toUpperCase()}</p>
+            </div>
+            ` : ''}
+
+            ${quotation.paymentDate ? `
+            <div class="highlight">
+              <p style="margin: 0;"><strong>Payment Date:</strong> ${new Date(quotation.paymentDate).toLocaleDateString()}</p>
+            </div>
+            ` : ''}
+
             <div class="footer">
-              <p>Thank you for your interest in our services!</p>
-              <p>Please contact us if you have any questions or need clarification.</p>
-              <p><strong>Contact:</strong> ${quotation.company?.phone || 'N/A'} | ${quotation.company?.email || 'N/A'}</p>
+              <h3 style="margin: 0 0 15px 0;">Thank you for your interest in our services!</h3>
+              <p style="margin: 0 0 15px 0; opacity: 0.9;">Please contact us if you have any questions or need clarification.</p>
+              <div class="contact-info">
+                <p style="margin: 5px 0;"><strong>Phone:</strong> ${quotation.company?.phone || 'N/A'}</p>
+                <p style="margin: 5px 0;"><strong>Email:</strong> ${quotation.company?.email || 'N/A'}</p>
+                <p style="margin: 5px 0;"><strong>Address:</strong> ${quotation.company?.address || 'N/A'}</p>
+              </div>
             </div>
           </div>
         </body>

@@ -11,7 +11,8 @@ import {
     Eye,
     Edit,
     FileText,
-    CheckCircle
+    CheckCircle,
+    QrCode
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import PageHeader from '../components/ui/PageHeader';
@@ -110,6 +111,25 @@ const QuotationFormPage: React.FC = () => {
     const [formData, setFormData] = useState<Partial<QuotationData>>(getDefaultQuotationData());
     const [errors, setErrors] = useState<ValidationError[]>([]);
 
+    // Debug: Log initial form data
+    useEffect(() => {
+        console.log('Initial form data:', formData);
+        console.log('Valid until date:', formData.validUntil);
+    }, []);
+
+    console.log("customers13:", customers);
+
+
+    // Update remaining amount when grand total changes
+    useEffect(() => {
+        if (formData.grandTotal !== undefined) {
+            setFormData(prev => ({
+                ...prev,
+                remainingAmount: prev.grandTotal || 0
+            }));
+        }
+    }, [formData.grandTotal]);
+
     // 🚀 STOCK DISPLAY STATES (Read-only for quotations)
     const [productStockCache, setProductStockCache] = useState<Record<string, {
         available: number;
@@ -143,6 +163,16 @@ const QuotationFormPage: React.FC = () => {
         'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'
     ];
 
+    // ServiceTicket related state
+    const [dgDetailsWithServiceData, setDgDetailsWithServiceData] = useState<any[]>([]);
+    const [showEngineSerialDropdown, setShowEngineSerialDropdown] = useState(false);
+    const [engineSerialSearchTerm, setEngineSerialSearchTerm] = useState('');
+    const [highlightedEngineSerialIndex, setHighlightedEngineSerialIndex] = useState(-1);
+
+    // QR Code upload states
+    const [qrCodeImage, setQrCodeImage] = useState<File | null>(null);
+    const [qrCodePreview, setQrCodePreview] = useState<string | null>(null);
+
 
 
     // Initialize data
@@ -161,6 +191,15 @@ const QuotationFormPage: React.FC = () => {
         }
     }, [isEditMode, quotationFromState, customers, navigate]);
 
+    // Handle QR code image when editing existing quotation
+    useEffect(() => {
+        if (isEditMode && formData.qrCodeImage && typeof formData.qrCodeImage === 'string') {
+            // If QR code is a string (base64 or URL), set it as preview
+            setQrCodePreview(formData.qrCodeImage);
+            setQrCodeImage(null); // Clear the file since we're showing the existing image
+        }
+    }, [isEditMode, formData.qrCodeImage]);
+
     // Close dropdowns when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -173,6 +212,8 @@ const QuotationFormPage: React.FC = () => {
                 setShowBillToAddressDropdown(false);
                 setShowShipToAddressDropdown(false);
                 setShowEngineerDropdown(false);
+                setShowEngineSerialDropdown(false);
+                setHighlightedEngineSerialIndex(-1);
             }
         };
 
@@ -181,6 +222,56 @@ const QuotationFormPage: React.FC = () => {
     }, []);
 
     console.log("formData.location:", formData.location);
+
+    // Payment helper functions
+    const getPaymentStatusColor = (status: string) => {
+        switch (status) {
+            case 'paid':
+                return 'text-green-600';
+            case 'partial':
+                return 'text-yellow-600';
+            case 'failed':
+                return 'text-red-600';
+            case 'pending':
+            default:
+                return 'text-gray-600';
+        }
+    };
+
+    const getPaymentStatusLabel = (status: string) => {
+        switch (status) {
+            case 'paid':
+                return 'Paid';
+            case 'partial':
+                return 'Partial';
+            case 'failed':
+                return 'Failed';
+            case 'pending':
+            default:
+                return 'Pending';
+        }
+    };
+
+    const getPaymentMethodLabel = (value: string) => {
+        switch (value) {
+            case 'cash':
+                return 'Cash';
+            case 'cheque':
+                return 'Cheque';
+            case 'bank_transfer':
+                return 'Bank Transfer';
+            case 'upi':
+                return 'UPI';
+            case 'card':
+                return 'Credit/Debit Card';
+            case 'razorpay':
+                return 'Razorpay';
+            case 'other':
+                return 'Other';
+            default:
+                return 'Not specified';
+        }
+    };
 
 
     // Auto-focus location field when form loads (Excel-like behavior)
@@ -273,6 +364,11 @@ const QuotationFormPage: React.FC = () => {
                 setAddresses(customerAddresses);
             }
 
+            // Fetch service tickets for the existing customer
+            if (quotation.customer?._id) {
+                fetchCustomerDgDetails(quotation.customer._id);
+            }
+
             // Find matching address ID for the quotation's addresses
             let matchingBillToAddressId = quotation.billToAddress?.addressId;
             let matchingShipToAddressId = quotation.shipToAddress?.addressId;
@@ -306,6 +402,7 @@ const QuotationFormPage: React.FC = () => {
             // Safely populate form with existing quotation data
             const formDataToSet = {
                 ...quotation,
+                subject: quotation.subject || '',
                 customer: quotation.customer ? {
                     _id: quotation.customer._id || '',
                     name: quotation.customer.name || '',
@@ -323,6 +420,13 @@ const QuotationFormPage: React.FC = () => {
                 issueDate: quotation.issueDate ? new Date(quotation.issueDate) : new Date(),
                 validUntil: quotation.validUntil ? new Date(quotation.validUntil) : new Date(),
                 validityPeriod: quotation.validityPeriod || 30,
+                // Service Ticket related fields
+                engineSerialNumber: quotation.engineSerialNumber || '',
+                kva: quotation.kva || '',
+                hourMeterReading: quotation.hourMeterReading || '',
+                serviceRequestDate: quotation.serviceRequestDate ? new Date(quotation.serviceRequestDate) : undefined,
+                // QR Code image
+                qrCodeImage: quotation.qrCodeImage || undefined,
                 items: (quotation.items || []).map((item: any) => ({
                     product: item.product?._id || item.product || '',
                     description: item.description || '',
@@ -337,6 +441,36 @@ const QuotationFormPage: React.FC = () => {
                     taxAmount: item.taxAmount || 0,
                     totalPrice: item.totalPrice || 0
                 })),
+                // New fields for service charges and battery buy back
+                serviceCharges: (quotation.serviceCharges || []).map((service: any) => ({
+                    description: service.description || '',
+                    quantity: service.quantity || 1,
+                    unitPrice: service.unitPrice || 0,
+                    discount: service.discount || 0,
+                    discountedAmount: service.discountedAmount || 0,
+                    taxRate: service.taxRate || 18,
+                    taxAmount: service.taxAmount || 0,
+                    totalPrice: service.totalPrice || 0
+                })),
+                batteryBuyBack: quotation.batteryBuyBack ? {
+                    description: quotation.batteryBuyBack.description || 'Battery Buy Back',
+                    quantity: quotation.batteryBuyBack.quantity || 1,
+                    unitPrice: quotation.batteryBuyBack.unitPrice || 0,
+                    discount: quotation.batteryBuyBack.discount || 0,
+                    discountedAmount: quotation.batteryBuyBack.discountedAmount || 0,
+                    taxRate: quotation.batteryBuyBack.taxRate || 18,
+                    taxAmount: quotation.batteryBuyBack.taxAmount || 0,
+                    totalPrice: quotation.batteryBuyBack.totalPrice || 0
+                } : {
+                    description: 'Battery Buy Back',
+                    quantity: 1,
+                    unitPrice: 0,
+                    discount: 0,
+                    discountedAmount: 0,
+                    taxRate: 18,
+                    taxAmount: 0,
+                    totalPrice: 0
+                },
                 notes: quotation.notes || '',
                 terms: quotation.terms || '',
                 billToAddress: quotation.billToAddress ? {
@@ -344,24 +478,28 @@ const QuotationFormPage: React.FC = () => {
                     state: quotation.billToAddress.state || '',
                     district: quotation.billToAddress.district || '',
                     pincode: quotation.billToAddress.pincode || '',
+                    gstNumber: quotation.billToAddress.gstNumber || '',
                     ...(matchingBillToAddressId && { addressId: matchingBillToAddressId })
                 } : {
                     address: '',
                     state: '',
                     district: '',
-                    pincode: ''
+                    pincode: '',
+                    gstNumber: ''
                 },
                 shipToAddress: quotation.shipToAddress ? {
                     address: quotation.shipToAddress.address || '',
                     state: quotation.shipToAddress.state || '',
                     district: quotation.shipToAddress.district || '',
                     pincode: quotation.shipToAddress.pincode || '',
+                    gstNumber: quotation.shipToAddress.gstNumber || '',
                     ...(matchingShipToAddressId && { addressId: matchingShipToAddressId })
                 } : {
                     address: '',
                     state: '',
                     district: '',
-                    pincode: ''
+                    pincode: '',
+                    gstNumber: ''
                 }
             };
 
@@ -386,6 +524,8 @@ const QuotationFormPage: React.FC = () => {
         try {
             const response = await apiClient.customers.getAll({ limit: 100, page: 1 });
             const responseData = response.data as any;
+            console.log("responseData13:", responseData);
+
             const customersData = responseData.customers || responseData || [];
             setCustomers(customersData);
         } catch (error) {
@@ -459,7 +599,7 @@ const QuotationFormPage: React.FC = () => {
                 const mainOffice = locationsData.find(loc => loc.name === "Main Office");
                 if (mainOffice) {
                     setFormData(prev => ({ ...prev, location: mainOffice._id }));
-                    
+
                     // 🚀 LOAD STOCK DATA FOR DEFAULT LOCATION
                     setTimeout(() => {
                         loadAllStockForLocation();
@@ -469,6 +609,89 @@ const QuotationFormPage: React.FC = () => {
         } catch (error) {
             console.error('Error fetching locations:', error);
             setLocations([]);
+        }
+    };
+
+    // Fetch customer's DG details and service ticket data
+    const fetchCustomerDgDetails = async (customerId: string) => {
+        try {
+            console.log('Fetching DG details for customer:', customerId);
+
+            // Fetch customer's dgDetails for engine information
+            const dgResponse = await apiClient.services.getCustomerEngines(customerId);
+            console.log('Full DG Response:', dgResponse);
+            const dgData = dgResponse.data as any;
+            console.log('DG Data:', dgData);
+            const dgDetails = dgData.engines || dgData || [];
+            console.log('DG Details array:', dgDetails);
+            console.log('DG Details length:', dgDetails.length);
+
+            // Log basic info for debugging
+            if (dgDetails.length > 0) {
+                console.log('DG Details found:', dgDetails.length);
+                console.log('Sample DG detail:', {
+                    engineSerialNumber: dgDetails[0].engineSerialNumber,
+                    kva: dgDetails[0].kva
+                });
+            }
+
+            // If no DG details found, set empty data and return early
+            if (!dgDetails || dgDetails.length === 0) {
+                console.log('No DG details found for customer');
+                setDgDetailsWithServiceData([]);
+                return;
+            }
+
+            try {
+                // Fetch service tickets filtered by customer
+
+                // Now fetch service tickets filtered by customer
+                console.log('Fetching service tickets with params:', {
+                    limit: 1000,
+                    page: 1,
+                    customer: customerId
+                });
+
+                const serviceResponse = await apiClient.services.getAll({
+                    limit: 100,
+                    page: 1,
+                    customer: customerId
+                });
+
+                const serviceData = serviceResponse.data as any;
+                const customerServiceTickets = serviceData.tickets || serviceData || [];
+                console.log('Service tickets found:', customerServiceTickets.length);
+
+                // Combine dgDetails with service ticket data
+                const combinedData = dgDetails.map((dg: any) => {
+                    // Find matching service ticket for this engine
+                    const matchingServiceTicket = customerServiceTickets.find((ticket: any) =>
+                        ticket.EngineSerialNumber === dg.engineSerialNumber
+                    );
+
+                    return {
+                        ...dg,
+                        // Service ticket data if available
+                        HourMeterReading: matchingServiceTicket?.HourMeterReading || '',
+                        ServiceRequestDate: matchingServiceTicket?.ServiceRequestDate || null
+                    };
+                });
+
+                console.log('Combined data ready:', combinedData.length, 'items');
+                setDgDetailsWithServiceData(combinedData);
+            } catch (serviceError) {
+                console.warn('Could not fetch service tickets, using only DG details:', serviceError);
+                // If service tickets fail, still show DG details without service data
+                const dgOnlyData = dgDetails.map((dg: any) => ({
+                    ...dg,
+                    HourMeterReading: '',
+                    ServiceRequestDate: null
+                }));
+                setDgDetailsWithServiceData(dgOnlyData);
+            }
+        } catch (error) {
+            console.error('Error fetching customer DG details:', error);
+            setDgDetailsWithServiceData([]);
         }
     };
 
@@ -589,6 +812,64 @@ const QuotationFormPage: React.FC = () => {
         if (!value) return 'Select customer';
         const customer = customers.find(c => c._id === value);
         return customer ? `${customer.name} - ${customer.email || ''}` : 'Select customer';
+    };
+
+    // QR Code handling functions
+    const handleQrCodeUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (file) {
+            processQrCodeFile(file);
+        }
+    };
+
+    const processQrCodeFile = (file: File) => {
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+            toast.error('Please select a valid image file');
+            return;
+        }
+
+        // Validate file size (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error('Image size should be less than 5MB');
+            return;
+        }
+
+        setQrCodeImage(file);
+
+        // Create preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            setQrCodePreview(e.target?.result as string);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleQrCodeDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.currentTarget.classList.add('border-blue-400', 'bg-blue-50');
+    };
+
+    const handleQrCodeDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50');
+    };
+
+    const handleQrCodeDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove('border-blue-400', 'bg-blue-50');
+
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            processQrCodeFile(files[0]);
+        }
+    };
+
+    const removeQrCode = () => {
+        setQrCodeImage(null);
+        setQrCodePreview(null);
+        // Also clear from form data if it exists
+        setFormData(prev => ({ ...prev, qrCodeImage: undefined }));
     };
 
     const getLocationLabel = (value: string) => {
@@ -795,7 +1076,7 @@ const QuotationFormPage: React.FC = () => {
         return { hasIssues: issueCount > 0, issueCount };
     };
 
-    
+
 
     // Enhanced Excel-like keyboard navigation
     const handleProductKeyDown = (e: React.KeyboardEvent, rowIndex: number) => {
@@ -1103,7 +1384,11 @@ const QuotationFormPage: React.FC = () => {
             // Check if the date is valid
             if (isNaN(date.getTime())) return '';
 
-            return date.toISOString().split('T')[0];
+            // Format as YYYY-MM-DD for date input
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
         } catch (error) {
             console.error('Error formatting date:', error);
             return '';
@@ -1264,7 +1549,7 @@ const QuotationFormPage: React.FC = () => {
                         name: selectedCustomer.name,
                         email: selectedCustomer.email,
                         phone: selectedCustomer.phone,
-                        pan: ''
+                        pan: '' // Reset pan when customer changes
                     }
                 });
                 setShowCustomerDropdown(false);
@@ -1336,6 +1621,7 @@ const QuotationFormPage: React.FC = () => {
                         state: selectedAddress.state,
                         district: selectedAddress.district,
                         pincode: selectedAddress.pincode,
+                        gstNumber: selectedAddress.gstNumber || '',
                         ...(selectedAddress.id && { addressId: selectedAddress.id })
                     } as any
                 });
@@ -1406,6 +1692,7 @@ const QuotationFormPage: React.FC = () => {
                         state: selectedAddress.state,
                         district: selectedAddress.district,
                         pincode: selectedAddress.pincode,
+                        gstNumber: selectedAddress.gstNumber || '',
                         ...(selectedAddress.id && { addressId: selectedAddress.id })
                     } as any
                 });
@@ -1530,7 +1817,7 @@ const QuotationFormPage: React.FC = () => {
             }
 
             // Recalculate totals
-            const calculationResult = calculateQuotationTotals(updatedItems, prev.overallDiscount || 0);
+            const calculationResult = calculateQuotationTotals(updatedItems, prev.serviceCharges || [], prev.batteryBuyBack || null, prev.overallDiscount || 0);
 
             return {
                 ...prev,
@@ -1552,13 +1839,13 @@ const QuotationFormPage: React.FC = () => {
     const validateForm = (): boolean => {
         const validation = validateQuotationData(formData);
         setErrors(validation.errors);
-        
+
         // 🚀 CHECK FOR STOCK ISSUES
         const stockIssues = getStockIssues();
         if (stockIssues.hasIssues) {
             toast.error(`⚠️ Stock Issues: ${stockIssues.issueCount} item(s) have insufficient stock or are out of stock`, { duration: 5000 });
         }
-        
+
         return validation.errors.length === 0;
     };
 
@@ -1570,9 +1857,27 @@ const QuotationFormPage: React.FC = () => {
 
         setSubmitting(true);
         try {
+            let qrCodeImageUrl = formData.qrCodeImage;
+
+            // If there's a new QR code image file, upload it first
+            if (qrCodeImage && qrCodeImage instanceof File) {
+                try {
+                    const uploadResponse = await apiClient.qrCode.upload(qrCodeImage);
+                    if (uploadResponse.success) {
+                        qrCodeImageUrl = uploadResponse.data.url;
+                    }
+                } catch (uploadError) {
+                    console.error('Error uploading QR code:', uploadError);
+                    toast.error('Failed to upload QR code image. Please try again.');
+                    setSubmitting(false);
+                    return;
+                }
+            }
+
             // Ensure company information is included
             const submissionData = {
                 ...formData,
+                qrCodeImage: qrCodeImageUrl, // Use uploaded URL or existing URL
                 company: formData.company || {
                     name: generalSettings?.companyName || 'Sun Power Services',
                     address: generalSettings?.companyAddress || '',
@@ -1608,6 +1913,75 @@ const QuotationFormPage: React.FC = () => {
         }
     };
 
+    // Handle customer selection
+    const handleCustomerSelect = (customerId: string) => {
+        const customer = customers.find(c => c._id === customerId);
+        if (customer) {
+            setFormData({
+                ...formData,
+                customer: {
+                    _id: customer._id, // Store customer ID
+                    name: customer.name,
+                    email: customer.email || '',
+                    phone: customer.phone || '',
+                    pan: '' // Reset pan when customer changes
+                },
+                customerAddress: undefined // Clear customer address when customer changes
+            });
+            setAddresses(customer.addresses || []);
+            setShowCustomerDropdown(false);
+
+            // Fetch service tickets for the selected customer
+            fetchCustomerDgDetails(customerId);
+        }
+    };
+
+    // Handle engine serial dropdown keyboard navigation
+    const handleEngineSerialKeyDown = (e: React.KeyboardEvent) => {
+        if (!showEngineSerialDropdown) return;
+
+        const filteredTickets = dgDetailsWithServiceData.filter(ticket =>
+            ticket.engineSerialNumber &&
+            ticket.engineSerialNumber.toLowerCase().includes(engineSerialSearchTerm.toLowerCase())
+        );
+
+        switch (e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setHighlightedEngineSerialIndex(prev =>
+                    prev < filteredTickets.length - 1 ? prev + 1 : 0
+                );
+                break;
+            case 'ArrowUp':
+                e.preventDefault();
+                setHighlightedEngineSerialIndex(prev =>
+                    prev > 0 ? prev - 1 : filteredTickets.length - 1
+                );
+                break;
+            case 'Enter':
+                e.preventDefault();
+                if (highlightedEngineSerialIndex >= 0 && highlightedEngineSerialIndex < filteredTickets.length) {
+                    const selectedTicket = filteredTickets[highlightedEngineSerialIndex];
+                    setFormData({
+                        ...formData,
+                        engineSerialNumber: selectedTicket.engineSerialNumber || '',
+                        kva: selectedTicket.dgRatingKVA ? String(selectedTicket.dgRatingKVA) : '',
+                        hourMeterReading: selectedTicket.HourMeterReading || '',
+                        serviceRequestDate: selectedTicket.ServiceRequestDate ? new Date(selectedTicket.ServiceRequestDate) : undefined
+                    });
+                    setShowEngineSerialDropdown(false);
+                    setEngineSerialSearchTerm('');
+                    setHighlightedEngineSerialIndex(-1);
+                }
+                break;
+            case 'Escape':
+                e.preventDefault();
+                setShowEngineSerialDropdown(false);
+                setHighlightedEngineSerialIndex(-1);
+                break;
+        }
+    };
+
     if (loading) {
         return (
             <div className="pl-2 pr-6 py-6">
@@ -1633,10 +2007,11 @@ const QuotationFormPage: React.FC = () => {
                         <ArrowLeft className="w-4 h-4" />
                         <span>Back to Billing</span>
                     </Button>
-                    
+
 
                 </div>
             </PageHeader>
+
 
 
             {/* 🚀 EXCEL-LIKE NAVIGATION GUIDE */}
@@ -1699,8 +2074,8 @@ const QuotationFormPage: React.FC = () => {
                                                             <li key={index} className="flex items-center justify-between">
                                                                 <span>• {getProductName(item.product)} (Qty: {item.quantity})</span>
                                                                 <span className="font-medium">
-                                                                    {stockInfo.available === 0 
-                                                                        ? '❌ Out of stock' 
+                                                                    {stockInfo.available === 0
+                                                                        ? '❌ Out of stock'
                                                                         : `⚠️ Only ${stockInfo.available} available`
                                                                     }
                                                                 </span>
@@ -1723,7 +2098,7 @@ const QuotationFormPage: React.FC = () => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 From Location *
                             </label>
-                            
+
                             {/* 🚀 Stock Loading Indicator */}
                             {formData.location && Object.keys(productStockCache).length === 0 && (
                                 <div className="mb-2 flex items-center text-xs text-blue-600">
@@ -1731,7 +2106,7 @@ const QuotationFormPage: React.FC = () => {
                                     <span>Loading stock data for this location...</span>
                                 </div>
                             )}
-                            
+
                             <div className="relative dropdown-container">
                                 <input
                                     type="text"
@@ -1923,20 +2298,7 @@ const QuotationFormPage: React.FC = () => {
                                                             key={customer._id}
                                                             data-customer-index={index}
                                                             onClick={() => {
-                                                                console.log('Selected customer:', customer);
-                                                                setFormData({
-                                                                    ...formData,
-                                                                    customer: {
-                                                                        _id: customer._id,
-                                                                        name: customer.name,
-                                                                        email: customer.email,
-                                                                        phone: customer.phone,
-                                                                        pan: ''
-                                                                    },
-                                                                    billToAddress: { address: '', state: '', district: '', pincode: '' },
-                                                                    shipToAddress: { address: '', state: '', district: '', pincode: '' }
-                                                                });
-                                                                setShowCustomerDropdown(false);
+                                                                handleCustomerSelect(customer._id);
                                                                 setCustomerSearchTerm('');
                                                                 setHighlightedCustomerIndex(-1);
                                                                 setAddresses(customer.addresses || []);
@@ -2152,6 +2514,8 @@ const QuotationFormPage: React.FC = () => {
                         </div>
                     </div>
 
+
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2237,7 +2601,10 @@ const QuotationFormPage: React.FC = () => {
                             <input
                                 type="date"
                                 value={formatDateForInput(formData.validUntil)}
+                                // Debug: Log the formatted date value
+                                onFocus={() => console.log('Valid until field focused, value:', formatDateForInput(formData.validUntil), 'raw:', formData.validUntil)}
                                 onChange={(e) => {
+                                    console.log('Valid until changed to:', e.target.value);
                                     if (e.target.value) {
                                         setFormData({ ...formData, validUntil: new Date(e.target.value) });
                                     } else {
@@ -2409,6 +2776,242 @@ const QuotationFormPage: React.FC = () => {
                             {/* {getFieldErrorMessage('assignedEngineer') && (
                             <p className="mt-1 text-sm text-red-600">{getFieldErrorMessage('assignedEngineer')}</p>
                         )} */}
+                        </div>
+                    </div>
+                    {/* Service Ticket Information */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Engine Serial Number
+                            </label>
+                            <div className="relative dropdown-container">
+                                <input
+                                    type="text"
+                                    value={engineSerialSearchTerm || formData.engineSerialNumber || ''}
+                                    onChange={(e) => {
+                                        setEngineSerialSearchTerm(e.target.value);
+                                        if (!showEngineSerialDropdown) setShowEngineSerialDropdown(true);
+                                        setHighlightedEngineSerialIndex(-1);
+                                    }}
+                                    onFocus={() => {
+                                        if (dgDetailsWithServiceData.length > 0) {
+                                            setShowEngineSerialDropdown(true);
+                                            setHighlightedEngineSerialIndex(-1);
+                                        }
+                                    }}
+                                    onKeyDown={handleEngineSerialKeyDown}
+                                    placeholder="Select engine serial number"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEngineSerialDropdown ? 'rotate-180' : ''}`} />
+                                </div>
+                                {showEngineSerialDropdown && dgDetailsWithServiceData.length > 0 && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                        <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                setFormData({
+                                                    ...formData,
+                                                    engineSerialNumber: '',
+                                                    kva: '',
+                                                    hourMeterReading: '',
+                                                    serviceRequestDate: undefined
+                                                });
+                                                setShowEngineSerialDropdown(false);
+                                                setEngineSerialSearchTerm('');
+                                            }}
+                                            className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm text-gray-700"
+                                        >
+                                            Clear selection
+                                        </button>
+                                        {dgDetailsWithServiceData
+                                            .filter(ticket =>
+                                                ticket.engineSerialNumber &&
+                                                ticket.engineSerialNumber.toLowerCase().includes(engineSerialSearchTerm.toLowerCase())
+                                            )
+                                            .map((ticket, index) => (
+                                                <button
+                                                    key={ticket._id}
+                                                    onClick={() => {
+                                                        setFormData({
+                                                            ...formData,
+                                                            engineSerialNumber: ticket.engineSerialNumber || '',
+                                                            kva: ticket.kva ? String(ticket.kva) : '',
+                                                            hourMeterReading: ticket.HourMeterReading || '',
+                                                            serviceRequestDate: ticket.ServiceRequestDate ? new Date(ticket.ServiceRequestDate) : undefined
+                                                        });
+                                                        setShowEngineSerialDropdown(false);
+                                                        setEngineSerialSearchTerm('');
+                                                        setHighlightedEngineSerialIndex(-1);
+                                                    }}
+                                                    className={`w-full px-3 py-2 text-left transition-colors text-sm ${highlightedEngineSerialIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                        'text-gray-700 hover:bg-gray-50'
+                                                        }`}
+                                                >
+                                                    <div className="font-medium">{ticket.engineSerialNumber}</div>
+                                                    <div className="text-xs text-gray-500">
+                                                        {ticket.kva && `KVA: ${ticket.kva}`}
+                                                        {ticket.HourMeterReading && ` • HMR: ${ticket.HourMeterReading}`}
+                                                        {ticket.ServiceRequestDate && ` • Date: ${new Date(ticket.ServiceRequestDate).toLocaleDateString()}`}
+                                                    </div>
+                                                </button>
+                                            ))}
+
+                                        {dgDetailsWithServiceData.length === 0 && (
+                                            <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                                No DG details found for this customer
+                                            </div>
+                                        )}
+
+                                        {dgDetailsWithServiceData.length > 0 && dgDetailsWithServiceData.filter(ticket =>
+                                            ticket.engineSerialNumber &&
+                                            ticket.engineSerialNumber.toLowerCase().includes(engineSerialSearchTerm.toLowerCase())
+                                        ).length === 0 && (
+                                                <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                                    No engine serial numbers match your search
+                                                </div>
+                                            )}
+                                    </div>
+                                )}
+                            </div>
+                            <p className="text-sm text-gray-500 mt-2">
+                                Select an engine serial number from customer's DG details to auto-populate KVA, Hour Meter Reading, and Service Request Date
+                            </p>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                KVA Rating
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.kva || ''}
+                                onChange={(e) => setFormData({ ...formData, kva: e.target.value })}
+                                placeholder="Auto-populated from service ticket"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-gray-50"
+                                readOnly
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Hour Meter Reading
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.hourMeterReading || ''}
+                                onChange={(e) => setFormData({ ...formData, hourMeterReading: e.target.value })}
+                                placeholder="Auto-populated from service ticket"
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-gray-50"
+                                readOnly
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Service Request Date
+                            </label>
+                            <input
+                                type="date"
+                                value={formData.serviceRequestDate ? new Date(formData.serviceRequestDate).toISOString().split('T')[0] : ''}
+                                onChange={(e) => setFormData({ ...formData, serviceRequestDate: e.target.value ? new Date(e.target.value) : undefined })}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors bg-gray-50"
+                                readOnly
+                            />
+                        </div>
+                    </div>
+
+                    {/* Subject Field */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div className="p-6">
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Subject (Sub)
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.subject || ''}
+                                    onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
+                                    placeholder="Enter quotation subject..."
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg font-medium"
+                                    style={{ fontSize: '1.1rem' }}
+                                />
+                                <p className="text-sm text-gray-500 mt-2">
+                                    This will appear as the main heading of your quotation (e.g., "SPARES QUOTATION FOR 125KVA DG SET")
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* QR Code Upload Field */}
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <div className="p-6">
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    QR Code Image <span className="text-gray-400 font-normal">(Optional)</span>
+                                </label>
+
+                                {!qrCodePreview ? (
+                                    <div
+                                        className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors"
+                                        onDragOver={handleQrCodeDragOver}
+                                        onDragLeave={handleQrCodeDragLeave}
+                                        onDrop={handleQrCodeDrop}
+                                    >
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleQrCodeUpload}
+                                            className="hidden"
+                                            id="qr-code-upload"
+                                        />
+                                        <label
+                                            htmlFor="qr-code-upload"
+                                            className="cursor-pointer flex flex-col items-center space-y-2"
+                                        >
+                                            <QrCode className="w-12 h-12 text-gray-400" />
+                                            <div className="text-sm text-gray-600">
+                                                <span className="font-medium text-blue-600 hover:text-blue-500">
+                                                    Click to upload
+                                                </span>{' '}
+                                                or drag and drop
+                                            </div>
+                                            <div className="text-xs text-gray-500">
+                                                PNG, JPG, JPEG up to 5MB
+                                            </div>
+                                        </label>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        <div className="relative inline-block">
+                                            <img
+                                                src={qrCodePreview}
+                                                alt="QR Code Preview"
+                                                className="max-w-xs max-h-64 rounded-lg border border-gray-200 shadow-sm"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={removeQrCode}
+                                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600 transition-colors"
+                                                title="Remove QR Code"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                        <div className="text-sm text-gray-600">
+                                            <strong>File:</strong> {qrCodeImage?.name}
+                                            <br />
+                                            <strong>Size:</strong> {qrCodeImage?.size ? (qrCodeImage.size / 1024 / 1024).toFixed(2) : '0'} MB
+                                        </div>
+                                    </div>
+                                )}
+
+                                <p className="text-sm text-gray-500 mt-2">
+                                    Upload a QR code image that will be included in the quotation
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2856,7 +3459,7 @@ const QuotationFormPage: React.FC = () => {
                                                 <input
                                                     type="number"
                                                     min="0"
-                                                    step="0.01"
+                                                    step="1"
                                                     value={item.unitPrice.toFixed(2)}
                                                     onChange={(e) => updateQuotationItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
                                                     onKeyDown={(e) => handleCellKeyDown(e, index, 'unitPrice')}
@@ -3092,6 +3695,666 @@ const QuotationFormPage: React.FC = () => {
                     </div>
                 </div>
 
+                {/* Service Charges Section */}
+                <div className="p-5 border-t border-gray-200">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-medium text-gray-900">Service Charges</h3>
+                        <button
+                            onClick={() => {
+                                setFormData(prev => {
+                                    const newServiceCharges = [
+                                        ...(prev.serviceCharges || []),
+                                        {
+                                            description: 'Additional Service charges',
+                                            quantity: 1,
+                                            unitPrice: 0,
+                                            discount: 0,
+                                            discountedAmount: 0,
+                                            taxRate: 18, // Default GST rate
+                                            taxAmount: 0,
+                                            totalPrice: 0
+                                        }
+                                    ];
+
+                                    // Recalculate totals including new service charge
+                                    const calculationResult = calculateQuotationTotals(
+                                        prev.items || [],
+                                        newServiceCharges,
+                                        prev.batteryBuyBack || null,
+                                        prev.overallDiscount || 0
+                                    );
+
+                                    return {
+                                        ...prev,
+                                        serviceCharges: newServiceCharges,
+                                        subtotal: calculationResult.subtotal,
+                                        totalDiscount: calculationResult.totalDiscount,
+                                        totalTax: calculationResult.totalTax,
+                                        grandTotal: calculationResult.grandTotal
+                                    };
+                                });
+                            }}
+                            type="button"
+                            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-2"
+                        >
+                            <Plus className="w-4 h-4" />
+                            <span>Add Service Charge</span>
+                        </button>
+                    </div>
+
+                    {/* Service Charges Table */}
+                    <div className="border border-gray-300 rounded-lg bg-white shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <div className="bg-gray-100 border-b border-gray-300 min-w-[1000px]">
+                                <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                                    style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">GST %</div>
+                                    <div className="p-3 text-center bg-gray-200">Total</div>
+                                </div>
+                            </div>
+
+                            <div className="divide-y divide-gray-200 min-w-[1000px]">
+                                {(formData.serviceCharges || []).map((service, index) => (
+                                    <div key={index} className="grid group hover:bg-blue-50 transition-colors bg-white"
+                                        style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+
+                                        {/* Description */}
+                                        <div className="p-2 border-r border-gray-200">
+                                            <input
+                                                type="text"
+                                                value={service.description}
+                                                onChange={(e) => {
+                                                    const newServiceCharges = [...(formData.serviceCharges || [])];
+                                                    newServiceCharges[index].description = e.target.value;
+                                                    setFormData(prev => {
+                                                        const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                                                        // Recalculate totals including service charges
+                                                        const calculationResult = calculateQuotationTotals(
+                                                            updatedData.items || [],
+                                                            newServiceCharges,
+                                                            updatedData.batteryBuyBack || null,
+                                                            updatedData.overallDiscount || 0
+                                                        );
+                                                        return {
+                                                            ...updatedData,
+                                                            subtotal: calculationResult.subtotal,
+                                                            totalDiscount: calculationResult.totalDiscount,
+                                                            totalTax: calculationResult.totalTax,
+                                                            grandTotal: calculationResult.grandTotal
+                                                        };
+                                                    });
+                                                }}
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                                                placeholder="Service description..."
+                                            />
+                                        </div>
+
+                                        {/* Quantity */}
+                                        <div className="p-2 border-r border-gray-200">
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                step="1"
+                                                value={service.quantity}
+                                                onChange={(e) => {
+                                                    const newServiceCharges = [...(formData.serviceCharges || [])];
+                                                    const quantity = parseFloat(e.target.value) || 1;
+                                                    const unitPrice = newServiceCharges[index].unitPrice || 0;
+                                                    const discount = newServiceCharges[index].discount || 0;
+                                                    const taxRate = newServiceCharges[index].taxRate || 18;
+
+                                                    // Calculate the derived fields
+                                                    const itemSubtotal = quantity * unitPrice;
+                                                    const discountAmount = (discount / 100) * itemSubtotal;
+                                                    const discountedAmount = itemSubtotal - discountAmount;
+                                                    const taxAmount = (taxRate / 100) * discountedAmount;
+                                                    const totalPrice = discountedAmount + taxAmount;
+
+                                                    newServiceCharges[index] = {
+                                                        ...newServiceCharges[index],
+                                                        quantity,
+                                                        discountedAmount: Math.round(discountAmount * 100) / 100,
+                                                        taxAmount: Math.round(taxAmount * 100) / 100,
+                                                        totalPrice: Math.round(totalPrice * 100) / 100
+                                                    };
+
+                                                    setFormData(prev => {
+                                                        const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                                                        // Recalculate totals including service charges
+                                                        const calculationResult = calculateQuotationTotals(
+                                                            updatedData.items || [],
+                                                            newServiceCharges,
+                                                            updatedData.batteryBuyBack || null,
+                                                            updatedData.overallDiscount || 0
+                                                        );
+                                                        return {
+                                                            ...updatedData,
+                                                            subtotal: calculationResult.subtotal,
+                                                            totalDiscount: calculationResult.totalDiscount,
+                                                            totalTax: calculationResult.totalTax,
+                                                            grandTotal: calculationResult.grandTotal
+                                                        };
+                                                    });
+                                                }}
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                                                placeholder="1"
+                                            />
+                                        </div>
+
+                                        {/* Unit Price */}
+                                        <div className="p-2 border-r border-gray-200">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="1"
+                                                value={service.unitPrice}
+                                                onChange={(e) => {
+                                                    const newServiceCharges = [...(formData.serviceCharges || [])];
+                                                    const unitPrice = parseFloat(e.target.value) || 0;
+                                                    const quantity = newServiceCharges[index].quantity || 1;
+                                                    const discount = newServiceCharges[index].discount || 0;
+                                                    const taxRate = newServiceCharges[index].taxRate || 18;
+
+                                                    // Calculate the derived fields
+                                                    const itemSubtotal = quantity * unitPrice;
+                                                    const discountAmount = (discount / 100) * itemSubtotal;
+                                                    const discountedAmount = itemSubtotal - discountAmount;
+                                                    const taxAmount = (taxRate / 100) * discountedAmount;
+                                                    const totalPrice = discountedAmount + taxAmount;
+
+                                                    newServiceCharges[index] = {
+                                                        ...newServiceCharges[index],
+                                                        unitPrice,
+                                                        discountedAmount: Math.round(discountAmount * 100) / 100,
+                                                        taxAmount: Math.round(taxAmount * 100) / 100,
+                                                        totalPrice: Math.round(totalPrice * 100) / 100
+                                                    };
+
+                                                    setFormData(prev => {
+                                                        const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                                                        // Recalculate totals including service charges
+                                                        const calculationResult = calculateQuotationTotals(
+                                                            updatedData.items || [],
+                                                            newServiceCharges,
+                                                            updatedData.batteryBuyBack || null,
+                                                            updatedData.overallDiscount || 0
+                                                        );
+                                                        return {
+                                                            ...updatedData,
+                                                            subtotal: calculationResult.subtotal,
+                                                            totalDiscount: calculationResult.totalDiscount,
+                                                            totalTax: calculationResult.totalTax,
+                                                            grandTotal: calculationResult.grandTotal
+                                                        };
+                                                    });
+                                                }}
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+
+                                        {/* Discount */}
+                                        <div className="p-2 border-r border-gray-200">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                step="1"
+                                                value={service.discount}
+                                                onChange={(e) => {
+                                                    const newServiceCharges = [...(formData.serviceCharges || [])];
+                                                    const discount = parseFloat(e.target.value) || 0;
+                                                    const quantity = newServiceCharges[index].quantity || 1;
+                                                    const unitPrice = newServiceCharges[index].unitPrice || 0;
+                                                    const taxRate = newServiceCharges[index].taxRate || 18;
+
+                                                    // Calculate the derived fields
+                                                    const itemSubtotal = quantity * unitPrice;
+                                                    const discountAmount = (discount / 100) * itemSubtotal;
+                                                    const discountedAmount = itemSubtotal - discountAmount;
+                                                    const taxAmount = (taxRate / 100) * discountedAmount;
+                                                    const totalPrice = discountedAmount + taxAmount;
+
+                                                    newServiceCharges[index] = {
+                                                        ...newServiceCharges[index],
+                                                        discount,
+                                                        discountedAmount: Math.round(discountAmount * 100) / 100,
+                                                        taxAmount: Math.round(taxAmount * 100) / 100,
+                                                        totalPrice: Math.round(totalPrice * 100) / 100
+                                                    };
+
+                                                    setFormData(prev => {
+                                                        const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                                                        // Recalculate totals including service charges
+                                                        const calculationResult = calculateQuotationTotals(
+                                                            updatedData.items || [],
+                                                            newServiceCharges,
+                                                            updatedData.batteryBuyBack || null,
+                                                            updatedData.overallDiscount || 0
+                                                        );
+                                                        return {
+                                                            ...updatedData,
+                                                            subtotal: calculationResult.subtotal,
+                                                            totalDiscount: calculationResult.totalDiscount,
+                                                            totalTax: calculationResult.totalTax,
+                                                            grandTotal: calculationResult.grandTotal
+                                                        };
+                                                    });
+                                                }}
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                                                placeholder="0.00"
+                                            />
+                                        </div>
+
+                                        {/* GST */}
+                                        <div className="p-2 border-r border-gray-200">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                step="1"
+                                                value={service.taxRate}
+                                                onChange={(e) => {
+                                                    const newServiceCharges = [...(formData.serviceCharges || [])];
+                                                    const taxRate = parseFloat(e.target.value) || 0;
+                                                    const quantity = newServiceCharges[index].quantity || 1;
+                                                    const unitPrice = newServiceCharges[index].unitPrice || 0;
+                                                    const discount = newServiceCharges[index].discount || 0;
+
+                                                    // Calculate the derived fields
+                                                    const itemSubtotal = quantity * unitPrice;
+                                                    const discountAmount = (discount / 100) * itemSubtotal;
+                                                    const discountedAmount = itemSubtotal - discountAmount;
+                                                    const taxAmount = (taxRate / 100) * discountedAmount;
+                                                    const totalPrice = discountedAmount + taxAmount;
+
+                                                    newServiceCharges[index] = {
+                                                        ...newServiceCharges[index],
+                                                        taxRate,
+                                                        discountedAmount: Math.round(discountAmount * 100) / 100,
+                                                        taxAmount: Math.round(taxAmount * 100) / 100,
+                                                        totalPrice: Math.round(totalPrice * 100) / 100
+                                                    };
+
+                                                    setFormData(prev => {
+                                                        const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                                                        // Recalculate totals including service charges
+                                                        const calculationResult = calculateQuotationTotals(
+                                                            updatedData.items || [],
+                                                            newServiceCharges,
+                                                            updatedData.batteryBuyBack || null,
+                                                            updatedData.overallDiscount || 0
+                                                        );
+                                                        return {
+                                                            ...updatedData,
+                                                            subtotal: calculationResult.subtotal,
+                                                            totalDiscount: calculationResult.totalDiscount,
+                                                            totalTax: calculationResult.totalTax,
+                                                            grandTotal: calculationResult.grandTotal
+                                                        };
+                                                    });
+                                                }}
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                                                placeholder="18.00"
+                                            />
+                                        </div>
+
+                                        {/* Total */}
+                                        <div className="p-2 text-center">
+                                            <div className="text-sm font-bold text-blue-600">
+                                                ₹{((service.quantity * service.unitPrice) * (1 - service.discount / 100) * (1 + service.taxRate / 100)).toFixed(2)}
+                                            </div>
+                                            {(formData.serviceCharges || []).length > 1 && (
+                                                <button
+                                                    onClick={() => {
+                                                        const newServiceCharges = (formData.serviceCharges || []).filter((_, i) => i !== index);
+                                                        setFormData(prev => {
+                                                            // Recalculate totals after removing service charge
+                                                            const calculationResult = calculateQuotationTotals(
+                                                                prev.items || [],
+                                                                newServiceCharges,
+                                                                prev.batteryBuyBack || null,
+                                                                prev.overallDiscount || 0
+                                                            );
+
+                                                            return {
+                                                                ...prev,
+                                                                serviceCharges: newServiceCharges,
+                                                                subtotal: calculationResult.subtotal,
+                                                                totalDiscount: calculationResult.totalDiscount,
+                                                                totalTax: calculationResult.totalTax,
+                                                                grandTotal: calculationResult.grandTotal
+                                                            };
+                                                        });
+                                                    }}
+                                                    className="mt-1 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                                                    title="Remove this service charge"
+                                                >
+                                                    <X className="w-3 h-3" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Battery Buy Back Section */}
+                <div className="p-5 border-t border-gray-200">
+                    <h3 className="text-lg font-medium text-gray-900 mb-4">Battery Buy Back (Deduction from Total)</h3>
+
+                    <div className="border border-gray-300 rounded-lg bg-white shadow-sm overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <div className="bg-gray-100 border-b border-gray-300 min-w-[1000px]">
+                                <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                                    style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">GST %</div>
+                                    <div className="p-3 text-center bg-gray-200">Total</div>
+                                </div>
+                            </div>
+
+                            <div className="bg-white">
+                                <div className="grid"
+                                    style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+
+                                    {/* Description */}
+                                    <div className="p-2 border-r border-gray-200">
+                                        <input
+                                            type="text"
+                                            value={formData.batteryBuyBack?.description || 'Battery Buy Back'}
+                                            onChange={(e) => {
+                                                setFormData(prev => {
+                                                    const updatedData = {
+                                                        ...prev,
+                                                        batteryBuyBack: {
+                                                            description: e.target.value,
+                                                            quantity: prev.batteryBuyBack?.quantity || 1,
+                                                            unitPrice: prev.batteryBuyBack?.unitPrice || 0,
+                                                            discount: prev.batteryBuyBack?.discount || 0,
+                                                            discountedAmount: prev.batteryBuyBack?.discountedAmount || 0,
+                                                            taxRate: prev.batteryBuyBack?.taxRate || 18,
+                                                            taxAmount: prev.batteryBuyBack?.taxAmount || 0,
+                                                            totalPrice: prev.batteryBuyBack?.totalPrice || 0
+                                                        }
+                                                    };
+
+                                                    // Recalculate totals including battery buy back
+                                                    const calculationResult = calculateQuotationTotals(
+                                                        updatedData.items || [],
+                                                        updatedData.serviceCharges || [],
+                                                        updatedData.batteryBuyBack,
+                                                        updatedData.overallDiscount || 0
+                                                    );
+
+                                                    return {
+                                                        ...updatedData,
+                                                        subtotal: calculationResult.subtotal,
+                                                        totalDiscount: calculationResult.totalDiscount,
+                                                        totalTax: calculationResult.totalTax,
+                                                        grandTotal: calculationResult.grandTotal
+                                                    };
+                                                });
+                                            }}
+                                            className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                                            placeholder="Battery Buy Back"
+                                        />
+                                    </div>
+
+                                    {/* Quantity */}
+                                    <div className="p-2 border-r border-gray-200">
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            step="1"
+                                            value={formData.batteryBuyBack?.quantity || 1}
+                                            onChange={(e) => {
+                                                const quantity = parseFloat(e.target.value) || 1;
+                                                const unitPrice = formData.batteryBuyBack?.unitPrice || 0;
+                                                const discount = formData.batteryBuyBack?.discount || 0;
+                                                const taxRate = formData.batteryBuyBack?.taxRate || 18;
+
+                                                // Calculate the derived fields
+                                                const itemSubtotal = quantity * unitPrice;
+                                                const discountAmount = (discount / 100) * itemSubtotal;
+                                                const discountedAmount = itemSubtotal - discountAmount;
+                                                const taxAmount = (taxRate / 100) * discountedAmount;
+                                                const totalPrice = discountedAmount + taxAmount;
+
+                                                setFormData(prev => {
+                                                    const updatedData = {
+                                                        ...prev,
+                                                        batteryBuyBack: {
+                                                            description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                                                            quantity,
+                                                            unitPrice,
+                                                            discount,
+                                                            discountedAmount: Math.round(discountAmount * 100) / 100,
+                                                            taxRate,
+                                                            taxAmount: Math.round(taxAmount * 100) / 100,
+                                                            totalPrice: Math.round(totalPrice * 100) / 100
+                                                        }
+                                                    };
+
+                                                    // Recalculate totals including battery buy back
+                                                    const calculationResult = calculateQuotationTotals(
+                                                        updatedData.items || [],
+                                                        updatedData.serviceCharges || [],
+                                                        updatedData.batteryBuyBack,
+                                                        updatedData.overallDiscount || 0
+                                                    );
+
+                                                    return {
+                                                        ...updatedData,
+                                                        subtotal: calculationResult.subtotal,
+                                                        totalDiscount: calculationResult.totalDiscount,
+                                                        totalTax: calculationResult.totalTax,
+                                                        grandTotal: calculationResult.grandTotal
+                                                    };
+                                                });
+                                            }}
+                                            className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                                            placeholder="1"
+                                        />
+                                    </div>
+
+                                    {/* Unit Price (negative value for deduction) */}
+                                    <div className="p-2 border-r border-gray-200">
+                                        <input
+                                            type="number"
+                                            step="1"
+                                            value={formData.batteryBuyBack?.unitPrice || 0}
+                                            onChange={(e) => {
+                                                const unitPrice = parseFloat(e.target.value) || 0;
+                                                const quantity = formData.batteryBuyBack?.quantity || 1;
+                                                const discount = formData.batteryBuyBack?.discount || 0;
+                                                const taxRate = formData.batteryBuyBack?.taxRate || 18;
+
+                                                // Calculate the derived fields
+                                                const itemSubtotal = quantity * unitPrice;
+                                                const discountAmount = (discount / 100) * itemSubtotal;
+                                                const discountedAmount = itemSubtotal - discountAmount;
+                                                const taxAmount = (taxRate / 100) * discountedAmount;
+                                                const totalPrice = discountedAmount + taxAmount;
+
+                                                setFormData(prev => {
+                                                    const updatedData = {
+                                                        ...prev,
+                                                        batteryBuyBack: {
+                                                            description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                                                            quantity,
+                                                            unitPrice,
+                                                            discount,
+                                                            discountedAmount: Math.round(discountAmount * 100) / 100,
+                                                            taxRate,
+                                                            taxAmount: Math.round(taxAmount * 100) / 100,
+                                                            totalPrice: Math.round(totalPrice * 100) / 100
+                                                        }
+                                                    };
+
+                                                    // Recalculate totals including battery buy back
+                                                    const calculationResult = calculateQuotationTotals(
+                                                        updatedData.items || [],
+                                                        updatedData.serviceCharges || [],
+                                                        updatedData.batteryBuyBack,
+                                                        updatedData.overallDiscount || 0
+                                                    );
+
+                                                    return {
+                                                        ...updatedData,
+                                                        subtotal: calculationResult.subtotal,
+                                                        totalDiscount: calculationResult.totalDiscount,
+                                                        totalTax: calculationResult.totalTax,
+                                                        grandTotal: calculationResult.grandTotal
+                                                    };
+                                                });
+                                            }}
+                                            className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-500 focus:ring-1 focus:ring-blue-500 text-right"
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+
+                                    {/* Discount */}
+                                    <div className="p-2 border-r border-gray-200">
+                                        <input
+                                            type="number"
+                                            // min="0"
+                                            max="100"
+                                            step="1"
+                                            value={formData.batteryBuyBack?.discount || 0}
+                                            onChange={(e) => {
+                                                const discount = parseFloat(e.target.value) || 0;
+                                                const quantity = formData.batteryBuyBack?.quantity || 1;
+                                                const unitPrice = formData.batteryBuyBack?.unitPrice || 0;
+                                                const taxRate = formData.batteryBuyBack?.taxRate || 18;
+
+                                                // Calculate the derived fields
+                                                const itemSubtotal = quantity * unitPrice;
+                                                const discountAmount = (discount / 100) * itemSubtotal;
+                                                const discountedAmount = itemSubtotal - discountAmount;
+                                                const taxAmount = (taxRate / 100) * discountedAmount;
+                                                const totalPrice = discountedAmount + taxAmount;
+
+                                                setFormData(prev => {
+                                                    const updatedData = {
+                                                        ...prev,
+                                                        batteryBuyBack: {
+                                                            description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                                                            quantity,
+                                                            unitPrice,
+                                                            discount,
+                                                            discountedAmount: Math.round(discountAmount * 100) / 100,
+                                                            taxRate,
+                                                            taxAmount: Math.round(taxAmount * 100) / 100,
+                                                            totalPrice: Math.round(totalPrice * 100) / 100
+                                                        }
+                                                    };
+
+                                                    // Recalculate totals including battery buy back
+                                                    const calculationResult = calculateQuotationTotals(
+                                                        updatedData.items || [],
+                                                        updatedData.serviceCharges || [],
+                                                        updatedData.batteryBuyBack,
+                                                        updatedData.overallDiscount || 0
+                                                    );
+
+                                                    return {
+                                                        ...updatedData,
+                                                        subtotal: calculationResult.subtotal,
+                                                        totalDiscount: calculationResult.totalDiscount,
+                                                        totalTax: calculationResult.totalTax,
+                                                        grandTotal: calculationResult.grandTotal
+                                                    };
+                                                });
+                                            }}
+                                            className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                                            placeholder="0.00"
+                                        />
+                                    </div>
+
+                                    {/* GST */}
+                                    <div className="p-2 border-r border-gray-200">
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            step="1"
+                                            value={formData.batteryBuyBack?.taxRate || 0}
+                                            onChange={(e) => {
+                                                const taxRate = parseFloat(e.target.value) || 0;
+                                                const quantity = formData.batteryBuyBack?.quantity || 1;
+                                                const unitPrice = formData.batteryBuyBack?.unitPrice || 0;
+                                                const discount = formData.batteryBuyBack?.discount || 0;
+
+                                                // Calculate the derived fields
+                                                const itemSubtotal = quantity * unitPrice;
+                                                const discountAmount = (discount / 100) * itemSubtotal;
+                                                const discountedAmount = itemSubtotal - discountAmount;
+                                                const taxAmount = (taxRate / 100) * discountedAmount;
+                                                const totalPrice = discountedAmount + taxAmount;
+
+                                                setFormData(prev => {
+                                                    const updatedData = {
+                                                        ...prev,
+                                                        batteryBuyBack: {
+                                                            description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                                                            quantity,
+                                                            unitPrice,
+                                                            discount,
+                                                            discountedAmount: Math.round(discountAmount * 100) / 100,
+                                                            taxRate,
+                                                            taxAmount: Math.round(taxAmount * 100) / 100,
+                                                            totalPrice: Math.round(totalPrice * 100) / 100
+                                                        }
+                                                    };
+
+                                                    // Recalculate totals including battery buy back
+                                                    const calculationResult = calculateQuotationTotals(
+                                                        updatedData.items || [],
+                                                        updatedData.serviceCharges || [],
+                                                        updatedData.batteryBuyBack,
+                                                        updatedData.overallDiscount || 0
+                                                    );
+
+                                                    return {
+                                                        ...updatedData,
+                                                        subtotal: calculationResult.subtotal,
+                                                        totalDiscount: calculationResult.totalDiscount,
+                                                        totalTax: calculationResult.totalTax,
+                                                        grandTotal: calculationResult.grandTotal
+                                                    };
+                                                });
+                                            }}
+                                            className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
+                                            placeholder="18.00"
+                                            data-field="battery-buy-back"
+                                        />
+                                    </div>
+
+                                    {/* Total */}
+                                    <div className="p-2 text-center">
+                                        <div className="text-sm font-bold text-red-600">
+                                            - ₹{((formData.batteryBuyBack?.quantity || 1) * (formData.batteryBuyBack?.unitPrice || 0) * (1 - (formData.batteryBuyBack?.discount || 0) / 100) * (1 + (formData.batteryBuyBack?.taxRate || 0) / 100)).toFixed(2)}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-2">
+                        💡 <strong>Note:</strong> Battery Buy Back is a deduction from the total. Use negative values (e.g., -500) to reduce the grand total.
+                    </p>
+                </div>
+
                 {/* Notes and Terms */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-2 p-5">
                     <div>
@@ -3168,7 +4431,7 @@ const QuotationFormPage: React.FC = () => {
                                         const value = parseFloat(e.target.value) || 0;
                                         console.log('QuotationForm: Overall discount changed to:', value);
                                         setFormData(prev => {
-                                            const calculationResult = calculateQuotationTotals(prev.items || [], value);
+                                            const calculationResult = calculateQuotationTotals(prev.items || [], prev.serviceCharges || [], prev.batteryBuyBack || null, value);
                                             console.log('QuotationForm: Calculation result:', calculationResult);
                                             const updatedData = {
                                                 ...prev,
@@ -3202,6 +4465,26 @@ const QuotationFormPage: React.FC = () => {
                                 <span className="text-gray-600">Subtotal:</span>
                                 <span className="font-medium">₹{formData.subtotal?.toFixed(2) || '0.00'}</span>
                             </div>
+
+                            {/* Service Charges Breakdown */}
+                            {formData.serviceCharges && formData.serviceCharges.length > 0 && formData.serviceCharges.some(service => service.totalPrice > 0) && (
+                                <div className="border-t border-gray-100 pt-2">
+                                    <div className="text-xs text-gray-500 mb-1">Service Charges:</div>
+                                    {formData.serviceCharges.map((service, index) => (
+                                        service.totalPrice > 0 && (
+                                            <div key={index} className="flex justify-between text-xs text-gray-600 mb-1">
+                                                <span className="truncate max-w-32">{service.description}</span>
+                                                <span className="font-medium">+₹{service.totalPrice?.toFixed(2) || '0.00'}</span>
+                                            </div>
+                                        )
+                                    ))}
+                                    <div className="flex justify-between text-sm text-gray-700 border-t border-gray-100 pt-1 mt-1">
+                                        <span>Total Service Charges:</span>
+                                        <span className="font-medium">+₹{(formData.serviceCharges || []).reduce((sum, service) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Total Tax:</span>
                                 <span className="font-medium">₹{formData.totalTax?.toFixed(2) || '0.00'}</span>
@@ -3214,11 +4497,95 @@ const QuotationFormPage: React.FC = () => {
                                 <span className="text-gray-600">Overall Discount:</span>
                                 <span className="font-medium text-green-600">-{formData.overallDiscount || 0}% (-₹{formData.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
                             </div>
+
+                            {/* Battery Buy Back Breakdown */}
+                            {formData.batteryBuyBack && formData.batteryBuyBack.totalPrice > 0 && (
+                                <div className="border-t border-gray-100 pt-2">
+                                    <div className="text-xs text-gray-500 mb-1">Battery Buy Back (Deduction):</div>
+                                    <div className="flex justify-between text-xs text-gray-600 mb-1">
+                                        <span className="truncate max-w-32">{formData.batteryBuyBack.description}</span>
+                                        <span className="font-medium text-red-600">-₹{formData.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm text-red-600 border-t border-gray-100 pt-1 mt-1">
+                                        <span>Total Deduction:</span>
+                                        <span className="font-medium">-₹{formData.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Net Amount Before Grand Total */}
+                            <div className="flex justify-between text-sm text-gray-700 border-t border-gray-200 pt-2">
+                                <span>Net Amount:</span>
+                                <span className="font-medium">₹{(() => {
+                                    let netAmount = (formData.subtotal || 0) - (formData.totalDiscount || 0) + (formData.totalTax || 0);
+                                    // Add service charges
+                                    if (formData.serviceCharges) {
+                                        netAmount += formData.serviceCharges.reduce((sum, service) => sum + (service.totalPrice || 0), 0);
+                                    }
+                                    // Subtract overall discount
+                                    if (formData.overallDiscountAmount) {
+                                        netAmount -= formData.overallDiscountAmount;
+                                    }
+                                    return netAmount.toFixed(2);
+                                })()}</span>
+                            </div>
+
                             <div className="flex justify-between font-bold text-lg border-t pt-3">
                                 <span>Grand Total:</span>
                                 <span className="text-blue-600">₹{formData.grandTotal?.toFixed(2) || '0.00'}</span>
                             </div>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Payment Information */}
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Remaining Amount */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-4">
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">Remaining Amount</h3>
+                        <div className="text-2xl font-bold text-blue-600">
+                            ₹{formData.remainingAmount?.toFixed(2) || formData.grandTotal?.toFixed(2) || '0.00'}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Total amount to be paid
+                        </p>
+                    </div>
+
+                    {/* Payment Status */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-4">
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">Payment Status</h3>
+                        <div className={`text-lg font-semibold ${getPaymentStatusColor(formData.paymentStatus || 'pending')}`}>
+                            {getPaymentStatusLabel(formData.paymentStatus || 'pending')}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            {formData.paymentStatus === 'paid' ? 'Full payment received' :
+                                formData.paymentStatus === 'partial' ? 'Partial payment received' :
+                                    'No payments received yet'}
+                        </p>
+                    </div>
+
+                    {/* Payment Method */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-4">
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">Payment Method</h3>
+                        <div className="text-lg font-semibold text-gray-900">
+                            {formData.paymentMethod ? getPaymentMethodLabel(formData.paymentMethod) : 'Not specified'}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            {formData.paymentMethod ? 'Payment method selected' : 'Will be set during payment'}
+                        </p>
+                    </div>
+
+                    {/* Paid Amount */}
+                    <div className="bg-white rounded-lg border border-gray-200 p-4">
+                        <h3 className="text-sm font-medium text-gray-700 mb-2">Paid Amount</h3>
+                        <div className="text-lg font-semibold text-green-600">
+                            ₹{formData.paidAmount?.toFixed(2) || '0.00'}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                            {formData.paidAmount && formData.paidAmount > 0 ? 'Payment received' : 'No payments yet'}
+                        </p>
                     </div>
                 </div>
             </div>

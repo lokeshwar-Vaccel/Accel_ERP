@@ -285,6 +285,56 @@ class ApiClient {
       }),
   };
 
+  // DG Product Management APIs
+  dgProducts = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/dg-products${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    create: (productData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/dg-products', {
+        method: 'POST',
+        body: JSON.stringify(productData),
+      }),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/dg-products/${id}`),
+
+    update: (id: string, data: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/dg-products/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean }>(`/dg-products/${id}`, {
+        method: 'DELETE',
+      }),
+
+    getCategories: () =>
+      this.makeRequest<{ success: boolean; data: any[] }>('/dg-products/categories'),
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/dg-products/stats'),
+    preview: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return this.makeRequest<{ success: boolean; data: any }>('/dg-products/preview', {
+        method: 'POST',
+        body: formData,
+        // Remove manual Content-Type header - let browser set it automatically
+      });
+    },
+    import: (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return this.makeRequest<{ success: boolean; data: any }>('/dg-products/import', {
+        method: 'POST',
+        body: formData,
+        // Remove manual Content-Type header - let browser set it automatically
+      });
+    }
+  };
+
   // Stock Management APIs
   stock = {
     // Stock Locations
@@ -511,6 +561,27 @@ class ApiClient {
       const allParams = { stockId: productId, ...(locationId && { location: locationId }), ...params };
       return this.makeRequest<{ success: boolean; data: { ledgers: any[] }; pagination: any }>(`/ledger?${new URLSearchParams(allParams)}`);
     },
+  };
+
+  // QR Code Management APIs
+  qrCode = {
+    upload: (file: File) => {
+      const formData = new FormData();
+      formData.append('qrCodeImage', file);
+      
+      return this.makeRequest<{ success: boolean; data: any }>('/qr-code/upload', {
+        method: 'POST',
+        body: formData,
+      });
+    },
+
+    delete: (filename: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/qr-code/${filename}`, {
+        method: 'DELETE',
+      }),
+
+    getInfo: (filename: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/qr-code/${filename}`),
   };
 
   // Service Management APIs
