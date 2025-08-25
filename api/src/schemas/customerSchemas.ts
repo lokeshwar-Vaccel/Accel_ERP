@@ -34,6 +34,8 @@ export interface CreateCustomerInput {
     installationType: 'infold' | 'outfold';
     amcStatus: 'yes' | 'no';
     cluster: string;
+    warrantyStartDate?: Date;
+    warrantyEndDate?: Date;
   }[];
 }
 
@@ -69,6 +71,8 @@ export interface UpdateCustomerInput {
     installationType: 'infold' | 'outfold';
     amcStatus: 'yes' | 'no';
     cluster: string;
+    warrantyStartDate?: Date;
+    warrantyEndDate?: Date;
   }[];
 }
 
@@ -163,7 +167,9 @@ const dgDetailsJoiSchema = Joi.object({
   warrantyStatus: Joi.string().valid('warranty', 'non_warranty').allow('', null),
   installationType: Joi.string().valid('infold', 'outfold').allow('', null),
   amcStatus: Joi.string().valid('yes', 'no').allow('', null),
-  cluster: Joi.string().trim().max(100).allow('', null)
+  cluster: Joi.string().trim().max(100).allow('', null),
+  warrantyStartDate: Joi.date().allow('', null),
+  warrantyEndDate: Joi.date().allow('', null)
 });
 
 // Base customer fields

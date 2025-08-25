@@ -1105,7 +1105,7 @@ const ServiceManagement: React.FC = () => {
       setOemSearchTerm(excelFormData.OEMName || '');
       setServiceTypeSearchTerm(excelFormData.TypeofService || '');
     } else {
-      setShowEditModal(true);
+    setShowEditModal(true);
     }
   };
 
@@ -1283,31 +1283,31 @@ const ServiceManagement: React.FC = () => {
       } else {
         // For manual tickets, use regular form data
         payload = {
-          // Legacy fields for backward compatibility
-          customer: ticketFormData.customer,
-          products: ticketFormData.products || undefined, // Add products array
-          serviceCharge: ticketFormData.serviceCharge || 0,
-          scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined,
+        // Legacy fields for backward compatibility
+        customer: ticketFormData.customer,
+        products: ticketFormData.products || undefined, // Add products array
+        serviceCharge: ticketFormData.serviceCharge || 0,
+        scheduledDate: ticketFormData.scheduledDate ? new Date(ticketFormData.scheduledDate).toISOString() : undefined,
 
-          // Standardized fields
-          serviceRequestType: ticketFormData.serviceRequestType,
-          requestSubmissionDate: editingTicket?.requestSubmissionDate || new Date().toISOString(), // Preserve original submission date
-          serviceRequiredDate: ticketFormData.serviceRequiredDate ? new Date(ticketFormData.serviceRequiredDate).toISOString() : undefined,
-          engineSerialNumber: ticketFormData.engineSerialNumber || undefined,
-          engineModel: ticketFormData.engineModel || '',
-          kva: ticketFormData.kva || '',
-          customerName: customers.find(c => c._id === ticketFormData.customer)?.name || '',
-          serviceRequestEngineer: ticketFormData.assignedTo || undefined,
-          typeOfVisit: ticketFormData.typeOfVisit,
-          typeOfService: ticketFormData.typeOfService || '',
-          businessVertical: ticketFormData.businessVertical || undefined,
-          selectedAddress: ticketFormData.selectedAddress || undefined,
-          complaintDescription: ticketFormData.complaintDescription || undefined
-        };
+        // Standardized fields
+        serviceRequestType: ticketFormData.serviceRequestType,
+        requestSubmissionDate: editingTicket?.requestSubmissionDate || new Date().toISOString(), // Preserve original submission date
+        serviceRequiredDate: ticketFormData.serviceRequiredDate ? new Date(ticketFormData.serviceRequiredDate).toISOString() : undefined,
+        engineSerialNumber: ticketFormData.engineSerialNumber || undefined,
+        engineModel: ticketFormData.engineModel || '',
+        kva: ticketFormData.kva || '',
+        customerName: customers.find(c => c._id === ticketFormData.customer)?.name || '',
+        serviceRequestEngineer: ticketFormData.assignedTo || undefined,
+        typeOfVisit: ticketFormData.typeOfVisit,
+        typeOfService: ticketFormData.typeOfService || '',
+        businessVertical: ticketFormData.businessVertical || undefined,
+        selectedAddress: ticketFormData.selectedAddress || undefined,
+        complaintDescription: ticketFormData.complaintDescription || undefined
+      };
 
-        // Only include assignedTo if it's not empty
-        if (ticketFormData.assignedTo && ticketFormData.assignedTo.trim() !== '') {
-          payload.assignedTo = ticketFormData.assignedTo;
+      // Only include assignedTo if it's not empty
+      if (ticketFormData.assignedTo && ticketFormData.assignedTo.trim() !== '') {
+        payload.assignedTo = ticketFormData.assignedTo;
         }
       }
 
@@ -1333,7 +1333,7 @@ const ServiceManagement: React.FC = () => {
       if (editingTicket.uploadedViaExcel) {
         setShowExcelEditModal(false);
       } else {
-        setShowEditModal(false);
+      setShowEditModal(false);
       }
       setEditingTicket(null);
       resetTicketForm();
@@ -3462,14 +3462,14 @@ const ServiceManagement: React.FC = () => {
                       <input
                         type="text"
                         value={typeOfVisitDropdown.searchTerm || (ticketFormData.typeOfVisit ? typeOfVisitOptions.find(opt => opt.value === ticketFormData.typeOfVisit)?.label || '' : '')}
-                        onChange={(e) => {
+                      onChange={(e) => {
                           setTypeOfVisitDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                           handleDropdownSearch('typeOfVisit', e.target.value);
                           // Clear error when user starts typing
-                          if (formErrors.typeOfVisit) {
-                            setFormErrors(prev => ({ ...prev, typeOfVisit: '' }));
-                          }
-                        }}
+                        if (formErrors.typeOfVisit) {
+                          setFormErrors(prev => ({ ...prev, typeOfVisit: '' }));
+                        }
+                      }}
                         onKeyDown={(e) => handleDropdownKeyDown('typeOfVisit', e, typeOfVisitDropdown.filteredOptions, (value) => handleDropdownSelect('typeOfVisit', value))}
                         onFocus={() => handleDropdownFocus('typeOfVisit')}
                         onBlur={() => {
@@ -3521,14 +3521,14 @@ const ServiceManagement: React.FC = () => {
                       <input
                         type="text"
                         value={typeOfServiceDropdown.searchTerm || (ticketFormData.typeOfService ? typeOfServiceOptions.find(opt => opt.value === ticketFormData.typeOfService)?.label || '' : '')}
-                        onChange={(e) => {
+                      onChange={(e) => {
                           setTypeOfServiceDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
                           handleDropdownSearch('typeOfService', e.target.value);
                           // Clear error when user starts typing
-                          if (formErrors.typeOfService) {
-                            setFormErrors(prev => ({ ...prev, typeOfService: '' }));
-                          }
-                        }}
+                        if (formErrors.typeOfService) {
+                          setFormErrors(prev => ({ ...prev, typeOfService: '' }));
+                        }
+                      }}
                         onKeyDown={(e) => handleDropdownKeyDown('typeOfService', e, typeOfServiceDropdown.filteredOptions, (value) => handleDropdownSelect('typeOfService', value))}
                         onFocus={() => handleDropdownFocus('typeOfService')}
                         onBlur={() => {

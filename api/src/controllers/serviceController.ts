@@ -679,6 +679,8 @@ export const updateServiceTicket = async (
       selectedAddress,
       typeOfService,
       typeOfVisit,
+      natureOfWork,
+      subNatureOfWork,
       businessVertical,
       complaintDescription,
       serviceRequestEngineer,
@@ -735,13 +737,19 @@ export const updateServiceTicket = async (
       updateData.SiteID = selectedAddress !== null ? selectedAddress.trim() : undefined;
     }
     if (typeOfService !== undefined) {
-      if (!typeOfService || typeOfService.trim() === '') {
-        return next(new AppError('Type of service cannot be empty', 400));
-      }
-      updateData.TypeofService = typeOfService.trim();
+      updateData.TypeofService = typeOfService && typeOfService.trim() !== '' ? typeOfService.trim() : undefined;
     }
     if (typeOfVisit !== undefined) {
       updateData.typeOfVisit = typeOfVisit;
+      console.log('Setting typeOfVisit:', typeOfVisit);
+    }
+    if (natureOfWork !== undefined) {
+      updateData.natureOfWork = natureOfWork;
+      console.log('Setting natureOfWork:', natureOfWork);
+    }
+    if (subNatureOfWork !== undefined) {
+      updateData.subNatureOfWork = subNatureOfWork;
+      console.log('Setting subNatureOfWork:', subNatureOfWork);
     }
     if (businessVertical !== undefined) {
       updateData.CustomerType = businessVertical;
@@ -1742,11 +1750,16 @@ export const updateExcelServiceTicket = async (
       eFSRNumber,
       eFSRClosureDateAndTime,
       ServiceRequestStatus,
-      OEMName
+      OEMName,
+      // Additional fields that might be sent
+      typeOfVisit,
+      natureOfWork,
+      subNatureOfWork
     } = req.body;
 
     // Prepare update data with Excel fields
     const updateData: any = {};
+
 
     // Excel-specific fields
     if (ServiceRequestNumber !== undefined) {
@@ -1811,8 +1824,18 @@ export const updateExcelServiceTicket = async (
     if (OEMName !== undefined) {
       updateData.OemName = OEMName;
     }
+    
+    // Handle additional fields
+    if (typeOfVisit !== undefined) {
+      updateData.typeOfVisit = typeOfVisit;
+    }
+    if (natureOfWork !== undefined) {
+      updateData.natureOfWork = natureOfWork;
+    }
+    if (subNatureOfWork !== undefined) {
+      updateData.subNatureOfWork = subNatureOfWork;
+    }
 
-    // Update the ticket
     const updatedTicket = await ServiceTicket.findByIdAndUpdate(
       req.params.id,
       updateData,
