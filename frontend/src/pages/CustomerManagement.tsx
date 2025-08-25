@@ -35,7 +35,8 @@ import {
   AlertTriangle,
   RefreshCw,
   Zap,
-  Package
+  Package,
+  Download
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import PageHeader from '../components/ui/PageHeader';
@@ -127,6 +128,8 @@ interface Customer {
     installationType: 'infold' | 'outfold';
     amcStatus: 'yes' | 'no';
     cluster: string;
+    warrantyStartDate?: string;
+    warrantyEndDate?: string;
   }[];
   // OEM specific properties
   oemCode?: string;
@@ -183,8 +186,8 @@ interface CustomerFormData {
   siteAddress?: string;
   numberOfDG?: number;
   customerType: CustomerType;
-  leadSource: string;
-  assignedTo: string;
+  leadSource?: string;
+  assignedTo?: string;
   notes: string;
   addresses: Address[];
   type: CustomerMainType;
@@ -202,6 +205,8 @@ interface CustomerFormData {
     installationType: 'infold' | 'outfold';
     amcStatus: 'yes' | 'no';
     cluster: string;
+    warrantyStartDate?: string;
+    warrantyEndDate?: string;
   }[];
 }
 
@@ -292,10 +297,8 @@ const CustomerManagement: React.FC = () => {
     panNumber: '',
     address: '',
     siteAddress: '',
-    numberOfDG: 0,
+    numberOfDG: 0, // Start with 1 since we initialize with one DG detail
     customerType: 'retail',
-    leadSource: '',
-    assignedTo: '',
     notes: '',
     addresses: [{
       id: Date.now(),
@@ -320,7 +323,9 @@ const CustomerManagement: React.FC = () => {
       warrantyStatus: 'warranty',
       installationType: 'infold',
       amcStatus: 'yes',
-      cluster: ''
+      cluster: '',
+      warrantyStartDate: '',
+      warrantyEndDate: ''
     }]
   });
 
@@ -586,12 +591,47 @@ const CustomerManagement: React.FC = () => {
 
   // DGDetails helper functions
   const updateDGDetails = (index: number, field: keyof NonNullable<CustomerFormData['dgDetails']>[0], value: any) => {
-    setCustomerFormData(prev => ({
-      ...prev,
-      dgDetails: prev.dgDetails!.map((dg, i) => 
-        i === index ? { ...dg, [field]: value } : dg
-      )
-    }));
+    setCustomerFormData(prev => {
+      const updatedDgDetails = prev.dgDetails!.map((dg, i) => {
+        if (i === index) {
+          const updatedDg = { ...dg, [field]: value };
+          
+          // Auto-calculate warranty end date when KVA or warranty start date changes
+          if (field === 'dgRatingKVA' || field === 'warrantyStartDate') {
+            const kva = field === 'dgRatingKVA' ? value : dg.dgRatingKVA;
+            let startDate = field === 'warrantyStartDate' ? value : dg.warrantyStartDate;
+            
+            // If KVA is being updated and no warranty start date is set, use commissioning date as default
+            if (field === 'dgRatingKVA' && kva > 0 && !startDate) {
+              startDate = dg.commissioningDate || new Date().toISOString().split('T')[0];
+              updatedDg.warrantyStartDate = startDate;
+            }
+            
+            if (startDate && kva > 0) {
+              updatedDg.warrantyEndDate = calculateWarrantyEndDate(startDate, kva);
+            }
+          }
+          
+          // Auto-calculate warranty end date when commissioning date changes (if no warranty start date is set)
+          if (field === 'commissioningDate') {
+            const kva = dg.dgRatingKVA;
+            const startDate = dg.warrantyStartDate || value; // Use commissioning date if no warranty start date
+            
+            if (kva > 0 && startDate) {
+              updatedDg.warrantyEndDate = calculateWarrantyEndDate(startDate, kva);
+            }
+          }
+          
+          return updatedDg;
+        }
+        return dg;
+      });
+      
+      return {
+        ...prev,
+        dgDetails: updatedDgDetails
+      };
+    });
   };
 
   const addDGDetails = () => {
@@ -610,8 +650,11 @@ const CustomerManagement: React.FC = () => {
         warrantyStatus: 'warranty' as const,
         installationType: 'infold' as const,
         amcStatus: 'yes' as const,
-        cluster: ''
-      }]
+        cluster: '',
+        warrantyStartDate: '',
+        warrantyEndDate: ''
+      }],
+      numberOfDG: (prev.dgDetails?.length || 0) + 1
     }));
   };
 
@@ -619,9 +662,31 @@ const CustomerManagement: React.FC = () => {
     if (customerFormData.dgDetails!.length > 1) {
       setCustomerFormData(prev => ({
         ...prev,
-        dgDetails: prev.dgDetails!.filter((_, i) => i !== index)
+        dgDetails: prev.dgDetails!.filter((_, i) => i !== index),
+        numberOfDG: prev.dgDetails!.length - 1
       }));
     }
+  };
+
+  // Helper function to calculate warranty period based on KVA
+  const calculateWarrantyPeriod = (kva: number): number => {
+    if (kva <= 5) {
+      return 18;
+    } else {
+      return 24;
+    }
+  };
+
+  // Helper function to calculate warranty end date based on start date and KVA
+  const calculateWarrantyEndDate = (startDate: string, kva: number): string => {
+    if (!startDate || kva <= 0) return '';
+    
+    const start = new Date(startDate);
+    const months = calculateWarrantyPeriod(kva);
+    const endDate = new Date(start);
+    endDate.setMonth(endDate.getMonth() + months);
+    
+    return endDate.toISOString().split('T')[0];
   };
 
   const addressTypes = [
@@ -1147,10 +1212,8 @@ const CustomerManagement: React.FC = () => {
       panNumber: '',
       address: '',
       siteAddress: '',
-      numberOfDG: 0,
+      numberOfDG: 1, // Start with 1 since we initialize with one DG detail
       customerType: customerTypeTab === 'oem' ? 'oem' : 'retail',
-      leadSource: '',
-      assignedTo: '',
       notes: '',
       addresses: [{
         id: Date.now(),
@@ -1175,7 +1238,9 @@ const CustomerManagement: React.FC = () => {
         warrantyStatus: 'warranty',
         installationType: 'infold',
         amcStatus: 'yes',
-        cluster: ''
+        cluster: '',
+        warrantyStartDate: '',
+        warrantyEndDate: ''
       }]
     });
     setShowAssignedToDropdown(false);
@@ -1210,8 +1275,6 @@ const CustomerManagement: React.FC = () => {
         (customer.address && typeof customer.address === 'object' ? 
           `${customer.address.street}, ${customer.address.city}, ${customer.address.state} ${customer.address.pincode}` : ''),
       customerType: customer.customerType || 'retail',
-      leadSource: customer.leadSource || '',
-      assignedTo: getUserId(customer.assignedTo),
       notes: customer.notes || '',
       siteAddress: (customer as any).siteAddress || '',
       numberOfDG: (customer as any).numberOfDG || 0,
@@ -1243,7 +1306,9 @@ const CustomerManagement: React.FC = () => {
             warrantyStatus: dg.warrantyStatus || 'warranty',
             installationType: dg.installationType || 'infold',
             amcStatus: dg.amcStatus || 'yes',
-            cluster: dg.cluster || ''
+            cluster: dg.cluster || '',
+            warrantyStartDate: dg.warrantyStartDate || '',
+            warrantyEndDate: dg.warrantyEndDate || ''
           }))
         : [{
             dgSerialNumbers: '',
@@ -1258,7 +1323,9 @@ const CustomerManagement: React.FC = () => {
             warrantyStatus: 'warranty',
             installationType: 'infold',
             amcStatus: 'yes',
-            cluster: ''
+            cluster: '',
+            warrantyStartDate: '',
+            warrantyEndDate: ''
           }]
     });
     console.log('Final form data set:', customerFormData);
@@ -1473,7 +1540,7 @@ const CustomerManagement: React.FC = () => {
     return found ? found.label : 'Retail';
   };
 
-  const getAssignedToLabel = (value: string) => {
+  const getAssignedToLabel = (value: string | undefined) => {
     if (!value) return 'Select user (optional)';
     const user = users.find(u => u.id === value);
 
@@ -1539,6 +1606,50 @@ const CustomerManagement: React.FC = () => {
   };
   const hasActiveFilters = typeFilter !== 'all' || statusFilter !== 'all' || sortField !== 'all' || searchTerm;
 
+  const handleExportExcel = async () => {
+    try {
+      // Build export parameters based on current filters
+      const params: any = {};
+      
+      if (searchTerm) params.search = searchTerm;
+      if (statusFilter !== 'all') params.status = statusFilter;
+      if (typeFilter !== 'all') params.customerType = typeFilter;
+      if (assignedToFilter) params.assignedTo = assignedToFilter;
+      if (dateFrom) params.dateFrom = dateFrom;
+      if (dateTo) params.dateTo = dateTo;
+      
+      // Add type parameter for supplier/customer distinction
+      if (customerTypeTab === 'supplier') {
+        params.type = 'supplier';
+      } else if (customerTypeTab === 'customer') {
+        params.type = 'customer';
+      }
+
+      // Call the export API
+      const blob = await apiClient.customers.export(params);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Set filename based on type
+      const filename = customerTypeTab === 'supplier' ? 'suppliers-export.xlsx' : 'customers-export.xlsx';
+      link.download = filename;
+      
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success(`${customerTypeTab === 'supplier' ? 'Suppliers' : 'Customers'} exported successfully!`);
+    } catch (error: any) {
+      console.error('Export error:', error);
+      toast.error('Failed to export data: ' + (error.message || 'Unknown error'));
+    }
+  };
+
   return (
     <div className="pl-2 pr-6 py-6 space-y-4">
       {/* Header */}
@@ -1561,7 +1672,7 @@ const CustomerManagement: React.FC = () => {
             <span className="text-sm">Sales Pipeline</span>
           </button>
 
-          {user?.role !== 'hr' &&
+          {user?.role !== 'hr' && customerTypeTab !== 'dg_customer' && customerTypeTab !== 'oem' &&
             <button
               onClick={() => setShowAddModal(true)}
               className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
@@ -1575,14 +1686,26 @@ const CustomerManagement: React.FC = () => {
               </span>
             </button>
           }
-          <button
-            onClick={handleImportClick}
-            disabled={importing}
-            className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <FileText className={`w-4 h-4 ${importing ? 'animate-pulse' : ''}`} />
-            <span className="text-sm">{importing ? 'Importing...' : 'Import Excel'}</span>
-          </button>
+          {(customerTypeTab === 'customer' || customerTypeTab === 'supplier') && (
+            <button
+              onClick={handleImportClick}
+              disabled={importing}
+              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FileText className={`w-4 h-4 ${importing ? 'animate-pulse' : ''}`} />
+              <span className="text-sm">{importing ? 'Importing...' : 'Import Excel'}</span>
+            </button>
+          )}
+                     {(customerTypeTab === 'customer' || customerTypeTab === 'supplier') && (
+             <button
+               onClick={handleExportExcel}
+               disabled={importing}
+               className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+             >
+               <Download className="w-4 h-4" />
+               <span className="text-sm">{importing ? 'Exporting...' : 'Export Excel'}</span>
+             </button>
+           )}
         </div>
       </PageHeader>
       <input
@@ -1845,32 +1968,53 @@ const CustomerManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
-                {customerTypeTab === 'customer' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer
-                </th>}
-                {customerTypeTab === 'dg_customer' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  DG Customer
-                </th>}
-                {customerTypeTab === 'oem' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Company & Code
-                </th>}
-                {customerTypeTab === 'supplier' && <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Supplier
-                </th>}
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {customerTypeTab === 'oem' ? 'Contact & Person' : 'Contact Info'}
+                  {customerTypeTab === 'oem' ? 'OEM Code' : 
+                   customerTypeTab === 'customer' ? 'Customer ID' :
+                   customerTypeTab === 'dg_customer' ? 'DG Customer ID' :
+                   'Supplier ID'}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {customerTypeTab === 'oem' ? 'Status & Rating' : 'Type & Status'}
+                  {customerTypeTab === 'oem' ? 'Company Name' : 
+                   customerTypeTab === 'customer' ? 'Customer Name' :
+                   customerTypeTab === 'dg_customer' ? 'DG Customer Name' :
+                   'Supplier Name'}
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {customerTypeTab === 'oem' ? 'Products Info' : 'Last Contact'}
+                  Contact Person Name
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {customerTypeTab === 'oem' ? 'Products Count' : 'Lead Source'}
+                  Designation
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {customerTypeTab === 'oem' ? 'Contact Person' : 'Designation'}
+                  Mobile Number
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email ID
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Address
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  State
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  District
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Pin Code
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  GST Details
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Status
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {customerTypeTab === 'oem' ? 'Rating' : 'Customer Type'}
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Lead Source
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -1880,13 +2024,13 @@ const CustomerManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={15} className="px-6 py-8 text-center text-gray-500">
                     Loading customers...
                   </td>
                 </tr>
               ) : customers.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={15} className="px-6 py-8 text-center text-gray-500">
                     <div className="text-center">
                       <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                       <p className="text-lg font-medium text-gray-900 mb-2">
@@ -1901,155 +2045,145 @@ const CustomerManagement: React.FC = () => {
               ) : (
                 customers.filter(customer => customer && customer._id).map((customer) => (
                   <tr key={customer._id} className="hover:bg-gray-50">
+                    {/* ID Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {customerTypeTab === 'oem' && customer.oemCode ? customer.oemCode :
+                       customer.customerId ? customer.customerId :
+                       customer._id?.slice(-6) || 'N/A'}
+                    </td>
+                    
+                    {/* Name Column */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-xs font-medium text-gray-900">
-                          {customerTypeTab === 'oem' ? 
-                            (customer.companyName || customer.name || 'Unnamed OEM') : 
-                            (customer.name || 'Unnamed Customer')
-                          }
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {/* ID: {customer._id.slice(-6)} */}
-                          {customerTypeTab === 'customer' && customer.customerId && (
-                            <>Customer ID: {customer.customerId}</>
-                          )}
-                          {customerTypeTab === 'dg_customer' && customer.customerId && (
-                            <>DG Customer ID: {customer.customerId}</>
-                          )}
-                          {customerTypeTab === 'oem' && customer.oemCode && (
-                            <>OEM Code: {customer.oemCode}</>
-                          )}
-                          {customerTypeTab === 'oem' && !customer.oemCode && (
-                            <>OEM ID: {customer._id?.slice(-6) || 'N/A'}</>
-                          )}
-                        </div>
+                      <div className="text-xs font-medium text-gray-900">
+                        {customerTypeTab === 'oem' ? 
+                          (customer.companyName || customer.name || 'Unnamed OEM') : 
+                          (customer.name || 'Unnamed Customer')
+                        }
                       </div>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="space-y-1">
-                        {customer.email && (
-                          <div className="flex items-center text-xs text-gray-600">
-                            <Mail className="w-4 h-4 mr-2" />
-                            {customer.email}
-                          </div>
-                        )}
-                        <div className="flex items-center text-xs text-gray-600">
-                          <Phone className="w-4 h-4 mr-2" />
-                          {customer.phone || "N/A"}
-                        </div>
-                        {customerTypeTab === 'oem' && customer.contactPerson && (
-                          <div className="flex items-center text-xs text-gray-600">
-                            <Users className="w-4 h-4 mr-2" />
-                            {customer.contactPerson}
-                          </div>
-                        )}
-                      </div>
+                    
+                    {/* Contact Person Name Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {customerTypeTab === 'oem' ? 
+                        (customer.contactPerson || '-') :
+                        (customer.contactPersonName || '-')
+                      }
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="space-y-2">
-                        {customerTypeTab === 'oem' ? (
-                          <div className="space-y-1">
-                            <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
-                              (customer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
-                              (customer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
-                              (customer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
-                              'bg-gray-100 text-gray-800'
-                            }`}>
-                              <span className="ml-1 capitalize">{(customer.status as any) || 'active'}</span>
-                            </span>
-                            {customer.rating && (
-                              <div className="flex items-center text-xs text-gray-600">
-                                <span className="mr-1">Rating:</span>
-                                <span className="text-yellow-600">{customer.rating}/5</span>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <>
-                            <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.status)}`}>
-                              {getStatusIcon(customer.status)}
-                              <span className="ml-1 capitalize">{customer.status}</span>
-                            </span>
-                            <div className="text-xs text-gray-600 capitalize">
-                              {customer.customerType}
-                            </div>
-                          </>
-                        )}
-                      </div>
+                    
+                    {/* Designation Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {customer.designation || '-'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {customerTypeTab === 'oem' ? (
-                        <div className="space-y-1">
-                          {customer.products && Array.isArray(customer.products) && customer.products.length > 0 ? (
-                            <>
-                              <div className="text-xs text-gray-600">
-                                <span className="font-medium">Top Product:</span>
-                              </div>
-                              <div className="text-xs text-gray-900">
-                                {customer.products[0].model} ({customer.products[0].kva} KVA)
-                              </div>
-                              <div className="text-xs text-gray-500">
-                                ₹{customer.products[0].price.toLocaleString()}
-                              </div>
-                            </>
-                          ) : (
-                            <span className="text-sm text-gray-400">No products</span>
-                          )}
-                        </div>
-                      ) : (
-                        customer.contactHistory && customer.contactHistory.length > 0 ? (
-                          <div className="space-y-1">
-                            <div className="flex items-center text-xs text-gray-600">
-                              {getContactIcon(customer.contactHistory[customer.contactHistory.length - 1].type)}
-                              <span className="ml-1 capitalize">
-                                {customer.contactHistory[customer.contactHistory.length - 1].type}
-                              </span>
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              {new Date(customer.contactHistory[customer.contactHistory.length - 1].date).toLocaleDateString()}
-                            </div>
-                          </div>
-                        ) : (
-                          <span className="text-sm text-gray-400">No contacts</span>
-                        )
-                      )}
+                    
+                    {/* Mobile Number Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {customer.phone || 'N/A'}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
-                      {customerTypeTab === 'oem' ? (
-                        <div className="space-y-1">
-                          {customer.products && Array.isArray(customer.products) && customer.products.length > 0 ? (
-                            <>
-                              <div className="font-medium text-gray-900">{customer.products.length} products</div>
-                              <div className="text-gray-500">
-                                {customer.products.filter(p => p.availability === 'in_stock').length} in stock
-                              </div>
-                              <div className="text-gray-500">
-                                {customer.products.filter(p => p.availability === 'on_order').length} on order
-                              </div>
-                            </>
-                          ) : (
-                            'No products'
-                          )}
-                        </div>
-                      ) : (
-                        customer.leadSource || 'Direct'
-                      )}
+                    
+                    {/* Email ID Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {customer.email || 'N/A'}
                     </td>
+                    
+                    {/* Address Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {(() => {
+                        if (customer.addresses && customer.addresses.length > 0) {
+                          const primaryAddress = customer.addresses.find(addr => addr.isPrimary) || customer.addresses[0];
+                          return primaryAddress.address || 'N/A';
+                        } else if (customerTypeTab === 'oem' && customer.address && typeof customer.address === 'object') {
+                          return customer.address.street || 'N/A';
+                        } else if (typeof customer.address === 'string') {
+                          return customer.address;
+                        }
+                        return 'N/A';
+                      })()}
+                    </td>
+                    
+                    {/* State Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {(() => {
+                        if (customer.addresses && customer.addresses.length > 0) {
+                          const primaryAddress = customer.addresses.find(addr => addr.isPrimary) || customer.addresses[0];
+                          return primaryAddress.state || 'N/A';
+                        } else if (customerTypeTab === 'oem' && customer.address && typeof customer.address === 'object') {
+                          return customer.address.state || 'N/A';
+                        }
+                        return 'N/A';
+                      })()}
+                    </td>
+                    
+                    {/* District Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {(() => {
+                        if (customer.addresses && customer.addresses.length > 0) {
+                          const primaryAddress = customer.addresses.find(addr => addr.isPrimary) || customer.addresses[0];
+                          return primaryAddress.district || 'N/A';
+                        }
+                        return 'N/A';
+                      })()}
+                    </td>
+                    
+                    {/* Pin Code Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {(() => {
+                        if (customer.addresses && customer.addresses.length > 0) {
+                          const primaryAddress = customer.addresses.find(addr => addr.isPrimary) || customer.addresses[0];
+                          return primaryAddress.pincode || 'N/A';
+                        } else if (customerTypeTab === 'oem' && customer.address && typeof customer.address === 'object') {
+                          return customer.address.pincode || 'N/A';
+                        }
+                        return 'N/A';
+                      })()}
+                    </td>
+                    
+                    {/* GST Details Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {(() => {
+                        if (customer.addresses && customer.addresses.length > 0) {
+                          const primaryAddress = customer.addresses.find(addr => addr.isPrimary) || customer.addresses[0];
+                          return primaryAddress.gstNumber || 'N/A';
+                        } else if (customer.gstNumber) {
+                          return customer.gstNumber;
+                        }
+                        return 'N/A';
+                      })()}
+                    </td>
+                    
+                    {/* Status Column */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       {customerTypeTab === 'oem' ? (
-                        <div className="space-y-1">
-                          <div className="font-medium text-gray-900">{customer.contactPerson || '-'}</div>
-                          {customer.alternatePhone && (
-                            <div className="text-xs text-gray-500">
-                              Alt: {customer.alternatePhone}
-                            </div>
-                          )}
-                        </div>
+                        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
+                          (customer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
+                          (customer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                          (customer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          <span className="capitalize">{(customer.status as any) || 'active'}</span>
+                        </span>
                       ) : (
-                        customer.designation || '-'
+                        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.status)}`}>
+                          {getStatusIcon(customer.status)}
+                          <span className="ml-1 capitalize">{customer.status}</span>
+                        </span>
                       )}
                     </td>
+                    
+                    {/* Customer Type/Rating Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {customerTypeTab === 'oem' ? (
+                        customer.rating ? `${customer.rating}/5` : 'N/A'
+                      ) : (
+                        <span className="capitalize">{customer.customerType}</span>
+                      )}
+                    </td>
+                    
+                    {/* Lead Source Column */}
+                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                      {customer.leadSource || 'Direct'}
+                    </td>
+                    
+                    {/* Actions Column */}
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button
@@ -2059,7 +2193,7 @@ const CustomerManagement: React.FC = () => {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        {customerTypeTab !== 'oem' && (
+                        {customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' && customerTypeTab !== 'supplier' && (
                           <button
                             onClick={() => openContactModal(customer)}
                             className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
@@ -2068,7 +2202,7 @@ const CustomerManagement: React.FC = () => {
                             <MessageSquare className="w-4 h-4" />
                           </button>
                         )}
-                        {customerTypeTab !== 'oem' && (
+                        {customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' && (
                           <button
                             onClick={() => openEditModal(customer)}
                             className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
@@ -2077,14 +2211,14 @@ const CustomerManagement: React.FC = () => {
                             <Edit className="w-4 h-4" />
                           </button>
                         )}
-                        {user?.role !== 'hr' &&
-                                                      <button
-                              onClick={() => handleDeleteCustomer(customer._id)}
-                              className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
-                              title={customerTypeTab === 'oem' ? 'Delete OEM' : 'Delete Customer'}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                        {user?.role !== 'hr' && customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' &&
+                          <button
+                            onClick={() => handleDeleteCustomer(customer._id)}
+                            className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
+                            title={(customerTypeTab as string) === 'oem' ? 'Delete OEM' : 'Delete Customer'}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         }
                       </div>
                     </td>
@@ -2420,6 +2554,8 @@ const CustomerManagement: React.FC = () => {
                                       <div><span className="font-medium">Installation:</span> {dg.installationType || 'N/A'}</div>
                                       <div><span className="font-medium">AMC:</span> {dg.amcStatus || 'N/A'}</div>
                                       <div><span className="font-medium">Cluster:</span> {dg.cluster || 'N/A'}</div>
+                                      <div><span className="font-medium">Warranty Start Date:</span> {dg.warrantyStartDate || 'N/A'}</div>
+                                      <div><span className="font-medium">Warranty End Date:</span> {dg.warrantyEndDate || 'N/A'}</div>
                                     </div>
                                   </div>
                                 ))}
@@ -2508,8 +2644,8 @@ const CustomerManagement: React.FC = () => {
                       <p className="text-sm text-gray-600 mt-1">Customer details and contact information</p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Customer Name, Type */}
+                  <div>
+                    {/* Customer Name */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Name *
@@ -2524,39 +2660,6 @@ const CustomerManagement: React.FC = () => {
                       />
                       {formErrors.name && (
                         <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
-                      )}
-                    </div>
-                    <div className="relative dropdown-container">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Type *
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => setShowCustomerTypeDropdown((v) => !v)}
-                        className="flex items-center justify-between w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {getTypeLabel(customerFormData.customerType)}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerTypeDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showCustomerTypeDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                          {typeOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => {
-                                setCustomerFormData({ ...customerFormData, customerType: option.value as CustomerType });
-                                setShowCustomerTypeDropdown(false);
-                              }}
-                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
                       )}
                     </div>
                   </div>
@@ -2725,35 +2828,7 @@ const CustomerManagement: React.FC = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 my-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Number of DG
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={customerFormData.numberOfDG || 0}
-                        onChange={(e) => setCustomerFormData({ ...customerFormData, numberOfDG: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., 2"
-                      />
-                    </div>
-                    
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Site Address
-                      </label>
-                      <input
-                        type="text"
-                        value={customerFormData.siteAddress || ''}
-                        onChange={(e) => setCustomerFormData({ ...customerFormData, siteAddress: e.target.value })}
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter site/installation address"
-                      />
-                    </div>
-                  </div>
+
 
                 </div>
                 {/* Right: Addresses */}
@@ -2902,6 +2977,23 @@ const CustomerManagement: React.FC = () => {
                         >
                           Add DG Details
                         </button>
+                      </div>
+                      
+                      {/* Number of DG - Auto-calculated field */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Number of DG
+                        </label>
+                        <input
+                          type="number"
+                          value={customerFormData.dgDetails?.length || 0}
+                          disabled
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
+                          placeholder="Auto-calculated based on DG details"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          This field is automatically calculated based on the number of DG details added above.
+                        </p>
                       </div>
                       
                       <div className="space-y-4">
@@ -3107,6 +3199,38 @@ const CustomerManagement: React.FC = () => {
                                   placeholder="e.g., North Zone, South Zone"
                                 />
                               </div>
+                              
+                              {/* Warranty Start Date */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Warranty Start Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={dgDetail.warrantyStartDate || dgDetail.commissioningDate}
+                                  onChange={(e) => updateDGDetails(index, 'warrantyStartDate', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Defaults to commissioning date if not specified
+                                </p>
+                              </div>
+                              
+                              {/* Warranty End Date */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Warranty End Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={dgDetail.warrantyEndDate || (dgDetail.dgRatingKVA > 0 ? calculateWarrantyEndDate(dgDetail.warrantyStartDate || dgDetail.commissioningDate, dgDetail.dgRatingKVA) : '')}
+                                  disabled
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Auto-calculated based on start date and KVA ({dgDetail.dgRatingKVA > 0 ? `${calculateWarrantyPeriod(dgDetail.dgRatingKVA)} months` : 'Enter KVA first'})
+                                </p>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -3220,8 +3344,8 @@ const CustomerManagement: React.FC = () => {
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-lg font-semibold text-gray-800">Basic Information</h3>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* Customer Name, Type */}
+                  <div>
+                    {/* Customer Name */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Name *
@@ -3236,39 +3360,6 @@ const CustomerManagement: React.FC = () => {
                       />
                       {formErrors.name && (
                         <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
-                      )}
-                    </div>
-                    <div className="relative dropdown-container">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Type *
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => setShowCustomerTypeDropdown((v) => !v)}
-                        className="flex items-center justify-between w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {getTypeLabel(customerFormData.customerType)}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerTypeDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-                      {showCustomerTypeDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                          {typeOptions.map((option) => (
-                            <button
-                              key={option.value}
-                              type="button"
-                              onClick={() => {
-                                setCustomerFormData({ ...customerFormData, customerType: option.value as CustomerType });
-                                setShowCustomerTypeDropdown(false);
-                              }}
-                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.customerType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              {option.label}
-                            </button>
-                          ))}
-                        </div>
                       )}
                     </div>
                   </div>
@@ -3618,6 +3709,23 @@ const CustomerManagement: React.FC = () => {
                         </button>
                       </div>
                       
+                      {/* Number of DG - Auto-calculated field */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Number of DG
+                        </label>
+                        <input
+                          type="number"
+                          value={customerFormData.dgDetails?.length || 0}
+                          disabled
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
+                          placeholder="Auto-calculated based on DG details"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          This field is automatically calculated based on the number of DG details added above.
+                        </p>
+                      </div>
+                      
                       <div className="space-y-4">
                         {customerFormData.dgDetails?.map((dgDetail, index) => (
                           <div key={index} className="border border-gray-200 rounded-lg p-4 bg-white">
@@ -3821,6 +3929,38 @@ const CustomerManagement: React.FC = () => {
                                   placeholder="e.g., North Zone, South Zone"
                                 />
                               </div>
+                              
+                              {/* Warranty Start Date */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Warranty Start Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={dgDetail.warrantyStartDate || dgDetail.commissioningDate}
+                                  onChange={(e) => updateDGDetails(index, 'warrantyStartDate', e.target.value)}
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Defaults to commissioning date if not specified
+                                </p>
+                              </div>
+                              
+                              {/* Warranty End Date */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Warranty End Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={dgDetail.warrantyEndDate || (dgDetail.warrantyStartDate && dgDetail.dgRatingKVA > 0 ? calculateWarrantyEndDate(dgDetail.warrantyStartDate, dgDetail.dgRatingKVA) : '')}
+                                  disabled
+                                  className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
+                                />
+                                <p className="text-xs text-gray-500 mt-1">
+                                  Auto-calculated based on start date and KVA ({dgDetail.dgRatingKVA > 0 ? `${calculateWarrantyPeriod(dgDetail.dgRatingKVA)} months` : 'Enter KVA first'})
+                                </p>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -3940,7 +4080,10 @@ const CustomerManagement: React.FC = () => {
                 {/* Customer Information */}
                 <div className="space-y-3">
                   <h3 className="text-lg font-medium text-gray-900 border-b pb-2">
-                    {customerTypeTab === 'oem' ? 'OEM Information' : 'Customer Information'}
+                    {customerTypeTab === 'oem' ? 'OEM Information' : 
+                     customerTypeTab === 'supplier' ? 'Supplier Information' :
+                     customerTypeTab === 'dg_customer' ? 'DG Customer Information' :
+                     'Customer Information'}
                   </h3>
                   {/* Status Dropdown as Tag - moved here above the grid */}
 
@@ -3963,10 +4106,7 @@ const CustomerManagement: React.FC = () => {
                         <p className="font-medium">{selectedCustomer.customerId}</p>
                       </div>
                     )}
-                    <div>
-                      <p className="text-xs text-gray-500">{customerTypeTab === 'oem' ? 'OEM Type' : 'Customer Type'}</p>
-                      <p className="font-medium capitalize">{customerTypeTab === 'oem' ? 'OEM' : selectedCustomer.customerType}</p>
-                    </div>
+
                     {customerTypeTab === 'oem' ? (
                       <div>
                         <p className="text-xs text-gray-500">Status</p>
@@ -4134,10 +4274,7 @@ const CustomerManagement: React.FC = () => {
                         <p className="font-medium text-sm">{selectedCustomer.creditDays} days</p>
                       </div>
                     )}
-                    <div>
-                      <p className="text-xs text-gray-500">Assigned To</p>
-                      <p className="font-medium">{getUserName(selectedCustomer.assignedTo) || 'Unassigned'}</p>
-                    </div>
+
                     <div>
                       <p className="text-xs text-gray-500">Created</p>
                       <p className="font-medium">{new Date(selectedCustomer.createdAt).toLocaleDateString()}</p>
@@ -4357,6 +4494,14 @@ const CustomerManagement: React.FC = () => {
                             <p className="text-xs text-gray-500">Service Cluster</p>
                             <p className="font-medium text-sm">{dgDetail.cluster}</p>
                           </div>
+                                                     <div>
+                             <p className="text-xs text-gray-500">Warranty Start Date</p>
+                             <p className="font-medium text-sm">{dgDetail.warrantyStartDate ? new Date(dgDetail.warrantyStartDate).toLocaleDateString() : 'N/A'}</p>
+                           </div>
+                           <div>
+                             <p className="text-xs text-gray-500">Warranty End Date</p>
+                             <p className="font-medium text-sm">{dgDetail.warrantyEndDate ? new Date(dgDetail.warrantyEndDate).toLocaleDateString() : 'N/A'}</p>
+                           </div>
                         </div>
                       </div>
                     ))}
@@ -4364,24 +4509,25 @@ const CustomerManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* Contact History */}
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-medium text-gray-900">
-                    {customerTypeTab === 'oem' ? 'OEM Details' : 'Contact History'}
-                  </h3>
-                  {customerTypeTab !== 'oem' && (
-                    <button
-                      onClick={() => {
-                        openContactModal(selectedCustomer);
-                        setShowDetailsModal(false);
-                      }}
-                      className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700 transition-colors"
-                    >
-                      Add Contact
-                    </button>
-                  )}
-                </div>
+              {/* Contact History - Hide for suppliers */}
+              {customerTypeTab !== 'supplier' && (
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-medium text-gray-900">
+                      {customerTypeTab === 'oem' ? 'OEM Details' : 'Contact History'}
+                    </h3>
+                    {customerTypeTab !== 'oem' && (
+                      <button
+                        onClick={() => {
+                          openContactModal(selectedCustomer);
+                          setShowDetailsModal(false);
+                        }}
+                        className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700 transition-colors"
+                      >
+                        Add Contact
+                      </button>
+                    )}
+                  </div>
                 {customerTypeTab === 'oem' ? (
                   <div className="text-center py-8 text-gray-500">
                     <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
@@ -4425,6 +4571,7 @@ const CustomerManagement: React.FC = () => {
                   </div>
                 )}
               </div>
+            )}
             </div>
           </div>
         </div>

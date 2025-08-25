@@ -78,6 +78,14 @@ const dgDetailsSchema = new Schema({
     trim: true,
     maxlength: [100, 'Cluster cannot exceed 100 characters']
   },
+  warrantyStartDate: {
+    type: Date,
+    required: false
+  },
+  warrantyEndDate: {
+    type: Date,
+    required: false
+  },
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
