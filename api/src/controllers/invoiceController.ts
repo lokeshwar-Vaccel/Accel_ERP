@@ -82,7 +82,7 @@ export const getInvoices = async (
 
     const total = await Invoice.countDocuments(query);
 
-    console.log("invoices:", invoices);
+    // console.log("invoices:", invoices);
     
 
     const response: APIResponse = {
@@ -182,6 +182,15 @@ export const createInvoice = async (
       sourceQuotation,
       quotationNumber,
       quotationPaymentDetails,
+      // New fields from quotation
+      subject,
+      engineSerialNumber,
+      kva,
+      hourMeterReading,
+      serviceRequestDate,
+      qrCodeImage,
+      serviceCharges,
+      batteryBuyBack,
     } = req.body;
 
     // Generate invoice number
@@ -221,18 +230,95 @@ export const createInvoice = async (
       subtotal += discountedTotal;
       totalTax += taxAmount;
     }
-      function roundTo2(n: number) {
-  return Math.round(n * 100) / 100;
-}
+
+    // Calculate service charges totals
+    let serviceChargesSubtotal = 0;
+    let serviceChargesTax = 0;
+    if (serviceCharges && serviceCharges.length > 0) {
+      for (const service of serviceCharges) {
+        const itemSubtotal = service.quantity * service.unitPrice;
+        const discountAmount = (service.discount / 100) * itemSubtotal;
+        const discountedAmount = itemSubtotal - discountAmount;
+        const taxAmount = (service.taxRate / 100) * discountedAmount;
+        
+        serviceChargesSubtotal += discountedAmount;
+        serviceChargesTax += taxAmount;
+      }
+      console.log('Service Charges Calculation:', {
+        serviceChargesSubtotal: serviceChargesSubtotal.toFixed(2),
+        serviceChargesTax: serviceChargesTax.toFixed(2)
+      });
+    }
+
+    // Calculate battery buy back totals (this is a DEDUCTION from the total)
+    let batteryBuyBackSubtotal = 0;
+    let batteryBuyBackTax = 0;
+    if (batteryBuyBack && batteryBuyBack.description) {
+      console.log('Received battery buyback data:', JSON.stringify(batteryBuyBack, null, 2));
+      
+      const itemSubtotal = batteryBuyBack.quantity * batteryBuyBack.unitPrice;
+      const discountAmount = (batteryBuyBack.discount / 100) * itemSubtotal;
+      const discountedAmount = itemSubtotal - discountAmount;
+      const taxAmount = (batteryBuyBack.taxRate / 100) * discountedAmount;
+      
+      batteryBuyBackSubtotal = discountedAmount;
+      batteryBuyBackTax = taxAmount;
+      
+      console.log('Battery Buy Back Calculation:', {
+        quantity: batteryBuyBack.quantity,
+        unitPrice: batteryBuyBack.unitPrice,
+        itemSubtotal: itemSubtotal.toFixed(2),
+        discount: batteryBuyBack.discount,
+        discountAmount: discountAmount.toFixed(2),
+        discountedAmount: discountedAmount.toFixed(2),
+        taxRate: batteryBuyBack.taxRate,
+        taxAmount: taxAmount.toFixed(2),
+        totalPrice: (discountedAmount + taxAmount).toFixed(2)
+      });
+    } else {
+      console.log('No battery buyback data received or description is empty');
+      console.log('batteryBuyBack:', batteryBuyBack);
+    }
+
+    // Update totals to include service charges (battery buy back will be deducted later)
+    const totalSubtotal = subtotal + serviceChargesSubtotal; // Don't subtract battery buyback here
+    const totalTaxAmount = totalTax + serviceChargesTax; // Don't subtract battery buyback tax here
+
+    console.log('Calculation Summary (before battery buyback deduction):', {
+      itemsSubtotal: subtotal.toFixed(2),
+      itemsTax: totalTax.toFixed(2),
+      serviceChargesSubtotal: serviceChargesSubtotal.toFixed(2),
+      serviceChargesTax: serviceChargesTax.toFixed(2),
+      totalSubtotal: totalSubtotal.toFixed(2),
+      totalTaxAmount: totalTaxAmount.toFixed(2)
+    });
+
+    function roundTo2(n: number) {
+      return Math.round(n * 100) / 100;
+    }
 
     // Create invoice with ALL required schema fields
-    let ans = roundTo2(totalTax)
+    let ans = roundTo2(totalTaxAmount)
+    
+    // Calculate grand total BEFORE battery buyback deduction
+    const grandTotalBeforeBatteryBuyBack = Number((Number(totalSubtotal) + Number(ans)).toFixed(2)) - discountAmount;
     
     // Calculate overall discount if provided
-    // Use the overallDiscountAmount sent from frontend directly
     const finalOverallDiscountAmount = overallDiscountAmount || 0;
-    const grandTotalBeforeOverallDiscount = Number((Number(subtotal) + Number(ans)).toFixed(2)) - discountAmount;
-    const finalTotalAmount = Number((grandTotalBeforeOverallDiscount - finalOverallDiscountAmount).toFixed(2));
+    const grandTotalBeforeOverallDiscount = grandTotalBeforeBatteryBuyBack - finalOverallDiscountAmount;
+    
+    // FINALLY, subtract the battery buyback amount (this is the deduction)
+    const finalTotalAmount = Number((grandTotalBeforeOverallDiscount - (batteryBuyBackSubtotal + batteryBuyBackTax)).toFixed(2));
+    
+    console.log('Final Total Calculation:', {
+      totalSubtotal: totalSubtotal.toFixed(2),
+      totalTaxAmount: totalTaxAmount.toFixed(2),
+      discountAmount: discountAmount.toFixed(2),
+      grandTotalBeforeBatteryBuyBack: grandTotalBeforeBatteryBuyBack.toFixed(2),
+      grandTotalBeforeOverallDiscount: grandTotalBeforeOverallDiscount.toFixed(2),
+      batteryBuyBackTotal: (batteryBuyBackSubtotal + batteryBuyBackTax).toFixed(2),
+      finalTotalAmount: finalTotalAmount.toFixed(2)
+    });
     
     // Handle payment details from quotation if this invoice is created from a quotation
     let paidAmount = 0;
@@ -275,12 +361,12 @@ export const createInvoice = async (
       issueDate: new Date(),
       dueDate: new Date(dueDate),
       items: calculatedItems,
-      subtotal,
-      taxAmount: totalTax,
+      subtotal: totalSubtotal, // This includes items + service charges (no battery buyback deduction yet)
+      taxAmount: totalTaxAmount, // This includes items + service charges tax (no battery buyback deduction yet)
       discountAmount,
       overallDiscount: overallDiscount || 0,
       overallDiscountAmount: finalOverallDiscountAmount,
-      totalAmount: finalTotalAmount,
+      totalAmount: finalTotalAmount, // This is the final amount AFTER battery buyback deduction
       paidAmount,
       remainingAmount,
       status: 'draft',
@@ -313,6 +399,15 @@ export const createInvoice = async (
         quotationNumber,
         quotationPaymentDetails
       }),
+      // New fields from quotation
+      ...(subject && { subject }),
+      ...(engineSerialNumber && { engineSerialNumber }),
+      ...(kva && { kva }),
+      ...(hourMeterReading && { hourMeterReading }),
+      ...(serviceRequestDate && { serviceRequestDate: new Date(serviceRequestDate) }),
+      ...(qrCodeImage && { qrCodeImage }),
+      ...(serviceCharges && serviceCharges.length > 0 && { serviceCharges }),
+      ...(batteryBuyBack && batteryBuyBack.description && { batteryBuyBack }),
     });
 
     await invoice.save();
@@ -320,12 +415,16 @@ export const createInvoice = async (
     // Log the created invoice details
     console.log('Invoice created successfully:', {
       invoiceNumber: invoice.invoiceNumber,
+      subtotal: invoice.subtotal,
+      taxAmount: invoice.taxAmount,
       totalAmount: invoice.totalAmount,
       paidAmount: invoice.paidAmount,
       remainingAmount: invoice.remainingAmount,
       paymentStatus: invoice.paymentStatus,
       sourceQuotation: invoice.sourceQuotation,
-      quotationNumber: invoice.quotationNumber
+      quotationNumber: invoice.quotationNumber,
+      batteryBuyBack: invoice.batteryBuyBack,
+      serviceCharges: invoice.serviceCharges
     });
 
     // Reduce stock if requested
@@ -905,15 +1004,6 @@ export const createInvoiceFromQuotation = async (
       return next(new AppError('Quotation not found', 404));
     }
 
-    console.log('Found quotation:', {
-      id: quotation._id,
-      number: quotation.quotationNumber,
-      customer: quotation.customer,
-      location: quotation.location,
-      itemsCount: quotation.items?.length,
-      grandTotal: quotation.grandTotal
-    });
-
     // Validate quotation has required fields
     if (!quotation.customer || !quotation.location) {
       return next(new AppError('Quotation is missing required customer or location information', 400));
@@ -988,7 +1078,6 @@ export const createInvoiceFromQuotation = async (
       }
     };
 
-    console.log('Creating invoice with data:', JSON.stringify(invoiceData, null, 2));
 
     // Create the invoice
     const invoice = new Invoice(invoiceData);

@@ -16,6 +16,34 @@ export interface IInvoiceItem {
 // Invoice Interface
 export interface IInvoice extends mongoose.Document {
   invoiceNumber: string;
+  // New fields from quotation
+  subject?: string; // Subject/Sub field for invoice
+  engineSerialNumber?: string; // Engine Serial Number from ServiceTicket
+  kva?: string; // KVA rating from ServiceTicket
+  hourMeterReading?: string; // Hour Meter Reading from ServiceTicket
+  serviceRequestDate?: Date; // Service Request Date from ServiceTicket
+  qrCodeImage?: string; // QR code image URL or base64 string
+  // Service charges and battery buy back
+  serviceCharges: Array<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+    discountedAmount: number;
+    taxRate: number;
+    taxAmount: number;
+    totalPrice: number;
+  }>;
+  batteryBuyBack?: {
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+    discountedAmount: number;
+    taxRate: number;
+    taxAmount: number;
+    totalPrice: number;
+  };
   user: mongoose.Types.ObjectId;
   customer: mongoose.Types.ObjectId;
   issueDate: Date;
@@ -160,6 +188,55 @@ const invoiceSchema = new Schema<IInvoice>({
     // required: true,
     unique: true,
     trim: true
+  },
+  // New fields from quotation
+  subject: { 
+    type: String, 
+    default: '' 
+  },
+  engineSerialNumber: { 
+    type: String 
+  },
+  kva: { 
+    type: String 
+  },
+  hourMeterReading: { 
+    type: String 
+  },
+  serviceRequestDate: { 
+    type: Date 
+  },
+  qrCodeImage: { 
+    type: String 
+  },
+  // Service charges and battery buy back
+  serviceCharges: {
+    type: [
+      {
+        description: { type: String, required: true },
+        quantity: { type: Number, required: true },
+        unitPrice: { type: Number, required: true },
+        discount: { type: Number, default: 0 },
+        discountedAmount: { type: Number, default: 0 },
+        taxRate: { type: Number, required: true },
+        taxAmount: { type: Number, default: 0 },
+        totalPrice: { type: Number, default: 0 },
+      },
+    ],
+    default: []
+  },
+  batteryBuyBack: {
+    type: {
+      description: { type: String, required: true },
+      quantity: { type: Number, required: true },
+      unitPrice: { type: Number, required: true },
+      discount: { type: Number, default: 0 },
+      discountedAmount: { type: Number, default: 0 },
+      taxRate: { type: Number, required: true },
+      taxAmount: { type: Number, default: 0 },
+      totalPrice: { type: Number, default: 0 },
+    },
+    required: false
   },
   customer: {
     type: Schema.Types.ObjectId,
@@ -509,33 +586,102 @@ invoiceSchema.pre('save', function (this: IInvoice, next) {
 
   const round2 = (n: number): number => Number(n.toFixed(2));
 
-  // 1. Recalculate subtotal and taxAmount
+  // 1. Recalculate subtotal and taxAmount from items
   this.subtotal = round2(this.items.reduce((sum, item) => sum + round2(item.totalPrice), 0));
   this.taxAmount = round2(this.items.reduce((sum, item) => sum + round2(item.taxAmount || 0), 0));
-  console.log("____step 1", this.totalAmount ,this.taxAmount, this.subtotal);
 
-  const discount = round2(this.discountAmount || 0);
-
-  // 2. Calculate totalAmount = subtotal + tax - discount - overallDiscountAmount
-  const grandTotalBeforeOverallDiscount = round2(this.subtotal + this.taxAmount - discount);
-  
-  // Only recalculate overallDiscountAmount if it's not already set (preserve frontend calculation)
-  if (this.overallDiscountAmount === undefined || this.overallDiscountAmount === null) {
-    this.overallDiscountAmount = round2((this.overallDiscount || 0) / 100 * grandTotalBeforeOverallDiscount);
+  // 2. Calculate service charges totals (same as QuotationSchema)
+  if (this.serviceCharges && this.serviceCharges.length > 0) {
+    this.serviceCharges.forEach((service: any) => {
+      const itemSubtotal = service.quantity * service.unitPrice;
+      const discountAmount = (service.discount / 100) * itemSubtotal;
+      const discountedAmount = itemSubtotal - discountAmount;
+      const taxAmount = (service.taxRate / 100) * discountedAmount;
+      const totalPrice = discountedAmount + taxAmount;
+      
+      service.discountedAmount = round2(discountAmount);
+      service.taxAmount = round2(taxAmount);
+      service.totalPrice = round2(totalPrice);
+    });
   }
-  
-  this.totalAmount = round2(grandTotalBeforeOverallDiscount - (this.overallDiscountAmount || 0));
-  console.log("____step 2", this.totalAmount, this.taxAmount, "overallDiscountAmount:", this.overallDiscountAmount);
 
-  // 3. Ensure paidAmount doesn't exceed total
+  // 3. Calculate battery buy back totals (same as QuotationSchema)
+  if (this.batteryBuyBack && this.batteryBuyBack.description) {
+    const itemSubtotal = this.batteryBuyBack.quantity * this.batteryBuyBack.unitPrice;
+    const discountAmount = (this.batteryBuyBack.discount / 100) * itemSubtotal;
+    const discountedAmount = itemSubtotal - discountAmount;
+    const taxAmount = (this.batteryBuyBack.taxRate / 100) * discountedAmount;
+    const totalPrice = discountedAmount + taxAmount;
+    
+    this.batteryBuyBack.discountedAmount = round2(discountAmount);
+    this.batteryBuyBack.taxAmount = round2(taxAmount);
+    this.batteryBuyBack.totalPrice = round2(totalPrice);
+    
+    console.log('Pre-save middleware - Battery Buy Back Calculation:', {
+      quantity: this.batteryBuyBack.quantity,
+      unitPrice: this.batteryBuyBack.unitPrice,
+      itemSubtotal: itemSubtotal.toFixed(2),
+      discount: this.batteryBuyBack.discount,
+      discountAmount: discountAmount.toFixed(2),
+      discountedAmount: discountedAmount.toFixed(2),
+      taxRate: this.batteryBuyBack.taxRate,
+      taxAmount: taxAmount.toFixed(2),
+      totalPrice: totalPrice.toFixed(2)
+    });
+  } else {
+    console.log('Pre-save middleware - No battery buyback data found');
+  }
+
+  // 4. Calculate grand total BEFORE overall discount (same as QuotationSchema)
+  let grandTotal = this.subtotal + this.taxAmount - (this.discountAmount || 0);
+
+  // Add service charges to grand total
+  if (this.serviceCharges && this.serviceCharges.length > 0) {
+    this.serviceCharges.forEach((service: any) => {
+      grandTotal += service.totalPrice;
+    });
+  }
+
+  // 5. Calculate overall discount amount if not set (same as QuotationSchema)
+  if (this.overallDiscountAmount === undefined || this.overallDiscountAmount === null) {
+    this.overallDiscountAmount = round2((this.overallDiscount || 0) / 100 * grandTotal);
+  }
+
+  // 6. Apply overall discount to grand total (same as QuotationSchema)
+  if (this.overallDiscountAmount && this.overallDiscountAmount > 0) {
+    grandTotal -= this.overallDiscountAmount;
+  }
+
+  // 7. FINALLY, subtract battery buyback from grand total (same as QuotationSchema)
+  if (this.batteryBuyBack && this.batteryBuyBack.totalPrice) {
+    grandTotal -= this.batteryBuyBack.totalPrice; // ✅ SUBTRACTS battery buyback (deduction)
+  }
+
+  // 8. Set the final total amount
+  this.totalAmount = round2(grandTotal);
+
+  console.log('Pre-save middleware - Final Calculation (matching QuotationSchema):', {
+    itemsSubtotal: this.subtotal.toFixed(2),
+    itemsTax: this.taxAmount.toFixed(2),
+    discountAmount: (this.discountAmount || 0).toFixed(2),
+    grandTotalBeforeOverallDiscount: (this.subtotal + this.taxAmount - (this.discountAmount || 0)).toFixed(2),
+    serviceChargesTotal: this.serviceCharges?.reduce((sum, service) => sum + service.totalPrice, 0).toFixed(2) || '0.00',
+    grandTotalAfterServiceCharges: (this.subtotal + this.taxAmount - (this.discountAmount || 0) + (this.serviceCharges?.reduce((sum, service) => sum + service.totalPrice, 0) || 0)).toFixed(2),
+    overallDiscountAmount: (this.overallDiscountAmount || 0).toFixed(2),
+    grandTotalAfterOverallDiscount: (this.subtotal + this.taxAmount - (this.discountAmount || 0) + (this.serviceCharges?.reduce((sum, service) => sum + service.totalPrice, 0) || 0) - (this.overallDiscountAmount || 0)).toFixed(2),
+    batteryBuyBackTotal: (this.batteryBuyBack?.totalPrice || 0).toFixed(2),
+    finalTotalAmount: this.totalAmount.toFixed(2)
+  });
+
+  // 9. Ensure paidAmount doesn't exceed total
   if (this.paidAmount > this.totalAmount) {
     this.paidAmount = this.totalAmount;
   }
 
-  // 4. Remaining amount = total - paid
+  // 10. Remaining amount = total - paid (same as QuotationSchema)
   this.remainingAmount = round2(Math.max(0, this.totalAmount - this.paidAmount));
 
-  // 5. Auto-update payment status
+  // 11. Auto-update payment status (same as QuotationSchema)
   if (this.totalAmount === 0) {
     this.paymentStatus = 'paid';
     this.paidAmount = 0;

@@ -27,7 +27,8 @@ import {
   IndianRupee,
   Printer,
   Receipt,
-  Calculator
+  Calculator,
+  Battery
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -42,6 +43,7 @@ import toast from 'react-hot-toast';
 import { Pagination } from 'components/ui/Pagination';
 import apiClientQuotation from '../utils/api';
 import UpdatePaymentModal from '../components/UpdatePaymentModal';
+import QuotationPrintModal from '../components/QuotationPrintModal';
 
 
 // Types
@@ -620,6 +622,10 @@ const InvoiceManagement: React.FC = () => {
   // Old advance payment states removed - now using unified UpdatePaymentModal
   const [showAdvancePaymentModal, setShowAdvancePaymentModal] = useState(false);
   const [selectedQuotationForPayment, setSelectedQuotationForPayment] = useState<Quotation | null>(null);
+  
+  // Print modal state
+  const [showPrintModal, setShowPrintModal] = useState(false);
+  const [selectedQuotationForPrint, setSelectedQuotationForPrint] = useState<Quotation | null>(null);
 
   console.log("selectedInvoice", selectedInvoice);
 
@@ -685,6 +691,12 @@ const InvoiceManagement: React.FC = () => {
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
+  };
+
+  // Handle opening print modal
+  const handleOpenPrintModal = (quotation: Quotation) => {
+    setSelectedQuotationForPrint(quotation);
+    setShowPrintModal(true);
   };
 
   const toFixedNumber = (value: number, decimals = 2) =>
@@ -1227,7 +1239,11 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const handleEditInvoice = (invoice: Invoice) => {
-    navigate(`/billing/edit/${invoice._id}`);
+    if (invoice.invoiceType === 'purchase') {
+      navigate(`/purchase-invoice/edit/${invoice._id}`);
+    } else {
+      navigate(`/billing/edit/${invoice._id}`);
+    }
   };
 
   // Quotation handlers
@@ -1237,7 +1253,7 @@ const InvoiceManagement: React.FC = () => {
 
   // Purchase Invoice handlers
   const handleCreatePurchaseInvoice = () => {
-    navigate('/billing/create', { state: { invoiceType: 'purchase' } });
+    navigate('/purchase-invoice/create');
   };
 
   const handleViewQuotation = (quotation: any) => {
@@ -1331,6 +1347,24 @@ const InvoiceManagement: React.FC = () => {
         terms: quotation.terms || '',
         location: quotation.location?._id || quotation.location,
         dueDate: quotation.validUntil ? new Date(quotation.validUntil).toISOString().split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        // ✅ NEW: All the quotation fields we added
+        subject: quotation.subject || '',
+        engineSerialNumber: quotation.engineSerialNumber || '',
+        kva: quotation.kva || '',
+        hourMeterReading: quotation.hourMeterReading || '',
+        serviceRequestDate: quotation.serviceRequestDate ? new Date(quotation.serviceRequestDate).toISOString().split('T')[0] : undefined,
+        qrCodeImage: quotation.qrCodeImage || '',
+        serviceCharges: quotation.serviceCharges || [],
+        batteryBuyBack: quotation.batteryBuyBack || {
+          description: '',
+          quantity: 0,
+          unitPrice: 0,
+          discount: 0,
+          discountedAmount: 0,
+          taxRate: 0,
+          taxAmount: 0,
+          totalPrice: 0
+        },
         // Quotation reference information
         sourceQuotation: quotation._id,
         quotationNumber: quotation.quotationNumber,
@@ -1689,6 +1723,16 @@ const InvoiceManagement: React.FC = () => {
 
     // Only show payment-related actions for sales invoices
     if (invoice.invoiceType === 'sale' || invoice.invoiceType === 'purchase') {
+
+      // Edit Invoice - Available for all invoices except cancelled
+      // if (invoice.status !== 'cancelled') {
+      //   actions.push({
+      //     icon: <Edit className="w-4 h-4" />,
+      //     label: 'Edit',
+      //     action: () => handleEditInvoice(invoice),
+      //     color: 'text-blue-600 hover:text-blue-900 hover:bg-blue-50'
+      //   });
+      // }
 
       // Edit Status - Available for all invoices except cancelled
       if (invoice.status !== 'cancelled') {
@@ -3996,6 +4040,14 @@ const InvoiceManagement: React.FC = () => {
                             <Eye className="w-4 h-4" />
                           </button>
                         </Tooltip>
+                        <Tooltip content="Print" position="top">
+                          <button
+                            onClick={() => handleOpenPrintModal(quotation)}
+                            className="text-gray-600 hover:text-gray-900 p-1.5 hover:bg-gray-50 rounded transition-colors duration-200"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
                         <Tooltip content="Edit" position="top">
                           <button
                             onClick={() => handleEditQuotation(quotation)}
@@ -4098,7 +4150,7 @@ const InvoiceManagement: React.FC = () => {
                           {invoiceType === 'purchase' ? invoice?.supplier?.name : invoice.customer?.name}
                         </div>
                         <div className="text-xs text-gray-500">
-                          {invoiceType === 'purchase' ? invoice.supplierEmail : invoice.customer?.email}
+                          {invoiceType === 'purchase' ? invoice.supplierEmail || invoice?.supplier?.email : invoice.customer?.email}
                         </div>
                       </div>
                     </td>
@@ -4266,6 +4318,70 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               </div>
 
+              {/* New Quotation Fields - Display with proper styling */}
+              {(selectedInvoice.subject || selectedInvoice.engineSerialNumber || selectedInvoice.kva || selectedInvoice.hourMeterReading || selectedInvoice.serviceRequestDate || selectedInvoice.qrCodeImage) && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <h4 className="font-medium text-blue-900 mb-3 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Quotation Details
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {selectedInvoice.subject && (
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Subject</label>
+                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
+                          {selectedInvoice.subject}
+                        </p>
+                      </div>
+                    )}
+                    {selectedInvoice.engineSerialNumber && (
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Engine Serial Number</label>
+                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
+                          {selectedInvoice.engineSerialNumber}
+                        </p>
+                      </div>
+                    )}
+                    {selectedInvoice.kva && (
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">KVA Rating</label>
+                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
+                          {selectedInvoice.kva}
+                        </p>
+                      </div>
+                    )}
+                    {selectedInvoice.hourMeterReading && (
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Hour Meter Reading</label>
+                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
+                          {selectedInvoice.hourMeterReading}
+                        </p>
+                      </div>
+                    )}
+                    {selectedInvoice.serviceRequestDate && (
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Service Request Date</label>
+                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
+                          {new Date(selectedInvoice.serviceRequestDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                    )}
+                    {selectedInvoice.qrCodeImage && (
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">QR Code Image</label>
+                        <div className="bg-white p-3 rounded border border-blue-200">
+                          <img
+                            src={selectedInvoice.qrCodeImage}
+                            alt="QR Code"
+                            className="max-w-xs max-h-48 rounded border border-gray-200 shadow-sm"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Company Information */}
               <div className={`grid grid-cols-1 gap-6 ${selectedInvoice?.assignedEngineer ? 'md:grid-cols-4' : selectedInvoice?.invoiceType === 'purchase' ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
                 <div>
@@ -4274,7 +4390,7 @@ const InvoiceManagement: React.FC = () => {
                     // For purchase invoices: Show supplier
                     <div className="text-sm text-gray-600">
                       <p className="font-medium">{selectedInvoice?.supplier?.name || 'N/A'}</p>
-                      {selectedInvoice?.supplierEmail && <p>Email: {selectedInvoice?.supplierEmail}</p>}
+                      {(selectedInvoice?.supplierEmail || selectedInvoice?.supplier?.email) && <p>Email: {selectedInvoice?.supplierEmail || selectedInvoice?.supplier?.email}</p>}
                       {selectedInvoice?.supplierAddress && (
                         <>
                           <p className="mt-2 font-medium text-gray-700">Address:</p>
@@ -4326,6 +4442,9 @@ const InvoiceManagement: React.FC = () => {
                           <p className="mt-2 font-medium text-gray-700">Address:</p>
                           {selectedInvoice?.location?.name && <p>{selectedInvoice?.location?.name}</p>}
                           {selectedInvoice?.location?.address && <p>{selectedInvoice?.location?.address}</p>}
+                          {selectedInvoice?.location?.gstNumber && (
+                            <p className="text-sm text-gray-600">GST: {selectedInvoice?.location?.gstNumber}</p>
+                          )}
                         </>
                       )}
                     </div>
@@ -4545,7 +4664,89 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               </div>
 
+              {/* Service Charges Section */}
+              {selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-medium text-green-900 mb-3 flex items-center">
+                    <Package className="w-4 h-4 mr-2" />
+                    Service Charges
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border border-green-200 rounded-lg">
+                      <thead className="bg-green-100">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Description</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Quantity</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Unit Price</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Discount</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Tax Rate</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-green-200">
+                        {selectedInvoice.serviceCharges.map((service: any, index: number) => (
+                          <tr key={index} className="bg-white">
+                            <td className="px-4 py-2 text-sm text-gray-900">{service.description}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{service.quantity}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">₹{service.unitPrice?.toFixed(2) || '0.00'}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{service.discount || 0}%</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{service.taxRate || 0}%</td>
+                            <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{service.totalPrice?.toFixed(2) || '0.00'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
 
+              {/* Battery Buy Back Section */}
+              {selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.description && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h4 className="font-medium text-orange-900 mb-3 flex items-center">
+                    <Battery className="w-4 h-4 mr-2" />
+                    Battery Buy Back (Deduction)
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Description</label>
+                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
+                        {selectedInvoice.batteryBuyBack.description}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Quantity</label>
+                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
+                        {selectedInvoice.batteryBuyBack.quantity}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Unit Price</label>
+                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
+                        ₹{selectedInvoice.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Discount</label>
+                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
+                        {selectedInvoice.batteryBuyBack.discount || 0}%
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Tax Rate</label>
+                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
+                        {selectedInvoice.batteryBuyBack.taxRate || 0}%
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Total Amount</label>
+                      <p className="text-sm font-medium text-red-600 bg-white px-3 py-2 rounded border border-orange-200">
+                        -₹{selectedInvoice.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Edit Mode Actions */}
               {editMode && (
@@ -4599,21 +4800,21 @@ const InvoiceManagement: React.FC = () => {
               )}
 
               {/* Notes and Terms */}
-              {(selectedInvoice.notes || selectedInvoice.terms) && (
+              {(selectedInvoice?.notes || selectedInvoice?.terms) && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {selectedInvoice.notes && (
+                  {selectedInvoice?.notes && (
                     <div>
                       <h4 className="font-medium text-gray-900 mb-2">Notes:</h4>
                       <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        {selectedInvoice.notes}
+                        {selectedInvoice?.notes}
                       </p>
                     </div>
                   )}
-                  {selectedInvoice.terms && (
+                  {selectedInvoice?.terms && (
                     <div>
                       <h4 className="font-medium text-gray-900 mb-2">Terms & Conditions:</h4>
                       <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        {selectedInvoice.terms}
+                        {selectedInvoice?.terms}
                       </p>
                     </div>
                   )}
@@ -4640,6 +4841,23 @@ const InvoiceManagement: React.FC = () => {
                       <span className="text-gray-600">Overall Discount:</span>
                       <span className="font-medium text-green-600">-{selectedInvoice.overallDiscount || 0}% (-₹{selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
                     </div>
+                    
+                    {/* Service Charges Total */}
+                    {selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Service Charges:</span>
+                        <span className="font-medium text-green-600">+₹{(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {/* Battery Buyback Total */}
+                    {selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.totalPrice && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Battery Buyback:</span>
+                        <span className="font-medium text-red-600">-₹{(selectedInvoice.batteryBuyBack.totalPrice || 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
                     <div className="flex justify-between font-bold text-lg border-t pt-3">
                       <span>Grand Total:</span>
                       <span className={hasAmountMismatch(selectedInvoice) ? 'text-red-600' : 'text-blue-600'}>
@@ -4659,6 +4877,28 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Notes and Terms */}
+              {(selectedQuotation?.notes || selectedQuotation?.terms) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {selectedQuotation?.notes && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Notes:</h4>
+                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                        {selectedQuotation?.notes}
+                      </p>
+                    </div>
+                  )}
+                  {selectedQuotation.terms && (
+                    <div>
+                      <h4 className="font-medium text-gray-900 mb-2">Terms & Conditions:</h4>
+                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                        {selectedQuotation.terms}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -5382,6 +5622,70 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               </div>
 
+              {/* New Quotation Fields - Display with proper styling */}
+              {(selectedQuotation.subject || selectedQuotation.engineSerialNumber || selectedQuotation.kva || selectedQuotation.hourMeterReading || selectedQuotation.serviceRequestDate || selectedQuotation.qrCodeImage) && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+                  <h4 className="font-medium text-blue-900 mb-3 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Quotation Details
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {selectedQuotation.subject && (
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Subject</label>
+                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
+                          {selectedQuotation.subject}
+                        </p>
+                      </div>
+                    )}
+                    {selectedQuotation.engineSerialNumber && (
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Engine Serial Number</label>
+                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
+                          {selectedQuotation.engineSerialNumber}
+                        </p>
+                      </div>
+                    )}
+                    {selectedQuotation.kva && (
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">KVA Rating</label>
+                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
+                          {selectedQuotation.kva}
+                        </p>
+                      </div>
+                    )}
+                    {selectedQuotation.hourMeterReading && (
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Hour Meter Reading</label>
+                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
+                          {selectedQuotation.hourMeterReading}
+                        </p>
+                      </div>
+                    )}
+                    {selectedQuotation.serviceRequestDate && (
+                      <div>
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">Service Request Date</label>
+                        <p className="text-sm text-blue-900 bg-white px-3 py-2 rounded border border-blue-200">
+                          {new Date(selectedQuotation.serviceRequestDate).toLocaleDateString()}
+                        </p>
+                      </div>
+                    )}
+                    {selectedQuotation.qrCodeImage && (
+                      <div className="md:col-span-2">
+                        <label className="block text-xs font-medium text-blue-700 uppercase tracking-wide mb-1">QR Code Image</label>
+                        <div className="bg-white p-3 rounded border border-blue-200">
+                          <img
+                            src={selectedQuotation.qrCodeImage}
+                            alt="QR Code"
+                            className="max-w-xs max-h-48 rounded border border-gray-200 shadow-sm"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Company Information */}
               <div className={`grid grid-cols-1 gap-6 ${selectedQuotation?.assignedEngineer ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
                 <div>
@@ -5396,6 +5700,9 @@ const InvoiceManagement: React.FC = () => {
                         <p className="mt-2 font-medium text-gray-700">Address:</p>
                         {selectedQuotation?.location?.name && <p>{selectedQuotation?.location?.name}</p>}
                         {selectedQuotation?.location?.address && <p>{selectedQuotation?.location?.address}</p>}
+                        {selectedQuotation?.location?.gstNumber && (
+                          <p className="text-sm text-gray-600">GST: {selectedQuotation?.location?.gstNumber}</p>
+                        )}
                       </>
                     )}
                   </div>
@@ -5415,6 +5722,9 @@ const InvoiceManagement: React.FC = () => {
                           <p>{selectedQuotation?.billToAddress?.district}, {selectedQuotation?.billToAddress?.pincode}</p>
                         )}
                         {selectedQuotation?.billToAddress?.state && <p>{selectedQuotation?.billToAddress?.state}</p>}
+                        {selectedQuotation?.billToAddress?.gstNumber && (
+                          <p className="text-sm text-gray-600">GST: {selectedQuotation?.billToAddress?.gstNumber}</p>
+                        )}
                       </>
                     )}
                   </div>
@@ -5432,6 +5742,9 @@ const InvoiceManagement: React.FC = () => {
                           <p>{selectedQuotation?.shipToAddress?.district}, {selectedQuotation?.shipToAddress?.pincode}</p>
                         )}
                         {selectedQuotation?.shipToAddress?.state && <p>{selectedQuotation?.shipToAddress?.state}</p>}
+                        {selectedQuotation?.shipToAddress?.gstNumber && (
+                          <p className="text-sm text-gray-600">GST: {selectedQuotation?.shipToAddress?.gstNumber}</p>
+                        )}
                       </>
                     )}
                   </div>
@@ -5495,25 +5808,87 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* Notes and Terms */}
-              {(selectedQuotation.notes || selectedQuotation.terms) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {selectedQuotation.notes && (
+              {/* Service Charges Section */}
+              {selectedQuotation.serviceCharges && selectedQuotation.serviceCharges.length > 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h4 className="font-medium text-green-900 mb-3 flex items-center">
+                    <Package className="w-4 h-4 mr-2" />
+                    Service Charges
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border border-green-200 rounded-lg">
+                      <thead className="bg-green-100">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Description</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Quantity</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Unit Price</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Discount</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Tax Rate</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-green-200">
+                        {selectedQuotation.serviceCharges.map((service: any, index: number) => (
+                          <tr key={index} className="bg-white">
+                            <td className="px-4 py-2 text-sm text-gray-900">{service.description}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{service.quantity}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">₹{service.unitPrice?.toFixed(2) || '0.00'}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{service.discount || 0}%</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{service.taxRate || 0}%</td>
+                            <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{service.totalPrice?.toFixed(2) || '0.00'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Battery Buy Back Section */}
+              {selectedQuotation.batteryBuyBack && selectedQuotation.batteryBuyBack.description && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h4 className="font-medium text-orange-900 mb-3 flex items-center">
+                    <Battery className="w-4 h-4 mr-2" />
+                    Battery Buy Back (Deduction)
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Notes:</h4>
-                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        {selectedQuotation.notes}
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Description</label>
+                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
+                        {selectedQuotation.batteryBuyBack.description}
                       </p>
                     </div>
-                  )}
-                  {selectedQuotation.terms && (
                     <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Terms & Conditions:</h4>
-                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        {selectedQuotation.terms}
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Quantity</label>
+                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
+                        {selectedQuotation.batteryBuyBack.quantity}
                       </p>
                     </div>
-                  )}
+                    <div>
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Unit Price</label>
+                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
+                        ₹{selectedQuotation.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Discount</label>
+                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
+                        {selectedQuotation.batteryBuyBack.discount || 0}%
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Tax Rate</label>
+                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
+                        {selectedQuotation.batteryBuyBack.taxRate || 0}%
+                      </p>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Total Amount</label>
+                      <p className="text-sm font-medium text-red-600 bg-white px-3 py-2 rounded border border-orange-200">
+                        -₹{selectedQuotation.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -5537,6 +5912,23 @@ const InvoiceManagement: React.FC = () => {
                       <span className="text-gray-600">Overall Discount:</span>
                       <span className="font-medium text-green-600">-{selectedQuotation.overallDiscount || 0}% (-₹{selectedQuotation.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
                     </div>
+                    
+                    {/* Service Charges Total */}
+                    {selectedQuotation.serviceCharges && selectedQuotation.serviceCharges.length > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Service Charges:</span>
+                        <span className="font-medium text-green-600">+₹{(selectedQuotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {/* Battery Buyback Total */}
+                    {selectedQuotation.batteryBuyBack && selectedQuotation.batteryBuyBack.totalPrice && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Battery Buyback:</span>
+                        <span className="font-medium text-red-600">-₹{(selectedQuotation.batteryBuyBack.totalPrice || 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
                     <div className="flex justify-between font-bold text-lg border-t pt-3">
                       <span>Grand Total:</span>
                       <span className="text-blue-600">₹{selectedQuotation.grandTotal?.toFixed(2)}</span>
@@ -5599,8 +5991,23 @@ const InvoiceManagement: React.FC = () => {
         submitting={submitting}
       />
 
+      {/* Quotation Print Modal */}
+      {showPrintModal && selectedQuotationForPrint && (
+        <QuotationPrintModal
+          isOpen={showPrintModal}
+          onClose={() => {
+            setShowPrintModal(false);
+            setSelectedQuotationForPrint(null as any);
+          }}
+          quotation={selectedQuotationForPrint as any}
+        />
+      )}
+
     </div>
   );
 };
 
 export default InvoiceManagement;
+
+
+

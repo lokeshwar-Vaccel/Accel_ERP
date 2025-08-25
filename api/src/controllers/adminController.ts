@@ -655,30 +655,66 @@ export const testEmailConfiguration = async (
   try {
     const { testEmail } = req.body;
 
-    // In a real implementation, you would send a test email here
-    // For now, we'll just simulate the test
-    const emailSettings = Array.from(settingsStore.values())
-      .filter(setting => setting.category === 'email');
-
-    const missingSettings = emailSettings
-      .filter(setting => !setting.value && setting.key !== 'smtp_password')
-      .map(setting => setting.key);
-
-    if (missingSettings.length > 0) {
-      return next(new AppError(`Missing email settings: ${missingSettings.join(', ')}`, 400));
+    if (!testEmail) {
+      return next(new AppError('Test email address is required', 400));
     }
 
-    const response: APIResponse = {
-      success: true,
-      message: `Test email would be sent to ${testEmail}`,
-      data: {
-        testEmail,
-        timestamp: new Date(),
-        status: 'simulated' // In real implementation, this would be 'sent' or 'failed'
-      }
-    };
+    // Import the nodemailer utility
+    const { sendQuotationEmail } = await import('../utils/nodemailer');
 
-    res.status(200).json(response);
+    // Create a test email
+    const testSubject = 'Test Email - Sun Power Services ERP';
+    const testHtmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>Test Email</title>
+        </head>
+        <body style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2>Test Email from Sun Power Services ERP</h2>
+          <p>This is a test email to verify the email configuration.</p>
+          <p><strong>Timestamp:</strong> ${new Date().toLocaleString()}</p>
+          <p><strong>Environment:</strong> ${process.env.NODE_ENV || 'development'}</p>
+          <hr>
+          <p style="color: #666; font-size: 12px;">
+            If you received this email, the SMTP configuration is working correctly.
+          </p>
+        </body>
+      </html>
+    `;
+
+    try {
+      // Attempt to send the test email
+      await sendQuotationEmail(testEmail, testSubject, testHtmlContent);
+      
+      const response: APIResponse = {
+        success: true,
+        message: 'Test email sent successfully',
+        data: {
+          testEmail,
+          timestamp: new Date(),
+          status: 'sent'
+        }
+      };
+
+      res.status(200).json(response);
+    } catch (emailError) {
+      console.error('Test email failed:', emailError);
+      
+      const response: APIResponse = {
+        success: false,
+        message: 'Test email failed',
+        data: {
+          testEmail,
+          timestamp: new Date(),
+          status: 'failed',
+          error: emailError instanceof Error ? emailError.message : 'Unknown error'
+        }
+      };
+
+      res.status(500).json(response);
+    }
   } catch (error) {
     next(error);
   }

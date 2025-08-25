@@ -27,6 +27,11 @@ const stockLocationSchema = new Schema({
     type: String,
     // match: [/^\+?[1-9]\d{1,14}$/, 'Please provide a valid phone number']
   },
+  gstNumber: {
+    type: String,
+    trim: true,
+    maxlength: [50, 'GST number cannot exceed 50 characters']
+  },
   isActive: {
     type: Boolean,
     default: true

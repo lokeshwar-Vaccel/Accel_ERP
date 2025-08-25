@@ -29,7 +29,7 @@ export async function sendFeedbackEmail(
   });
 
   const mailOptions = {
-    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
+    from: `${process.env.EMAIL_FROM_NAME} <${process.env.EMAIL_FROM_ADDRESS}>`,
     to: toEmail,
     subject: `Service Ticket #${ticketNumber} - Feedback Request`,
     html: `<!DOCTYPE html>
@@ -114,7 +114,7 @@ export async function sendThankYouEmail(toEmail: string): Promise<void> {
   });
 
   const mailOptions = {
-    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
+    from: `${process.env.EMAIL_FROM_NAME} <${process.env.EMAIL_FROM_ADDRESS}>`,
     to: toEmail,
     subject: 'Thank You for Your Feedback',
     html: `<!DOCTYPE html>
@@ -173,15 +173,15 @@ export async function sendQuotationEmail(
 ): Promise<void> {
   // Check if we're in development mode and SMTP is not configured
   const isDevelopment = process.env.NODE_ENV === 'development';
-  const hasSMTPConfig = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.FROM_NAME && process.env.FROM_EMAIL;
+  const hasSMTPConfig = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS && process.env.EMAIL_FROM_NAME && process.env.EMAIL_FROM_ADDRESS;
   
   console.log('=== EMAIL CONFIGURATION DEBUG ===');
   console.log('NODE_ENV:', process.env.NODE_ENV);
   console.log('SMTP_HOST:', process.env.SMTP_HOST ? 'SET' : 'NOT SET');
   console.log('SMTP_USER:', process.env.SMTP_USER ? 'SET' : 'NOT SET');
   console.log('SMTP_PASS:', process.env.SMTP_PASS ? 'SET' : 'NOT SET');
-  console.log('FROM_NAME:', process.env.FROM_NAME ? 'SET' : 'NOT SET');
-  console.log('FROM_EMAIL:', process.env.FROM_EMAIL ? 'SET' : 'NOT SET');
+  console.log('EMAIL_FROM_NAME:', process.env.EMAIL_FROM_NAME ? 'SET' : 'NOT SET');
+  console.log('EMAIL_FROM_ADDRESS:', process.env.EMAIL_FROM_ADDRESS ? 'SET' : 'NOT SET');
   console.log('isDevelopment:', isDevelopment);
   console.log('hasSMTPConfig:', hasSMTPConfig);
   console.log('=== END DEBUG ===');
@@ -199,7 +199,7 @@ export async function sendQuotationEmail(
 
   // Validate required environment variables for production
   if (!hasSMTPConfig) {
-    throw new Error(`Missing required SMTP environment variables: SMTP_HOST, SMTP_USER, SMTP_PASS, FROM_NAME, FROM_EMAIL`);
+    throw new Error(`Missing required SMTP environment variables: SMTP_HOST, SMTP_USER, SMTP_PASS, EMAIL_FROM_NAME, EMAIL_FROM_ADDRESS`);
   }
 
   // Validate email parameters
@@ -215,31 +215,71 @@ export async function sendQuotationEmail(
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS
     },
+    // Add additional options for Gmail
+    tls: {
+      rejectUnauthorized: false
+    },
+    // Gmail-specific settings
+    service: process.env.SMTP_HOST === 'smtp.gmail.com' ? 'gmail' : undefined,
+    debug: true, // Enable debug output
+    logger: true // Log to console
   });
 
   // Verify SMTP connection
   try {
+    console.log('Attempting to verify SMTP connection...');
+    console.log('SMTP Configuration:', {
+      host: process.env.SMTP_HOST,
+      port: process.env.SMTP_PORT,
+      secure: process.env.SMTP_PORT === '465',
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS ? '***SET***' : 'NOT SET'
+    });
+    
     await transporter.verify();
     console.log('SMTP connection verified successfully');
   } catch (verifyError) {
     console.error('SMTP connection verification failed:', verifyError);
+    console.error('Full error details:', JSON.stringify(verifyError, null, 2));
     throw new Error(`SMTP connection failed: ${verifyError instanceof Error ? verifyError.message : 'Unknown error'}`);
   }
 
   const mailOptions = {
-    from: `${process.env.FROM_NAME} <${process.env.FROM_EMAIL}>`,
+    from: `${process.env.EMAIL_FROM_NAME} <${process.env.EMAIL_FROM_ADDRESS}>`,
     to: toEmail,
     subject: subject,
     html: htmlContent,
   };
 
   try {
+    console.log('Attempting to send email with options:', {
+      from: mailOptions.from,
+      to: mailOptions.to,
+      subject: mailOptions.subject,
+      htmlLength: mailOptions.html.length
+    });
+    
     const result = await transporter.sendMail(mailOptions);
     console.log('Quotation email sent successfully:', result);
   } catch (error) {
     console.error('Error sending quotation email:', error);
+    console.error('Full error details:', JSON.stringify(error, null, 2));
+    
+    // Handle common Gmail SMTP errors
     if (error instanceof Error) {
-      throw new Error(`Email sending failed: ${error.message}`);
+      let errorMessage = error.message;
+      
+      if (error.message.includes('Invalid login')) {
+        errorMessage = 'Gmail authentication failed. Please check your email and App Password.';
+      } else if (error.message.includes('Username and Password not accepted')) {
+        errorMessage = 'Gmail credentials rejected. Please verify your App Password is correct.';
+      } else if (error.message.includes('Connection timeout')) {
+        errorMessage = 'Gmail connection timeout. Please check your internet connection and try again.';
+      } else if (error.message.includes('ENOTFOUND')) {
+        errorMessage = 'Gmail SMTP server not found. Please check your SMTP configuration.';
+      }
+      
+      throw new Error(`Email sending failed: ${errorMessage}`);
     } else {
       throw new Error('Email sending failed with unknown error');
     }
