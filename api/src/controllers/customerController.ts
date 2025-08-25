@@ -8,6 +8,7 @@ import { AuthenticatedRequest, APIResponse, LeadStatus, CustomerType, QueryParam
 import { AppError } from '../middleware/errorHandler';
 import notificationService from '../services/notificationService';
 import { TransactionCounter } from '../models/TransactionCounter';
+import * as XLSX from 'xlsx';
 
 // Utility to get next customerId
 async function getNextCustomerId() {
@@ -987,6 +988,213 @@ export const getConvertedCustomers = async (
     };
 
     res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export customers/suppliers to Excel
+// @route   GET /api/v1/customers/export
+// @access  Private
+export const exportCustomers = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      search, 
+      customerType, 
+      status, 
+      assignedTo,
+      leadSource,
+      newLeadStatus,
+      qualifiedStatus,
+      convertedStatus,
+      lostStatus,
+      contactedStatus,
+      dateFrom,
+      dateTo,
+      type
+    } = req.query as any;
+
+    // Build query
+    const query: any = {};
+    
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { customerId: { $regex: search, $options: 'i' } },
+      ];
+    }
+    
+    if (customerType) {
+      query.customerType = customerType;
+    }
+    
+    // Handle status-based filters
+    if (newLeadStatus === 'true') {
+      query.status = 'new';
+    } else if (qualifiedStatus === 'true') {
+      query.status = 'qualified';
+    } else if (convertedStatus === 'true') {
+      query.status = 'converted';
+    } else if (lostStatus === 'true') {
+      query.status = 'lost';
+    } else if (contactedStatus === 'true') {
+      query.status = 'contacted';
+    } else if (status) {
+      query.status = status;
+    }
+    
+    if (assignedTo) {
+      query.assignedTo = assignedTo;
+    }
+    
+    if (leadSource) {
+      query.leadSource = { $regex: leadSource, $options: 'i' };
+    }
+    
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) query.createdAt.$lte = new Date(dateTo);
+    }
+
+    if (type) {
+      query.type = type;
+    }
+
+    // Fetch all customers matching the query
+    const customers = await Customer.find(query)
+      .select('customerId name alice designation contactPersonName email phone panNumber address customerType type status leadSource assignedTo notes addresses siteAddress numberOfDG createdAt updatedAt')
+      .populate('assignedTo', 'firstName lastName email')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('dgDetails')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Helper function to format date for Excel
+    const formatDateForExcel = (date: any) => {
+      if (!date) return '';
+      try {
+        return new Date(date).toLocaleDateString('en-GB');
+      } catch (error) {
+        return '';
+      }
+    };
+
+    // Helper function to get assigned user name
+    const getAssignedUserName = (assignedTo: any) => {
+      if (!assignedTo) return '';
+      if (typeof assignedTo === 'string') return assignedTo;
+      return `${assignedTo.firstName || ''} ${assignedTo.lastName || ''}`.trim() || assignedTo.email || '';
+    };
+
+    // Helper function to get primary address
+    const getPrimaryAddress = (addresses: any[]) => {
+      if (!addresses || addresses.length === 0) return '';
+      const primaryAddress = addresses.find(addr => addr.isPrimary) || addresses[0];
+      return primaryAddress.address || '';
+    };
+
+    // Transform data for Excel export
+    const excelData = customers.map((customer: any, index) => {
+      const assignedUser = getAssignedUserName(customer.assignedTo);
+      const primaryAddress = getPrimaryAddress(customer.addresses);
+      
+      return {
+        'S.No': index + 1,
+        'Customer ID': customer.customerId || '',
+        'Name': customer.name || '',
+        'Alice (Alias)': customer.alice || '',
+        'Designation': customer.designation || '',
+        'Contact Person': customer.contactPersonName || '',
+        'Email': customer.email || '',
+        'Phone': customer.phone || '',
+        'PAN Number': customer.panNumber || '',
+        'Primary Address': primaryAddress,
+        'Customer Type': customer.customerType || '',
+        'Type': customer.type || '',
+        'Status': customer.status || '',
+        'Lead Source': customer.leadSource || '',
+        'Assigned To': assignedUser,
+        'Notes': customer.notes || '',
+        'Site Address': customer.siteAddress || '',
+        'Number of DG': customer.numberOfDG || 0,
+        'Created Date': formatDateForExcel(customer.createdAt),
+        'Last Updated': formatDateForExcel(customer.updatedAt)
+      };
+    });
+
+    // Create workbook and worksheet
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // Add styling to headers
+    const headerRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+    for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (!worksheet[cellAddress]) {
+        worksheet[cellAddress] = { v: '', t: 's' };
+      }
+      worksheet[cellAddress].s = {
+        fill: {
+          fgColor: { rgb: "FFFF00" }, // Yellow background
+          patternType: "solid"
+        },
+        font: {
+          bold: true,
+          color: { rgb: "000000" } // Black text
+        },
+        alignment: {
+          horizontal: "center",
+          vertical: "center"
+        }
+      };
+    }
+
+    // Auto-size columns
+    const columnWidths = [
+      { wch: 8 },   // S.No
+      { wch: 15 },  // Customer ID
+      { wch: 25 },  // Name
+      { wch: 20 },  // Alice
+      { wch: 20 },  // Designation
+      { wch: 20 },  // Contact Person
+      { wch: 25 },  // Email
+      { wch: 15 },  // Phone
+      { wch: 15 },  // PAN Number
+      { wch: 40 },  // Primary Address
+      { wch: 15 },  // Customer Type
+      { wch: 12 },  // Type
+      { wch: 12 },  // Status
+      { wch: 20 },  // Lead Source
+      { wch: 25 },  // Assigned To
+      { wch: 30 },  // Notes
+      { wch: 40 },  // Site Address
+      { wch: 15 },  // Number of DG
+      { wch: 15 },  // Created Date
+      { wch: 15 }   // Last Updated
+    ];
+    worksheet['!cols'] = columnWidths;
+
+    // Add worksheet to workbook
+    const sheetName = type === 'supplier' ? 'Suppliers Export' : 'Customers Export';
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+    // Generate buffer
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Set response headers
+    const filename = type === 'supplier' ? 'suppliers-export.xlsx' : 'customers-export.xlsx';
+    res.setHeader('Content-Disposition', `attachment; filename=${filename}`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Length', buffer.length);
+
+    res.send(buffer);
   } catch (error) {
     next(error);
   }

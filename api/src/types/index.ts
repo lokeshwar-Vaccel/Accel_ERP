@@ -413,6 +413,8 @@ export interface IDGDetails extends Document {
   installationType: 'infold' | 'outfold';
   amcStatus: 'yes' | 'no';
   cluster: string;
+  warrantyStartDate?: Date;
+  warrantyEndDate?: Date;
   createdBy: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;

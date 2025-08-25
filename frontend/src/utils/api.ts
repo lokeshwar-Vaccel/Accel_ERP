@@ -254,6 +254,21 @@ class ApiClient {
         body: formData,
       });
     },
+
+    // Excel export
+    export: (params?: any) => {
+      const queryString = params ? `?${new URLSearchParams(params)}` : '';
+      return fetch(`${this.baseURL}/customers/export${queryString}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+        },
+      }).then(response => {
+        if (!response.ok) {
+          throw new Error('Export failed');
+        }
+        return response.blob();
+      });
+    },
   };
 
   // Product Management APIs

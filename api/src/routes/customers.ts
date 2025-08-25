@@ -25,6 +25,7 @@ import {
   getDGCustomers,
   getOEMCustomers,
   getConvertedCustomers,
+  exportCustomers,
 } from '../controllers/customerController';
 import multer from 'multer';
 import { previewCustomerImport, importCustomers } from '../controllers/customerImportController';
@@ -56,6 +57,9 @@ router.get('/converted', checkPermission('read'), getConvertedCustomers);
 router.route('/')
   .get(validate(customerQuerySchema, 'query'), checkPermission('read'), getCustomers)
   .post(validate(createCustomerSchema), checkPermission('write'), createCustomer);
+
+// Export customers/suppliers to Excel
+router.get('/export', checkPermission('read'), exportCustomers);
 
 router.route('/:id')
   .get(checkPermission('read'), getCustomer)
