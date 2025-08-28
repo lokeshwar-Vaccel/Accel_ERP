@@ -1214,6 +1214,7 @@ const CustomerManagement: React.FC = () => {
       siteAddress: '',
       numberOfDG: 1, // Start with 1 since we initialize with one DG detail
       customerType: customerTypeTab === 'oem' ? 'oem' : 'retail',
+      leadSource: '',
       notes: '',
       addresses: [{
         id: Date.now(),
@@ -1275,6 +1276,7 @@ const CustomerManagement: React.FC = () => {
         (customer.address && typeof customer.address === 'object' ? 
           `${customer.address.street}, ${customer.address.city}, ${customer.address.state} ${customer.address.pincode}` : ''),
       customerType: customer.customerType || 'retail',
+      leadSource: (customer as any).leadSource || '',
       notes: customer.notes || '',
       siteAddress: (customer as any).siteAddress || '',
       numberOfDG: (customer as any).numberOfDG || 0,
@@ -2007,15 +2009,17 @@ const CustomerManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   GST Details
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
+
+                {/* Status - Only show for non-suppliers */}
+                {customerTypeTab !== 'supplier' && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                )}
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {customerTypeTab === 'oem' ? 'Rating' : 'Customer Type'}
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Lead Source
-                </th>
+
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -2150,24 +2154,28 @@ const CustomerManagement: React.FC = () => {
                       })()}
                     </td>
                     
-                    {/* Status Column */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {customerTypeTab === 'oem' ? (
-                        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
-                          (customer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
-                          (customer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
-                          (customer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          <span className="capitalize">{(customer.status as any) || 'active'}</span>
-                        </span>
-                      ) : (
-                        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.status)}`}>
-                          {getStatusIcon(customer.status)}
-                          <span className="ml-1 capitalize">{customer.status}</span>
-                        </span>
-                      )}
-                    </td>
+
+                    
+                    {/* Status Column - Only show for non-suppliers */}
+                    {customerTypeTab !== 'supplier' && (
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {customerTypeTab === 'oem' ? (
+                          <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
+                            (customer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
+                            (customer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                            (customer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            <span className="capitalize">{(customer.status as any) || 'active'}</span>
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.status)}`}>
+                            {getStatusIcon(customer.status)}
+                            <span className="ml-1 capitalize">{customer.status}</span>
+                          </span>
+                        )}
+                      </td>
+                    )}
                     
                     {/* Customer Type/Rating Column */}
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
@@ -2178,10 +2186,7 @@ const CustomerManagement: React.FC = () => {
                       )}
                     </td>
                     
-                    {/* Lead Source Column */}
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
-                      {customer.leadSource || 'Direct'}
-                    </td>
+
                     
                     {/* Actions Column */}
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
@@ -2736,70 +2741,6 @@ const CustomerManagement: React.FC = () => {
                         <p className="text-red-500 text-xs mt-1">{formErrors.panNumber}</p>
                       )}
                     </div>
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Lead Source
-                      </label>
-                      <input
-                        type="text"
-                        value={customerFormData.leadSource}
-                        onChange={(e) => setCustomerFormData({ ...customerFormData, leadSource: e.target.value })}
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., Website, Referral, Trade Show"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Assigned To
-                      </label>
-                      <div className="relative dropdown-container">
-                        <button
-                          disabled={user?.role === 'hr'}
-                          type="button"
-                          onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
-                          className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        >
-                          <span className="text-gray-700 truncate mr-1">
-                            {getAssignedToLabel(customerFormData.assignedTo)}
-                          </span>
-                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAssignedToDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showAssignedToDropdown && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCustomerFormData({ ...customerFormData, assignedTo: '' });
-                                setShowAssignedToDropdown(false);
-                              }}
-                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              Unassigned
-                            </button>
-                            {users.map(user => (
-                              <button
-                                key={user.id}
-                                type="button"
-                                onClick={() => {
-                                  setCustomerFormData({ ...customerFormData, assignedTo: user.id });
-                                  setShowAssignedToDropdown(false);
-                                }}
-                                className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.assignedTo === user.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                  }`}
-                              >
-                                <div>
-                                  <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`}</div>
-                                  <div className="text-xs text-gray-500">{user.email}</div>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
 
                   <div className='mt-4'>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2827,6 +2768,22 @@ const CustomerManagement: React.FC = () => {
                       placeholder="Enter customer alias/short name"
                     />
                   </div>
+
+                  {/* Lead Source - Only show for suppliers */}
+                  {customerTypeTab === 'supplier' && (
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Lead Source
+                      </label>
+                      <input
+                        type="text"
+                        value={customerFormData.leadSource || ''}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, leadSource: e.target.value })}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="e.g., Website, Referral, Trade Show"
+                      />
+                    </div>
+                  )}
 
 
 
@@ -2956,8 +2913,8 @@ const CustomerManagement: React.FC = () => {
                   </div>
                 </div>
 
-                {/* DG Details Section - Only show for DG Customers */}
-                {/* {customerTypeTab === 'dg_customer' && ( */}
+                {/* DG Details Section - Only show for DG Customers and Customers (not suppliers) */}
+                {customerTypeTab !== 'supplier' && (
                   <div className="w-full border-t border-gray-200 p-4 bg-gray-50">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold text-gray-800">DG Technical Details</h3>
@@ -3237,7 +3194,7 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                {/* )} */}
+                )}
 
                 {/* Additional Information Section */}
                 {/* <div className="w-full border-t border-gray-200 p-4 bg-gray-50">
@@ -3436,70 +3393,6 @@ const CustomerManagement: React.FC = () => {
                         <p className="text-red-500 text-xs mt-1">{formErrors.panNumber}</p>
                       )}
                     </div>
-                  <div className="grid grid-cols-2 gap-4 mt-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Lead Source
-                      </label>
-                      <input
-                        type="text"
-                        value={customerFormData.leadSource}
-                        onChange={(e) => setCustomerFormData({ ...customerFormData, leadSource: e.target.value })}
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., Website, Referral, Trade Show"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Assigned To
-                      </label>
-                      <div className="relative dropdown-container">
-                        <button
-                          disabled={user?.role === 'hr'}
-                          type="button"
-                          onClick={() => setShowAssignedToDropdown(!showAssignedToDropdown)}
-                          className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                        >
-                          <span className="text-gray-700 truncate mr-1">
-                            {getAssignedToLabel(customerFormData.assignedTo)}
-                          </span>
-                          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showAssignedToDropdown ? 'rotate-180' : ''}`} />
-                        </button>
-                        {showAssignedToDropdown && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setCustomerFormData({ ...customerFormData, assignedTo: '' });
-                                setShowAssignedToDropdown(false);
-                              }}
-                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!customerFormData.assignedTo ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                }`}
-                            >
-                              Unassigned
-                            </button>
-                            {users.map(user => (
-                              <button
-                                key={user.id}
-                                type="button"
-                                onClick={() => {
-                                  setCustomerFormData({ ...customerFormData, assignedTo: user.id });
-                                  setShowAssignedToDropdown(false);
-                                }}
-                                className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${customerFormData.assignedTo === user.id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                  }`}
-                              >
-                                <div>
-                                  <div className="font-medium">{user.fullName || `${user.firstName} ${user.lastName}`}</div>
-                                  <div className="text-xs text-gray-500">{user.email}</div>
-                                </div>
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
 
                   <div className='mt-4'>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -3528,37 +3421,56 @@ const CustomerManagement: React.FC = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4 my-6">
-                    {/* Number of DG */}
-                    <div>
+                  {/* Lead Source - Only show for suppliers */}
+                  {customerTypeTab === 'supplier' && (
+                    <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Number of DG
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={customerFormData.numberOfDG || 0}
-                        onChange={(e) => setCustomerFormData({ ...customerFormData, numberOfDG: parseInt(e.target.value) || 0 })}
-                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., 2"
-                      />
-                    </div>
-                    
-                    {/* Site Address */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Site Address
+                        Lead Source
                       </label>
                       <input
                         type="text"
-                        value={customerFormData.siteAddress || ''}
-                        onChange={(e) => setCustomerFormData({ ...customerFormData, siteAddress: e.target.value })}
+                        value={customerFormData.leadSource || ''}
+                        onChange={(e) => setCustomerFormData({ ...customerFormData, leadSource: e.target.value })}
                         className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter site/installation address"
+                        placeholder="e.g., Website, Referral, Trade Show"
                       />
                     </div>
-                  </div>
+                  )}
+
+                  {/* Number of DG and Site Address - Only show for non-suppliers */}
+                  {customerTypeTab !== 'supplier' && (
+                    <div className="grid grid-cols-2 gap-4 my-6">
+                      {/* Number of DG */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Number of DG
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={customerFormData.numberOfDG || 0}
+                          onChange={(e) => setCustomerFormData({ ...customerFormData, numberOfDG: parseInt(e.target.value) || 0 })}
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="e.g., 2"
+                        />
+                      </div>
+                      
+                      {/* Site Address */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Site Address
+                        </label>
+                        <input
+                          type="text"
+                          value={customerFormData.siteAddress || ''}
+                          onChange={(e) => setCustomerFormData({ ...customerFormData, siteAddress: e.target.value })}
+                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Enter site/installation address"
+                        />
+                      </div>
+                    </div>
+                  )}
 
                 </div>
                 {/* Right: Addresses */}
@@ -3686,8 +3598,8 @@ const CustomerManagement: React.FC = () => {
                   </div>
                 </div>
 
-                {/* DG Details Section - Only show for DG Customers */}
-                {/* {customerTypeTab === 'dg_customer' && ( */}
+                {/* DG Details Section - Only show for DG Customers and Customers (not suppliers) */}
+                {customerTypeTab !== 'supplier' && (
                   <div className="w-full border-t border-gray-200 p-4 bg-gray-50">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold text-gray-800">DG Technical Details</h3>
@@ -3967,7 +3879,7 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                {/* )} */}
+                )}
 
                 {/* Additional Information Section */}
                 {/* <div className="w-full border-t border-gray-200 p-4 bg-gray-50">
@@ -4107,61 +4019,64 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     )}
 
-                    {customerTypeTab === 'oem' ? (
-                      <div>
-                        <p className="text-xs text-gray-500">Status</p>
-                        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
-                          (selectedCustomer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
-                          (selectedCustomer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
-                          (selectedCustomer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          <span className="ml-1 capitalize">{(selectedCustomer.status as any) || 'active'}</span>
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="mb-2">
-                        <div className="relative dropdown-container inline-block">
-                          <button
-                            type="button"
-                            onClick={() => setShowStatusDropdown((v) => !v)}
-                            className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(selectedCustomer.status)} ${showStatusDropdown ? 'ring-2 ring-blue-400 border-blue-300' : 'border-transparent'}`}
-                          >
-                            {getStatusIcon(selectedCustomer.status)}
-                            <span className="ml-2 capitalize">{getStatusLabel(selectedCustomer.status)}</span>
-                            <ChevronDown className={`w-4 h-4 ml-2 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
-                          </button>
-                          {showStatusDropdown && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white p-2 border border-gray-200 rounded-md shadow-lg z-50 py-1 min-w-[160px] flex flex-col">
-                              {statusOptions
-                                .filter(opt => opt.value !== 'all' && opt.value !== selectedCustomer.status)
-                                .map((option) => (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={async () => {
-                                      await handleStatusChange(selectedCustomer._id, option.value as LeadStatus);
-                                      setSelectedCustomer(prev => prev ? { ...prev, status: option.value as LeadStatus } : prev);
-                                      setShowStatusDropdown(false);
-                                    }}
-                                    className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full w-full mb-2 focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(option.value as LeadStatus)} border-transparent hover:opacity-80 hover:scale-105`}
-                                  >
-                                    {getStatusIcon(option.value as LeadStatus)}
-                                    <span className="ml-2 capitalize">{option.label}</span>
-                                  </button>
-                                ))}
-                            </div>
-                          )}
+                    {/* Status - Only show for non-suppliers */}
+                    {customerTypeTab !== 'supplier' && (
+                      customerTypeTab === 'oem' ? (
+                        <div>
+                          <p className="text-xs text-gray-500">Status</p>
+                          <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
+                            (selectedCustomer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
+                            (selectedCustomer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                            (selectedCustomer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            <span className="ml-1 capitalize">{(selectedCustomer.status as any) || 'active'}</span>
+                          </span>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="mb-2">
+                          <div className="relative dropdown-container inline-block">
+                            <button
+                              type="button"
+                              onClick={() => setShowStatusDropdown((v) => !v)}
+                              className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(selectedCustomer.status)} ${showStatusDropdown ? 'ring-2 ring-blue-400 border-blue-300' : 'border-transparent'}`}
+                            >
+                              {getStatusIcon(selectedCustomer.status)}
+                              <span className="ml-2 capitalize">{getStatusLabel(selectedCustomer.status)}</span>
+                              <ChevronDown className={`w-4 h-4 ml-2 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showStatusDropdown && (
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-white p-2 border border-gray-200 rounded-md shadow-lg z-50 py-1 min-w-[160px] flex flex-col">
+                                {statusOptions
+                                  .filter(opt => opt.value !== 'all' && opt.value !== selectedCustomer.status)
+                                  .map((option) => (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={async () => {
+                                        await handleStatusChange(selectedCustomer._id, option.value as LeadStatus);
+                                        setSelectedCustomer(prev => prev ? { ...prev, status: option.value as LeadStatus } : prev);
+                                        setShowStatusDropdown(false);
+                                      }}
+                                      className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full w-full mb-2 focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(option.value as LeadStatus)} border-transparent hover:opacity-80 hover:scale-105`}
+                                    >
+                                      {getStatusIcon(option.value as LeadStatus)}
+                                      <span className="ml-2 capitalize">{option.label}</span>
+                                    </button>
+                                  ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
                     )}
                     <div>
-                      <p className="text-xs text-gray-500">{customerTypeTab === 'oem' ? 'Products' : 'Lead Source'}</p>
+                      <p className="text-xs text-gray-500">{customerTypeTab === 'oem' ? 'Products' : 'Customer Type'}</p>
                       <p className="font-medium">
                         {customerTypeTab === 'oem' ? 
                           (selectedCustomer.products && Array.isArray(selectedCustomer.products) && selectedCustomer.products.length > 0 ? 
                             `${selectedCustomer.products.length} products` : 'No products') :
-                          (selectedCustomer.leadSource || 'Direct')
+                          (selectedCustomer.customerType || 'N/A')
                         }
                       </p>
                     </div>
@@ -4209,6 +4124,13 @@ const CustomerManagement: React.FC = () => {
                       <div>
                         <p className="text-xs text-gray-500">Alice (Alias)</p>
                         <p className="font-medium text-sm">{selectedCustomer.alice}</p>
+                      </div>
+                    )}
+                    {/* Lead Source - Only show for suppliers */}
+                    {customerTypeTab === 'supplier' && selectedCustomer.leadSource && (
+                      <div>
+                        <p className="text-xs text-gray-500">Lead Source</p>
+                        <p className="font-medium text-sm">{selectedCustomer.leadSource}</p>
                       </div>
                     )}
                     {selectedCustomer.siteAddress && (
@@ -4768,7 +4690,7 @@ const CustomerManagement: React.FC = () => {
                                 {customer.name}
                               </div>
                               <div className="text-xs text-gray-500 mt-1">
-                                {customer.customerType} • {customer.leadSource || 'Direct'}
+                                {customer.customerType}
                               </div>
                               {customer.contactHistory.length > 0 && (
                                 <div className="text-xs text-blue-600 mt-1">
