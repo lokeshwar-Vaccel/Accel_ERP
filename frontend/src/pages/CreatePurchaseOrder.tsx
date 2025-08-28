@@ -25,7 +25,7 @@ import toast from 'react-hot-toast';
 import PageHeader from '../components/ui/PageHeader';
 
 // Types
-type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'partially_received' | 'received' | 'cancelled';
+type PurchaseOrderStatus = 'approved_order_sent_sap' | 'credit_not_available' | 'fully_invoiced' | 'order_under_process' | 'partially_invoiced' | 'rejected';
 
 interface POItem {
     product: string;
@@ -108,7 +108,8 @@ interface PurchaseOrder {
     priority?: 'low' | 'medium' | 'high' | 'urgent';
     sourceType?: 'manual' | 'amc' | 'service' | 'inventory';
     sourceId?: string;
-    department?: string;
+    department: 'retail' | 'corporate' | 'industrial_marine' | 'others';
+    purchaseOrderType: 'commercial' | 'breakdown_order';
     notes?: string;
     attachments?: string[];
     approvedBy?: string;
@@ -131,7 +132,8 @@ interface POFormData {
     priority: 'low' | 'medium' | 'high' | 'urgent';
     sourceType: 'manual' | 'amc' | 'service' | 'inventory';
     sourceId?: string;
-    department?: string;
+    department: 'retail' | 'corporate' | 'industrial_marine' | 'others';
+    purchaseOrderType: 'commercial' | 'breakdown_order';
     notes?: string;
     items: POItem[];
 }
@@ -167,7 +169,8 @@ const CreatePurchaseOrder: React.FC = () => {
         priority: 'low',
         sourceType: 'manual',
         sourceId: '',
-        department: '',
+        department: 'retail',
+        purchaseOrderType: 'commercial',
         notes: '',
         items: [{
             product: '',
@@ -202,6 +205,7 @@ const CreatePurchaseOrder: React.FC = () => {
     const [showPriorityDropdown, setShowPriorityDropdown] = useState(false);
     const [showSourceTypeDropdown, setShowSourceTypeDropdown] = useState(false);
     const [showDepartmentDropdown, setShowDepartmentDropdown] = useState(false);
+    const [showPurchaseOrderTypeDropdown, setShowPurchaseOrderTypeDropdown] = useState(false);
 
     // Search states
     const [supplierSearchTerm, setSupplierSearchTerm] = useState('');
@@ -212,6 +216,7 @@ const CreatePurchaseOrder: React.FC = () => {
     const [prioritySearchTerm, setPrioritySearchTerm] = useState('');
     const [sourceTypeSearchTerm, setSourceTypeSearchTerm] = useState('');
     const [departmentSearchTerm, setDepartmentSearchTerm] = useState('');
+    const [purchaseOrderTypeSearchTerm, setPurchaseOrderTypeSearchTerm] = useState('');
 
     // Search helper functions
     const updateProductSearchTerm = (itemIndex: number, searchTerm: string) => {
@@ -235,6 +240,7 @@ const CreatePurchaseOrder: React.FC = () => {
     const [highlightedPriorityIndex, setHighlightedPriorityIndex] = useState(-1);
     const [highlightedSourceTypeIndex, setHighlightedSourceTypeIndex] = useState(-1);
     const [highlightedDepartmentIndex, setHighlightedDepartmentIndex] = useState(-1);
+    const [highlightedPurchaseOrderTypeIndex, setHighlightedPurchaseOrderTypeIndex] = useState(-1);
     const [isTabTransitioning, setIsTabTransitioning] = useState(false);
 
     // Refs for keyboard navigation
@@ -245,6 +251,7 @@ const CreatePurchaseOrder: React.FC = () => {
     const prioritySelectRef = useRef<HTMLInputElement>(null);
     const sourceTypeSelectRef = useRef<HTMLInputElement>(null);
     const departmentSelectRef = useRef<HTMLInputElement>(null);
+    const purchaseOrderTypeSelectRef = useRef<HTMLInputElement>(null);
     const createPOButtonRef = useRef<HTMLButtonElement>(null);
 
     // Auto-focus on supplier field when component mounts
@@ -274,6 +281,7 @@ const CreatePurchaseOrder: React.FC = () => {
                 setShowPriorityDropdown(false);
                 setShowSourceTypeDropdown(false);
                 setShowDepartmentDropdown(false);
+                setShowPurchaseOrderTypeDropdown(false);
                 // Close product, category, and UOM dropdowns for all rows
                 setShowProductDropdowns({});
                 setShowCategoryDropdowns({});
@@ -435,7 +443,8 @@ const CreatePurchaseOrder: React.FC = () => {
                     priority: po.priority || 'low',
                     sourceType: po.sourceType || 'manual',
                     sourceId: po.sourceId || '',
-                    department: po.department || '',
+                    department: po.department || 'retail',
+                    purchaseOrderType: po.purchaseOrderType || 'commercial',
                     notes: po.notes || '',
                     items: po.items.map(item => ({
                         product: typeof item.product === 'string' ? item.product : item.product._id,
@@ -696,6 +705,9 @@ const CreatePurchaseOrder: React.FC = () => {
         if (!formData.supplierAddress?.address) {
             newErrors.push('Delivery address is required');
         }
+        if (!formData.purchaseOrderType) {
+            newErrors.push('Purchase order type is required');
+        }
 
         // Check if we have at least one valid item
         const validItems = formData.items.filter(item => {
@@ -795,12 +807,10 @@ const CreatePurchaseOrder: React.FC = () => {
     ];
 
     const departmentOptions = [
-        { value: 'RETAIL', label: 'RETAIL' },
-        { value: 'INDUSTRIAL', label: 'INDUSTRIAL' },
-        { value: 'IE', label: 'IE' },
-        { value: 'TELECOM', label: 'TELECOM' },
-        { value: 'EV', label: 'EV' },
-        { value: 'RET/TEL', label: 'RET/TEL' }
+        { value: 'retail', label: 'Retail' },
+        { value: 'corporate', label: 'Corporate' },
+        { value: 'industrial_marine', label: 'Industrial & Marine' },
+        { value: 'others', label: 'Others' }
     ];
 
     // Helper functions for dropdown options
@@ -887,12 +897,25 @@ const CreatePurchaseOrder: React.FC = () => {
     };
 
     const handleDepartmentSelect = (value: string) => {
-        setFormData(prev => ({ ...prev, department: value }));
+        setFormData(prev => ({ ...prev, department: value as 'retail' | 'corporate' | 'industrial_marine' | 'others' }));
         setShowDepartmentDropdown(false);
         setDepartmentSearchTerm('');
         setHighlightedDepartmentIndex(-1);
 
-        // Auto-focus on first product field after department selection
+        // Auto-focus on purchase order type field after department selection
+        setTimeout(() => {
+            purchaseOrderTypeSelectRef.current?.focus();
+            setShowPurchaseOrderTypeDropdown(true);
+        }, 50);
+    };
+
+    const handlePurchaseOrderTypeSelect = (value: string) => {
+        setFormData(prev => ({ ...prev, purchaseOrderType: value as 'commercial' | 'breakdown_order' }));
+        setShowPurchaseOrderTypeDropdown(false);
+        setPurchaseOrderTypeSearchTerm('');
+        setHighlightedPurchaseOrderTypeIndex(-1);
+
+        // Auto-focus on first product field after purchase order type selection
         setTimeout(() => {
             const firstProductInput = document.querySelector(`[data-row="0"][data-field="partNo"]`) as HTMLInputElement;
             if (firstProductInput) {
@@ -1009,6 +1032,7 @@ const CreatePurchaseOrder: React.FC = () => {
                 sourceType: formData.sourceType,
                 sourceId: formData.sourceId,
                 department: formData.department,
+                purchaseOrderType: formData.purchaseOrderType,
                 notes: formData.notes,
                 items: mappedItems,
                 totalAmount: calculateTotal()
@@ -2358,6 +2382,59 @@ const CreatePurchaseOrder: React.FC = () => {
                                                     }`}
                                             >
                                                 <div className="font-medium text-gray-900">{option.label}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Purchase Order Type */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Purchase Order Type <span className="text-red-500">*</span>
+                            </label>
+                            <div className="relative dropdown-container">
+                                <input
+                                    ref={purchaseOrderTypeSelectRef}
+                                    type="text"
+                                    value={purchaseOrderTypeSearchTerm || formData.purchaseOrderType}
+                                    onChange={(e) => {
+                                        setPurchaseOrderTypeSearchTerm(e.target.value);
+                                        if (!showPurchaseOrderTypeDropdown) setShowPurchaseOrderTypeDropdown(true);
+                                        setHighlightedPurchaseOrderTypeIndex(-1);
+                                    }}
+                                    onFocus={() => {
+                                        setShowPurchaseOrderTypeDropdown(true);
+                                        setHighlightedPurchaseOrderTypeIndex(-1);
+                                        if (!purchaseOrderTypeSearchTerm && formData.purchaseOrderType) {
+                                            setPurchaseOrderTypeSearchTerm('');
+                                        }
+                                    }}
+                                    placeholder="Select purchase order type"
+                                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                    data-field="purchase-order-type"
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPurchaseOrderTypeDropdown ? 'rotate-180' : ''}`} />
+                                </div>
+                                {showPurchaseOrderTypeDropdown && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                        <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                            <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                        </div>
+                                        {['commercial', 'breakdown_order'].map((option, index) => (
+                                            <button
+                                                key={option}
+                                                onClick={() => handlePurchaseOrderTypeSelect(option)}
+                                                className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.purchaseOrderType === option ? 'bg-blue-100 text-blue-800' :
+                                                    highlightedPurchaseOrderTypeIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                        'text-gray-700 hover:bg-gray-50'
+                                                    }`}
+                                            >
+                                                <div className="font-medium text-gray-900">{option === 'commercial' ? 'Commercial' : 'Breakdown Order'}</div>
                                             </button>
                                         ))}
                                     </div>

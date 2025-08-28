@@ -1775,7 +1775,7 @@ const InvoiceManagement: React.FC = () => {
         });
       }
 
-      if (invoice.status === 'sent' && (invoice.paymentStatus === 'pending' || invoice.paymentStatus === 'partial')) {
+      if (invoice.status === 'sent' && invoice.invoiceType === 'sale' && (invoice.paymentStatus === 'pending' || invoice.paymentStatus === 'partial')) {
         actions.push({
           icon: <Send className="w-4 h-4" />,
           label: 'Send Reminder',

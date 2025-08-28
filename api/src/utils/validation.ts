@@ -167,7 +167,7 @@ export const createPurchaseOrderSchema = Joi.object({
 export const updatePurchaseOrderSchema = Joi.object({
   supplier: Joi.string().max(200),
   expectedDeliveryDate: Joi.date(),
-  status: Joi.string().valid('draft', 'sent', 'confirmed', 'received', 'cancelled')
+  status: Joi.string().valid('approved_order_sent_sap', 'credit_not_available', 'fully_invoiced', 'order_under_process', 'partially_invoiced', 'rejected')
 });
 
 // Query validation schemas

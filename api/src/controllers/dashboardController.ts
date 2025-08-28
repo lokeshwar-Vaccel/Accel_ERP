@@ -50,8 +50,8 @@ export const getDashboardOverview = async (
     const lowStockItems = lowStockItemsArray.length;
 
     // Get purchase order metrics
-    const pendingPOs = await PurchaseOrder.countDocuments({ status: 'draft' });
-    const confirmedPOs = await PurchaseOrder.countDocuments({ status: 'confirmed' });
+    const pendingPOs = await PurchaseOrder.countDocuments({ status: 'Order Under Process' });
+    const confirmedPOs = await PurchaseOrder.countDocuments({ status: 'Approved & Order Sent to SAP' });
 
     // Calculate revenue metrics (sample calculation)
     const totalAMCValue = await AMC.aggregate([
@@ -60,7 +60,7 @@ export const getDashboardOverview = async (
     ]);
 
     const totalPOValue = await PurchaseOrder.aggregate([
-      { $match: { status: { $ne: 'cancelled' } } },
+      { $match: { status: { $ne: 'Rejected' } } },
       { $group: { _id: null, total: { $sum: '$totalAmount' } } }
     ]);
 

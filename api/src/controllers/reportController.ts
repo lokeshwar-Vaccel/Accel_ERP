@@ -583,7 +583,7 @@ export const generateRevenueReport = async (
     ]);
 
     // Get purchase order spending
-    const poQuery: any = { status: { $ne: 'cancelled' } };
+    const poQuery: any = { status: { $ne: 'Rejected' } };
     if (Object.keys(dateQuery).length > 0) {
       poQuery.orderDate = dateQuery;
     }
