@@ -25,7 +25,7 @@ import toast from 'react-hot-toast';
 import PageHeader from '../components/ui/PageHeader';
 
 // Types
-type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'partially_received' | 'received' | 'cancelled';
+type PurchaseOrderStatus = 'approved_order_sent_sap' | 'credit_not_available' | 'fully_invoiced' | 'order_under_process' | 'partially_invoiced' | 'rejected';
 
 interface POItem {
   product: string;
@@ -109,6 +109,7 @@ interface PurchaseOrder {
   sourceType?: 'manual' | 'amc' | 'service' | 'inventory';
   sourceId?: string;
   department?: string;
+  purchaseOrderType: 'commercial' | 'breakdown_order';
   notes?: string;
   attachments?: string[];
   approvedBy?: string;
@@ -131,7 +132,7 @@ interface POFormData {
   invoiceDate: string;
   dueDate: string;
   sourceId?: string;
-  department?: string;
+  department: 'retail' | 'corporate' | 'industrial_marine' | 'others';
   notes?: string;
   items: POItem[];
 }
@@ -166,7 +167,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
     location: '',
     invoiceDate: new Date().toISOString().split('T')[0],
     dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
-    department: '',
+    department: 'retail',
     notes: '',
     items: [{
       product: '',
@@ -469,7 +470,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
           invoiceDate: po.orderDate ? po.orderDate.split('T')[0] : new Date().toISOString().split('T')[0],
           dueDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           sourceId: po.sourceId || '',
-          department: po.department || '',
+          department: (po.department as 'retail' | 'corporate' | 'industrial_marine' | 'others') || 'retail',
           notes: po.notes || '',
           items: po.items.map(item => ({
             product: typeof item.product === 'string' ? item.product : item.product._id,
@@ -838,12 +839,10 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
   ];
 
   const departmentOptions = [
-    { value: 'RETAIL', label: 'RETAIL' },
-    { value: 'INDUSTRIAL', label: 'INDUSTRIAL' },
-    { value: 'IE', label: 'IE' },
-    { value: 'TELECOM', label: 'TELECOM' },
-    { value: 'EV', label: 'EV' },
-    { value: 'RET/TEL', label: 'RET/TEL' }
+    { value: 'retail', label: 'Retail' },
+    { value: 'corporate', label: 'Corporate' },
+    { value: 'industrial_marine', label: 'Industrial & Marine' },
+    { value: 'others', label: 'Others' }
   ];
 
   // Helper functions for dropdown options
@@ -930,7 +929,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
   };
 
   const handleDepartmentSelect = (value: string) => {
-    setFormData(prev => ({ ...prev, department: value }));
+    setFormData(prev => ({ ...prev, department: value as 'retail' | 'corporate' | 'industrial_marine' | 'others' }));
     setShowDepartmentDropdown(false);
     setDepartmentSearchTerm('');
     setHighlightedDepartmentIndex(-1);

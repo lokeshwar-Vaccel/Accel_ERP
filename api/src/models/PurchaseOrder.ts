@@ -26,7 +26,7 @@ interface IPurchaseOrderSchema extends Document {
   };
   items: IPOItemSchema[];
   totalAmount: number;
-  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
+  status: 'approved_order_sent_sap' | 'credit_not_available' | 'fully_invoiced' | 'order_under_process' | 'partially_invoiced' | 'rejected';
   orderDate: Date;
   expectedDeliveryDate?: Date;
   actualDeliveryDate?: Date;
@@ -38,8 +38,10 @@ interface IPurchaseOrderSchema extends Document {
   invoiceDate?: Date;
   documentNumber?: string;
   documentDate?: Date;
-  department?: string; // Department for this purchase order
+  department: 'retail' | 'corporate' | 'industrial_marine' | 'others'; // Department for this purchase order
   notes?: string;
+  // Purchase Order Type field
+  purchaseOrderType: 'commercial' | 'breakdown_order';
   // Payment fields - same structure as Invoice and Quotation models
   paidAmount: number;
   remainingAmount: number;
@@ -128,8 +130,8 @@ const purchaseOrderSchema = new Schema({
   },
   status: {
     type: String,
-    enum: ['draft', 'sent', 'confirmed', 'received', 'cancelled', 'partially_received'],
-    default: 'draft',
+    enum: ['approved_order_sent_sap', 'credit_not_available', 'fully_invoiced', 'order_under_process', 'partially_invoiced', 'rejected'],
+    default: 'order_under_process',
     required: [true, 'Status is required']
   },
   orderDate: {
@@ -174,12 +176,19 @@ const purchaseOrderSchema = new Schema({
   },
   department: {
     type: String,
-    maxlength: [100, 'Department cannot exceed 100 characters'],
+    enum: ['retail', 'corporate', 'industrial_marine', 'others'],
+    required: [true, 'Department is required'],
     trim: true
   },
   notes: {
     type: String,
     trim: true
+  },
+  // Purchase Order Type field
+  purchaseOrderType: {
+    type: String,
+    enum: ['commercial', 'breakdown_order'],
+    required: [true, 'Purchase order type is required']
   },
   // Payment fields - same structure as Invoice and Quotation models
   paidAmount: {
@@ -223,11 +232,12 @@ purchaseOrderSchema.index({ supplier: 1 });
 purchaseOrderSchema.index({ status: 1 });
 purchaseOrderSchema.index({ orderDate: -1 });
 purchaseOrderSchema.index({ expectedDeliveryDate: 1 });
+purchaseOrderSchema.index({ purchaseOrderType: 1 });
 
 // Virtual for delivery status
 purchaseOrderSchema.virtual('deliveryStatus').get(function (this: IPurchaseOrderSchema) {
-  if (this.status === 'received') return 'delivered';
-  if (this.status === 'cancelled') return 'cancelled';
+  if (this.status === 'fully_invoiced') return 'delivered';
+  if (this.status === 'rejected') return 'cancelled';
   if (!this.expectedDeliveryDate) return 'no_delivery_date';
 
   const now = new Date();
@@ -241,7 +251,7 @@ purchaseOrderSchema.virtual('deliveryStatus').get(function (this: IPurchaseOrder
 
 // Virtual for days until delivery
 purchaseOrderSchema.virtual('daysUntilDelivery').get(function (this: IPurchaseOrderSchema) {
-  if (!this.expectedDeliveryDate || this.status === 'received' || this.status === 'cancelled') {
+  if (!this.expectedDeliveryDate || this.status === 'fully_invoiced' || this.status === 'rejected') {
     return null;
   }
 
@@ -316,9 +326,9 @@ purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {
   next();
 });
 
-// Set actual delivery date when status changes to received
+// Set actual delivery date when status changes to fully_invoiced
 purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {
-  if (this.isModified('status') && this.status === 'received' && !this.actualDeliveryDate) {
+  if (this.isModified('status') && this.status === 'fully_invoiced' && !this.actualDeliveryDate) {
     this.actualDeliveryDate = new Date();
   }
   next();
@@ -363,23 +373,23 @@ purchaseOrderSchema.methods.updateItemQuantity = function (this: IPurchaseOrderS
   return this.save();
 };
 
-// Method to confirm PO
-purchaseOrderSchema.methods.confirm = function (this: IPurchaseOrderSchema) {
-  if (this.status !== 'sent') {
-    throw new Error('Only sent purchase orders can be confirmed');
+// Method to approve PO
+purchaseOrderSchema.methods.approve = function (this: IPurchaseOrderSchema) {
+  if (this.status !== 'order_under_process') {
+    throw new Error('Only orders under process can be approved');
   }
 
-  this.status = 'confirmed';
+  this.status = 'approved_order_sent_sap';
   return this.save();
 };
 
-// Method to receive PO
-purchaseOrderSchema.methods.receive = function (this: IPurchaseOrderSchema) {
-  if (this.status !== 'confirmed') {
-    throw new Error('Only confirmed purchase orders can be received');
+// Method to mark PO as fully invoiced
+purchaseOrderSchema.methods.markFullyInvoiced = function (this: IPurchaseOrderSchema) {
+  if (this.status !== 'approved_order_sent_sap') {
+    throw new Error('Only approved purchase orders can be marked as fully invoiced');
   }
 
-  this.status = 'received';
+  this.status = 'fully_invoiced';
   this.actualDeliveryDate = new Date();
 
   return this.save();
@@ -391,7 +401,7 @@ purchaseOrderSchema.statics.getOverduePOs = async function () {
 
   return this.find({
     expectedDeliveryDate: { $lt: now },
-    status: { $in: ['sent', 'confirmed'] }
+    status: { $in: ['order_under_process', 'approved_order_sent_sap'] }
   }).populate('items.product').populate('createdBy');
 };
 

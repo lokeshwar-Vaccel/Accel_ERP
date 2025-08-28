@@ -375,10 +375,12 @@ export interface IPurchaseOrder extends Document {
   supplier: string;
   items: IPOItem[];
   totalAmount: number;
-  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled';
+  status: 'approved_order_sent_sap' | 'credit_not_available' | 'fully_invoiced' | 'order_under_process' | 'partially_invoiced' | 'rejected';
   orderDate: Date;
   expectedDeliveryDate?: Date;
   actualDeliveryDate?: Date;
+  purchaseOrderType: 'commercial' | 'breakdown_order';
+  department: 'retail' | 'corporate' | 'industrial_marine' | 'others';
   createdBy: string;
 }
 

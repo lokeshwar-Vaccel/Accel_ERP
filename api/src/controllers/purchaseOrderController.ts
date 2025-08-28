@@ -13,15 +13,12 @@ import { sendEmail } from '../utils/email';
 
 // Purchase Order Status enum for internal use
 enum PurchaseOrderStatus {
-  DRAFT = 'draft',
-  SENT = 'sent',
-  CONFIRMED = 'confirmed',
-  RECEIVED = 'received',
-  CANCELLED = 'cancelled',
-  PARTIALLY_RECEIVED = 'partially_received',
-  PENDING = 'pending',
-  APPROVED = 'approved',
-  COMPLETED = 'completed'
+  ORDER_UNDER_PROCESS = 'order_under_process',
+  APPROVED_ORDER_SENT_SAP = 'approved_order_sent_sap',
+  PARTIALLY_INVOICED = 'partially_invoiced',
+  FULLY_INVOICED = 'fully_invoiced',
+  REJECTED = 'rejected',
+  CREDIT_NOT_AVAILABLE = 'credit_not_available'
 }
 
 type InvoiceItemInput = {
@@ -51,7 +48,7 @@ export const getPurchaseOrders = async (
       dateFrom,
       totalPurchaseOrdersStatus,
       pendingPurchaseOrdersStatus,
-      confirmedPurchaseOrdersStatus,
+      approvedPurchaseOrdersStatus,
       dateTo
     } = req.query as QueryParams & {
       status?: PurchaseOrderStatus;
@@ -60,7 +57,7 @@ export const getPurchaseOrders = async (
       dateTo?: string;
       totalPurchaseOrdersStatus?: string;
       pendingPurchaseOrdersStatus?: string;
-      confirmedPurchaseOrdersStatus?: string;
+      approvedPurchaseOrdersStatus?: string;
     };
 
     // Build query
@@ -96,8 +93,8 @@ export const getPurchaseOrders = async (
       query.status = pendingPurchaseOrdersStatus;
     }
 
-    if (confirmedPurchaseOrdersStatus) {
-      query.status = confirmedPurchaseOrdersStatus;
+    if (approvedPurchaseOrdersStatus) {
+      query.status = approvedPurchaseOrdersStatus;
     }
 
     // Execute query with pagination
@@ -112,8 +109,8 @@ export const getPurchaseOrders = async (
     const total = await PurchaseOrder.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));
     const totalPurchaseOrdersCount = await PurchaseOrder.countDocuments();
-    const pendingPurchaseOrdersCount = await PurchaseOrder.countDocuments({ status: 'draft' });
-    const confirmedPurchaseOrdersCount = await PurchaseOrder.countDocuments({ status: 'confirmed' });
+    const pendingPurchaseOrdersCount = await PurchaseOrder.countDocuments({ status: 'order_under_process' });
+    const confirmedPurchaseOrdersCount = await PurchaseOrder.countDocuments({ status: 'approved_order_sent_sap' });
 
     const response: APIResponse = {
       success: true,
@@ -361,11 +358,11 @@ export const sendPurchaseOrder = async (
       return next(new AppError('Purchase order not found', 404));
     }
 
-    if (order.status !== 'draft') {
-      return next(new AppError('Only draft purchase orders can be sent', 400));
+    if (order.status !== 'order_under_process') {
+      return next(new AppError('Only orders under process can be sent to SAP', 400));
     }
 
-    order.status = 'sent';
+    order.status = 'approved_order_sent_sap';
     await order.save();
 
     const response: APIResponse = {
@@ -463,8 +460,8 @@ export const receiveItems = async (
       return next(new AppError('Purchase order not found', 404));
     }
 
-    if (!['confirmed', 'partially_received'].includes(order.status)) {
-      return next(new AppError('Purchase order must be confirmed before receiving items', 400));
+    if (!['approved_order_sent_sap', 'partially_invoiced'].includes(order.status)) {
+      return next(new AppError('Purchase order must be approved before receiving items', 400));
     }
 
     let totalOrderedQuantity = 0;
@@ -655,11 +652,11 @@ export const receiveItems = async (
       // No items received yet, keep current status
     } else if (totalReceivedQuantity >= totalOrderedQuantity) {
       // All items received
-      order.status = 'received';
+      order.status = 'fully_invoiced';
       order.actualDeliveryDate = receiptDate ? new Date(receiptDate) : new Date();
     } else {
       // Partial receipt
-      order.status = 'partially_received';
+      order.status = 'partially_invoiced';
       if (!order.actualDeliveryDate) {
         order.actualDeliveryDate = receiptDate ? new Date(receiptDate) : new Date();
       }
@@ -798,7 +795,7 @@ export const receiveItems = async (
     }
 
     // Check if we had any validation errors but still processed some items
-    let message = `Items received successfully. ${order.status === 'received' ? 'Purchase order completed.' : `Partial receipt: ${totalReceivedQuantity}/${totalOrderedQuantity} items received.`}`;
+    let message = `Items received successfully. ${order.status === 'fully_invoiced' ? 'Purchase order completed.' : `Partial receipt: ${totalReceivedQuantity}/${totalOrderedQuantity} items received.`}`;
     if (results.errors.length > 0) {
       message += ` Note: Some items had errors: ${results.errors.join('; ')}`;
     }
@@ -851,11 +848,11 @@ export const cancelPurchaseOrder = async (
       return next(new AppError('Purchase order not found', 404));
     }
 
-    if (order.status === 'received') {
-      return next(new AppError('Cannot cancel received purchase order', 400));
+    if (order.status === 'fully_invoiced') {
+      return next(new AppError('Cannot cancel fully invoiced purchase order', 400));
     }
 
-    order.status = 'cancelled';
+    order.status = 'rejected';
     await order.save();
 
     const response: APIResponse = {
@@ -880,15 +877,15 @@ export const getPurchaseOrderStats = async (
 ): Promise<void> => {
   try {
     const totalOrders = await PurchaseOrder.countDocuments();
-    const draftOrders = await PurchaseOrder.countDocuments({ status: 'draft' });
-    const sentOrders = await PurchaseOrder.countDocuments({ status: 'sent' });
-    const confirmedOrders = await PurchaseOrder.countDocuments({ status: 'confirmed' });
-    const receivedOrders = await PurchaseOrder.countDocuments({ status: 'received' });
-    const cancelledOrders = await PurchaseOrder.countDocuments({ status: 'cancelled' });
+    const orderUnderProcess = await PurchaseOrder.countDocuments({ status: 'order_under_process' });
+    const approvedOrders = await PurchaseOrder.countDocuments({ status: 'approved_order_sent_sap' });
+    const partiallyInvoicedOrders = await PurchaseOrder.countDocuments({ status: 'partially_invoiced' });
+    const fullyInvoicedOrders = await PurchaseOrder.countDocuments({ status: 'fully_invoiced' });
+    const rejectedOrders = await PurchaseOrder.countDocuments({ status: 'rejected' });
 
     // Total purchase value
     const totalValueStats = await PurchaseOrder.aggregate([
-      { $match: { status: { $ne: 'cancelled' } } },
+      { $match: { status: { $ne: 'rejected' } } },
       {
         $group: {
           _id: null,
@@ -918,7 +915,7 @@ export const getPurchaseOrderStats = async (
 
     // Top suppliers by order count
     const topSuppliers = await PurchaseOrder.aggregate([
-      { $match: { status: { $ne: 'cancelled' } } },
+      { $match: { status: { $ne: 'rejected' } } },
       {
         $group: {
           _id: '$supplier',
@@ -935,11 +932,11 @@ export const getPurchaseOrderStats = async (
       message: 'Purchase order statistics retrieved successfully',
       data: {
         totalOrders,
-        draftOrders,
-        sentOrders,
-        confirmedOrders,
-        receivedOrders,
-        cancelledOrders,
+        orderUnderProcess,
+        approvedOrders,
+        partiallyInvoicedOrders,
+        fullyInvoicedOrders,
+        rejectedOrders,
         totalPurchaseValue: totalValueStats[0]?.totalValue || 0,
         avgOrderValue: totalValueStats[0]?.avgOrderValue || 0,
         monthlyOrders,
@@ -974,13 +971,18 @@ export const updatePurchaseOrderStatus = async (
 
     // Validate status transitions
     const validTransitions: Record<string, string[]> = {
-      'draft': ['sent', 'cancelled'],
-      'sent': ['confirmed', 'cancelled'],
-      'confirmed': ['received', 'partially_received', 'cancelled'],
-      'partially_received': ['received', 'cancelled'],
-      'received': [], // Cannot change from received
-      'cancelled': [] // Cannot change from cancelled
+      'order_under_process': ['approved_order_sent_sap', 'rejected', 'credit_not_available'],
+      'approved_order_sent_sap': ['partially_invoiced', 'fully_invoiced', 'rejected'],
+      'partially_invoiced': ['fully_invoiced', 'rejected'],
+      'fully_invoiced': [], // Cannot change from fully invoiced
+      'rejected': [], // Cannot change from rejected
+      'credit_not_available': ['order_under_process', 'rejected'] // Can retry or reject
     };
+
+    // Check if current status exists in valid transitions
+    if (!validTransitions[order.status]) {
+      return next(new AppError(`Invalid current status: ${order.status}`, 400));
+    }
 
     if (!validTransitions[order.status].includes(status)) {
       return next(new AppError(`Cannot change status from ${order.status} to ${status}`, 400));
@@ -989,8 +991,8 @@ export const updatePurchaseOrderStatus = async (
     order.status = status;
     await order.save();
 
-    // Send email to supplier if status is changed to 'sent'
-    if (status === 'sent' && order.supplierEmail) {
+    // Send email to supplier if status is changed to 'approved_order_sent_sap'
+    if (status === 'approved_order_sent_sap' && order.supplierEmail) {
       const subject = `Purchase Order ${order.poNumber} Sent`;
       const html = `<p>Dear Supplier,</p>
         <p>Your purchase order <strong>${order.poNumber}</strong> has been sent.</p>
@@ -1069,7 +1071,7 @@ export const updatePurchaseOrderPayment = async (
         paymentDate: paymentDate ? new Date(paymentDate) : undefined,
         paymentMethod,
         notes: notes || purchaseOrder.notes,
-        ...(purchaseOrder.status === 'draft' && newTotalPaidAmount > 0 && { status: 'sent' })
+        ...(purchaseOrder.status === 'order_under_process' && newTotalPaidAmount > 0 && { status: 'approved_order_sent_sap' })
       },
       { new: true, runValidators: true }
     )
@@ -1357,7 +1359,7 @@ const createInvoiceFromPO = async ({
     totalAmount: finalTotalAmount,
     paidAmount: paidAmount,
     remainingAmount: remainingAmount,
-    status: 'draft',
+    status: 'sent',
     paymentStatus: paymentStatus,
     notes: notes ? `${notes}\n\nCreated from PO: ${poNumber}` : `Created from PO: ${poNumber}`,
     terms,

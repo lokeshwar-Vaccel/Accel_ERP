@@ -178,7 +178,7 @@ async function main() {
       supplierEmail: `supplier${i + 1}@example.com`,
       items: [{ product: pickRandom(products)._id, quantity: randomInt(1, 20), unitPrice: randomInt(100, 1000), taxRate: [5, 12, 18, 28][randomInt(0, 3)], totalPrice: randomInt(100, 2000), receivedQuantity: randomInt(1, 20) }],
       totalAmount: randomInt(1000, 20000),
-      status: pickRandom(['draft', 'sent', 'confirmed', 'received', 'cancelled', 'partially_received']),
+      status: pickRandom(['order_under_process', 'approved_order_sent_sap', 'partially_invoiced', 'fully_invoiced', 'rejected']),
       orderDate: new Date(Date.now() - randomInt(0, 100) * 86400000),
       expectedDeliveryDate: new Date(Date.now() + randomInt(1, 30) * 86400000),
       actualDeliveryDate: new Date(Date.now() + randomInt(1, 30) * 86400000),
