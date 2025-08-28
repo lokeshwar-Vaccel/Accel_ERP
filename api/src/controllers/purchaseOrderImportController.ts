@@ -280,7 +280,7 @@ export const importPurchaseOrders = async (
           supplier: supplier,
           items: processedItems,
           totalAmount: totalAmount,
-          status: 'draft' as const,
+          status: 'Order Under Process' as const,
           expectedDeliveryDate: getExpectedDeliveryDate(firstItem.month, firstItem.YEAR),
           priority: getPriorityFromDept(firstItem.DEPT),
           sourceType: 'manual' as const,

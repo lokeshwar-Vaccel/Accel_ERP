@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import * as XLSX from 'xlsx';
 import {
   Plus,
   Search,
@@ -36,7 +37,7 @@ import toast from 'react-hot-toast';
 import { PaymentMethodDetails } from '../types';
 
 // Types matching backend structure
-type PurchaseOrderStatus = 'draft' | 'sent' | 'confirmed' | 'partially_received' | 'received' | 'cancelled';
+type PurchaseOrderStatus = 'approved_order_sent_sap' | 'credit_not_available' | 'fully_invoiced' | 'order_under_process' | 'partially_invoiced' | 'rejected';
 
 interface POItem {
   product: string | {
@@ -105,7 +106,8 @@ interface PurchaseOrder {
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   sourceType?: 'manual' | 'amc' | 'service' | 'inventory';
   sourceId?: string;
-  department?: string; // Department for this purchase order
+  department: 'retail' | 'corporate' | 'industrial_marine' | 'others'; // Department for this purchase order
+  purchaseOrderType: 'commercial' | 'breakdown_order';
   notes?: string;
   attachments?: string[];
   approvedBy?: string;
@@ -179,7 +181,7 @@ interface POFormData {
   priority: 'low' | 'medium' | 'high' | 'urgent';
   sourceType: 'manual' | 'amc' | 'service' | 'inventory';
   sourceId?: string;
-  department?: string; // Department for this purchase order
+  department?: 'retail' | 'corporate' | 'industrial_marine' | 'others'; // Department for this purchase order
   notes?: string;
   items: Array<{
     product: string;
@@ -807,12 +809,12 @@ const PurchaseOrderManagement: React.FC = () => {
 
       // Show success toast based on status
       const statusMessages: Record<PurchaseOrderStatus, string> = {
-        'draft': 'Purchase Order saved as draft',
-        'sent': 'Purchase Order sent to supplier successfully',
-        'confirmed': 'Purchase Order marked as confirmed',
-        'partially_received': 'Purchase Order partially received',
-        'received': 'Purchase Order marked as received',
-        'cancelled': 'Purchase Order cancelled successfully'
+        'order_under_process': 'Purchase Order is under process',
+        'approved_order_sent_sap': 'Purchase Order approved and sent to SAP',
+        'credit_not_available': 'Purchase Order marked as credit not available',
+        'partially_invoiced': 'Purchase Order partially invoiced',
+        'fully_invoiced': 'Purchase Order fully invoiced',
+        'rejected': 'Purchase Order rejected'
       };
 
       toast.success(statusMessages[newStatus]);
@@ -975,6 +977,79 @@ const PurchaseOrderManagement: React.FC = () => {
     fileInputRef.current?.click();
   };
 
+  const handleExportToExcel = async () => {
+    try {
+      // Show loading state
+      toast.loading('Preparing export...', { id: 'export' });
+      
+      // Get all purchase orders from backend (not just filtered ones)
+      const response = await apiClient.purchaseOrders.getAll({
+        sort: '-createdAt'
+      });
+
+      let allPurchaseOrders: PurchaseOrder[] = [];
+      if (response.success && response.data) {
+        if (Array.isArray(response.data)) {
+          allPurchaseOrders = response.data;
+        } else if ((response.data as any).orders && Array.isArray((response.data as any).orders)) {
+          allPurchaseOrders = (response.data as any).orders;
+        }
+      }
+
+      // Prepare data for export - only required fields with complete data
+      const exportData = allPurchaseOrders.map((po, index) => ({
+        'Status': getStatusLabel(po.status),
+        'Order Approval Date': po.approvedBy ? formatDate(po.updatedAt) : 'Not Approved',
+        'Order No': po.poNumber,
+        'Order Date': formatDate(po.orderDate),
+        'Order Category': po.department ? getDepartmentLabel(po.department) : 'Not specified',
+        'Order Type': getPurchaseOrderTypeLabel(po.purchaseOrderType),
+        'Order Value': Number(po.totalAmount).toFixed(2) // Ensure 2 decimal places and convert to number first
+      }));
+
+      // Create Excel workbook with proper formatting
+      const workbook = XLSX.utils.book_new();
+      
+      // Convert data to worksheet format
+      const worksheet = XLSX.utils.json_to_sheet(exportData);
+      
+      // Set column widths for better display
+      const columnWidths = [
+        { wch: 25 }, // Status - wide enough for long status text
+        { wch: 20 }, // Order Approval Date
+        { wch: 25 }, // Order No - wide enough for long PO numbers
+        { wch: 15 }, // Order Date
+        { wch: 25 }, // Order Category - wide enough for department names
+        { wch: 25 }, // Order Type - wide enough for type names
+        { wch: 15 }  // Order Value
+      ];
+      
+      worksheet['!cols'] = columnWidths;
+      
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Purchase Orders');
+      
+      // Generate Excel file
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      
+      // Download the file
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `purchase_orders_${new Date().toISOString().split('T')[0]}.xlsx`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast.success(`Exported ${exportData.length} purchase orders to Excel`, { id: 'export' });
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Failed to export purchase orders. Please try again.', { id: 'export' });
+    }
+  };
+
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1096,7 +1171,8 @@ const PurchaseOrderManagement: React.FC = () => {
   const filteredPOs = purchaseOrders.filter(po => {
     const supplier = typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)?.name || 'Unknown Supplier';
     const matchesSearch = po.poNumber?.toLowerCase().includes(searchTerm?.toLowerCase()) ||
-      supplier?.toLowerCase().includes(searchTerm?.toLowerCase());
+      supplier?.toLowerCase().includes(searchTerm?.toLowerCase()) ||
+      po.purchaseOrderType?.toLowerCase().includes(searchTerm?.toLowerCase());
     const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
     const matchesSupplier = !supplierFilter || supplier?.toLowerCase().includes(supplierFilter?.toLowerCase());
 
@@ -1141,17 +1217,17 @@ const PurchaseOrderManagement: React.FC = () => {
 
   const getStatusColor = (status: PurchaseOrderStatus) => {
     switch (status) {
-      case 'draft':
+      case 'order_under_process':
         return 'bg-gray-100 text-gray-800';
-      case 'sent':
+      case 'approved_order_sent_sap':
         return 'bg-blue-100 text-blue-800';
-      case 'confirmed':
+      case 'credit_not_available':
         return 'bg-yellow-100 text-yellow-800';
-      case 'partially_received':
+      case 'partially_invoiced':
         return 'bg-orange-100 text-orange-800';
-      case 'received':
+      case 'fully_invoiced':
         return 'bg-green-100 text-green-800';
-      case 'cancelled':
+      case 'rejected':
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -1204,16 +1280,16 @@ const PurchaseOrderManagement: React.FC = () => {
       title: 'Pending Approval',
       value: pendingPurchaseOrdersCount,
       action: () => {
-        setStatusFilter('draft');
+        setStatusFilter('order_under_process');
       },
       icon: <Clock className="w-6 h-6" />,
       color: 'orange'
     },
     {
-      title: 'Confirmed',
+      title: 'Approved',
       value: confirmedPurchaseOrdersCount,
       action: () => {
-        setStatusFilter('confirmed');
+        setStatusFilter('approved_order_sent_sap');
       },
       icon: <CheckCircle className="w-6 h-6" />,
       color: 'green'
@@ -1238,11 +1314,12 @@ const PurchaseOrderManagement: React.FC = () => {
   // Status options with labels
   const statusOptions = [
     { value: 'all', label: 'All Status' },
-    { value: 'draft', label: 'Draft' },
-    { value: 'confirmed', label: 'Confirmed' },
-    { value: 'partially_received', label: 'Partially Received' },
-    { value: 'received', label: 'Received' },
-    { value: 'cancelled', label: 'Cancelled' }
+    { value: 'order_under_process', label: 'Order Under Process' },
+    { value: 'approved_order_sent_sap', label: 'Approved & Order Sent to SAP' },
+    { value: 'partially_invoiced', label: 'Partially Invoiced' },
+    { value: 'fully_invoiced', label: 'Fully Invoiced' },
+    { value: 'rejected', label: 'Rejected' },
+    { value: 'credit_not_available', label: 'Credit Not Available' }
   ];
 
   const getStatusLabel = (value: string) => {
@@ -1267,6 +1344,24 @@ const PurchaseOrderManagement: React.FC = () => {
       { value: 'other', label: 'Other' }
     ];
     return options.find(opt => opt.value === value)?.label || 'Select payment method';
+  };
+
+  const getDepartmentLabel = (value: string) => {
+    const options = [
+      { value: 'retail', label: 'Retail' },
+      { value: 'corporate', label: 'Corporate' },
+      { value: 'industrial_marine', label: 'Industrial & Marine' },
+      { value: 'others', label: 'Others' }
+    ];
+    return options.find(opt => opt.value === value)?.label || value;
+  };
+
+  const getPurchaseOrderTypeLabel = (value: string) => {
+    const options = [
+      { value: 'commercial', label: 'Commercial' },
+      { value: 'breakdown_order', label: 'Breakdown Order' }
+    ];
+    return options.find(opt => opt.value === value)?.label || value;
   };
 
   // Helper function to update payment method details safely
@@ -1400,6 +1495,14 @@ const PurchaseOrderManagement: React.FC = () => {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span className="text-sm">Refresh</span>
           </button>
+          <button
+  onClick={handleExportToExcel}
+  className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
+>
+  <Download className="w-4 h-4" />
+  <span className="text-sm">Export Excel</span>
+</button>
+
           <button
             onClick={handleImportClick}
             disabled={importing}
@@ -1572,22 +1675,52 @@ const PurchaseOrderManagement: React.FC = () => {
             <thead className="bg-gray-50">
               <tr>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Purchase Order
+                  S.No
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Supplier
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount & Items
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
+                  Purchase Order No.
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Order Date
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Department
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  PO Type
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Total Amount
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">
                   Status
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Payment
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Delivery
+                  Payment Status
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Supplier Email
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Created By
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Items
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Expected Delivery
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Actual Delivery
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Delivery Status
                 </th>
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
@@ -1597,80 +1730,141 @@ const PurchaseOrderManagement: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">Loading purchase orders...</td>
+                  <td colSpan={18} className="px-6 py-8 text-center text-gray-500">Loading purchase orders...</td>
                 </tr>
               ) : filteredPOs.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-8 text-center text-gray-500">No purchase orders found</td>
+                  <td colSpan={18} className="px-6 py-8 text-center text-gray-500">No purchase orders found</td>
                 </tr>
               ) : (
-                filteredPOs.map((po) => (
+                filteredPOs.map((po, index) => (
                   <tr key={po._id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-sm font-medium text-blue-600">{po.poNumber}</div>
-                        <div className="text-xs text-gray-600">
-                          Created: {formatDate(po.orderDate)}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          By: {getCreatedByName(po.createdBy)}
-                        </div>
+                    {/* S.No */}
+                    <td className="px-4 py-3 whitespace-nowrap text-center">
+                      <div className="text-sm font-medium text-gray-900">
+                        {((currentPage - 1) * limit) + index + 1}
                       </div>
                     </td>
+                    
+                    {/* Supplier */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-xs font-medium text-gray-900">
+                      <div className="text-sm font-medium text-gray-900">
                         {typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)?.name || 'Unknown Supplier'}
                       </div>
-                      <div className="text-xs font-medium text-gray-500">
+                    </td>
+                    
+                    {/* Purchase Order No. */}
+                    <td className="px-4 py-3 whitespace-nowrap w-48">
+                      <div className="text-sm font-medium text-blue-600">
+                        {po.poNumber}
+                      </div>
+                    </td>
+                    
+                    {/* Order Date */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {formatDate(po.orderDate)}
+                      </div>
+                    </td>
+                    
+                    {/* Department */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {po.department ? getDepartmentLabel(po.department) : 'Not specified'}
+                      </div>
+                    </td>
+                    
+                    {/* PO Type */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        po.purchaseOrderType === 'commercial' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'
+                      }`}>
+                        {getPurchaseOrderTypeLabel(po.purchaseOrderType)}
+                      </span>
+                    </td>
+                    
+                    {/* Total Amount */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        ₹{po.totalAmount.toFixed(2)}
+                      </div>
+                    </td>
+                    
+                    {/* Status */}
+                    <td className="px-4 py-3 whitespace-nowrap w-48">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(po.status)}`}>
+                        {getStatusLabel(po.status)}
+                      </span>
+                    </td>
+                    
+                    {/* Payment */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        ₹{(po.paidAmount || 0).toFixed(2)} / ₹{po.totalAmount.toFixed(2)}
+                      </div>
+                    </td>
+                    
+                    {/* Payment Status */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        po.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                        po.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {(po.paymentStatus
+                          ? po.paymentStatus.charAt(0).toUpperCase() + po.paymentStatus.slice(1)
+                          : 'Pending')}
+                      </span>
+                    </td>
+                    
+                    {/* Supplier Email */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-xs text-gray-600">
                         {typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)?.email || 'No Email'}
                       </div>
                     </td>
+                    
+                    {/* Created By */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-xs font-medium text-gray-900">{formatCurrency(po.totalAmount)}</div>
-                        <div className="text-xs text-gray-600">{po.items.length} item(s)</div>
+                      <div className="text-sm text-gray-900">
+                        {getCreatedByName(po.createdBy)}
                       </div>
                     </td>
+                    
+                    {/* Items */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(po.status)}`}>
-                        {po.status.charAt(0).toUpperCase() + po.status.slice(1)}
-                      </span>
+                      <div className="text-sm text-gray-900">
+                        {po.items.length} item(s)
+                      </div>
                     </td>
+                    
+                    {/* Expected Delivery */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        <div className="text-xs font-medium text-gray-900">
-                          {formatCurrency(po.paidAmount || 0)} / {formatCurrency(po.totalAmount)}
-                        </div>
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          po.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
-                          po.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          {(po.paymentStatus
-                            ? po.paymentStatus.charAt(0).toUpperCase() + po.paymentStatus.slice(1)
-                            : 'Pending')}
+                      <div className="text-sm text-gray-900">
+                        {po.expectedDeliveryDate ? formatDate(po.expectedDeliveryDate) : 'Not set'}
+                      </div>
+                    </td>
+                    
+                    {/* Actual Delivery */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {po.actualDeliveryDate ? formatDate(po.actualDeliveryDate) : 'Not delivered'}
+                      </div>
+                    </td>
+                    
+                    {/* Delivery Status */}
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {po.deliveryStatus ? (
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDeliveryStatusColor(po.deliveryStatus)}`}>
+                          {po.deliveryStatus.replace('_', ' ')}
                         </span>
-                      </div>
+                      ) : (
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                          Not set
+                        </span>
+                      )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div>
-                        {po.expectedDeliveryDate && (
-                          <div className="text-xs text-gray-600">
-                            Expected: {formatDate(po.expectedDeliveryDate)}
-                          </div>
-                        )}
-                        {po.actualDeliveryDate && (
-                          <div className="text-xs text-gray-600">
-                            Delivered: {formatDate(po.actualDeliveryDate)}
-                          </div>
-                        )}
-                        {po.deliveryStatus && (
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDeliveryStatusColor(po.deliveryStatus)}`}>
-                            {po.deliveryStatus.replace('_', ' ')}
-                          </span>
-                        )}
-                      </div>
-                    </td>
+
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
                       <div className="flex items-center space-x-2">
                         <button
@@ -1680,7 +1874,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
-                        {po.status === 'draft' && (
+                        {po.status === 'order_under_process' && (
                           <button
                             onClick={() => handleEditPO(po)}
                             className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
@@ -1689,48 +1883,48 @@ const PurchaseOrderManagement: React.FC = () => {
                             <Edit className="w-4 h-4" />
                           </button>
                         )}
-                        {po.status === 'draft' && (
+                        {po.status === 'order_under_process' && (
                           <button
-                            onClick={() => handleStatusUpdate(po._id, 'sent')}
+                            onClick={() => handleStatusUpdate(po._id, 'approved_order_sent_sap')}
                             className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
-                            title="Send PO"
+                            title="Approve PO"
                           >
                             <Send className="w-4 h-4" />
                           </button>
                         )}
-                        {(po.status === 'confirmed' || po.status === 'partially_received') && (
+                        {(po.status === 'approved_order_sent_sap' || po.status === 'partially_invoiced') && (
                           <button
                             onClick={() => openReceiveModal(po)}
                             className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
-                            title={po.status === 'partially_received' ? 'Receive More Items' : 'Receive Items'}
+                            title={po.status === 'partially_invoiced' ? 'Invoice More Items' : 'Invoice Items'}
                           >
                             <Package className="w-4 h-4" />
                           </button>
                         )}
-                        {po.status === 'sent' && (
+                        {/* {po.status === 'order_under_process' && (
                           <button
-                            onClick={() => handleStatusUpdate(po._id, 'confirmed')}
+                            onClick={() => handleStatusUpdate(po._id, 'approved_order_sent_sap')}
                             className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
                           >
                             <Check className="w-4 h-4" />
-                            {/* <span>Mark as Confirmed</span> */}
+                            <span>Mark as Approved</span>
                           </button>
-                        )}
                         {/* Payment Update Button */}
-                        {(po.status !== 'draft') && <button
-                          onClick={() => openPaymentModal(po)}
-                          className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
-                          title="Update Payment"
-                        >
-                          <IndianRupee className="w-4 h-4" />
-                        </button>}
-                        {(po.status === 'draft' || po.status === 'sent') && (
+                        {(po.status !== 'order_under_process') && (po.status !== 'rejected') && (
                           <button
-                            onClick={() => handleStatusUpdate(po._id, 'cancelled')}
+                            onClick={() => openPaymentModal(po)}
+                            className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-indigo-50 transition-colors"
+                            title="Update Payment"
+                          >
+                          <IndianRupee className="w-4 h-4" />
+                        </button>)}
+                        {(po.status === 'order_under_process') && (
+                          <button
+                            onClick={() => handleStatusUpdate(po._id, 'rejected')}
                             className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50 transition-colors"
                           >
                             <X className="w-4 h-4" />
-                            {/* <span>Cancel PO</span> */}
+                            {/* <span>Reject PO</span> */}
                           </button>
                         )}
                         {/* Sync Payment Status Button */}
@@ -1776,7 +1970,7 @@ const PurchaseOrderManagement: React.FC = () => {
       {/* PO Details Modal */}
       {showDetailsModal && selectedPO && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[50]">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl m-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">Purchase Order Details</h2>
@@ -1797,16 +1991,15 @@ const PurchaseOrderManagement: React.FC = () => {
                   <h3 className="text-sm font-medium text-gray-500 mb-2">Basic Information</h3>
                   <div className="space-y-2">
                     <p><span className="text-xs text-gray-600">PO Number:</span> <span className="font-medium">{selectedPO.poNumber}</span></p>
+                    <p><span className="text-xs text-gray-600">Purchase Order Type:</span> <span className="font-medium">{getPurchaseOrderTypeLabel(selectedPO.purchaseOrderType)}</span></p>
+                    <p><span className="text-xs text-gray-600">Department:</span> <span className="font-medium">{selectedPO.department ? getDepartmentLabel(selectedPO.department) : 'Not specified'}</span></p>
                     <p><span className="text-xs text-gray-600">Supplier:</span> <span className="font-medium">{typeof selectedPO.supplier === 'string' ? selectedPO.supplier : (selectedPO.supplier as Supplier)?.name || 'Unknown Supplier'}</span></p>
                     <p><span className="text-xs text-gray-600">Total Amount:</span> <span className="font-medium">{formatCurrency(selectedPO.totalAmount)}</span></p>
                     <p><span className="text-xs text-gray-600">Status:</span>
                       <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(selectedPO.status)}`}>
-                        {selectedPO.status.charAt(0).toUpperCase() + selectedPO.status.slice(1)}
+                        {getStatusLabel(selectedPO.status)}
                       </span>
                     </p>
-                    {selectedPO.department && (
-                      <p><span className="text-xs text-gray-600">Department:</span> <span className="font-medium">{selectedPO.department}</span></p>
-                    )}
                   </div>
                 </div>
 
@@ -2033,7 +2226,7 @@ const PurchaseOrderManagement: React.FC = () => {
               {/* Action Buttons */}
               <div className="flex justify-between items-center pt-4 border-t border-gray-200">
                 <div className="flex space-x-3">
-                  {selectedPO.status === 'draft' && (
+                  {selectedPO.status === 'order_under_process' && (
                     <>
                       <button
                         onClick={() => handleEditPO(selectedPO)}
@@ -2043,7 +2236,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         <span>Edit PO</span>
                       </button>
                       <button
-                        onClick={() => handleStatusUpdate(selectedPO._id, 'sent')}
+                        onClick={() => handleStatusUpdate(selectedPO._id, 'approved_order_sent_sap')}
                         className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-green-700 transition-colors"
                       >
                         <Send className="w-4 h-4" />
@@ -2051,33 +2244,33 @@ const PurchaseOrderManagement: React.FC = () => {
                       </button>
                     </>
                   )}
-                  {selectedPO.status === 'sent' && (
+                  {selectedPO.status === 'approved_order_sent_sap' && (
                     <button
-                      onClick={() => handleStatusUpdate(selectedPO._id, 'confirmed')}
+                      onClick={() => handleStatusUpdate(selectedPO._id, 'fully_invoiced')}
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
                     >
                       <Check className="w-4 h-4" />
-                      <span>Mark as Confirmed</span>
+                      <span>Mark as Fully Invoiced</span>
                     </button>
                   )}
-                  {(selectedPO.status === 'confirmed' || selectedPO.status === 'partially_received') && (
+                  {(selectedPO.status === 'approved_order_sent_sap' || selectedPO.status === 'partially_invoiced') && (
                     <button
                       onClick={() => openReceiveModal(selectedPO)}
                       className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-purple-700 transition-colors"
                     >
                       <Package className="w-4 h-4" />
                       <span>
-                        {selectedPO.status === 'partially_received' ? 'Receive More Items' : 'Receive Items'}
+                        {selectedPO.status === 'partially_invoiced' ? 'Receive More Items' : 'Receive Items'}
                       </span>
                     </button>
                   )}
-                  {(selectedPO.status === 'draft' || selectedPO.status === 'sent') && (
+                  {(selectedPO.status === 'order_under_process') && (
                     <button
-                      onClick={() => handleStatusUpdate(selectedPO._id, 'cancelled')}
+                      onClick={() => handleStatusUpdate(selectedPO._id, 'rejected')}
                       className="bg-red-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-red-700 transition-colors"
                     >
                       <Ban className="w-4 h-4" />
-                      <span>Cancel PO</span>
+                      <span>Reject PO</span>
                     </button>
                   )}
                   {/* Payment Update Button */}
@@ -2125,13 +2318,13 @@ const PurchaseOrderManagement: React.FC = () => {
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  {selectedPO.status === 'partially_received' ? 'Receive More Items' : 'Receive Items'}
+                  {selectedPO.status === 'partially_invoiced' ? 'Receive More Items' : 'Receive Items'}
                 </h2>
                 <p className="text-gray-600 mt-1">
                   PO: <span className="font-semibold">{selectedPO.poNumber}</span>
-                  {selectedPO.status === 'partially_received' && (
+                  {selectedPO.status === 'partially_invoiced' && (
                     <span className="ml-2 px-2 py-1 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
-                      Partially Received
+                      Partially Invoiced
                     </span>
                   )}
                 </p>
@@ -2166,7 +2359,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
             <div className="p-6 space-y-6">
               {/* Status Alert */}
-              {selectedPO.status === 'partially_received' ? (
+              {selectedPO.status === 'partially_invoiced' ? (
                 <div className="bg-gradient-to-r from-orange-50 to-yellow-50 border border-orange-200 rounded-lg p-4">
                   <div className="flex items-start">
                     <Package className="w-5 h-5 text-orange-600 mr-3 mt-0.5 flex-shrink-0" />

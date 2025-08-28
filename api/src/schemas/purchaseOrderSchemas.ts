@@ -33,12 +33,13 @@ export interface CreatePurchaseOrderInput {
     isPrimary: boolean;
   };
   items: POItemInput[];
+  purchaseOrderType: 'Commercial' | 'Breakdown Order'; // Purchase order type
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   deliveryLocation?: string;
   paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
   shippingMethod?: 'standard' | 'express' | 'overnight' | 'pickup';
-  department?: string; // Department for this purchase order
+  department: 'Retail' | 'Corporate' | 'Industrial & Marine' | 'Others'; // Department for this purchase order
   // New fields for shipping and documentation
   shipDate?: string;
   docketNumber?: string;
@@ -84,13 +85,14 @@ export interface UpdatePurchaseOrderInput {
     isPrimary: boolean;
   };
   items: POItemInput[];
+  purchaseOrderType?: 'Commercial' | 'Breakdown Order'; // Purchase order type (optional for updates)
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
-  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
+  status?: 'approved_order_sent_sap' | 'credit_not_available' | 'fully_invoiced' | 'order_under_process' | 'partially_invoiced' | 'rejected';
   deliveryLocation?: string;
   paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
   shippingMethod?: 'standard' | 'express' | 'overnight' | 'pickup';
-  department?: string; // Department for this purchase order
+  department?: 'Retail' | 'Corporate' | 'Industrial & Marine' | 'Others'; // Department for this purchase order (optional for updates)
   // New fields for shipping and documentation
   shipDate?: string;
   docketNumber?: string;
@@ -187,7 +189,7 @@ export interface PurchaseOrderQueryInput {
   limit?: number;
   sort?: string;
   search?: string;
-  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
+  status?: 'approved_order_sent_sap' | 'credit_not_available' | 'fully_invoiced' | 'order_under_process' | 'partially_invoiced' | 'rejected';
   supplier?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   dateFrom?: string;
@@ -247,7 +249,7 @@ export interface PurchaseOrderReportInput {
   dateFrom: string;
   dateTo: string;
   supplier?: string;
-  status?: 'draft' | 'sent' | 'confirmed' | 'received' | 'cancelled' | 'partially_received';
+  status?: 'approved_order_sent_sap' | 'credit_not_available' | 'fully_invoiced' | 'order_under_process' | 'partially_invoiced' | 'rejected';
   deliveryLocation?: string;
   format?: 'json' | 'csv' | 'excel' | 'pdf';
   includeGraphs?: boolean;
@@ -269,6 +271,8 @@ export interface PurchaseOrderImportInput {
   TOTAL?: number;
   // Optional fields for processing
   supplier?: string;
+  purchaseOrderType?: 'commercial' | 'breakdown_order'; // Purchase order type
+  department?: 'retail' | 'corporate' | 'industrial_marine' | 'others'; // Department for this purchase order
   expectedDeliveryDate?: string;
   priority?: 'low' | 'medium' | 'high' | 'urgent';
   paymentTerms?: 'cod' | 'net_30' | 'net_60' | 'advance' | 'credit';
@@ -283,7 +287,7 @@ const basePOFields = {
   ),
   supplierEmail: Joi.string().email().max(200).trim().allow('', null),
   totalAmount: Joi.number().min(0).precision(2),
-  status: Joi.string().valid('draft', 'sent', 'confirmed', 'received', 'cancelled', 'partially_received'),
+  status: Joi.string().valid('approved_order_sent_sap', 'credit_not_available', 'fully_invoiced', 'order_under_process', 'partially_invoiced', 'rejected'),
   orderDate: Joi.date().iso(),
   expectedDeliveryDate: Joi.date().iso(),
   actualDeliveryDate: Joi.date().iso(),
@@ -299,7 +303,8 @@ const basePOFields = {
   deliveryLocation: Joi.string().hex().length(24), // Stock location ID
   paymentTerms: Joi.string().valid('cod', 'net_30', 'net_60', 'advance', 'credit'),
   shippingMethod: Joi.string().valid('standard', 'express', 'overnight', 'pickup'),
-  department: Joi.string().max(100).trim().allow('', null) // Department for this purchase order
+  department: Joi.string().valid('retail', 'corporate', 'industrial_marine', 'others').required(), // Department for this purchase order
+  purchaseOrderType: Joi.string().valid('commercial', 'breakdown_order').required() // Purchase order type
 };
 
 // Purchase order item schema
@@ -342,6 +347,7 @@ export const createPurchaseOrderSchema = Joi.object<CreatePurchaseOrderInput>({
   paymentTerms: basePOFields.paymentTerms.default('net_30'),
   shippingMethod: basePOFields.shippingMethod.default('standard'),
   department: basePOFields.department,
+  purchaseOrderType: basePOFields.purchaseOrderType,
   // New fields for shipping and documentation
   shipDate: basePOFields.shipDate,
   docketNumber: basePOFields.docketNumber,
@@ -395,6 +401,7 @@ export const updatePurchaseOrderSchema = Joi.object<UpdatePurchaseOrderInput>({
   paymentTerms: basePOFields.paymentTerms,
   shippingMethod: basePOFields.shippingMethod,
   department: basePOFields.department,
+  purchaseOrderType: basePOFields.purchaseOrderType.optional(), // Optional for updates
   // New fields for shipping and documentation
   shipDate: basePOFields.shipDate,
   docketNumber: basePOFields.docketNumber,
@@ -607,6 +614,8 @@ export const purchaseOrderImportSchema = Joi.object<PurchaseOrderImportInput>({
   TOTAL: Joi.number().min(0).precision(2),
   // Optional processing fields
   supplier: Joi.string().allow(''),
+  purchaseOrderType: basePOFields.purchaseOrderType.default('Commercial'),
+  department: basePOFields.department.default('Retail'),
   expectedDeliveryDate: basePOFields.expectedDeliveryDate,
   priority: basePOFields.priority.default('medium'),
   paymentTerms: basePOFields.paymentTerms.default('net_30'),
