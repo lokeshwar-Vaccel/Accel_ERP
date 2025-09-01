@@ -72,21 +72,21 @@ export const numberToWords = (amount: number): string => {
   return result + ' Only';
 };
 
-// Field Operators API utility
-export const fetchFieldOperators = async () => {
+// Field Engineers API utility
+export const fetchFieldEngineers = async () => {
   try {
-    const response = await apiClient.users.getFieldOperators();
-    if (response.success && response.data.fieldOperators) {
-      return response.data.fieldOperators.map((operator: any) => ({
-        value: operator.id,
-        label: operator.name,
-        email: operator.email,
-        phone: operator.phone
+    const response = await apiClient.users.getFieldEngineers();
+    if (response.success && response.data.fieldEngineers) {
+      return response.data.fieldEngineers.map((engineer: any) => ({
+        value: engineer.id,
+        label: engineer.name,
+        email: engineer.email,
+        phone: engineer.phone
       }));
     }
     return [];
   } catch (error) {
-    console.error('Error fetching field operators:', error);
+    console.error('Error fetching field engineers:', error);
     return [];
   }
 };

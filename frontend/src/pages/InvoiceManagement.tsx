@@ -4529,7 +4529,7 @@ const InvoiceManagement: React.FC = () => {
                         {selectedInvoice.assignedEngineer?.phone && <p>Phone: {selectedInvoice.assignedEngineer?.phone}</p>}
                         <div className="mt-1">
                           <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                            Field Operator
+                            Field Engineer
                           </span>
                         </div>
                       </>
@@ -5760,7 +5760,7 @@ const InvoiceManagement: React.FC = () => {
                         {selectedQuotation.assignedEngineer?.phone && <p>Phone: {selectedQuotation.assignedEngineer?.phone}</p>}
                         <div className="mt-1">
                           <span className="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800">
-                            Field Operator
+                            Field Engineer
                           </span>
                         </div>
                       </>

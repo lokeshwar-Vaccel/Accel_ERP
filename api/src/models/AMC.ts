@@ -7,13 +7,27 @@ interface IVisitScheduleSchema {
   completedDate?: Date;
   assignedTo?: mongoose.Types.ObjectId;
   status: 'pending' | 'completed' | 'cancelled';
-  notes?: string;
 }
 
 // Main AMC interface
 interface IAMCSchema extends Document {
   contractNumber: string;
   customer: mongoose.Types.ObjectId;
+  // New fields as per client requirements
+  customerAddress: string; // Selected address from customer's addresses
+  contactPersonName: string;
+  contactNumber: string;
+  engineSerialNumber: string;
+  engineModel: string; // Auto-populated from engine selection
+  kva: number; // Auto-populated from engine selection
+  dgMake: string; // Auto-populated from engine selection
+  dateOfCommissioning: Date; // Auto-populated from engine selection
+  amcStartDate: Date;
+  amcEndDate: Date;
+  amcType: 'AMC' | 'CAMC';
+  numberOfVisits: number;
+  numberOfOilServices: number;
+  // Legacy fields (keeping for backward compatibility)
   products: mongoose.Types.ObjectId[];
   startDate: Date;
   endDate: Date;
@@ -47,11 +61,37 @@ const visitScheduleSchema = new Schema({
     default: 'pending',
     required: [true, 'Visit status is required']
   },
-  notes: {
+  serviceReport: {
     type: String,
-    maxlength: [1000, 'Notes cannot exceed 1000 characters']
+    maxlength: [2000, 'Service report cannot exceed 2000 characters']
+  },
+  issues: [{
+    description: {
+      type: String,
+      maxlength: [500, 'Issue description cannot exceed 500 characters']
+    },
+    severity: {
+      type: String,
+      enum: ['low', 'medium', 'high', 'critical']
+    },
+    resolved: {
+      type: Boolean,
+      default: false
+    },
+    followUpRequired: {
+      type: Boolean,
+      default: false
+    }
+  }],
+  customerSignature: {
+    type: String,
+    maxlength: [10000, 'Customer signature cannot exceed 10000 characters']
+  },
+  nextVisitRecommendations: {
+    type: String,
+    maxlength: [1000, 'Next visit recommendations cannot exceed 1000 characters']
   }
-}, { _id: false });
+});
 
 const amcSchema = new Schema({
   contractNumber: {
@@ -66,27 +106,87 @@ const amcSchema = new Schema({
     ref: 'Customer',
     required: [true, 'Customer is required']
   },
+  // New fields as per client requirements
+  customerAddress: {
+    type: String,
+    required: [true, 'Customer address is required'],
+    trim: true
+  },
+  contactPersonName: {
+    type: String,
+    required: [true, 'Contact person name is required'],
+    trim: true,
+    maxlength: [100, 'Contact person name cannot exceed 100 characters']
+  },
+  contactNumber: {
+    type: String,
+    required: [true, 'Contact number is required'],
+    trim: true
+  },
+  engineSerialNumber: {
+    type: String,
+    required: [true, 'Engine serial number is required'],
+    trim: true
+  },
+  engineModel: {
+    type: String,
+    required: [true, 'Engine model is required'],
+    trim: true
+  },
+  kva: {
+    type: Number,
+    required: [true, 'KVA is required'],
+    min: [0, 'KVA cannot be negative']
+  },
+  dgMake: {
+    type: String,
+    required: [true, 'DG make is required'],
+    trim: true
+  },
+  dateOfCommissioning: {
+    type: Date,
+    required: [true, 'Date of commissioning is required']
+  },
+  amcStartDate: {
+    type: Date,
+    required: [true, 'AMC start date is required']
+  },
+  amcEndDate: {
+    type: Date,
+    required: [true, 'AMC end date is required']
+  },
+  amcType: {
+    type: String,
+    enum: ['AMC', 'CAMC'],
+    required: [true, 'AMC type is required']
+  },
+  numberOfVisits: {
+    type: Number,
+    required: [true, 'Number of visits is required'],
+    min: [1, 'Must have at least 1 visit']
+  },
+  numberOfOilServices: {
+    type: Number,
+    required: [true, 'Number of oil services is required'],
+    min: [0, 'Number of oil services cannot be negative']
+  },
+  // Legacy fields (keeping for backward compatibility)
   products: [{
     type: Schema.Types.ObjectId,
-    ref: 'Product',
-    required: [true, 'At least one product is required']
+    ref: 'Product'
   }],
   startDate: {
-    type: Date,
-    required: [true, 'Start date is required']
+    type: Date
   },
   endDate: {
-    type: Date,
-    required: [true, 'End date is required']
+    type: Date
   },
   contractValue: {
     type: Number,
-    required: [true, 'Contract value is required'],
     min: [0, 'Contract value cannot be negative']
   },
   scheduledVisits: {
     type: Number,
-    required: [true, 'Number of scheduled visits is required'],
     min: [1, 'Must have at least 1 scheduled visit']
   },
   completedVisits: {
@@ -123,19 +223,20 @@ const amcSchema = new Schema({
 amcSchema.index({ contractNumber: 1 });
 amcSchema.index({ customer: 1 });
 amcSchema.index({ status: 1 });
-amcSchema.index({ startDate: 1 });
-amcSchema.index({ endDate: 1 });
+amcSchema.index({ amcStartDate: 1 });
+amcSchema.index({ amcEndDate: 1 });
+amcSchema.index({ engineSerialNumber: 1 });
 amcSchema.index({ nextVisitDate: 1 });
 
 // Virtual for remaining visits
 amcSchema.virtual('remainingVisits').get(function(this: IAMCSchema) {
-  return Math.max(0, this.scheduledVisits - this.completedVisits);
+  return Math.max(0, this.numberOfVisits - this.completedVisits);
 });
 
 // Virtual for contract duration
 amcSchema.virtual('contractDuration').get(function(this: IAMCSchema) {
-  if (this.startDate && this.endDate) {
-    const diff = this.endDate.getTime() - this.startDate.getTime();
+  if (this.amcStartDate && this.amcEndDate) {
+    const diff = this.amcEndDate.getTime() - this.amcStartDate.getTime();
     return Math.ceil(diff / (1000 * 60 * 60 * 24)); // in days
   }
   return null;
@@ -143,9 +244,9 @@ amcSchema.virtual('contractDuration').get(function(this: IAMCSchema) {
 
 // Virtual for days until expiry
 amcSchema.virtual('daysUntilExpiry').get(function(this: IAMCSchema) {
-  if (this.endDate) {
+  if (this.amcEndDate) {
     const now = new Date();
-    const diff = this.endDate.getTime() - now.getTime();
+    const diff = this.amcEndDate.getTime() - now.getTime();
     return Math.ceil(diff / (1000 * 60 * 60 * 24));
   }
   return null;
@@ -153,8 +254,8 @@ amcSchema.virtual('daysUntilExpiry').get(function(this: IAMCSchema) {
 
 // Virtual for completion percentage
 amcSchema.virtual('completionPercentage').get(function(this: IAMCSchema) {
-  if (this.scheduledVisits === 0) return 0;
-  return Math.round((this.completedVisits / this.scheduledVisits) * 100);
+  if (this.numberOfVisits === 0) return 0;
+  return Math.round((this.completedVisits / this.numberOfVisits) * 100);
 });
 
 // Generate unique contract number
@@ -179,24 +280,28 @@ amcSchema.pre('save', async function(this: IAMCSchema, next) {
   next();
 });
 
-// Validate that end date is after start date
+// Validate that AMC end date is after start date
 amcSchema.pre('save', function(this: IAMCSchema, next) {
-  if (this.startDate && this.endDate && this.endDate <= this.startDate) {
-    throw new Error('End date must be after start date');
+  if (this.amcStartDate && this.amcEndDate && this.amcEndDate <= this.amcStartDate) {
+    throw new Error('AMC end date must be after start date');
   }
   next();
 });
 
 // Generate visit schedule when contract is created
 amcSchema.pre('save', function(this: IAMCSchema, next) {
-  if (this.isNew && this.scheduledVisits > 0) {
-    const contractDays = Math.ceil((this.endDate.getTime() - this.startDate.getTime()) / (1000 * 60 * 60 * 24));
-    const intervalDays = Math.floor(contractDays / this.scheduledVisits);
+  if (this.isNew && this.numberOfVisits > 0) {
+    // Calculate the interval in months based on contract duration and number of visits
+    const totalMonths = (this.amcEndDate.getFullYear() - this.amcStartDate.getFullYear()) * 12 + 
+                       (this.amcEndDate.getMonth() - this.amcStartDate.getMonth());
+    const intervalMonths = Math.floor(totalMonths / this.numberOfVisits);
     
     this.visitSchedule = [];
     
-    for (let i = 0; i < this.scheduledVisits; i++) {
-      const visitDate = new Date(this.startDate.getTime() + (i * intervalDays * 24 * 60 * 60 * 1000));
+    for (let i = 0; i < this.numberOfVisits; i++) {
+      const visitDate = new Date(this.amcStartDate);
+      // Schedule visits with proper interval (first visit after interval, not on start date)
+      visitDate.setMonth(this.amcStartDate.getMonth() + ((i + 1) * intervalMonths));
       
       this.visitSchedule.push({
         scheduledDate: visitDate,
@@ -213,7 +318,7 @@ amcSchema.pre('save', function(this: IAMCSchema, next) {
 // Auto-update status when contract expires
 amcSchema.pre('save', function(this: IAMCSchema, next) {
   const now = new Date();
-  if (this.endDate < now && this.status === AMCStatus.ACTIVE) {
+  if (this.amcEndDate < now && this.status === AMCStatus.ACTIVE) {
     this.status = AMCStatus.EXPIRED;
   }
   
@@ -239,7 +344,7 @@ amcSchema.methods.scheduleNextVisit = function(this: IAMCSchema, visitDate: Date
 };
 
 // Method to complete a visit
-amcSchema.methods.completeVisit = function(this: IAMCSchema, visitId: string, notes?: string) {
+amcSchema.methods.completeVisit = function(this: IAMCSchema, visitId: string) {
   const visit = (this.visitSchedule as any).id(visitId);
   if (!visit) {
     throw new Error('Visit not found');
@@ -247,7 +352,6 @@ amcSchema.methods.completeVisit = function(this: IAMCSchema, visitId: string, no
   
   visit.completedDate = new Date();
   visit.status = 'completed';
-  if (notes) visit.notes = notes;
   
   this.completedVisits += 1;
   
@@ -264,7 +368,7 @@ amcSchema.statics.getExpiringContracts = async function(days: number = 30) {
   expiryDate.setDate(expiryDate.getDate() + days);
   
   return this.find({
-    endDate: { $lte: expiryDate },
+    amcEndDate: { $lte: expiryDate },
     status: AMCStatus.ACTIVE
   }).populate('customer').populate('products');
 };

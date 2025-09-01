@@ -180,7 +180,7 @@ export const createUser = async (
       }
     }
 
-    if (req.user?.role === UserRole.FIELD_OPERATOR || req.user?.role === UserRole.VIEWER) {
+    if (req.user?.role === UserRole.FIELD_ENGINEER || req.user?.role === UserRole.VIEWER) {
       return next(new AppError('You cannot assign any roles', 403));
     }
 
@@ -260,7 +260,7 @@ export const updateUser = async (
       }
     }
 
-    if (role && (req.user?.role === UserRole.FIELD_OPERATOR || req.user?.role === UserRole.VIEWER)) {
+    if (role && (req.user?.role === UserRole.FIELD_ENGINEER || req.user?.role === UserRole.VIEWER)) {
       return next(new AppError('You cannot assign any roles', 403));
     }
 
@@ -479,18 +479,18 @@ export const getUserStats = async (
   }
 }; 
 
-// @desc    Get field operators for dropdown
-// @route   GET /api/v1/users/field-operators
+// @desc    Get field engineers for dropdown
+// @route   GET /api/v1/users/field-engineers
 // @access  Private
-export const getFieldOperators = async (
+export const getFieldEngineers = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Get all active field operators
-    const fieldOperators = await User.find({
-      role: UserRole.FIELD_OPERATOR,
+    // Get all active field engineers
+    const fieldEngineers = await User.find({
+      role: UserRole.FIELD_ENGINEER,
       status: UserStatus.ACTIVE
     })
     .select('_id firstName lastName email phone')
@@ -498,15 +498,15 @@ export const getFieldOperators = async (
 
     const response: APIResponse = {
       success: true,
-      message: 'Field operators retrieved successfully',
+      message: 'Field engineers retrieved successfully',
       data: {
-        fieldOperators: fieldOperators.map(operator => ({
-          _id: operator._id,
-          name: `${operator.firstName} ${operator.lastName}`,
-          firstName: operator.firstName,
-          lastName: operator.lastName,
-          email: operator.email,
-          phone: operator.phone
+        fieldEngineers: fieldEngineers.map(engineer => ({
+          _id: engineer._id,
+          name: `${engineer.firstName} ${engineer.lastName}`,
+          firstName: engineer.firstName,
+          lastName: engineer.lastName,
+          email: engineer.email,
+          phone: engineer.phone
         }))
       }
     };

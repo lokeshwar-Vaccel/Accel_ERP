@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { uploadQrCode, getFileUrl, deleteFile } from '../middleware/upload';
 import { AppError } from '../errors/AppError';
 
@@ -82,11 +84,14 @@ export const deleteQrCodeImage = async (
       return next(new AppError('Filename is required', 400));
     }
 
-    const deleted = deleteFile(filename);
-
-    if (!deleted) {
+    // Check if file exists before deleting
+    const filePath = path.join(__dirname, '../assets/uploads', filename);
+    if (!fs.existsSync(filePath)) {
       return next(new AppError('File not found', 404));
     }
+
+    // Delete the file
+    deleteFile(filename);
 
     res.status(200).json({
       success: true,

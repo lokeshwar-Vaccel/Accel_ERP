@@ -189,7 +189,7 @@ const DGInvoiceFormPage: React.FC = () => {
     message: string;
   }>>({});
 
-  // Field operators (engineers) for sales invoices
+      // Field engineers for sales invoices
   const [fieldOperators, setFieldOperators] = useState<any[]>([]);
 
   // Invoice specific state - Conditional based on invoice type
@@ -374,7 +374,7 @@ const DGInvoiceFormPage: React.FC = () => {
         fetchProducts(),
         fetchLocations(),
         fetchGeneralSettings(),
-        fetchFieldOperators()
+        fetchFieldEngineers()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -508,12 +508,20 @@ const DGInvoiceFormPage: React.FC = () => {
     }
   };
 
-  const fetchFieldOperators = async () => {
+  const fetchFieldEngineers = async () => {
     try {
-      const response = await apiClient.users.getFieldOperators();
-      setFieldOperators(response.data?.fieldOperators || response.data || []);
+      const response = await apiClient.users.getFieldEngineers();
+      if (response.success && response.data.fieldEngineers) {
+        const fieldEngineers = response.data.fieldEngineers.map((engineer: any) => ({
+          value: engineer._id || engineer.id,
+          label: engineer.name || `${engineer.firstName} ${engineer.lastName}`,
+          email: engineer.email,
+          phone: engineer.phone
+        }));
+        setFieldOperators(fieldEngineers);
+      }
     } catch (error) {
-      console.error('Error fetching field operators:', error);
+      console.error('Error fetching field engineers:', error);
       setFieldOperators([]);
     }
   };
