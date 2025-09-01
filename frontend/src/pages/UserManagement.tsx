@@ -40,7 +40,7 @@ const UserModuleMap = {
   admin: 'Admin',
   hr: 'HR',
   manager: 'Manager',
-  field_operator: 'Field Operator',
+  field_engineer: 'Field Engineer',
   viewer: 'Viewer',
 } as const;
 
@@ -118,7 +118,7 @@ export const UserManagement: React.FC = () => {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
 
-  const userRoles: UserModuleKey[] = ['super_admin', 'admin', 'hr', 'manager', 'field_operator', 'viewer'];
+  const userRoles: UserModuleKey[] = ['super_admin', 'admin', 'hr', 'manager', 'field_engineer', 'viewer'];
   const allModules: ModuleKey[] = [
     'dashboard',
     'lead_management',
@@ -148,7 +148,7 @@ export const UserManagement: React.FC = () => {
       'dg_sales',
     ],
     manager: allModules.filter(m => m !== 'admin_settings'),
-    field_operator: [
+    field_engineer: [
       'dashboard',
       'service_management',
       'amc_management',
@@ -169,7 +169,7 @@ export const UserManagement: React.FC = () => {
     { value: 'admin', label: 'Admin' },
     { value: 'manager', label: 'Manager' },
     { value: 'hr', label: 'HR' },
-    { value: 'field_operator', label: 'Field Operator' },
+    { value: 'field_engineer', label: 'Field Engineer' },
     { value: 'viewer', label: 'Viewer' }
   ];
 
@@ -591,7 +591,7 @@ export const UserManagement: React.FC = () => {
       'admin': 'bg-blue-100 text-blue-800',
       'manager': 'bg-orange-100 text-orange-800',
       'hr': 'bg-teal-100 text-teal-800',
-      'field_operator': 'bg-indigo-100 text-indigo-800',
+      'field_engineer': 'bg-indigo-100 text-indigo-800',
       'viewer': 'bg-gray-100 text-gray-800',
     };
     return colors[role.toLowerCase()] || 'bg-gray-100 text-gray-800';
@@ -603,15 +603,15 @@ export const UserManagement: React.FC = () => {
       'admin': 'Admin',
       'manager': 'Manager',
       'hr': 'HR',
-      'field_operator': 'Field Operator',
+      'field_engineer': 'Field Engineer',
       'viewer': 'Viewer',
     };
     return roleMap[role] || role;
   };
 
   const getAvailableModules = () => {
-    const roleKey = typeof formData.role === 'string' && (['super_admin', 'admin', 'hr', 'manager', 'field_operator', 'viewer'] as const).includes(formData.role as any)
-      ? (formData.role as unknown as 'super_admin' | 'admin' | 'hr' | 'manager' | 'field_operator' | 'viewer')
+    const roleKey = typeof formData.role === 'string' && (['super_admin', 'admin', 'hr', 'manager', 'field_engineer', 'viewer'] as const).includes(formData.role as any)
+      ? (formData.role as unknown as 'super_admin' | 'admin' | 'hr' | 'manager' | 'field_engineer' | 'viewer')
       : 'Viewer';
     return roleModuleMapping[roleKey] || [];
   };
@@ -626,7 +626,7 @@ export const UserManagement: React.FC = () => {
       'admin': 'Near-complete access excluding system-level admin settings',
       'hr': 'Access to user management, HR-related modules',
       'manager': 'Comprehensive access to operational modules',
-      'field_operator': 'Access to field operations, service management, and inventory',
+      'field_engineer': 'Access to field operations, service management, and inventory',
       'viewer': 'Read-only access to selected modules'
     };
     return descriptions[role as keyof typeof descriptions] || '';
@@ -643,9 +643,9 @@ export const UserManagement: React.FC = () => {
       return targetUserRole !== 'super_admin' && targetUserRole !== 'admin';
     }
 
-    // Manager: Can edit/delete HR, Field Operator and Viewer users
+    // Manager: Can edit/delete HR, Field Engineer and Viewer users
     if (currentUserRole === 'manager') {
-      return ['hr', 'field_operator', 'viewer'].includes(targetUserRole);
+      return ['hr', 'field_engineer', 'viewer'].includes(targetUserRole);
     }
 
     // HR: Can edit/delete Viewer users only (NOT Manager users)
@@ -653,8 +653,8 @@ export const UserManagement: React.FC = () => {
       return targetUserRole === 'viewer';
     }
 
-    // Field Operator: Cannot edit/delete any users
-    if (currentUserRole === 'field_operator') {
+    // Field Engineer: Cannot edit/delete any users
+    if (currentUserRole === 'field_engineer') {
       return false;
     }
 
@@ -667,13 +667,13 @@ export const UserManagement: React.FC = () => {
   };
 
   const getAvailableRoles = (currentUserRole: any, existingUsers: any) => {
-    const allRoles = ['super_admin', 'admin', 'hr', 'manager', 'field_operator', 'viewer'];
+    const allRoles = ['super_admin', 'admin', 'hr', 'manager', 'field_engineer', 'viewer'];
     const UserModuleMap: any = {
       super_admin: 'Super Admin',
       admin: 'Admin',
       hr: 'HR',
       manager: 'Manager',
-      field_operator: 'Field Operator',
+      field_engineer: 'Field Engineer',
       viewer: 'Viewer'
     };
 
@@ -691,18 +691,18 @@ export const UserManagement: React.FC = () => {
           return true;
         }
 
-        // Admin: Can assign hr, manager, field_operator, viewer roles
+        // Admin: Can assign hr, manager, field_engineer, viewer roles
         if (currentUserRole === 'admin') {
-          return ['hr', 'manager', 'field_operator', 'viewer'].includes(role);
+          return ['hr', 'manager', 'field_engineer', 'viewer'].includes(role);
         }
 
-        // Manager: Can assign hr, field_operator and viewer roles
+        // Manager: Can assign hr, field_engineer and viewer roles
         if (currentUserRole === 'manager') {
-          return ['hr', 'field_operator', 'viewer'].includes(role);
+          return ['hr', 'field_engineer', 'viewer'].includes(role);
         }
 
-        // Field Operator: Cannot assign any roles
-        if (currentUserRole === 'field_operator') {
+        // Field Engineer: Cannot assign any roles
+        if (currentUserRole === 'field_engineer') {
           return false;
         }
 

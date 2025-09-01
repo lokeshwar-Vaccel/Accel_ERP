@@ -8,7 +8,7 @@ import {
   restoreUser,
   resetPassword,
   getUserStats,
-  getFieldOperators
+  getFieldEngineers
 } from '../controllers/userController';
 import { protect, restrictTo, checkModuleAccess, checkPermission } from '../middleware/auth';
 import { UserRole } from '../types';
@@ -27,10 +27,10 @@ router.get('/stats',
   getUserStats  
 );
 
-// Get field operators for dropdown
-router.get('/field-operators', 
+// Get field engineers for dropdown
+router.get('/field-engineers', 
   checkPermission('read'), 
-  getFieldOperators
+  getFieldEngineers
 );
 
 // CRUD operations

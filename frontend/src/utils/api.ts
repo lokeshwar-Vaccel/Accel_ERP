@@ -163,8 +163,8 @@ class ApiClient {
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/users/stats'),
 
-    getFieldOperators: () =>
-      this.makeRequest<{ success: boolean; data: { fieldOperators: any[] } }>('/users/field-operators'),
+    getFieldEngineers: () =>
+      this.makeRequest<{ success: boolean; data: { fieldEngineers: any[] } }>('/users/field-engineers'),
   };
 
   // Lead Management APIs
@@ -173,6 +173,8 @@ class ApiClient {
 
       return this.makeRequest<{ success: boolean; data:{customers:any[],counts:any}; pagination: any }>(`/customers${params ? `?${new URLSearchParams(params)}` : ''}`);
     },
+    getAllForDropdown: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[] }>(`/customers/all${params ? `?${new URLSearchParams(params)}` : ''}`),
     dgCustomers: {
       getAll: (params?: any) =>
         this.makeRequest<{ success: boolean; data: any[]; page: number; limit: number; total: number; totalPages: number }>(`/customers/dg-customers${params ? `?${new URLSearchParams(params)}` : ''}`),
@@ -671,6 +673,21 @@ class ApiClient {
         method: 'PUT',
         body: JSON.stringify(excelData),
       }),
+
+    uploadPdf: (id: string, pdfFile: File) => {
+      const formData = new FormData();
+      formData.append('pdfFile', pdfFile);
+      
+      return this.makeRequest<{ success: boolean; data: { ticket: any; pdfFile: any } }>(`/services/${id}/upload-pdf`, {
+        method: 'POST',
+        body: formData,
+      });
+    },
+
+    deletePdf: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/services/${id}/pdf`, {
+        method: 'DELETE',
+      }),
   };
 
   // Digital Service Report APIs
@@ -780,6 +797,30 @@ class ApiClient {
         body: JSON.stringify(visitData),
       }),
 
+    scheduleVisitsBulk: (id: string, visits: any[]) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/${id}/schedule-visits-bulk`, {
+        method: 'POST',
+        body: JSON.stringify({ visits }),
+      }),
+
+          completeVisit: (amcId: string, visitData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/amc/${amcId}/complete-visit`, {
+          method: 'POST',
+          body: JSON.stringify(visitData),
+        }),
+
+    regenerateVisits: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/${id}/regenerate-visits`, {
+        method: 'PUT',
+      }),
+
+    // Visit date filtering
+    getByVisitDate: (params: any) =>
+      this.makeRequest<{ success: boolean; data: any; pagination: any }>(`/amc/visits-by-date${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getVisitScheduleSummary: (params: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/amc/visit-schedule-summary${params ? `?${new URLSearchParams(params)}` : ''}`),
+
     bulkRenew: (contractIds: string[], renewalData: any) =>
       this.makeRequest<{ success: boolean; data: any }>('/amc/bulk-renew', {
         method: 'POST',
@@ -819,6 +860,15 @@ class ApiClient {
 
     getDashboard: () =>
       this.makeRequest<{ success: boolean; data: any }>('/amc/dashboard'),
+
+    exportToExcel: (params?: any) => {
+      const queryString = params ? `?${new URLSearchParams(params)}` : '';
+      return fetch(`${this.baseURL}/amc/export-excel${queryString}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+        },
+      });
+    },
   };
 
   // Purchase Orders APIs

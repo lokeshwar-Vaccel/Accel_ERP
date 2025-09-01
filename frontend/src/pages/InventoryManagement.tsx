@@ -2548,30 +2548,35 @@ const InventoryManagement: React.FC = () => {
             overflowX: 'scroll !important' as any
           }}
         >
-          <table className="w-full min-w-[1600px] table-fixed">
+          <table className="w-full min-w-[1800px] table-fixed">
             <thead className="bg-gray-50 sticky top-0">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Product Details</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Part No</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Stock Levels</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Location</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">CPCB No</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Unit Price</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">UOM</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Pricing</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">Status & Department</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Technical Info</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Actions</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">SLNO</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PART NO</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">DESCRIPTION</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">CPCB Norms</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">UOM</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">QTY</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">RACK</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">ROOM</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">DEPT</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">GNDP</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">HSN CODE</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">GST</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Max Stock</th>
+                <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200 overflow-y-scroll">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="px-6 py-8 text-center text-gray-500">Loading inventory...</td>
+                  <td colSpan={16} className="px-6 py-8 text-center text-gray-500">Loading inventory...</td>
                 </tr>
               ) : inventory.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-6 py-8 text-center text-gray-500">No inventory items found</td>
+                  <td colSpan={16} className="px-6 py-8 text-center text-gray-500">No inventory items found</td>
                 </tr>
               ) : (
                 inventory.map((item, idx) => {
@@ -2579,112 +2584,22 @@ const InventoryManagement: React.FC = () => {
                   const StatusIcon = status.icon;
                   return (
                     <tr key={item._id || idx} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-4 w-72 uppercase">
-                        <div className="flex items-start">
-                          <Package className="w-4 h-4 text-gray-400 mr-2 mt-1 flex-shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium text-gray-900 break-words">
-                              {item.product?.name}
-                            </div>
-                            {/* <div className="text-xs text-gray-500">
-                              {item.product?.partNo}
-                            </div> */}
-                            <div className="text-xs text-gray-400 mt-1">
-                              {item.product?.brand} • {item.product?.category}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
+                      <td className="px-4 py-4 text-xs text-center">{idx + 1}</td>
                       <td className="px-4 py-4 text-xs font-bold text-black">{item.product?.partNo || 'N/A'}</td>
-                      <td className="px-4 py-4 w-36">
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Current:</span>
-                            <span className="text-sm font-bold text-gray-900">{item.quantity}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Reserved:</span>
-                            <span className="text-xs text-orange-600 font-medium">{item.reservedQuantity || 0}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Available:</span>
-                            <span className="text-xs text-green-600 font-medium">{item.availableQuantity}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            {/* <span className="text-xs text-gray-500">UOM:</span>
-                            <span className="text-xs text-green-600 font-medium">{item.product?.uom || 'N/A'}</span> */}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 w-40">
-                        <div className="space-y-1">
-                          <div className="flex items-center">
-                            <Building className="w-3 h-3 text-blue-500 mr-1" />
-                            <span className="text-sm font-medium text-gray-900 truncate">
-                              {item.location?.name || <span className="text-red-500">Unassigned</span>}
-                            </span>
-                          </div>
-                          <div className="flex items-center">
-                            <Archive className="w-3 h-3 text-green-500 mr-1" />
-                            <span className="text-xs text-gray-700 truncate">
-                              Room: {item.room?.name || <span className="text-red-500">Unassigned</span>}
-                            </span>
-                          </div>
-                          <div className="flex items-center">
-                            <MapPin className="w-3 h-3 text-purple-500 mr-1" />
-                            <span className="text-xs text-gray-600 truncate">
-                              Rack: {item.rack?.name || <span className="text-red-500">Unassigned</span>}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.cpcbNo || 'N/A'}</td>
-                      <td className="px-4 py-4 text-sm font-medium text-gray-900">{item.product?.price !== undefined ? `₹${item.product.price.toFixed(2)}` : 'N/A'}</td>
-                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.uom || 'N/A'}</td>
-
-                      <td className="px-4 py-4 w-36">
-                        <div className="space-y-1">
-                          {/* <div className="text-sm font-medium text-gray-900">
-                          MRP: ₹{(item.product?.price || 0).toFixed(2)}
-                          </div> */}
-                          <div className="text-xs text-gray-600">
-                            GST: {item.product?.gst}%
-                          </div>
-                          <div className="text-xs text-gray-700 font-bold">
-                            GNDP: ₹{(item.product?.gndp || 0).toFixed(2)}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 w-36 uppercase">
-                        <div className="space-y-2">
-                          <Badge variant={status.variant} size="xs">
-                            <StatusIcon className="w-2 h-2 mr-1" />
-                            {status.label}
-                          </Badge>
-                          <div>
-                            <Badge variant="default" size="xs">
-                              {item.product?.dept}
-                            </Badge>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="px-4 py-4 w-32 uppercase">
-                        <div className="space-y-1 text-xs text-gray-500">
-                          <div>
-                            HSN: {item.product?.hsnNumber}
-                          </div>
-                          <div>
-                            {new Date(item?.lastUpdated).toLocaleDateString()}
-                          </div>
-                          <div className="text-xs text-gray-400 truncate">
-                            {item.product?.productType2}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 w-32 whitespace-nowrap text-sm font-medium">
+                      <td className="px-4 py-4 text-xs text-gray-900">{item.product?.name || 'N/A'}</td>
+                      <td className="px-4 py-4 text-xs text-center text-gray-700">{item.product?.cpcbNo || 'NA'}</td>
+                      <td className="px-4 py-4 text-xs text-center text-gray-700">{item.product?.uom || 'Nos'}</td>
+                      <td className="px-4 py-4 text-xs text-center font-medium">{item.quantity}</td>
+                      <td className="px-4 py-4 text-xs text-center text-gray-700">{item.rack?.name || ''}</td>
+                      <td className="px-4 py-4 text-xs text-center text-gray-700">{item.room?.name || ''}</td>
+                      <td className="px-4 py-4 text-xs text-center text-gray-700">{item.product?.dept || ''}</td>
+                      <td className="px-4 py-4 text-xs text-center font-medium">{(item.product?.gndp || 0).toFixed(2)}</td>
+                      <td className="px-4 py-4 text-xs text-center font-medium">{item.product?.price !== undefined ? item.product.price.toFixed(2) : 'N/A'}</td>
+                      <td className="px-4 py-4 text-xs text-center text-gray-700">{item.product?.hsnNumber || ''}</td>
+                      <td className="px-4 py-4 text-xs text-center">{item.product?.gst || ''}</td>
+                      <td className="px-4 py-4 text-xs text-center">{item.product?.minStockLevel || ''}</td>
+                      <td className="px-4 py-4 text-xs text-center">{item.product?.maxStockLevel || ''}</td>
+                      <td className="px-4 py-4 text-xs text-center whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center justify-center space-x-1">
                           <button
                             onClick={() => handleUpdateStock(item)}
@@ -2702,7 +2617,7 @@ const InventoryManagement: React.FC = () => {
                           </button>
                           <button
                             onClick={() => handleTransferStock(item)}
-                            className="text-purple-600 hover:text-purple-900 p-1 pe-3 rounded hover:bg-purple-50 transition-colors"
+                            className="text-purple-600 hover:text-purple-900 p-2 rounded hover:bg-purple-50 transition-colors"
                             title="Transfer Stock"
                           >
                             <ArrowUpDown className="w-4 h-4" />
@@ -4438,11 +4353,11 @@ const InventoryManagement: React.FC = () => {
       {/* Stock Ledger Modal */}
       {showLedgerModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl m-4 max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-[95vw] m-4 max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b border-gray-200">
               <div>
-                <h2 className="text-xl font-semibold text-gray-900">Stock Ledger</h2>
-                <p className="text-sm text-gray-600">Complete transaction history across all products and locations</p>
+                <h2 className="text-xl font-semibold text-gray-900">Stock Ledger - Detailed Report</h2>
+                <p className="text-sm text-gray-600">Complete inventory movement with opening, inwards, outwards, and closing balances</p>
               </div>
               <button
                 onClick={() => setShowLedgerModal(false)}
@@ -4452,218 +4367,15 @@ const InventoryManagement: React.FC = () => {
               </button>
             </div>
 
-            {/* Summary Cards */}
-            <div className="p-4 bg-white border-b border-gray-200">
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <div 
-                  className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-4 ${
-                    ledgerFilters.transactionType === 'inward' 
-                      ? 'bg-green-100 border-green-300 ring-2 ring-green-200' 
-                      : 'bg-green-50 border-green-200 hover:bg-green-100'
-                  }`}
-                  onClick={() => handleSummaryCardClick('inward')}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-green-600 font-medium">Total Inward</p>
-                      <p className="text-2xl font-bold text-green-700">{staticSummary.totalInwardQuantity.toLocaleString()}</p>
-                      <p className="text-xs text-green-600">{staticSummary.totalInwardCount} transactions</p>
-                    </div>
-                    <div className="text-green-500">
-                      <TrendingUp className="w-8 h-8" />
-                    </div>
-                  </div>
-                </div>
-
-                <div 
-                  className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-4 ${
-                    ledgerFilters.transactionType === 'outward' 
-                      ? 'bg-red-100 border-red-300 ring-2 ring-red-200' 
-                      : 'bg-red-50 border-red-200 hover:bg-red-100'
-                  }`}
-                  onClick={() => handleSummaryCardClick('outward')}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-red-600 font-medium">Total Outward</p>
-                      <p className="text-2xl font-bold text-red-700">{staticSummary.totalOutwardQuantity.toLocaleString()}</p>
-                      <p className="text-xs text-red-600">{staticSummary.totalOutwardCount} transactions</p>
-                    </div>
-                    <div className="text-red-500">
-                      <TrendingDown className="w-8 h-8" />
-                    </div>
-                  </div>
-                </div>
-
-               
-
-                <div 
-                  className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-4 ${
-                    ledgerFilters.transactionType === 'adjustment' 
-                      ? 'bg-purple-100 border-purple-300 ring-2 ring-purple-200' 
-                      : 'bg-purple-50 border-purple-200 hover:bg-purple-100'
-                  }`}
-                  onClick={() => handleSummaryCardClick('adjustment')}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-purple-600 font-medium">Adjustments</p>
-                      <p className="text-2xl font-bold text-purple-700">{staticSummary.totalAdjustmentCount.toLocaleString()}</p>
-                      <p className="text-xs text-purple-600">Count</p>
-                    </div>
-                    <div className="text-purple-500">
-                      <Settings className="w-6 h-6" />
-                    </div>
-                  </div>
-                </div>
-
-                <div 
-                  className={`cursor-pointer transition-all hover:scale-105 border rounded-lg p-4 ${
-                    ledgerFilters.transactionType === 'transfer' 
-                      ? 'bg-indigo-100 border-indigo-300 ring-2 ring-indigo-200' 
-                      : 'bg-indigo-50 border-indigo-200 hover:bg-indigo-100'
-                  }`}
-                  onClick={() => handleSummaryCardClick('transfer')}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-indigo-600 font-medium">Transfers</p>
-                      <p className="text-2xl font-bold text-indigo-700">{staticSummary.totalTransferCount.toLocaleString()}</p>
-                      <p className="text-xs text-indigo-600">Count</p>
-                    </div>
-                    <div className="text-indigo-500">
-                      <ArrowLeftRight className="w-6 h-6" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 cursor-not-allowed">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-blue-600 font-medium">Net Movement</p>
-                      <p className={`text-2xl font-bold ${(staticSummary.totalInwardQuantity - staticSummary.totalOutwardQuantity) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                        {(staticSummary.totalInwardQuantity - staticSummary.totalOutwardQuantity) >= 0 ? '+' : ''}{(staticSummary.totalInwardQuantity - staticSummary.totalOutwardQuantity).toLocaleString()}
-                      </p>
-                      <p className="text-xs text-blue-600">Inward - Outward</p>
-                    </div>
-                    <div className="text-blue-500">
-                      <BarChart3 className="w-8 h-8" />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 cursor-not-allowed">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-orange-600 font-medium">Transactions</p>
-                      <p className="text-2xl font-bold text-orange-700">{(staticSummary.totalInwardCount + staticSummary.totalOutwardCount + staticSummary.totalAdjustmentCount + staticSummary.totalTransferCount + staticSummary.totalReservationCount + staticSummary.totalReleaseCount).toLocaleString()}</p>
-                      <p className="text-xs text-orange-600">Total Movements</p>
-                    </div>
-                    <div className="text-orange-500">
-                      <Package className="w-8 h-8" />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Active Filters */}
-            {(ledgerFilters.search || ledgerFilters.transactionType || ledgerFilters.location || ledgerFilters.fromDate || ledgerFilters.toDate) && (
-              <div className="p-4 bg-blue-50 border-b border-blue-200">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-medium text-blue-800">Active Filters</h3>
-                  <button
-                    onClick={() => {
-                      setLedgerFilters({
-                        search: '',
-                        location: '',
-                        transactionType: '',
-                        dateRange: '',
-                        fromDate: '',
-                        toDate: ''
-                      });
-                      setLedgerPagination(prev => ({ ...prev, page: 1 }));
-                    }}
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                  >
-                    Clear All
-                  </button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {ledgerFilters.search && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      Search: "{ledgerFilters.search}"
-                      <button
-                        onClick={() => {
-                          setLedgerFilters(prev => ({ ...prev, search: '' }));
-                          setLedgerPagination(prev => ({ ...prev, page: 1 }));
-                        }}
-                        className="ml-1 text-blue-600 hover:text-blue-800"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  )}
-                  {ledgerFilters.transactionType && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                      Type: {getTransactionTypeLabel(ledgerFilters.transactionType)}
-                      <button
-                        onClick={() => {
-                          setLedgerFilters(prev => ({ ...prev, transactionType: '' }));
-                          setLedgerPagination(prev => ({ ...prev, page: 1 }));
-                        }}
-                        className="ml-1 text-green-600 hover:text-green-800"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  )}
-                  {ledgerFilters.location && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                      Location: {getLedgerLocationLabel(ledgerFilters.location)}
-                      <button
-                        onClick={() => {
-                          setLedgerFilters(prev => ({ ...prev, location: '' }));
-                          setLedgerPagination(prev => ({ ...prev, page: 1 }));
-                        }}
-                        className="ml-1 text-purple-600 hover:text-purple-800"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  )}
-                                     {(ledgerFilters.fromDate || ledgerFilters.toDate) && (
-                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
-                       Date: {ledgerFilters.fromDate ? new Date(ledgerFilters.fromDate).toLocaleDateString('en-IN') : ''} to {ledgerFilters.toDate ? new Date(ledgerFilters.toDate).toLocaleDateString('en-IN') : ''}
-                       <button
-                         onClick={() => {
-                           setLedgerFilters(prev => ({ 
-                             ...prev, 
-                             fromDate: '', 
-                             toDate: '',
-                             dateRange: ''
-                           }));
-                           setLedgerPagination(prev => ({ ...prev, page: 1 }));
-                         }}
-                         className="ml-1 text-orange-600 hover:text-orange-800"
-                       >
-                         ×
-                       </button>
-                     </span>
-                   )}
-                </div>
-              </div>
-            )}
-
             {/* Filters */}
             <div className="p-4 bg-gray-50 border-b border-gray-200">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
                 <div className="relative">
-                <label className="block text-xs text-gray-600 mb-1">Search</label>
+                  <label className="block text-xs text-gray-600 mb-1">Search</label>
                   <Search className="absolute mt-2 pt-1 left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                   <input
                     type="text"
-                    placeholder="Search transactions..."
+                    placeholder="Search products..."
                     value={ledgerFilters.search}
                     onChange={(e) => {
                       setLedgerFilters({ ...ledgerFilters, search: e.target.value });
@@ -4675,8 +4387,7 @@ const InventoryManagement: React.FC = () => {
 
                 {/* Date Range Custom Dropdown */}
                 <div className="relative dropdown-container">
-                <label className="block text-xs text-gray-600 mb-1">Date Range</label>
-
+                  <label className="block text-xs text-gray-600 mb-1">Date Range</label>
                   <button
                     onClick={() => setShowDateRangeDropdown(!showDateRangeDropdown)}
                     className="flex items-center justify-between w-full px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
@@ -4695,44 +4406,24 @@ const InventoryManagement: React.FC = () => {
                       ].map((option) => (
                         <button
                           key={option.value}
-                                                  onClick={() => {
-                          let newDates = { fromDate: '', toDate: '' };
-                          if (option.value) {
-                            const days = parseInt(option.value, 10);
-                            const toDate = new Date();
-                            const fromDate = new Date();
-                            fromDate.setDate(toDate.getDate() - days + 1);
-                            
-                            newDates = {
-                              fromDate: formatDateToString(fromDate),
-                              toDate: formatDateToString(toDate)
-                            };
-                          }
-                          // Validate date range
-                          if (newDates.fromDate && newDates.toDate) {
-                            const from = new Date(newDates.fromDate);
-                            const to = new Date(newDates.toDate);
-                            const diffDays = Math.ceil((to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24));
-                            
-                            if (diffDays < 0) {
-                              toast.error('Invalid date range selected');
-                              return;
+                          onClick={() => {
+                            let newDates = { fromDate: '', toDate: '' };
+                            if (option.value) {
+                              const days = parseInt(option.value, 10);
+                              const toDate = new Date();
+                              const fromDate = new Date();
+                              fromDate.setDate(toDate.getDate() - days + 1);
+                              
+                              newDates = {
+                                fromDate: formatDateToString(fromDate),
+                                toDate: formatDateToString(toDate)
+                              };
                             }
-                            
-                            if (diffDays > 365) {
-                              toast('Date range exceeds 365 days. Large date ranges may take longer to load.', {
-                                icon: '⚠️',
-                                duration: 4000
-                              });
-                            }
-                          }
-                          
-                          setLedgerFilters({ ...ledgerFilters, dateRange: option.value, ...newDates });
-                          setShowDateRangeDropdown(false);
-                          setLedgerPagination(prev => ({ ...prev, page: 1 }));
-                        }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${ledgerFilters.dateRange === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
+                            setLedgerFilters({ ...ledgerFilters, dateRange: option.value, ...newDates });
+                            setShowDateRangeDropdown(false);
+                            setLedgerPagination(prev => ({ ...prev, page: 1 }));
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${ledgerFilters.dateRange === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
                         >
                           {option.label}
                         </button>
@@ -4758,31 +4449,23 @@ const InventoryManagement: React.FC = () => {
                       allowInput: true,
                       time_24hr: true,
                       parseDate: (datestr) => {
-                        // Handle DD/MM/YYYY format without timezone issues
                         const parts = datestr.split('/');
                         if (parts.length === 3) {
                           const day = parseInt(parts[0], 10);
-                          const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+                          const month = parseInt(parts[1], 10) - 1;
                           const year = parseInt(parts[2], 10);
-                          // Use local timezone to avoid date shifting
-                          const date = new Date(year, month, day, 12, 0, 0); // Set to noon to avoid timezone issues
+                          const date = new Date(year, month, day, 12, 0, 0);
                           return date;
                         }
                         return new Date(datestr);
                       },
                       maxDate: ledgerFilters.toDate ? new Date(ledgerFilters.toDate) : new Date(),
-                      onClose: (selectedDates, dateStr) => {
-                        // Validate fromDate is not after toDate
-                        if (ledgerFilters.toDate && dateStr && new Date(dateStr) > new Date(ledgerFilters.toDate)) {
-                          toast.error('From date cannot be after To date');
-                          setLedgerFilters(prev => ({ ...prev, fromDate: '' }));
-                        }
-                      }
                     }}
                     className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     placeholder="From date"
                   />
                 </div>
+
                 {/* To Date input */}
                 <div className="relative">
                   <label className="block text-xs text-gray-600 mb-1">To Date</label>
@@ -4800,236 +4483,224 @@ const InventoryManagement: React.FC = () => {
                       allowInput: true,
                       time_24hr: true,
                       parseDate: (datestr) => {
-                        // Handle DD/MM/YYYY format without timezone issues
                         const parts = datestr.split('/');
                         if (parts.length === 3) {
                           const day = parseInt(parts[0], 10);
-                          const month = parseInt(parts[1], 10) - 1; // Month is 0-indexed
+                          const month = parseInt(parts[1], 10) - 1;
                           const year = parseInt(parts[2], 10);
-                          // Use local timezone to avoid date shifting
-                          const date = new Date(year, month, day, 12, 0, 0); // Set to noon to avoid timezone issues
+                          const date = new Date(year, month, day, 12, 0, 0);
                           return date;
                         }
                         return new Date(datestr);
                       },
                       minDate: ledgerFilters.fromDate ? new Date(ledgerFilters.fromDate) : undefined,
                       maxDate: new Date(),
-                      onClose: (selectedDates, dateStr) => {
-                        // Validate toDate is not before fromDate
-                        if (ledgerFilters.fromDate && dateStr && new Date(dateStr) < new Date(ledgerFilters.fromDate)) {
-                          toast.error('To date cannot be before From date');
-                          setLedgerFilters(prev => ({ ...prev, toDate: '' }));
-                        }
-                      }
                     }}
                     className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     placeholder="To date"
                   />
                 </div>
-
-                {/* Transaction Type Custom Dropdown */}
-                <div className="relative dropdown-container">
-                  <label className="block text-xs text-gray-600 mb-1">Transaction Type</label>
-                  <button
-                    onClick={() => setShowTransactionTypeDropdown(!showTransactionTypeDropdown)}
-                    className="flex items-center justify-between w-full px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                  >
-                    <span className="text-gray-700 truncate mr-1">{getTransactionTypeLabel(ledgerFilters.transactionType)}</span>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showTransactionTypeDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showTransactionTypeDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                      {[
-                        { value: '', label: 'All Types' },
-                        { value: 'inward', label: 'Inward (Purchase)' },
-                        { value: 'outward', label: 'Outward (Sale)' },
-                        { value: 'transfer', label: 'Transfer (Location/Room/Rack)' },
-                        { value: 'adjustment', label: 'Adjustment' },
-                        { value: 'reservation', label: 'Reservation' },
-                        { value: 'release', label: 'Release' }
-                      ].map((option) => (
-                        <button
-                          key={option.value}
-                          onClick={() => {
-                            setLedgerFilters({ ...ledgerFilters, transactionType: option.value });
-                            setShowTransactionTypeDropdown(false);
-                            setLedgerPagination(prev => ({ ...prev, page: 1 }));
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${ledgerFilters.transactionType === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          {option.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Location Custom Dropdown */}
-                <div className="relative dropdown-container">
-                <label className="block text-xs text-gray-600 mb-1">Location</label>
-                  <button
-                    onClick={() => setShowLedgerLocationDropdown(!showLedgerLocationDropdown)}
-                    className="flex items-center justify-between w-full px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                  >
-                    <span className="text-gray-700 truncate mr-1">{getLedgerLocationLabel(ledgerFilters.location)}</span>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showLedgerLocationDropdown ? 'rotate-180' : ''}`} />
-                  </button>
-                  {showLedgerLocationDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                      <button
-                        onClick={() => {
-                          setLedgerFilters({ ...ledgerFilters, location: '' });
-                          setShowLedgerLocationDropdown(false);
-                          setLedgerPagination(prev => ({ ...prev, page: 1 }));
-                        }}
-                        className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!ledgerFilters.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                          }`}
-                      >
-                        All Locations
-                      </button>
-                      {locations.map(location => (
-                        <button
-                          key={location._id}
-                          onClick={() => {
-                            setLedgerFilters({ ...ledgerFilters, location: location._id });
-                            setShowLedgerLocationDropdown(false);
-                            setLedgerPagination(prev => ({ ...prev, page: 1 }));
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${ledgerFilters.location === location._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                            }`}
-                        >
-                          {location.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
               </div>
 
               <div className="flex items-center justify-between text-xs text-gray-600">
-                <span>Showing {stockLedgerData.length} of {ledgerPagination.total} transactions</span>
+                <span>Showing {stockLedgerData.length} of {ledgerPagination.total} products</span>
                 <span>Page {ledgerPagination.page} of {ledgerPagination.pages}</span>
               </div>
             </div>
 
-            {/* Ledger Table */}
+            {/* Detailed Ledger Table */}
             <div className="flex-1 overflow-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 sticky top-0">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Previous Qty</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Change</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Result</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Reference</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">User</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {loading && stockLedgerData.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                        <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
-                        Loading transactions...
-                      </td>
-                    </tr>
-                  ) : stockLedgerData.length === 0 ? (
-                    <tr>
-                      <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                        <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                        <p>No transactions found</p>
-                        <p className="text-xs text-gray-400">Try adjusting your filters</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    stockLedgerData.map((ledger) => (
-                      <tr key={ledger._id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 text-xs">
-                          <div className="text-gray-900">{new Date(ledger.transactionDate).toLocaleDateString()}</div>
-                          <div className="text-gray-500">{new Date(ledger.transactionDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          <div className="font-medium text-gray-900">{ledger.product?.name || 'Unknown Product'}</div>
-                          <div className="text-gray-500">{ledger.product?.category}</div>
-                          <div className="text-gray-500 font-bold">Part No:{ledger.product?.partNo}</div>
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          <div className="font-medium text-gray-900">{ledger.location?.name || 'Unknown Location'}</div>
-                          <div className="text-gray-500 capitalize">{ledger.location?.type?.replace('_', ' ')}</div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`inline-flex px-1.5 py-0.5 text-xs font-semibold rounded-full ${ledger.transactionType === 'inward' ? 'bg-green-100 text-green-800' :
-                            ledger.transactionType === 'outward' ? 'bg-red-100 text-red-800' :
-                              ledger.transactionType === 'transfer' ? 'bg-purple-100 text-purple-800' :
-                                ledger.transactionType === 'reservation' ? 'bg-orange-100 text-orange-800' :
-                                  ledger.transactionType === 'release' ? 'bg-blue-100 text-blue-800' :
-                                    'bg-gray-100 text-gray-800'
-                            }`}>
-                            {ledger.transactionType === 'inward' ? '↗ Inward' :
-                              ledger.transactionType === 'outward' ? '↙ Outward' :
-                                ledger.transactionType === 'transfer' ? '🔄 Transfer' :
-                                  ledger.transactionType === 'reservation' ? '🔒 Reserved' :
-                                    ledger.transactionType === 'release' ? '🔓 Released' :
-                                      '⚡ Adjustment'}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-xs font-bold text-gray-900">
-                          {ledger.previousQuantity}
-                        </td>
-                        <td className="px-4 py-3 text-xs font-medium">
-                          <span className={`${ledger.quantity > 0 ? 'text-green-600' : 'text-red-600'
-                            }`}>
-                            {ledger.quantity > 0 ? '+' : ''}{ledger.quantity}
-                          </span>
-                        </td>
-
-                        <td className="px-4 py-3 text-xs font-bold text-gray-900">
-                          {ledger.resultingQuantity}
-                        </td>
-                        <td className="px-4 py-3 text-xs">
-                          <div className="font-mono text-blue-600">{ledger.referenceId}</div>
-                          <div className="text-gray-500 capitalize">{ledger.referenceType?.replace('_', ' ')}</div>
-                          {ledger.reason && <div className="text-gray-600 mt-1">{ledger.reason}</div>}
-                          {ledger.notes && <div className="text-gray-400 mt-1 italic">{ledger.notes}</div>}
-                        </td>
-                        <td className="px-4 py-3 text-xs text-gray-600">
-                          {ledger.performedBy?.firstName && ledger.performedBy?.lastName
-                            ? `${ledger.performedBy.firstName} ${ledger.performedBy.lastName}`
-                            : 'System'}
+              <div className="min-w-full">
+                <table className="w-full border-collapse border border-gray-300">
+                  <thead className="bg-gray-100 sticky top-0">
+                                         <tr>
+                       <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Description</th>
+                       <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Part Number</th>
+                       
+                       {/* Opening Balance */}
+                       <th colSpan={3} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                         Opening Balance
+                       </th>
+                       
+                       {/* Inwards */}
+                       <th colSpan={3} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                         Inwards
+                       </th>
+                       
+                       {/* Outwards */}
+                       <th colSpan={6} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                         Outwards
+                       </th>
+                       
+                       {/* Closing Balance */}
+                       <th colSpan={3} className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">
+                         Closing Balance
+                       </th>
+                     </tr>
+                     <tr>
+                       <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"></th>
+                       <th className="border border-gray-300 px-3 py-2 text-left text-xs font-medium text-gray-700 uppercase tracking-wider"></th>
+                       
+                       {/* Opening Balance sub-headers */}
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
+                       
+                       {/* Inwards sub-headers */}
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
+                       
+                       {/* Outwards sub-headers */}
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Consumption</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Gross Profit</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Perc %</th>
+                       
+                       {/* Closing Balance sub-headers */}
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Quantity</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Rate</th>
+                       <th className="border border-gray-300 px-3 py-2 text-center text-xs font-medium text-gray-700 uppercase tracking-wider">Value</th>
+                     </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {loading && stockLedgerData.length === 0 ? (
+                      <tr>
+                        <td colSpan={17} className="px-4 py-8 text-center text-gray-500">
+                          <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                          Loading ledger data...
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : stockLedgerData.length === 0 ? (
+                      <tr>
+                        <td colSpan={17} className="px-4 py-8 text-center text-gray-500">
+                          <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                          <p>No ledger data found</p>
+                          <p className="text-xs text-gray-400">Try adjusting your filters</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      stockLedgerData.map((ledger, index) => {
+                        // Calculate values for the detailed format
+                        const openingQty = ledger.previousQuantity || 0;
+                        const openingRate = ledger.product?.price || 100; // Default price if not set
+                        const openingValue = openingQty * openingRate;
+                        
+                        const inwardsQty = ledger.transactionType === 'inward' ? ledger.quantity : 0;
+                        const inwardsRate = ledger.product?.price || 100; // Default price if not set
+                        const inwardsValue = inwardsQty * inwardsRate;
+                        
+                        // For outward quantity, we need to show the actual outward quantity from the transaction
+                        // Outward transactions typically have negative quantities, so we take the absolute value
+                        const outwardsQty = ledger.transactionType === 'outward' ? Math.abs(ledger.quantity) : 0;
+                        const outwardsRate = ledger.product?.price || 100; // Default price if not set
+                        const outwardsValue = outwardsQty * outwardsRate;
+                        
+                        // Formula: Consumption = Value of Opening Stock + Inward Value - Outward Value
+                        const consumption = openingValue + inwardsValue - outwardsValue;
+                        
+                        // Formula: Gross Profit = Value of Outward - Value of Consumption
+                        const grossProfit = outwardsValue - consumption;
+                        const profitPercentage = consumption > 0 ? (grossProfit / consumption) * 100 : 0;
+                        
+                        const closingQty = ledger.resultingQuantity || 0;
+                        const closingRate = ledger.product?.price || 100; // Default price if not set
+                        const closingValue = closingQty * closingRate;
+                        
+                        return (
+                          <tr key={ledger._id} className="hover:bg-gray-50">
+                            <td className="border border-gray-300 px-3 py-2 text-xs font-medium text-gray-900">
+                              {ledger.product?.name || 'Unknown Product'}
+                            </td>
+                            <td className="border border-gray-300 px-3 py-2 text-xs text-gray-600 font-mono">
+                              {ledger.product?.partNo || 'N/A'}
+                            </td>
+                            
+                                                         {/* Opening Balance */}
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                               {openingQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
+                             </td>
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                               ₹{openingRate.toFixed(2)}
+                             </td>
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
+                               ₹{openingValue.toFixed(2)}
+                             </td>
+                             
+                             {/* Inwards */}
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                               {inwardsQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
+                             </td>
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                               ₹{inwardsRate.toFixed(2)}
+                             </td>
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
+                               ₹{inwardsValue.toFixed(2)}
+                             </td>
+                             
+                             {/* Outwards */}
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                               {outwardsQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
+                             </td>
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                               ₹{outwardsRate.toFixed(2)}
+                             </td>
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
+                               ₹{outwardsValue.toFixed(2)}
+                             </td>
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                               ₹{consumption.toFixed(2)}
+                             </td>
+                             <td className={`border border-gray-300 px-3 py-2 text-xs text-center font-medium ${grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                               ₹{grossProfit.toFixed(2)}
+                             </td>
+                             <td className={`border border-gray-300 px-3 py-2 text-xs text-center font-medium ${profitPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                               {profitPercentage.toFixed(2)}%
+                             </td>
+                             
+                             {/* Closing Balance */}
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                               {closingQty.toFixed(2)} {ledger.product?.uom || 'Nos.'}
+                             </td>
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center">
+                               ₹{closingRate.toFixed(2)}
+                             </td>
+                             <td className="border border-gray-300 px-3 py-2 text-xs text-center font-medium">
+                               ₹{closingValue.toFixed(2)}
+                             </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             {/* Pagination */}
             {ledgerPagination.pages > 1 && (
               <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-center">
-                                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => setLedgerPagination(prev => ({ ...prev, page: prev.page - 1 }))}
-                      disabled={ledgerPagination.page <= 1}
-                      className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                    >
-                      Previous
-                    </button>
-                    <span className="text-sm text-gray-600">
-                      Page {ledgerPagination.page} of {ledgerPagination.pages}
-                    </span>
-                    <button
-                      onClick={() => setLedgerPagination(prev => ({ ...prev, page: prev.page + 1 }))}
-                      disabled={ledgerPagination.page >= ledgerPagination.pages}
-                      className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                    >
-                      Next
-                    </button>
-                  </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setLedgerPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                    disabled={ledgerPagination.page <= 1}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-gray-600">
+                    Page {ledgerPagination.page} of {ledgerPagination.pages}
+                  </span>
+                  <button
+                    onClick={() => setLedgerPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                    disabled={ledgerPagination.page >= ledgerPagination.pages}
+                    className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                  >
+                    Next
+                  </button>
+                </div>
               </div>
             )}
           </div>

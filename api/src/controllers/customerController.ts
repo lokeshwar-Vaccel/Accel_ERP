@@ -21,6 +21,74 @@ async function getNextCustomerId() {
   return `SPS1${String(counter.sequence).padStart(4, '0')}`;
 }
 
+// @desc    Get all customers for dropdown (no pagination)
+// @route   GET /api/v1/customers/all
+// @access  Private
+export const getAllCustomersForDropdown = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      search, 
+      customerType, 
+      status, 
+      type
+    } = req.query as any;
+
+    // Build query
+    const query: any = {};
+    
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { phone: { $regex: search, $options: 'i' } },
+        { customerId: { $regex: search, $options: 'i' } },
+      ];
+    }
+    
+    if (customerType) {
+      query.customerType = customerType;
+    }
+    
+    if (status) {
+      query.status = status;
+    }
+
+    if (type) {
+      query.type = type;
+    }
+
+    // Execute query without pagination - get all customers
+    const customers = await Customer.find(query)
+      .select('_id name email phone customerId customerType type status contactPersonName addresses')
+      .sort({ name: 1 }) // Sort by name alphabetically
+      .lean();
+
+    // Ensure 'type' is set to 'customer' if missing
+    const processedCustomers = customers.map((customer: any) => {
+      if (!customer.type) {
+        customer.type = 'customer';
+      }
+      return customer;
+    });
+
+    console.log('Number of customers returned for dropdown:', processedCustomers.length);
+
+    const response: APIResponse = {
+      success: true,
+      message: 'All customers retrieved successfully for dropdown',
+      data: processedCustomers
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get all customers
 // @route   GET /api/v1/customers
 // @access  Private

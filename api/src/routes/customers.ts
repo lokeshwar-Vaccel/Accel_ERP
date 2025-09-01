@@ -26,6 +26,7 @@ import {
   getOEMCustomers,
   getConvertedCustomers,
   exportCustomers,
+  getAllCustomersForDropdown,
 } from '../controllers/customerController';
 import multer from 'multer';
 import { previewCustomerImport, importCustomers } from '../controllers/customerImportController';
@@ -52,6 +53,9 @@ router.get('/oem', checkPermission('read'), getOEMCustomers);
 
 // Converted Customers route
 router.get('/converted', checkPermission('read'), getConvertedCustomers);
+
+// Get all customers for dropdown (no pagination)
+router.get('/all', checkPermission('read'), getAllCustomersForDropdown);
 
 // Customer routes
 router.route('/')

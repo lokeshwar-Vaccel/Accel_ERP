@@ -113,9 +113,9 @@ const createServiceEngineerIfNotExists = async (engineerName: string, createdBy:
 
     const cleanEngineerName = engineerName.trim();
     
-    // First, try to find existing field operator by full name (exact match)
+    // First, try to find existing field engineer by full name (exact match)
     let engineer = await User.findOne({
-      role: UserRole.FIELD_OPERATOR,
+      role: UserRole.FIELD_ENGINEER,
       $or: [
         // Exact match for full name
         { 
@@ -140,7 +140,7 @@ const createServiceEngineerIfNotExists = async (engineerName: string, createdBy:
       const lastName = nameParts.slice(1).join(' ') || '';
       
       engineer = await User.findOne({
-        role: UserRole.FIELD_OPERATOR,
+        role: UserRole.FIELD_ENGINEER,
         $or: [
           // Match by firstName and lastName combination
           {
@@ -161,7 +161,7 @@ const createServiceEngineerIfNotExists = async (engineerName: string, createdBy:
       return engineer;
     }
 
-    // If not found, create new field operator
+    // If not found, create new field engineer
     
     // Split name by space: first word is firstName, rest is lastName
     const nameParts = cleanEngineerName.split(' ');
@@ -183,13 +183,13 @@ const createServiceEngineerIfNotExists = async (engineerName: string, createdBy:
     // Hash the default password "12345"
     const hashedPassword = await bcrypt.hash('12345', 12);
 
-    // Create new field operator with default values
+    // Create new field engineer with default values
     const engineerData = {
       firstName: firstName,
       lastName: lastName, // This will be "Unknown" if only one word
       email: email,
       password: hashedPassword,
-      role: UserRole.FIELD_OPERATOR,
+      role: UserRole.FIELD_ENGINEER,
       status: UserStatus.ACTIVE,
       moduleAccess: [
         { module: 'dashboard', access: true, permission: 'read' },
@@ -205,20 +205,20 @@ const createServiceEngineerIfNotExists = async (engineerName: string, createdBy:
     
     return engineer;
   } catch (error) {
-    console.error(`Error creating field operator ${engineerName}:`, error);
+          console.error(`Error creating field engineer ${engineerName}:`, error);
     
     // Provide more specific error messages
     if (error instanceof Error) {
       if (error.message.includes('duplicate key error')) {
-        throw new Error(`Field operator with email already exists: ${engineerName}`);
+        throw new Error(`Field engineer with email already exists: ${engineerName}`);
       } else if (error.message.includes('validation failed')) {
-        throw new Error(`Validation failed for field operator: ${engineerName} - ${error.message}`);
+                  throw new Error(`Validation failed for field engineer: ${engineerName} - ${error.message}`);
       } else {
-        throw new Error(`Failed to create field operator: ${engineerName} - ${error.message}`);
+                  throw new Error(`Failed to create field engineer: ${engineerName} - ${error.message}`);
       }
     }
     
-    throw new Error(`Failed to create field operator: ${engineerName}`);
+          throw new Error(`Failed to create field engineer: ${engineerName}`);
   }
 };
 
@@ -516,10 +516,10 @@ export const createServiceTicket = async (
       // Check if it's a valid ObjectId
       if (/^[0-9a-fA-F]{24}$/.test(engineerId)) {
         const engineer = await User.findById(engineerId);
-        if (engineer && engineer.role === UserRole.FIELD_OPERATOR) {
+        if (engineer && engineer.role === UserRole.FIELD_ENGINEER) {
           serviceEngineerId = engineer._id;
         } else {
-          return next(new AppError('Invalid service engineer ID or engineer does not have field operator role', 400));
+          return next(new AppError('Invalid service engineer ID or engineer does not have field engineer role', 400));
         }
       } else {
         return next(new AppError('Invalid service engineer ID format', 400));
@@ -765,11 +765,11 @@ export const updateServiceTicket = async (
       
       if (/^[0-9a-fA-F]{24}$/.test(engineerId)) {
         const engineer = await User.findById(engineerId);
-        if (engineer && engineer.role === UserRole.FIELD_OPERATOR) {
+        if (engineer && engineer.role === UserRole.FIELD_ENGINEER) {
           updateData.ServiceEngineerName = engineer._id;
           updateData.assignedTo = engineer._id; // For backward compatibility
         } else {
-          return next(new AppError('Invalid service engineer ID or engineer does not have field operator role', 400));
+          return next(new AppError('Invalid service engineer ID or engineer does not have field engineer role', 400));
         }
       } else {
         return next(new AppError('Invalid service engineer ID format', 400));
@@ -1213,9 +1213,9 @@ export const bulkImportServiceTickets = async (
             if (/^[0-9a-fA-F]{24}$/.test(serviceRequestEngineer)) {
               engineer = await User.findById(serviceRequestEngineer);
               if (engineer) {
-                // Check if the user has FIELD_OPERATOR role
-                if (engineer.role !== UserRole.FIELD_OPERATOR) {
-                  engineer = null; // Reset to null so we create a new FIELD_OPERATOR user
+                // Check if the user has FIELD_ENGINEER role
+                if (engineer.role !== UserRole.FIELD_ENGINEER) {
+                  engineer = null; // Reset to null so we create a new FIELD_ENGINEER user
                 }
               }
             }
@@ -1854,6 +1854,101 @@ export const updateExcelServiceTicket = async (
       message: 'Excel service ticket updated successfully'
     });
   } catch (error) {
+    next(error);
+  }
+}; 
+
+// @desc    Upload PDF for service ticket
+// @route   POST /api/v1/services/:id/upload-pdf
+// @access  Private
+export const uploadServiceTicketPdf = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const ticket = await ServiceTicket.findById(req.params.id);
+    if (!ticket) {
+      return next(new AppError('Service ticket not found', 404));
+    }
+
+    // Check if PDF file was uploaded
+    if (!req.file) {
+      return next(new AppError('No PDF file uploaded', 400));
+    }
+
+    // Delete existing PDF if it exists
+    if (ticket.pdfFile && ticket.pdfFile.filename) {
+      const { deletePdfFile } = await import('../middleware/upload');
+      deletePdfFile(ticket.pdfFile.filename);
+    }
+
+    // Get PDF file URL
+    const { getPdfFileUrl } = await import('../middleware/upload');
+    const fileUrl = getPdfFileUrl(req.file.filename);
+
+    // Update ticket with PDF file information
+    ticket.pdfFile = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      mimetype: req.file.mimetype,
+      size: req.file.size,
+      url: fileUrl
+    };
+
+    await ticket.save();
+
+    const response: APIResponse = {
+      success: true,
+      message: 'PDF uploaded successfully for service ticket',
+      data: {
+        ticket: ticket,
+        pdfFile: ticket.pdfFile
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error: any) {
+    console.error('Error uploading PDF for service ticket:', error);
+    next(error);
+  }
+};
+
+// @desc    Delete PDF from service ticket
+// @route   DELETE /api/v1/services/:id/pdf
+// @access  Private
+export const deleteServiceTicketPdf = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const ticket = await ServiceTicket.findById(req.params.id);
+    if (!ticket) {
+      return next(new AppError('Service ticket not found', 404));
+    }
+
+    if (!ticket.pdfFile || !ticket.pdfFile.filename) {
+      return next(new AppError('No PDF file found for this ticket', 404));
+    }
+
+    // Delete the PDF file from storage
+    const { deletePdfFile } = await import('../middleware/upload');
+    deletePdfFile(ticket.pdfFile.filename);
+
+    // Remove PDF file information from ticket
+    ticket.pdfFile = undefined;
+    await ticket.save();
+
+    const response: APIResponse = {
+      success: true,
+      message: 'PDF deleted successfully from service ticket',
+      data: { ticket: ticket }
+    };
+
+    res.status(200).json(response);
+  } catch (error: any) {
+    console.error('Error deleting PDF from service ticket:', error);
     next(error);
   }
 }; 

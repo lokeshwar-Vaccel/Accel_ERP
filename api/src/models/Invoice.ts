@@ -125,7 +125,7 @@ export interface IInvoice extends mongoose.Document {
     isPrimary: boolean;
     gstNumber?: string;
   };
-  assignedEngineer?: mongoose.Types.ObjectId; // Reference to User with Field Operator role
+  assignedEngineer?: mongoose.Types.ObjectId; // Reference to User with Field Engineer role
   referenceNo?: string;
   referenceDate?: string;
 }

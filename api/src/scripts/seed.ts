@@ -108,7 +108,7 @@ const sampleUsers = [
     lastName: 'Field',
     email: 'alex.field@sunpowerservices.com',
     password: 'field123',
-    role: UserRole.FIELD_OPERATOR,
+    role: UserRole.FIELD_ENGINEER,
     status: 'active',
     moduleAccess: [
       { module: 'dashboard', access: true, permission: 'read' },

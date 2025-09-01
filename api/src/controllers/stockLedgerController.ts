@@ -105,7 +105,7 @@ export const getStockLedger = async (
     }
 
     const ledgerQuery = StockLedger.find(query)
-      .populate('product', 'name category description brand partNo')
+      .populate('product', 'name category description brand partNo price uom')
       .populate('location', 'name address contactPerson')
       .populate('performedBy', 'firstName lastName email')
       .sort(sort as string)
