@@ -121,10 +121,10 @@ export const checkPermission = (action: 'read' | 'write' | 'delete') => {
       }
     }
 
-    // Field Operator-specific restrictions
-    if (req.user.role === UserRole.FIELD_OPERATOR) {
-      const fieldOperatorModules = ['services', 'amc', 'inventory', 'products'];
-      if (!fieldOperatorModules.includes(requestedModule)) {
+    // Field Engineer-specific restrictions
+    if (req.user.role === UserRole.FIELD_ENGINEER) {
+      const fieldEngineerModules = ['services', 'amc', 'inventory', 'products'];
+      if (!fieldEngineerModules.includes(requestedModule)) {
         return next(new AppError('You do not have access to this module', 403));
       }
     }

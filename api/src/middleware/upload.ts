@@ -8,6 +8,12 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir, { recursive: true });
 }
 
+// Ensure PDF upload directory exists
+const pdfUploadDir = path.join(__dirname, '../assets/uploadPdfs');
+if (!fs.existsSync(pdfUploadDir)) {
+  fs.mkdirSync(pdfUploadDir, { recursive: true });
+}
+
 // Configure storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -18,6 +24,19 @@ const storage = multer.diskStorage({
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     const ext = path.extname(file.originalname);
     cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
+// Configure PDF storage
+const pdfStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, pdfUploadDir);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename with timestamp for PDFs
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, 'pdf-' + uniqueSuffix + ext);
   }
 });
 
@@ -67,6 +86,24 @@ const fileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCa
   cb(new Error(`File type ${file.mimetype} is not allowed`));
 };
 
+// PDF file filter
+const pdfFileFilter = (req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  // Only allow PDF files
+  if (file.mimetype === 'application/pdf') {
+    cb(null, true);
+    return;
+  }
+
+  // Check file extension as fallback
+  const fileExtension = file.originalname.toLowerCase();
+  if (fileExtension.endsWith('.pdf')) {
+    cb(null, true);
+    return;
+  }
+
+  cb(new Error('Only PDF files are allowed'));
+};
+
 // Configure multer with disk storage
 const upload = multer({
   storage: storage,
@@ -74,6 +111,16 @@ const upload = multer({
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
     files: 10 // Maximum 10 files per request
+  }
+});
+
+// Configure multer with PDF storage
+const uploadPdf = multer({
+  storage: pdfStorage,
+  fileFilter: pdfFileFilter,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB limit for PDFs
+    files: 1 // Only 1 PDF file per request
   }
 });
 
@@ -89,6 +136,9 @@ const uploadExcel = multer({
 
 // Middleware for single file upload
 export const uploadSingle = upload.single('file');
+
+// Middleware for PDF file upload
+export const uploadPdfSingle = uploadPdf.single('pdfFile');
 
 // Middleware for Excel/CSV file upload (memory storage)
 export const uploadExcelSingle = uploadExcel.single('file');
@@ -124,14 +174,25 @@ export const getFileUrl = (filename: string): string => {
   return `/api/v1/files/${filename}`;
 };
 
+// Helper function to get PDF file URL
+export const getPdfFileUrl = (filename: string): string => {
+  return `/api/v1/files/pdf/${filename}`;
+};
+
 // Helper function to delete file
-export const deleteFile = (filename: string): boolean => {
+export const deleteFile = (filename: string): void => {
   const filePath = path.join(uploadDir, filename);
   if (fs.existsSync(filePath)) {
     fs.unlinkSync(filePath);
-    return true;
   }
-  return false;
+};
+
+// Helper function to delete PDF file
+export const deletePdfFile = (filename: string): void => {
+  const filePath = path.join(pdfUploadDir, filename);
+  if (fs.existsSync(filePath)) {
+    fs.unlinkSync(filePath);
+  }
 };
 
 export default upload; 

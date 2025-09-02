@@ -6,6 +6,7 @@ import {
   updateAMCSchema,
   amcQuerySchema,
   scheduleVisitSchema,
+  scheduleVisitsBulkSchema,
   completeVisitSchema,
   renewAMCSchema
 } from '../schemas';
@@ -22,6 +23,7 @@ import {
   getAMCStats,
   generateAMCReport,
   scheduleEnhancedVisit,
+  scheduleVisitsBulk,
   bulkRenewContracts,
   getAMCPerformance,
   getAMCDetails,
@@ -32,7 +34,11 @@ import {
   getAMCDashboard,
   deleteAMCContract,
   bulkDeleteAMCContracts,
-  archiveAMCContract
+  archiveAMCContract,
+  regenerateVisitSchedule,
+  getAMCsByVisitDate,
+  getVisitScheduleSummary,
+  exportAMCToExcel
 } from '../controllers/amcController';
 
 const router = Router();
@@ -58,6 +64,13 @@ router.get('/expiring-soon', checkPermission('read'), getExpiringSoon);
 router.get('/visits-due', checkPermission('read'), getVisitsDue);
 router.get('/customer/:customerId', checkPermission('read'), getAMCsByCustomer);
 
+// Visit schedule filtering routes
+router.get('/visits-by-date', checkPermission('read'), getAMCsByVisitDate);
+router.get('/visit-schedule-summary', checkPermission('read'), getVisitScheduleSummary);
+
+// Export functionality
+router.get('/export-excel', checkPermission('read'), exportAMCToExcel);
+
 // Enhanced AMC functionality
 router.post('/bulk-renew', checkPermission('write'), bulkRenewContracts);
 router.delete('/bulk-delete', restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), bulkDeleteAMCContracts);
@@ -69,17 +82,21 @@ router.route('/:id')
 
 // AMC actions
 router.post('/:id/schedule-visit', validate(scheduleVisitSchema), checkPermission('write'), scheduleVisit);
-router.post('/visits/:visitId/complete', validate(completeVisitSchema), checkPermission('write'), completeVisit);
+router.post('/:id/complete-visit', validate(completeVisitSchema), checkPermission('write'), completeVisit);
 router.post('/:id/renew', validate(renewAMCSchema), checkPermission('write'), renewAMC);
 
 // Enhanced AMC functionality
 router.post('/:id/schedule-visit-enhanced', checkPermission('write'), scheduleEnhancedVisit);
+router.post('/:id/schedule-visits-bulk', validate(scheduleVisitsBulkSchema), checkPermission('write'), scheduleVisitsBulk);
 router.get('/:id/performance', checkPermission('read'), getAMCPerformance);
 router.get('/:id/details', checkPermission('read'), getAMCDetails);
 router.put('/:id/status', checkPermission('write'), updateAMCStatus);
 
 // Delete and Archive functionality
 router.put('/:id/archive', restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('write'), archiveAMCContract);
+
+// Regenerate visit schedule
+router.put('/:id/regenerate-visits', checkPermission('write'), regenerateVisitSchedule);
 
 // Reports
 router.get('/reports/:type', checkPermission('read'), generateAMCReport);

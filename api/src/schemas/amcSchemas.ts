@@ -4,11 +4,27 @@ import { AMCStatus } from '../types';
 // TypeScript interfaces for validation results
 export interface CreateAMCInput {
   customer: string;
-  products: string[];
-  startDate: string;
-  endDate: string;
-  contractValue: number;
-  scheduledVisits: number;
+  // New fields as per client requirements
+  customerAddress: string;
+  contactPersonName: string;
+  contactNumber: string;
+  engineSerialNumber: string;
+  engineModel: string;
+  kva: number;
+  dgMake: string;
+  dateOfCommissioning: string;
+  amcStartDate: string;
+  amcEndDate: string;
+  amcType: 'AMC' | 'CAMC';
+  numberOfVisits: number;
+  numberOfOilServices: number;
+  status?: AMCStatus;
+  // Legacy fields (keeping for backward compatibility)
+  products?: string[];
+  startDate?: string;
+  endDate?: string;
+  contractValue?: number;
+  scheduledVisits?: number;
   terms?: string;
   contractType?: 'comprehensive' | 'breakdown' | 'preventive' | 'labor_only';
   paymentTerms?: 'annual' | 'semi_annual' | 'quarterly' | 'monthly';
@@ -38,6 +54,21 @@ export interface CreateAMCInput {
 }
 
 export interface UpdateAMCInput {
+  // New fields as per client requirements
+  customerAddress?: string;
+  contactPersonName?: string;
+  contactNumber?: string;
+  engineSerialNumber?: string;
+  engineModel?: string;
+  kva?: number;
+  dgMake?: string;
+  dateOfCommissioning?: string;
+  amcStartDate?: string;
+  amcEndDate?: string;
+  amcType?: 'AMC' | 'CAMC';
+  numberOfVisits?: number;
+  numberOfOilServices?: number;
+  // Legacy fields (keeping for backward compatibility)
   products?: string[];
   startDate?: string;
   endDate?: string;
@@ -59,20 +90,8 @@ export interface UpdateAMCInput {
 }
 
 export interface CompleteVisitInput {
-  visitId: string;
   completedDate: string;
-  assignedTo?: string;
   serviceReport: string;
-  workPerformed?: {
-    task: string;
-    status: 'completed' | 'partial' | 'skipped';
-    notes?: string;
-  }[];
-  partsUsed?: {
-    product: string;
-    quantity: number;
-    covered?: boolean;
-  }[];
   issues?: {
     description: string;
     severity?: 'low' | 'medium' | 'high' | 'critical';
@@ -80,12 +99,8 @@ export interface CompleteVisitInput {
     followUpRequired?: boolean;
   }[];
   customerSignature?: string;
-  customerFeedback?: {
-    rating?: number;
-    comments?: string;
-  };
   nextVisitRecommendations?: string;
-  workDuration?: number;
+  visitIndex?: number;
   images?: {
     url: string;
     description?: string;
@@ -97,8 +112,6 @@ export interface ScheduleVisitInput {
   scheduledDate: string;
   assignedTo: string;
   visitType?: 'routine' | 'breakdown' | 'inspection' | 'emergency';
-  estimatedDuration?: number;
-  notes?: string;
   requiredTools?: string[];
   customerNotified?: boolean;
 }
@@ -202,13 +215,28 @@ export interface AMCImportInput {
 // Base AMC fields
 const baseAMCFields = {
   customer: Joi.string().hex().length(24),
+  // New fields as per client requirements
+  customerAddress: Joi.string().max(500).trim(),
+  contactPersonName: Joi.string().max(100).trim(),
+  contactNumber: Joi.string().max(20).trim(),
+  engineSerialNumber: Joi.string().max(100).trim(),
+  engineModel: Joi.string().max(100).trim(),
+  kva: Joi.number().min(0).precision(2),
+  dgMake: Joi.string().max(100).trim(),
+  dateOfCommissioning: Joi.date().iso(),
+  amcStartDate: Joi.date().iso(),
+  amcEndDate: Joi.date().iso(),
+  amcType: Joi.string().valid('AMC', 'CAMC'),
+  numberOfVisits: Joi.number().integer().min(1),
+  numberOfOilServices: Joi.number().integer().min(0),
+  status: Joi.string().valid(...Object.values(AMCStatus)),
+  // Legacy fields (keeping for backward compatibility)
   products: Joi.array().items(Joi.string().hex().length(24)),
   startDate: Joi.date().iso(),
   endDate: Joi.date().iso(),
   contractValue: Joi.number().min(0).precision(2),
   scheduledVisits: Joi.number().integer().min(1),
   completedVisits: Joi.number().integer().min(0),
-  status: Joi.string().valid(...Object.values(AMCStatus)),
   nextVisitDate: Joi.date().iso(),
   terms: Joi.string().max(5000).allow(''),
   contractType: Joi.string().valid('comprehensive', 'breakdown', 'preventive', 'labor_only'),
@@ -219,11 +247,27 @@ const baseAMCFields = {
 // Create AMC schema
 export const createAMCSchema = Joi.object<CreateAMCInput>({
   customer: baseAMCFields.customer.required(),
-  products: baseAMCFields.products.min(1).required(),
-  startDate: baseAMCFields.startDate.required(),
-  endDate: baseAMCFields.endDate.greater(Joi.ref('startDate')).required(),
-  contractValue: baseAMCFields.contractValue.required(),
-  scheduledVisits: baseAMCFields.scheduledVisits.required(),
+  // New required fields as per client requirements
+  customerAddress: baseAMCFields.customerAddress.required(),
+  contactPersonName: baseAMCFields.contactPersonName.required(),
+  contactNumber: baseAMCFields.contactNumber.required(),
+  engineSerialNumber: baseAMCFields.engineSerialNumber.required(),
+  engineModel: baseAMCFields.engineModel.required(),
+  kva: baseAMCFields.kva.required(),
+  dgMake: baseAMCFields.dgMake.required(),
+  dateOfCommissioning: baseAMCFields.dateOfCommissioning.required(),
+  amcStartDate: baseAMCFields.amcStartDate.required(),
+  amcEndDate: baseAMCFields.amcEndDate.greater(Joi.ref('amcStartDate')).required(),
+  amcType: baseAMCFields.amcType.required(),
+  numberOfVisits: baseAMCFields.numberOfVisits.required(),
+  numberOfOilServices: baseAMCFields.numberOfOilServices.required(),
+  status: Joi.string().valid(...Object.values(AMCStatus)).default('active'),
+  // Legacy fields (optional for backward compatibility)
+  products: baseAMCFields.products,
+  startDate: baseAMCFields.startDate,
+  endDate: baseAMCFields.endDate,
+  contractValue: baseAMCFields.contractValue,
+  scheduledVisits: baseAMCFields.scheduledVisits,
   terms: baseAMCFields.terms,
   contractType: baseAMCFields.contractType.default('comprehensive'),
   paymentTerms: baseAMCFields.paymentTerms.default('annual'),
@@ -256,7 +300,22 @@ export const createAMCSchema = Joi.object<CreateAMCInput>({
 
 // Update AMC schema
 export const updateAMCSchema = Joi.object<UpdateAMCInput>({
-  products: baseAMCFields.products.min(1),
+  // New fields as per client requirements (all optional for updates)
+  customerAddress: baseAMCFields.customerAddress,
+  contactPersonName: baseAMCFields.contactPersonName,
+  contactNumber: baseAMCFields.contactNumber,
+  engineSerialNumber: baseAMCFields.engineSerialNumber,
+  engineModel: baseAMCFields.engineModel,
+  kva: baseAMCFields.kva,
+  dgMake: baseAMCFields.dgMake,
+  dateOfCommissioning: baseAMCFields.dateOfCommissioning,
+  amcStartDate: baseAMCFields.amcStartDate,
+  amcEndDate: baseAMCFields.amcEndDate,
+  amcType: baseAMCFields.amcType,
+  numberOfVisits: baseAMCFields.numberOfVisits,
+  numberOfOilServices: baseAMCFields.numberOfOilServices,
+  // Legacy fields (keeping for backward compatibility)
+  products: baseAMCFields.products,
   startDate: baseAMCFields.startDate,
   endDate: baseAMCFields.endDate,
   contractValue: baseAMCFields.contractValue,
@@ -278,24 +337,8 @@ export const updateAMCSchema = Joi.object<UpdateAMCInput>({
 
 // Visit completion schema
 export const completeVisitSchema = Joi.object<CompleteVisitInput>({
-  visitId: Joi.string().hex().length(24).required(),
   completedDate: Joi.date().iso().required(),
-  assignedTo: Joi.string().hex().length(24),
   serviceReport: Joi.string().max(2000).required(),
-  workPerformed: Joi.array().items(
-    Joi.object({
-      task: Joi.string().max(200).required(),
-      status: Joi.string().valid('completed', 'partial', 'skipped').required(),
-      notes: Joi.string().max(500)
-    })
-  ),
-  partsUsed: Joi.array().items(
-    Joi.object({
-      product: Joi.string().hex().length(24).required(),
-      quantity: Joi.number().min(1).required(),
-      covered: Joi.boolean().default(true) // Whether covered under AMC
-    })
-  ),
   issues: Joi.array().items(
     Joi.object({
       description: Joi.string().max(500).required(),
@@ -304,20 +347,16 @@ export const completeVisitSchema = Joi.object<CompleteVisitInput>({
       followUpRequired: Joi.boolean().default(false)
     })
   ),
-  customerSignature: Joi.string().max(10000), // Base64 encoded
-  customerFeedback: Joi.object({
-    rating: Joi.number().min(1).max(5),
-    comments: Joi.string().max(1000)
-  }),
-  nextVisitRecommendations: Joi.string().max(1000),
-  workDuration: Joi.number().min(0), // in hours
+  customerSignature: Joi.string().max(10000).allow('').optional(), // Base64 encoded - made optional and allow empty
+  nextVisitRecommendations: Joi.string().max(1000).optional(),
+  visitIndex: Joi.number().integer().min(0).optional(), // Add visit index for fallback identification
   images: Joi.array().items(
     Joi.object({
       url: Joi.string().uri(),
       description: Joi.string().max(200),
       type: Joi.string().valid('before', 'during', 'after', 'issue')
     })
-  ).max(20)
+  ).max(20).optional()
 });
 
 // Schedule visit schema
@@ -325,10 +364,19 @@ export const scheduleVisitSchema = Joi.object<ScheduleVisitInput>({
   scheduledDate: Joi.date().iso().greater('now').required(),
   assignedTo: Joi.string().hex().length(24).required(),
   visitType: Joi.string().valid('routine', 'breakdown', 'inspection', 'emergency').default('routine'),
-  estimatedDuration: Joi.number().min(0.5).max(24), // in hours
-  notes: Joi.string().max(500),
   requiredTools: Joi.array().items(Joi.string().max(100)),
   customerNotified: Joi.boolean().default(false)
+});
+
+// Bulk schedule visits schema
+export const scheduleVisitsBulkSchema = Joi.object({
+  visits: Joi.array().items(
+    Joi.object({
+      scheduledDate: Joi.date().iso().required(),
+      assignedTo: Joi.string().hex().length(24).required(),
+      visitType: Joi.string().valid('routine', 'breakdown', 'inspection', 'emergency').default('routine')
+    })
+  ).min(1).required()
 });
 
 // Reschedule visit schema

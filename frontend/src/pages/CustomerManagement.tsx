@@ -1214,6 +1214,7 @@ const CustomerManagement: React.FC = () => {
       siteAddress: '',
       numberOfDG: 1, // Start with 1 since we initialize with one DG detail
       customerType: customerTypeTab === 'oem' ? 'oem' : 'retail',
+      leadSource: '',
       notes: '',
       addresses: [{
         id: Date.now(),
@@ -1275,6 +1276,7 @@ const CustomerManagement: React.FC = () => {
         (customer.address && typeof customer.address === 'object' ? 
           `${customer.address.street}, ${customer.address.city}, ${customer.address.state} ${customer.address.pincode}` : ''),
       customerType: customer.customerType || 'retail',
+      leadSource: (customer as any).leadSource || '',
       notes: customer.notes || '',
       siteAddress: (customer as any).siteAddress || '',
       numberOfDG: (customer as any).numberOfDG || 0,
@@ -2007,9 +2009,13 @@ const CustomerManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   GST Details
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
+
+                {/* Status - Only show for non-suppliers */}
+                {customerTypeTab !== 'supplier' && (
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                )}
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {customerTypeTab === 'oem' ? 'Rating' : 'Customer Type'}
                 </th>
@@ -2147,24 +2153,28 @@ const CustomerManagement: React.FC = () => {
                       })()}
                     </td>
                     
-                    {/* Status Column */}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {customerTypeTab === 'oem' ? (
-                        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
-                          (customer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
-                          (customer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
-                          (customer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          <span className="capitalize">{(customer.status as any) || 'active'}</span>
-                        </span>
-                      ) : (
-                        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.status)}`}>
-                          {getStatusIcon(customer.status)}
-                          <span className="ml-1 capitalize">{customer.status}</span>
-                        </span>
-                      )}
-                    </td>
+
+                    
+                    {/* Status Column - Only show for non-suppliers */}
+                    {customerTypeTab !== 'supplier' && (
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {customerTypeTab === 'oem' ? (
+                          <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
+                            (customer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
+                            (customer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                            (customer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            <span className="capitalize">{(customer.status as any) || 'active'}</span>
+                          </span>
+                        ) : (
+                          <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(customer.status)}`}>
+                            {getStatusIcon(customer.status)}
+                            <span className="ml-1 capitalize">{customer.status}</span>
+                          </span>
+                        )}
+                      </td>
+                    )}
                     
                     {/* Customer Type/Rating Column */}
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
@@ -3925,61 +3935,64 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     )}
 
-                    {customerTypeTab === 'oem' ? (
-                      <div>
-                        <p className="text-xs text-gray-500">Status</p>
-                        <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
-                          (selectedCustomer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
-                          (selectedCustomer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
-                          (selectedCustomer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }`}>
-                          <span className="ml-1 capitalize">{(selectedCustomer.status as any) || 'active'}</span>
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="mb-2">
-                        <div className="relative dropdown-container inline-block">
-                          <button
-                            type="button"
-                            onClick={() => setShowStatusDropdown((v) => !v)}
-                            className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(selectedCustomer.status)} ${showStatusDropdown ? 'ring-2 ring-blue-400 border-blue-300' : 'border-transparent'}`}
-                          >
-                            {getStatusIcon(selectedCustomer.status)}
-                            <span className="ml-2 capitalize">{getStatusLabel(selectedCustomer.status)}</span>
-                            <ChevronDown className={`w-4 h-4 ml-2 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
-                          </button>
-                          {showStatusDropdown && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white p-2 border border-gray-200 rounded-md shadow-lg z-50 py-1 min-w-[160px] flex flex-col">
-                              {statusOptions
-                                .filter(opt => opt.value !== 'all' && opt.value !== selectedCustomer.status)
-                                .map((option) => (
-                                  <button
-                                    key={option.value}
-                                    type="button"
-                                    onClick={async () => {
-                                      await handleStatusChange(selectedCustomer._id, option.value as LeadStatus);
-                                      setSelectedCustomer(prev => prev ? { ...prev, status: option.value as LeadStatus } : prev);
-                                      setShowStatusDropdown(false);
-                                    }}
-                                    className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full w-full mb-2 focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(option.value as LeadStatus)} border-transparent hover:opacity-80 hover:scale-105`}
-                                  >
-                                    {getStatusIcon(option.value as LeadStatus)}
-                                    <span className="ml-2 capitalize">{option.label}</span>
-                                  </button>
-                                ))}
-                            </div>
-                          )}
+                    {/* Status - Only show for non-suppliers */}
+                    {customerTypeTab !== 'supplier' && (
+                      customerTypeTab === 'oem' ? (
+                        <div>
+                          <p className="text-xs text-gray-500">Status</p>
+                          <span className={`inline-flex items-center px-2 py-1 text-xs font-semibold rounded-full ${
+                            (selectedCustomer.status as any) === 'active' ? 'bg-green-100 text-green-800' :
+                            (selectedCustomer.status as any) === 'inactive' ? 'bg-gray-100 text-gray-800' :
+                            (selectedCustomer.status as any) === 'blacklisted' ? 'bg-red-100 text-red-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            <span className="ml-1 capitalize">{(selectedCustomer.status as any) || 'active'}</span>
+                          </span>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="mb-2">
+                          <div className="relative dropdown-container inline-block">
+                            <button
+                              type="button"
+                              onClick={() => setShowStatusDropdown((v) => !v)}
+                              className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(selectedCustomer.status)} ${showStatusDropdown ? 'ring-2 ring-blue-400 border-blue-300' : 'border-transparent'}`}
+                            >
+                              {getStatusIcon(selectedCustomer.status)}
+                              <span className="ml-2 capitalize">{getStatusLabel(selectedCustomer.status)}</span>
+                              <ChevronDown className={`w-4 h-4 ml-2 text-gray-400 transition-transform ${showStatusDropdown ? 'rotate-180' : ''}`} />
+                            </button>
+                            {showStatusDropdown && (
+                              <div className="absolute top-full left-0 right-0 mt-1 bg-white p-2 border border-gray-200 rounded-md shadow-lg z-50 py-1 min-w-[160px] flex flex-col">
+                                {statusOptions
+                                  .filter(opt => opt.value !== 'all' && opt.value !== selectedCustomer.status)
+                                  .map((option) => (
+                                    <button
+                                      key={option.value}
+                                      type="button"
+                                      onClick={async () => {
+                                        await handleStatusChange(selectedCustomer._id, option.value as LeadStatus);
+                                        setSelectedCustomer(prev => prev ? { ...prev, status: option.value as LeadStatus } : prev);
+                                        setShowStatusDropdown(false);
+                                      }}
+                                      className={`inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full w-full mb-2 focus:outline-none transition-colors border cursor-pointer shadow-sm ${getStatusColor(option.value as LeadStatus)} border-transparent hover:opacity-80 hover:scale-105`}
+                                    >
+                                      {getStatusIcon(option.value as LeadStatus)}
+                                      <span className="ml-2 capitalize">{option.label}</span>
+                                    </button>
+                                  ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
                     )}
                     <div>
-                      <p className="text-xs text-gray-500">{customerTypeTab === 'oem' ? 'Products' : 'Lead Source'}</p>
+                      <p className="text-xs text-gray-500">{customerTypeTab === 'oem' ? 'Products' : 'Customer Type'}</p>
                       <p className="font-medium">
                         {customerTypeTab === 'oem' ? 
                           (selectedCustomer.products && Array.isArray(selectedCustomer.products) && selectedCustomer.products.length > 0 ? 
                             `${selectedCustomer.products.length} products` : 'No products') :
-                          (selectedCustomer.leadSource || 'Direct')
+                          (selectedCustomer.customerType || 'N/A')
                         }
                       </p>
                     </div>
@@ -4027,6 +4040,13 @@ const CustomerManagement: React.FC = () => {
                       <div>
                         <p className="text-xs text-gray-500">Alice (Alias)</p>
                         <p className="font-medium text-sm">{selectedCustomer.alice}</p>
+                      </div>
+                    )}
+                    {/* Lead Source - Only show for suppliers */}
+                    {customerTypeTab === 'supplier' && selectedCustomer.leadSource && (
+                      <div>
+                        <p className="text-xs text-gray-500">Lead Source</p>
+                        <p className="font-medium text-sm">{selectedCustomer.leadSource}</p>
                       </div>
                     )}
                     {selectedCustomer.siteAddress && (
@@ -4586,7 +4606,7 @@ const CustomerManagement: React.FC = () => {
                                 {customer.name}
                               </div>
                               <div className="text-xs text-gray-500 mt-1">
-                                {customer.customerType} • {customer.leadSource || 'Direct'}
+                                {customer.customerType}
                               </div>
                               {customer.contactHistory.length > 0 && (
                                 <div className="text-xs text-blue-600 mt-1">

@@ -65,7 +65,8 @@ export const getAMCContracts = async (
 
     // Execute query with pagination
     const contracts = await AMC.find(query)
-      .populate('customer', 'name email phone customerType')
+      .select('contractNumber customer customerAddress contactPersonName contactNumber engineSerialNumber engineModel kva dgMake dateOfCommissioning amcStartDate amcEndDate amcType numberOfVisits numberOfOilServices products startDate endDate contractValue scheduledVisits completedVisits status nextVisitDate visitSchedule terms createdBy createdAt updatedAt')
+      .populate('customer', 'name email phone customerType address')
       .populate('products', 'name category brand modelNumber')
       .populate('createdBy', 'firstName lastName email')
       .populate('visitSchedule.assignedTo', 'firstName lastName email')
@@ -104,6 +105,7 @@ export const getAMCContract = async (
 ): Promise<void> => {
   try {
     const contract = await AMC.findById(req.params.id)
+      .select('contractNumber customer customerAddress contactPersonName contactNumber engineSerialNumber engineModel kva dgMake dateOfCommissioning amcStartDate amcEndDate amcType numberOfVisits numberOfOilServices products startDate endDate contractValue scheduledVisits completedVisits status nextVisitDate visitSchedule terms createdBy createdAt updatedAt')
       .populate('customer', 'name email phone address customerType')
       .populate('products', 'name category brand modelNumber specifications')
       .populate('createdBy', 'firstName lastName email')
@@ -139,15 +141,24 @@ export const createAMCContract = async (
     const contractNumber = `AMC-${new Date().getFullYear()}-${String(contractCount + 1).padStart(4, '0')}`;
 
     // Calculate next visit date (30 days from start)
-    const nextVisitDate = new Date(req.body.startDate);
+    const nextVisitDate = new Date(req.body.amcStartDate);
     nextVisitDate.setDate(nextVisitDate.getDate() + 30);
 
+    // Map new fields to legacy fields for backward compatibility
     const contractData = {
       ...req.body,
       contractNumber,
       nextVisitDate,
       completedVisits: 0,
-      createdBy: req.user!.id
+      createdBy: req.user!.id,
+      // Map new fields to legacy fields
+      startDate: req.body.amcStartDate,
+      endDate: req.body.amcEndDate,
+      scheduledVisits: req.body.numberOfVisits,
+      // Set default contract value if not provided
+      contractValue: req.body.contractValue || 0,
+      // Set default products array if not provided
+      products: req.body.products || []
     };
 
     const contract = await AMC.create(contractData);
@@ -220,6 +231,11 @@ export const scheduleAMCVisit = async (
       return next(new AppError('AMC contract not found', 404));
     }
 
+    // Check if we're exceeding the scheduled visits limit
+    if (contract.visitSchedule.length >= contract.numberOfVisits) {
+      return next(new AppError(`Cannot schedule more visits. Maximum allowed: ${contract.numberOfVisits}`, 400));
+    }
+
     const visitData = {
       scheduledDate: new Date(scheduledDate),
       assignedTo,
@@ -263,21 +279,47 @@ export const completeAMCVisit = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { notes, workCompleted, partsUsed } = req.body;
+    const { completedDate, serviceReport, issues, customerSignature, nextVisitRecommendations, visitIndex } = req.body;
+    const amcId = req.params.id;
 
-    const contract = await AMC.findById(req.params.id);
+    console.log('Completing visit for AMC:', amcId);
+
+    // Find the AMC contract by ID
+    const contract = await AMC.findById(amcId);
+
     if (!contract) {
+      console.log('AMC contract not found:', amcId);
       return next(new AppError('AMC contract not found', 404));
     }
 
-    const visit = (contract.visitSchedule as any).id(req.params.visitId);
-    if (!visit) {
-      return next(new AppError('Visit not found', 404));
+    console.log('Found contract with', contract.visitSchedule.length, 'visits');
+
+    // Find the visit by index
+    if (visitIndex === undefined || visitIndex < 0 || visitIndex >= contract.visitSchedule.length) {
+      console.log('Invalid visit index:', visitIndex);
+      return next(new AppError('Invalid visit index', 400));
     }
 
-    visit.completedDate = new Date();
-    visit.status = 'completed';
-    visit.notes = notes;
+    const visit = contract.visitSchedule[visitIndex];
+    console.log('Found visit at index:', visitIndex, 'Status:', visit.status);
+
+    if (visit.status === 'completed') {
+      return next(new AppError('Visit is already completed', 400));
+    }
+
+
+
+    // Update visit with completion data
+    (visit as any).completedDate = new Date(completedDate);
+    (visit as any).status = 'completed';
+    (visit as any).serviceReport = serviceReport;
+    (visit as any).issues = issues || [];
+    (visit as any).nextVisitRecommendations = nextVisitRecommendations;
+    
+    // Only set customerSignature if provided
+    if (customerSignature && customerSignature.trim() !== '') {
+      (visit as any).customerSignature = customerSignature;
+    }
 
     // Increment completed visits count
     contract.completedVisits += 1;
@@ -668,8 +710,6 @@ export const scheduleEnhancedVisit = async (
       scheduledDate,
       assignedTo,
       visitType = 'routine',
-      estimatedDuration = 2,
-      notes,
       autoSchedule = false,
       scheduleType = 'manual' // manual, automatic, optimized
     } = req.body;
@@ -686,21 +726,24 @@ export const scheduleEnhancedVisit = async (
 
     if (autoSchedule) {
       // Generate automatic visit schedule based on contract terms
-      const startDate = new Date(amc.startDate);
-      const endDate = new Date(amc.endDate);
-      const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-      const visitsPerMonth = amc.scheduledVisits / (totalDays / 30);
+      const startDate = new Date(amc.amcStartDate || amc.startDate);
+      const endDate = new Date(amc.amcEndDate || amc.endDate);
+      const numberOfVisits = amc.numberOfVisits || amc.scheduledVisits;
+      
+      // Calculate the interval in months based on contract duration and number of visits
+      const totalMonths = (endDate.getFullYear() - startDate.getFullYear()) * 12 + 
+                         (endDate.getMonth() - startDate.getMonth());
+      const intervalMonths = Math.floor(totalMonths / numberOfVisits);
 
-      for (let i = 0; i < amc.scheduledVisits; i++) {
+      for (let i = 0; i < numberOfVisits; i++) {
         const visitDate = new Date(startDate);
-        visitDate.setDate(startDate.getDate() + (i * (totalDays / amc.scheduledVisits)));
+        // Schedule visits with proper interval (first visit after interval, not on start date)
+        visitDate.setMonth(startDate.getMonth() + ((i + 1) * intervalMonths));
 
         visitSchedule.push({
           scheduledDate: visitDate.toISOString(),
           assignedTo: assignedTo || amc.createdBy,
           visitType: 'routine',
-          estimatedDuration,
-          notes: `Scheduled visit ${i + 1} of ${amc.scheduledVisits}`,
           status: 'pending'
         });
       }
@@ -710,20 +753,102 @@ export const scheduleEnhancedVisit = async (
         scheduledDate,
         assignedTo,
         visitType,
-        estimatedDuration,
-        notes,
         status: 'pending'
       }];
     }
 
     // Update AMC with new visit schedule
-    amc.visitSchedule = [...(amc.visitSchedule || []), ...visitSchedule];
+    // Replace existing visit schedule instead of appending
+    amc.visitSchedule = visitSchedule;
     await amc.save();
 
     const response: APIResponse = {
       success: true,
       message: 'Visit(s) scheduled successfully',
       data: { visits: visitSchedule, amc }
+    };
+
+    res.status(201).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Bulk schedule visits for AMC contract
+// @route   POST /api/v1/amc/:id/schedule-visits-bulk
+// @access  Private
+export const scheduleVisitsBulk = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { id } = req.params;
+    const { visits } = req.body; // Array of visit objects
+
+    if (!Array.isArray(visits) || visits.length === 0) {
+      return next(new AppError('Visits array is required and cannot be empty', 400));
+    }
+
+    const amc = await AMC.findById(id)
+      .populate('customer', 'name email phone address')
+      .populate('products', 'name category brand modelNumber');
+
+    if (!amc) {
+      return next(new AppError('AMC contract not found', 404));
+    }
+
+    // Validate each visit
+    const validatedVisits = visits.map((visit, index) => {
+      if (!visit.scheduledDate) {
+        throw new AppError(`Visit ${index + 1}: Scheduled date is required`, 400);
+      }
+      if (!visit.assignedTo) {
+        throw new AppError(`Visit ${index + 1}: Assigned engineer is required`, 400);
+      }
+
+      // Validate date format
+      const scheduledDate = new Date(visit.scheduledDate);
+      if (isNaN(scheduledDate.getTime())) {
+        throw new AppError(`Visit ${index + 1}: Invalid date format`, 400);
+      }
+
+      // Validate that assignedTo is a valid ObjectId
+      if (!visit.assignedTo.match(/^[0-9a-fA-F]{24}$/)) {
+        throw new AppError(`Visit ${index + 1}: Invalid engineer ID format`, 400);
+      }
+
+      return {
+        scheduledDate: scheduledDate,
+        assignedTo: visit.assignedTo,
+        visitType: visit.visitType || 'routine',
+        status: 'pending' as const
+      };
+    });
+
+    // Replace the entire visit schedule with the new visits
+    amc.visitSchedule = validatedVisits;
+    
+    // Set next visit date to the first scheduled visit
+    if (validatedVisits.length > 0) {
+      amc.nextVisitDate = validatedVisits[0].scheduledDate;
+    }
+
+    await amc.save();
+
+    const populatedContract = await AMC.findById(amc._id)
+      .populate('customer', 'name email phone')
+      .populate('products', 'name category brand')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('visitSchedule.assignedTo', 'firstName lastName email');
+
+    const response: APIResponse = {
+      success: true,
+      message: `${validatedVisits.length} visit(s) scheduled successfully`,
+      data: { 
+        contract: populatedContract,
+        scheduledVisits: validatedVisits
+      }
     };
 
     res.status(201).json(response);
@@ -869,6 +994,7 @@ export const getAMCDetails = async (
 ): Promise<void> => {
   try {
     const contract = await AMC.findById(req.params.id)
+      .select('contractNumber customer customerAddress contactPersonName contactNumber engineSerialNumber engineModel kva dgMake dateOfCommissioning amcStartDate amcEndDate amcType numberOfVisits numberOfOilServices products startDate endDate contractValue scheduledVisits completedVisits status nextVisitDate visitSchedule terms createdBy createdAt updatedAt')
       .populate('customer', 'name email phone customerType address')
       .populate('products', 'name category brand modelNumber serialNumber')
       .populate('createdBy', 'firstName lastName email')
@@ -1278,6 +1404,578 @@ export const archiveAMCContract = async (
     };
 
     res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Regenerate visit schedule for AMC contract
+// @route   PUT /api/v1/amc/:id/regenerate-visits
+// @access  Private
+export const regenerateVisitSchedule = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const contract = await AMC.findById(req.params.id);
+    if (!contract) {
+      return next(new AppError('AMC contract not found', 404));
+    }
+
+    // Check if contract has completed visits
+    if (contract.completedVisits > 0) {
+      return next(new AppError('Cannot regenerate visit schedule for contracts with completed visits', 400));
+    }
+
+    // Calculate the interval in months based on contract duration and number of visits
+    const totalMonths = (contract.amcEndDate.getFullYear() - contract.amcStartDate.getFullYear()) * 12 + 
+                       (contract.amcEndDate.getMonth() - contract.amcStartDate.getMonth());
+    const intervalMonths = Math.floor(totalMonths / contract.numberOfVisits);
+    
+    // Clear existing visit schedule
+    contract.visitSchedule = [];
+    
+    // Generate new visit schedule
+    for (let i = 0; i < contract.numberOfVisits; i++) {
+      const visitDate = new Date(contract.amcStartDate);
+      // Schedule visits with proper interval (first visit after interval, not on start date)
+      visitDate.setMonth(contract.amcStartDate.getMonth() + ((i + 1) * intervalMonths));
+      
+      contract.visitSchedule.push({
+        scheduledDate: visitDate,
+        status: 'pending' as const
+      });
+    }
+    
+    // Set next visit date to first visit
+    contract.nextVisitDate = contract.visitSchedule[0].scheduledDate;
+    
+    await contract.save();
+
+    const populatedContract = await AMC.findById(contract._id)
+      .populate('customer', 'name email phone')
+      .populate('products', 'name category brand')
+      .populate('createdBy', 'firstName lastName email');
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Visit schedule regenerated successfully',
+      data: { 
+        contract: populatedContract,
+        newSchedule: contract.visitSchedule
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+}; 
+
+// @desc    Get AMC contracts by visit scheduled date
+// @route   GET /api/v1/amc/visits-by-date
+// @access  Private
+export const getAMCsByVisitDate = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      scheduledDate, 
+      page = 1, 
+      limit = 10, 
+      status = 'all',
+      customer = 'all'
+    } = req.query as {
+      scheduledDate: string;
+      page?: string;
+      limit?: string;
+      status?: string;
+      customer?: string;
+    };
+
+    if (!scheduledDate) {
+      return next(new AppError('Scheduled date is required', 400));
+    }
+
+    // Parse the scheduled date
+    let targetDate: Date;
+    if (scheduledDate.includes('/')) {
+      // Handle DD/MM/YYYY format
+      const [day, month, year] = scheduledDate.split('/');
+      targetDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    } else {
+      // Handle YYYY-MM-DD format
+      targetDate = new Date(scheduledDate);
+    }
+    
+    if (isNaN(targetDate.getTime())) {
+      return next(new AppError('Invalid date format', 400));
+    }
+
+    // Set the date range for the entire day (00:00:00 to 23:59:59)
+    const startOfDay = new Date(targetDate);
+    startOfDay.setHours(0, 0, 0, 0);
+    
+    const endOfDay = new Date(targetDate);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    // Build the query - use $elemMatch to match array elements
+    const query: any = {
+      visitSchedule: {
+        $elemMatch: {
+          scheduledDate: {
+            $gte: startOfDay,
+            $lte: endOfDay
+          }
+        }
+      }
+    };
+
+    // Add status filter if specified
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    // Add customer filter if specified
+    if (customer && customer !== 'all') {
+      query.customer = customer;
+    }
+
+
+
+    // Execute query with pagination
+    const contracts = await AMC.find(query)
+      .select('contractNumber customer customerAddress contactPersonName contactNumber engineSerialNumber engineModel kva dgMake dateOfCommissioning amcStartDate amcEndDate amcType numberOfVisits numberOfOilServices products startDate endDate contractValue scheduledVisits completedVisits status nextVisitDate visitSchedule terms createdBy createdAt updatedAt')
+      .populate('customer', 'name email phone customerType address')
+      .populate('products', 'name category brand modelNumber')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('visitSchedule.assignedTo', 'firstName lastName email')
+      .sort('-createdAt')
+      .limit(Number(limit))
+      .skip((Number(page) - 1) * Number(limit));
+
+
+
+    // Get total count for pagination
+    const total = await AMC.countDocuments(query);
+    const pages = Math.ceil(total / Number(limit));
+
+    // Process the results to include visit details for the specific date
+    const processedContracts = contracts.map(contract => {
+      const contractObj = contract.toObject();
+      
+      // Filter visit schedule to only include visits on the target date
+      const visitsOnDate = contract.visitSchedule.filter((visit: any) => {
+        const visitDate = new Date(visit.scheduledDate);
+        return visitDate >= startOfDay && visitDate <= endOfDay;
+      });
+
+      return {
+        ...contractObj,
+        visitsOnDate,
+        visitCountOnDate: visitsOnDate.length
+      };
+    });
+
+    // Calculate summary statistics
+    const totalVisitsOnDate = processedContracts.reduce((sum, contract) => sum + contract.visitCountOnDate, 0);
+    const uniqueCustomers = new Set(processedContracts.map(c => c.customer._id.toString())).size;
+    const totalContractValue = processedContracts.reduce((sum, contract) => sum + (contract.contractValue || 0), 0);
+
+    const response: APIResponse = {
+      success: true,
+      message: `AMC contracts with visits scheduled on ${scheduledDate} retrieved successfully`,
+      data: { 
+        contracts: processedContracts,
+        summary: {
+          totalContracts: processedContracts.length,
+          totalVisitsOnDate,
+          uniqueCustomers,
+          totalContractValue,
+          scheduledDate
+        }
+      },
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get visit schedule summary by date range
+// @route   GET /api/v1/amc/visit-schedule-summary
+// @access  Private
+export const getVisitScheduleSummary = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      startDate, 
+      endDate,
+      status = 'all'
+    } = req.query as {
+      startDate: string;
+      endDate: string;
+      status?: string;
+    };
+
+    if (!startDate || !endDate) {
+      return next(new AppError('Start date and end date are required', 400));
+    }
+
+    // Parse the dates
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return next(new AppError('Invalid date format', 400));
+    }
+
+    // Set time to cover full days
+    start.setHours(0, 0, 0, 0);
+    end.setHours(23, 59, 59, 999);
+
+    // Build the query
+    const query: any = {
+      'visitSchedule.scheduledDate': {
+        $gte: start,
+        $lte: end
+      }
+    };
+
+    // Add status filter if specified
+    if (status && status !== 'all') {
+      query.status = status;
+    }
+
+    // Aggregate to get visit schedule summary
+    const summary = await AMC.aggregate([
+      { $match: query },
+      { $unwind: '$visitSchedule' },
+      {
+        $match: {
+          'visitSchedule.scheduledDate': {
+            $gte: start,
+            $lte: end
+          }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$visitSchedule.scheduledDate' } },
+            status: '$visitSchedule.status'
+          },
+          count: { $sum: 1 },
+          contracts: { $addToSet: '$_id' },
+          contractNumbers: { $addToSet: '$contractNumber' }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.date',
+          visits: {
+            $push: {
+              status: '$_id.status',
+              count: '$count',
+              contracts: '$contracts',
+              contractNumbers: '$contractNumbers'
+            }
+          },
+          totalVisits: { $sum: '$count' },
+          uniqueContracts: { $addToSet: '$_id' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Get additional statistics
+    const totalContracts = await AMC.countDocuments(query);
+    const totalVisitsInRange = summary.reduce((sum, day) => sum + day.totalVisits, 0);
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Visit schedule summary retrieved successfully',
+      data: {
+        summary,
+        statistics: {
+          totalContracts,
+          totalVisitsInRange,
+          dateRange: { startDate, endDate }
+        }
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+}; 
+
+// @desc    Export AMC contracts to Excel with filters
+// @route   GET /api/v1/amc/export-excel
+// @access  Private
+export const exportAMCToExcel = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const {
+      search,
+      status,
+      customer,
+      dateFrom,
+      dateTo,
+      expiringIn
+    } = req.query as {
+      search?: string;
+      status?: AMCStatus;
+      customer?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      expiringIn?: string;
+    };
+
+    // Build query based on filters
+    const query: any = {};
+
+    if (search) {
+      query.$or = [
+        { contractNumber: { $regex: search, $options: 'i' } },
+        { terms: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    if (status) {
+      query.status = status;
+    }
+
+    if (customer) {
+      query.customer = customer;
+    }
+
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) query.createdAt.$lte = new Date(dateTo);
+    }
+
+    // Handle expiring contracts filter
+    if (expiringIn) {
+      const days = parseInt(expiringIn);
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + days);
+      query.endDate = { $lte: expiryDate };
+      query.status = AMCStatus.ACTIVE;
+    }
+
+    // Fetch contracts with all necessary data
+    const contracts = await AMC.find(query)
+      .populate('customer', 'name email phone customerType address')
+      .populate('products', 'name category brand modelNumber')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('visitSchedule.assignedTo', 'firstName lastName email')
+      .sort('-createdAt');
+
+    // Helper function to format dates for Excel
+    const formatDateForExcel = (date: Date | string): string => {
+      if (!date) return '';
+      try {
+        const d = new Date(date);
+        if (isNaN(d.getTime())) return '';
+        return d.toLocaleDateString('en-IN');
+      } catch (error) {
+        return '';
+      }
+    };
+
+    // Helper function to format currency for Excel
+    const formatCurrencyForExcel = (amount: number): string => {
+      if (!amount || isNaN(amount)) return '0.00';
+      return new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR'
+      }).format(amount);
+    };
+
+    // Helper function to get customer name
+    const getCustomerName = (customer: any): string => {
+      if (!customer) return '';
+      if (typeof customer === 'string') return customer;
+      return customer.name || '';
+    };
+
+    // Helper function to get user name
+    const getUserName = (user: any): string => {
+      if (!user) return '';
+      if (typeof user === 'string') return user;
+      return user.fullName || `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || '';
+    };
+
+    // Helper function to calculate days until expiry
+    const getDaysUntilExpiry = (endDate: Date | string): number => {
+      if (!endDate) return 0;
+      try {
+        const end = new Date(endDate);
+        const now = new Date();
+        const diffTime = end.getTime() - now.getTime();
+        return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      } catch (error) {
+        return 0;
+      }
+    };
+
+    // Helper function to calculate completion percentage
+    const getCompletionPercentage = (completed: number, scheduled: number): number => {
+      if (!scheduled || scheduled === 0) return 0;
+      return Math.round((completed / scheduled) * 100);
+    };
+
+        // Export data with all information
+    const excelData = contracts.map((contract, index) => {
+      // Get visit schedule information
+      const maxVisits = Math.max(contract.numberOfVisits || contract.scheduledVisits || 0, 
+                                contract.visitSchedule ? contract.visitSchedule.length : 0);
+      
+      // Create base object with common fields
+      const baseData: any = {
+        'S.No': index + 1,
+        'Contract Number': contract.contractNumber,
+        'Customer Name': getCustomerName(contract.customer),
+        'Customer Email': contract.customer && typeof contract.customer === 'object' ? (contract.customer as any).email : '',
+        'Customer Phone': contract.customer && typeof contract.customer === 'object' ? (contract.customer as any).phone : '',
+        'Customer Type': contract.customer && typeof contract.customer === 'object' ? (contract.customer as any).customerType : '',
+        'Customer Address': contract.customerAddress || (contract.customer && typeof contract.customer === 'object' ? (contract.customer as any).address : ''),
+        'Contact Person': contract.contactPersonName || '',
+        'Contact Number': contract.contactNumber || '',
+        'Engine Serial Number': contract.engineSerialNumber || '',
+        'Engine Model': contract.engineModel || '',
+        'KVA Rating': contract.kva || '',
+        'DG Make': contract.dgMake || '',
+        'Date of Commissioning': formatDateForExcel(contract.dateOfCommissioning),
+        'AMC Type': contract.amcType || 'AMC',
+        'Number of Visits': contract.numberOfVisits || contract.scheduledVisits,
+        'Number of Oil Services': contract.numberOfOilServices || 0,
+        'AMC Start Date': formatDateForExcel(contract.amcStartDate || contract.startDate),
+        'AMC End Date': formatDateForExcel(contract.amcEndDate || contract.endDate),
+        'Status': contract.status,
+        'Days Until Expiry': getDaysUntilExpiry(contract.amcEndDate || contract.endDate),
+        'Scheduled Visits': contract.scheduledVisits || contract.numberOfVisits,
+        'Completed Visits': contract.completedVisits,
+        'Remaining Visits': Math.max(0, (contract.scheduledVisits || contract.numberOfVisits) - contract.completedVisits),
+        'Completion %': getCompletionPercentage(contract.completedVisits, contract.scheduledVisits || contract.numberOfVisits)
+      };
+
+      // Add visit-specific columns
+      for (let i = 1; i <= maxVisits; i++) {
+        const visit = contract.visitSchedule && contract.visitSchedule[i - 1];
+        if (visit) {
+          baseData[`Visit ${i} Date`] = formatDateForExcel(visit.scheduledDate);
+          baseData[`Visit ${i} Engineer`] = getUserName(visit.assignedTo) || 'Unassigned';
+        } else {
+          baseData[`Visit ${i} Date`] = '';
+          baseData[`Visit ${i} Engineer`] = '';
+        }
+      }
+
+      return baseData;
+    });
+
+        // Create Excel workbook
+    const XLSX = require('xlsx');
+    const workbook = XLSX.utils.book_new();
+    
+    // Set column widths
+    const columnWidths = [
+      { wch: 8 },   // S.No
+      { wch: 20 },  // Contract Number
+      { wch: 30 },  // Customer Name
+      { wch: 25 },  // Customer Email
+      { wch: 15 },  // Customer Phone
+      { wch: 15 },  // Customer Type
+      { wch: 40 },  // Customer Address
+      { wch: 20 },  // Contact Person
+      { wch: 15 },  // Contact Number
+      { wch: 20 },  // Engine Serial Number
+      { wch: 15 },  // Engine Model
+      { wch: 12 },  // KVA Rating
+      { wch: 15 },  // DG Make
+      { wch: 20 },  // Date of Commissioning
+      { wch: 10 },  // AMC Type
+      { wch: 15 },  // Number of Visits
+      { wch: 20 },  // Number of Oil Services
+      { wch: 12 },  // AMC Start Date
+      { wch: 12 },  // AMC End Date
+      { wch: 12 },  // Status
+      { wch: 15 },  // Days Until Expiry
+      { wch: 15 },  // Scheduled Visits
+      { wch: 15 },  // Completed Visits
+      { wch: 15 },  // Remaining Visits
+      { wch: 12 }   // Completion %
+    ];
+
+    // Add column widths for visit-specific columns (up to 12 visits)
+    for (let i = 1; i <= 12; i++) {
+      columnWidths.push({ wch: 15 }); // Visit X Date
+      columnWidths.push({ wch: 20 }); // Visit X Engineer
+    }
+
+    // Create worksheet directly from data (no title row)
+    let worksheet = XLSX.utils.json_to_sheet(excelData);
+
+    // Set column widths
+    worksheet['!cols'] = columnWidths;
+
+    // Add styling to headers (row 1)
+    const headerRange = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:A1');
+    for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col }); // Row 0 (first row)
+      if (worksheet[cellAddress]) {
+        worksheet[cellAddress].s = {
+          fill: {
+            fgColor: { rgb: "4472C4" }, // Blue background
+            patternType: "solid"
+          },
+          font: {
+            bold: true,
+            color: { rgb: "FFFFFF" } // White text
+          },
+          alignment: {
+            horizontal: "center",
+            vertical: "center"
+          }
+        };
+      }
+    }
+
+    // Add the worksheet to workbook
+    const sheetName = `AMC_Export_${new Date().toISOString().split('T')[0]}`;
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+    // Generate buffer
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    // Set response headers
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="AMC_Export_${new Date().toISOString().split('T')[0]}.xlsx"`);
+    res.setHeader('Content-Length', buffer.length);
+
+    // Send the file
+    res.send(buffer);
+
   } catch (error) {
     next(error);
   }
