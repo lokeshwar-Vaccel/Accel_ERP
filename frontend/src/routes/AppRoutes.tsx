@@ -98,9 +98,6 @@ const AppRoutes: React.FC = () => {
             {/* DG Sales */}
             <Route path="/dg-sales" element={<DGSales />} />
             
-            {/* DG Customers */}
-            <Route path="/dg-customers" element={<DGCustomers />} />
-            
             {/* DG Quotation Management */}
             <Route path="/dg-quotation/create" element={<DGQuotationForm />} />
             <Route path="/dg-quotation/edit/:id" element={<DGQuotationForm />} />

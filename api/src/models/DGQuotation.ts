@@ -4,6 +4,21 @@ export interface IDGQuotation extends Document {
   quotationNumber: string;
   issueDate: Date;
   validUntil: Date;
+  quotationRevisionNo: string;
+  // DG Product Selection fields
+  subject: string;
+  annexureRating: string;
+  dgModel: string;
+  cylinder: string;
+  // Warranty fields
+  warrantyFromInvoice: string;
+  warrantyFromCommissioning: string;
+  warrantyHours: string;
+  // Terms & Conditions fields
+  taxRate: string;
+  freightTerms: string;
+  deliveryPeriod: string;
+  validityDays: string;
   dgEnquiry?: Types.ObjectId; // Reference to DGEnquiry
   enquiryDetails?: {
     enquiryNo: string;
@@ -15,8 +30,9 @@ export interface IDGQuotation extends Document {
     plannedFollowUpDate: Date;
     numberOfFollowUps: number;
   };
+  location?: string; // Reference to StockLocation
   customer: {
-    _id?: string; // DGCustomer ID for reference
+    _id?: string; // Customer ID for reference
     name: string;
     email: string;
     phone: string;
@@ -26,6 +42,20 @@ export interface IDGQuotation extends Document {
     pinCode?: string;
     tehsil?: string;
     district?: string;
+  };
+  billToAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    addressId?: number;
+  };
+  shipToAddress?: {
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    addressId?: number;
   };
   company: {
     name?: string;
@@ -45,65 +75,69 @@ export interface IDGQuotation extends Document {
     kva: string;
     phase: string;
     quantity: number;
-    fuelType?: string;
-    engineModel?: string;
-    alternatorModel?: string;
-    fuelTankCapacity?: string;
-    runtime?: string;
-    noiseLevel?: string;
-    emissionCompliance?: string;
   };
-  items: Array<{
+  dgItems: Array<{
     product: string;
     description: string;
-    hsnCode?: string;
-    partNo?: string;
     quantity: number;
-    uom: string;
     unitPrice: number;
-    discount: number;
-    discountedAmount: number;
-    taxRate: number;
-    taxAmount: number;
     totalPrice: number;
-  }>;
-  services: Array<{
-    serviceName: string;
-    description: string;
-    quantity: number;
-    uom: string;
-    unitPrice: number;
-    discount: number;
-    discountedAmount: number;
-    taxRate: number;
-    taxAmount: number;
-    totalPrice: number;
+    kva: string;
+    phase: string;
+    annexureRating: string;
+    dgModel: string;
+    numberOfCylinders: number;
+    subject: string;
+    isActive: boolean;
   }>;
   subtotal: number;
   totalDiscount: number;
   totalTax: number;
   grandTotal: number;
   roundOff: number;
+  grandTotalInWords: string;
   notes?: string;
   terms?: string;
-  validityPeriod: number;
-  deliveryTerms?: string;
   paymentTerms?: string;
   warrantyTerms?: string;
   installationTerms?: string;
   commissioningTerms?: string;
+  validityPeriod: number;
+  deliveryTerms?: string;
   createdBy: string;
   status: 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired';
   sentDate?: Date;
   acceptedDate?: Date;
   rejectedDate?: Date;
   rejectionReason?: string;
+  fromDateInvoice?: string;
+  fromCommissingDate?: string;
+  hours:string;
+  taxes:string;
+  freight:string;
+  validity: string;
+  employeeDetails: string;
 }
 
 const DGQuotationSchema = new Schema<IDGQuotation>({
   quotationNumber: { type: String, unique: true, required: true },
   issueDate: { type: Date, required: true },
   validUntil: { type: Date, required: true },
+  quotationRevisionNo: { type: String, required: true, default: '01' },
+  // DG Product Selection fields
+  subject: { type: String },
+  annexureRating: { type: String },
+  dgModel: { type: String },
+  cylinder: { type: String },
+  // Warranty fields
+  warrantyFromInvoice: { type: String, default: '30' },
+  warrantyFromCommissioning: { type: String, default: '24' },
+  warrantyHours: { type: String, default: '5000' },
+  // Terms & Conditions fields
+  taxRate: { type: String, default: '18' },
+  freightTerms: { type: String, default: 'extra' },
+  deliveryPeriod: { type: String, default: '6' },
+  validityDays: { type: String, default: '30' },
   dgEnquiry: { type: Schema.Types.ObjectId, ref: 'DGEnquiry' },
   enquiryDetails: {
     enquiryNo: { type: String },
@@ -115,8 +149,9 @@ const DGQuotationSchema = new Schema<IDGQuotation>({
     plannedFollowUpDate: { type: Date },
     numberOfFollowUps: { type: Number, default: 0 },
   },
+  location: { type: Schema.Types.ObjectId, ref: 'StockLocation' },
   customer: {
-    _id: { type: String },
+    _id: { type: Schema.Types.ObjectId, ref: 'Customer' },
     name: { type: String, required: true },
     email: { type: String },
     phone: { type: String },
@@ -126,6 +161,20 @@ const DGQuotationSchema = new Schema<IDGQuotation>({
     pinCode: { type: String },
     tehsil: { type: String },
     district: { type: String },
+  },
+  billToAddress: {
+    address: { type: String, trim: true },
+    state: { type: String, trim: true },
+    district: { type: String, trim: true },
+    pincode: { type: String, trim: true },
+    addressId: { type: Number },
+  },
+  shipToAddress: {
+    address: { type: String, trim: true },
+    state: { type: String, trim: true },
+    district: { type: String, trim: true },
+    pincode: { type: String, trim: true },
+    addressId: { type: Number },
   },
   company: {
     name: { type: String },
@@ -145,57 +194,47 @@ const DGQuotationSchema = new Schema<IDGQuotation>({
     kva: { type: String, required: true },
     phase: { type: String, required: true },
     quantity: { type: Number, required: true },
-    fuelType: { type: String },
-    engineModel: { type: String },
-    alternatorModel: { type: String },
-    fuelTankCapacity: { type: String },
-    runtime: { type: String },
-    noiseLevel: { type: String },
-    emissionCompliance: { type: String },
+    segment: { type: String },
+    subSegment: { type: String },
+    dgOwnership: { type: String },
   },
-  items: [
+  dgItems: [
     {
       product: { type: String, required: true },
       description: { type: String, required: true },
-      hsnCode: { type: String },
-      partNo: { type: String },
       quantity: { type: Number, required: true },
-      uom: { type: String, required: true },
       unitPrice: { type: Number, required: true },
-      discount: { type: Number, default: 0 },
-      discountedAmount: { type: Number, required: true },
-      taxRate: { type: Number, required: true },
-      taxAmount: { type: Number, required: true },
       totalPrice: { type: Number, required: true },
-    },
-  ],
-  services: [
-    {
-      serviceName: { type: String, required: true },
-      description: { type: String, required: true },
-      quantity: { type: Number, required: true },
-      uom: { type: String, required: true },
-      unitPrice: { type: Number, required: true },
-      discount: { type: Number, default: 0 },
-      discountedAmount: { type: Number, required: true },
-      taxRate: { type: Number, required: true },
-      taxAmount: { type: Number, required: true },
-      totalPrice: { type: Number, required: true },
+      kva: { type: String, required: true },
+      phase: { type: String, required: true },
+      annexureRating: { type: String, required: true },
+      dgModel: { type: String, required: true },
+      numberOfCylinders: { type: Number, required: true },
+      subject: { type: String, required: true },
+      isActive: { type: Boolean, required: true },
     },
   ],
   subtotal: { type: Number, required: true },
-  totalDiscount: { type: Number, required: true },
+  totalDiscount: { type: Number, default: 0 },
   totalTax: { type: Number, required: true },
   grandTotal: { type: Number, required: true },
   roundOff: { type: Number, default: 0 },
+  grandTotalInWords: { type: String },
   notes: { type: String },
   terms: { type: String },
-  validityPeriod: { type: Number, required: true },
+  validityPeriod: { type: Number, default: 30 },
   deliveryTerms: { type: String },
   paymentTerms: { type: String },
   warrantyTerms: { type: String },
   installationTerms: { type: String },
   commissioningTerms: { type: String },
+  fromDateInvoice: { type: String },
+  fromCommissingDate: { type: String },
+  hours: { type: String },
+  taxes: { type: String },
+  freight: { type: String },
+  validity: { type: String },
+  employeeDetails: { type: String },
   createdBy: { type: String, required: true },
   status: { 
     type: String, 

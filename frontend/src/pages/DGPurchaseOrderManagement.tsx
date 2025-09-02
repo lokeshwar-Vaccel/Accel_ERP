@@ -66,24 +66,22 @@ interface DGPOItem1 {
   taxRate: number;
 }
 
-interface DGCustomer {
-  _id: string;
-  name: string;
-  email: string;
-  phone: string;
-  pan?: string;
-  corporateName?: string;
-  address?: string;
-  pinCode?: string;
-  tehsil?: string;
-  district?: string;
-}
-
 interface DGPurchaseOrder {
   _id: string;
   poNumber: string;
   dgQuotation?: string;
-  customer: DGCustomer;
+  customer: {
+    _id?: string;
+    name: string;
+    email: string;
+    phone: string;
+    pan?: string;
+    corporateName?: string;
+    address?: string;
+    pinCode?: string;
+    tehsil?: string;
+    district?: string;
+  };
   supplier: string;
   supplierEmail: string;
   supplierAddress: {
@@ -236,7 +234,6 @@ const DGPurchaseOrderManagement: React.FC = () => {
 
   // State management
   const [purchaseOrders, setPurchaseOrders] = useState<DGPurchaseOrder[]>([]);
-  const [dgCustomers, setDgCustomers] = useState<DGCustomer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [locations, setLocations] = useState<StockLocation[]>([]);
@@ -332,7 +329,6 @@ const DGPurchaseOrderManagement: React.FC = () => {
     try {
       await Promise.all([
         fetchPurchaseOrders(),
-        fetchDGCustomers(),
         fetchProducts(),
         fetchSuppliers(),
         fetchLocations(),
@@ -371,17 +367,6 @@ const DGPurchaseOrderManagement: React.FC = () => {
     } catch (error) {
       console.error('Error fetching purchase orders:', error);
       toast.error('Failed to load purchase orders');
-    }
-  };
-
-  const fetchDGCustomers = async () => {
-    try {
-      const response = await apiClient.customers.dgCustomers.getAll({});
-      if (response.success) {
-        setDgCustomers(response.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching DG customers:', error);
     }
   };
 
@@ -1053,43 +1038,15 @@ const DGPurchaseOrderManagement: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Customer <span className="text-red-500">*</span>
+                      Customer Name <span className="text-red-500">*</span>
                     </label>
-                    <select
-                      value={formData.customer._id || ''}
-                      onChange={(e) => {
-                        const customer = dgCustomers.find(c => c._id === e.target.value);
-                        if (customer) {
-                          setFormData(prev => ({
-                            ...prev,
-                            customer: {
-                              _id: customer._id,
-                              name: customer.name,
-                              email: customer.email,
-                              phone: customer.phone,
-                              pan: customer.pan || '',
-                              corporateName: customer.corporateName || '',
-                              address: customer.address || '',
-                              pinCode: customer.pinCode || '',
-                              tehsil: customer.tehsil || '',
-                              district: customer.district || ''
-                            }
-                          }));
-                        }
-                      }}
+                    <input
+                      type="text"
+                      value={formData.customer.name}
+                      onChange={(e) => setFormData(prev => ({ ...prev, customer: { ...prev.customer, name: e.target.value } }))}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.customer ? 'border-red-500' : 'border-gray-300'}`}
-                    >
-                      <option value="">Select customer...</option>
-                      {!Array.isArray(dgCustomers) || dgCustomers.length === 0 ? (
-                        <option value="" disabled>Loading customers...</option>
-                      ) : (
-                        dgCustomers.map(customer => (
-                          <option key={customer._id} value={customer._id}>
-                            {customer.name} - {customer.email}
-                          </option>
-                        ))
-                      )}
-                    </select>
+                      placeholder="Enter customer name"
+                    />
                     {formErrors.customer && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.customer}</p>
                     )}

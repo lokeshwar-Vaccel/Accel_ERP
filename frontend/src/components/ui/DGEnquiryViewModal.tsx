@@ -68,21 +68,27 @@ export default function DGEnquiryViewModal({ isOpen, onClose, onSuccess, enquiry
       return;
     }
 
+    if (!enquiry.customer?._id) {
+      toast.error('Customer ID not found');
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await apiClient.dgSales.enquiries.update(enquiry._id, {
-        enquiryStatus: 'Qualified'
+      // Update customer status to 'Converted' instead of enquiry status
+      const response = await apiClient.customers.update(enquiry.customer._id, {
+        status: 'converted'
       });
 
       if (response.success) {
-        toast.success('Customer status changed to Qualified successfully!');
+        toast.success('Customer status updated to Converted successfully!');
         onSuccess();
         onClose();
       } else {
-        throw new Error('Failed to update status');
+        throw new Error('Failed to update customer status');
       }
     } catch (error: any) {
-      console.error('Error updating status:', error);
+      console.error('Error updating customer status:', error);
       toast.error(error.message || 'Failed to update customer status');
     } finally {
       setLoading(false);
@@ -107,12 +113,12 @@ export default function DGEnquiryViewModal({ isOpen, onClose, onSuccess, enquiry
           <div className="flex items-center space-x-3">
             <Button
               onClick={handleQualifyCustomer}
-              disabled={loading || enquiry.enquiryStatus === 'Qualified'}
-              variant={enquiry.enquiryStatus === 'Qualified' ? 'outline' : 'primary'}
+              disabled={loading || enquiry.customer?.status === 'converted'}
+              variant={enquiry.customer?.status === 'converted' ? 'outline' : 'primary'}
               className="flex items-center space-x-2"
             >
               <CheckCircle className="h-4 w-4" />
-              <span>{enquiry.enquiryStatus === 'Qualified' ? 'Already Qualified' : 'Qualify Customer'}</span>
+              <span>{enquiry.customer?.status === 'converted' ? 'Customer Already Converted' : 'Qualify Customer'}</span>
             </Button>
             <button
               onClick={onClose}
@@ -202,6 +208,14 @@ export default function DGEnquiryViewModal({ isOpen, onClose, onSuccess, enquiry
                 <div>
                   <label className="block text-sm font-medium text-gray-700">DG Ownership</label>
                   <p className="mt-1 text-sm text-gray-900">{enquiry.dgOwnership || 'NOT_OWNED'}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Customer Status</label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    <Badge variant={enquiry.customer?.status === 'converted' ? 'success' : 'info'}>
+                      {enquiry.customer?.status === 'converted' ? 'Converted' : 'New'}
+                    </Badge>
+                  </p>
                 </div>
               </div>
             </div>

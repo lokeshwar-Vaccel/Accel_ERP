@@ -1,0 +1,57 @@
+  // Effect to handle enquiry data and auto-fill customer details
+  useEffect(() => {
+    console.log('Enquiry data received:', enquiry);
+    console.log('Customers loaded:', customers);
+    
+    if (enquiry && enquiry.customerId) {
+      console.log('Looking for customer with ID:', enquiry.customerId);
+      // Find the customer in the customers list
+      const customer = customers.find(cust => cust._id === enquiry.customerId);
+      console.log('Found customer:', customer);
+      
+      if (customer) {
+        console.log('Auto-filling customer details:', customer);
+        // Set the customer details
+        setFormData(prev => ({
+          ...prev,
+          customer: {
+            _id: customer._id,
+            name: customer.name,
+            email: customer.email || '',
+            phone: customer.phone || '',
+            pan: customer.pan || '',
+            corporateName: customer.corporateName || '',
+            address: customer.address || '',
+            pinCode: customer.pinCode || '',
+            tehsil: customer.tehsil || '',
+            district: customer.district || ''
+          }
+        }));
+        
+        // Show success message
+        toast.success(`Customer "${customer.name}" details auto-filled successfully!`);
+      } else {
+        console.log('Customer not found in customers list');
+        // If customer not found in list, try to use enquiry data directly
+        if (enquiry.customerName) {
+          console.log('Using enquiry data directly for customer details');
+          setFormData(prev => ({
+            ...prev,
+            customer: {
+              _id: enquiry.customerId || '',
+              name: enquiry.customerName || '',
+              email: enquiry.email || '',
+              phone: enquiry.phoneNumber || '',
+              pan: enquiry.panNumber || '',
+              corporateName: enquiry.corporateName || '',
+              address: enquiry.address || '',
+              pinCode: enquiry.pinCode || '',
+              tehsil: enquiry.tehsil || '',
+              district: enquiry.district || ''
+            }
+          }));
+          toast.success(`Customer "${enquiry.customerName}" details auto-filled from enquiry data!`);
+        }
+      }
+    }
+  }, [enquiry, customers]);

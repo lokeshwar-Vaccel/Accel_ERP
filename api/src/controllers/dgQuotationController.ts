@@ -3,7 +3,6 @@ import { AuthenticatedRequest } from '../types';
 import { AppError } from '../errors/AppError';
 import { DGQuotation } from '../models/DGQuotation';
 import { DGEnquiry } from '../models/DGEnquiry';
-import { DGCustomer } from '../models/DGCustomer';
 import { Product } from '../models/Product';
 import { generateReferenceId } from '../utils/generateReferenceId';
 import { 
@@ -13,17 +12,18 @@ import {
 } from '../schemas/dgQuotationSchemas';
 
 // Helper function to calculate quotation totals
-const calculateQuotationTotals = (items: any[], services: any[] = []) => {
+const calculateQuotationTotals = (items: any[], services: any[] = [], globalTaxRate: string = '18') => {
   let subtotal = 0;
   let totalDiscount = 0;
   let totalTax = 0;
+  const taxRatePercent = parseFloat(globalTaxRate);
 
   // Calculate items totals
   items.forEach(item => {
     const itemTotal = item.quantity * item.unitPrice;
-    const discountAmount = (itemTotal * item.discount) / 100;
+    const discountAmount = (itemTotal * (item.discount || 0)) / 100;
     const discountedAmount = itemTotal - discountAmount;
-    const taxAmount = (discountedAmount * item.taxRate) / 100;
+    const taxAmount = (discountedAmount * taxRatePercent) / 100;
     
     subtotal += itemTotal;
     totalDiscount += discountAmount;
@@ -33,9 +33,9 @@ const calculateQuotationTotals = (items: any[], services: any[] = []) => {
   // Calculate services totals
   services.forEach(service => {
     const serviceTotal = service.quantity * service.unitPrice;
-    const discountAmount = (serviceTotal * service.discount) / 100;
+    const discountAmount = (serviceTotal * (service.discount || 0)) / 100;
     const discountedAmount = serviceTotal - discountAmount;
-    const taxAmount = (discountedAmount * service.taxRate) / 100;
+    const taxAmount = (discountedAmount * taxRatePercent) / 100;
     
     subtotal += serviceTotal;
     totalDiscount += discountAmount;
@@ -85,12 +85,14 @@ export const createDGQuotation = async (
       }
     }
 
-    // Calculate totals
-    const totals = calculateQuotationTotals(quotationData.items, quotationData.services);
+    // Calculate totals - handle both items and dgItems for flexibility
+    const items = quotationData.dgItems || quotationData.items || [];
+    const totals = calculateQuotationTotals(items, quotationData.services, quotationData.taxRate);
 
     // Create quotation
     const quotation = new DGQuotation({
       ...quotationData,
+      dgItems: items, // Ensure dgItems is set properly
       ...totals,
       createdBy: req.user?.id || 'system'
     });
@@ -257,10 +259,9 @@ export const updateDGQuotation = async (
     }
 
     // Calculate new totals if items or services are updated
-    if (updateData.items || updateData.services) {
-      const items = updateData.items || existingQuotation.items;
-      const services = updateData.services || existingQuotation.services;
-      const totals = calculateQuotationTotals(items, services);
+    if (updateData.dgItems) {
+      const items = updateData.dgItems || existingQuotation.dgItems;
+      const totals = calculateQuotationTotals(items);
       updateData.subtotal = totals.subtotal;
       updateData.totalDiscount = totals.totalDiscount;
       updateData.totalTax = totals.totalTax;

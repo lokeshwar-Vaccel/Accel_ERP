@@ -43,13 +43,9 @@ interface DGQuotationData {
     kva: string;
     phase: string;
     quantity: number;
-    fuelType: string;
-    engineModel: string;
-    alternatorModel: string;
-    fuelTankCapacity: string;
-    runtime: string;
-    noiseLevel: string;
-    emissionCompliance: string;
+    segment: string;
+    subSegment: string;
+    dgOwnership: string;
   };
   items: Array<{
     product: string;
