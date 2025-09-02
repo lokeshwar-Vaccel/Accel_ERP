@@ -2284,24 +2284,72 @@ const AMCManagement: React.FC = () => {
     setShowReportModal(true);
   };
 
+  // Helper function to check if any filters are active
+  const hasActiveFilters = () => {
+    return searchTerm || 
+           statusFilter !== 'all' || 
+           customerFilter !== 'all' || 
+           expiryFilter !== 'all' || 
+           (filterMode === 'visitDate' && visitDateFilter);
+  };
+
+  // Helper function to get a summary of active filters
+  const getActiveFiltersSummary = () => {
+    const filters = [];
+    
+    if (searchTerm) filters.push(`Search: "${searchTerm}"`);
+    if (statusFilter !== 'all') filters.push(`Status: ${statusFilter}`);
+    if (customerFilter !== 'all') {
+      const customer = customers.find(c => c._id === customerFilter);
+      filters.push(`Customer: ${customer?.name || customerFilter}`);
+    }
+    if (expiryFilter !== 'all') filters.push(`Expiring: ${expiryFilter}`);
+    if (filterMode === 'visitDate' && visitDateFilter) {
+      filters.push(`Visit Date: ${visitDateFilter}`);
+    }
+    
+    return filters.join(', ');
+  };
+
   const handleExportToExcel = async () => {
     try {
       setSubmitting(true);
-      toast.loading('Preparing export...', { id: 'export' });
-
+      
       // Build export parameters based on current filters
+      // This ensures the exported data matches exactly what is shown in the current view
       const exportParams: any = {};
 
       // Add current filters
       if (searchTerm) exportParams.search = searchTerm;
       if (statusFilter !== 'all') exportParams.status = statusFilter;
       if (customerFilter !== 'all') exportParams.customer = customerFilter;
-      if (expiryFilter !== 'all') exportParams.expiringIn = expiryFilter.replace('days', '');
+      if (expiryFilter !== 'all') exportParams.expiringIn = parseInt(expiryFilter.replace('days', ''));
 
       // Add visit date filter if active
       if (filterMode === 'visitDate' && visitDateFilter) {
         exportParams.scheduledDate = visitDateFilter;
       }
+
+      // Determine if we're exporting all data or filtered data
+      const filtersActive = hasActiveFilters();
+
+      const exportMessage = filtersActive 
+        ? `Preparing export for ${amcs.length} filtered contracts...` 
+        : 'Preparing export for all AMC contracts...';
+
+      toast.loading(exportMessage, { id: 'export' });
+
+      console.log('Exporting with parameters:', exportParams);
+      console.log('Current view shows:', amcs.length, 'contracts');
+      console.log('Has active filters:', filtersActive);
+      if (filtersActive) {
+        console.log('Active filters:', getActiveFiltersSummary());
+      }
+      
+      // Debug: Log the exact URL being called
+      const queryString = new URLSearchParams(exportParams).toString();
+      console.log('Export URL parameters:', queryString);
+      console.log('Full export URL:', `/amc/export-excel?${queryString}`);
 
       // Call the export API
       const response = await apiClient.amc.exportToExcel(exportParams);
@@ -2318,8 +2366,9 @@ const AMCManagement: React.FC = () => {
       const link = document.createElement('a');
       link.href = url;
       
-      // Set filename
-      const filename = `AMC_Export_${new Date().toISOString().split('T')[0]}.xlsx`;
+      // Set filename based on whether it's filtered or all data
+      const filterIndicator = filtersActive ? '_Filtered' : '_All';
+      const filename = `AMC_Export${filterIndicator}_${new Date().toISOString().split('T')[0]}.xlsx`;
       link.download = filename;
       
       // Trigger download
@@ -2330,7 +2379,12 @@ const AMCManagement: React.FC = () => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      toast.success('AMC data exported successfully!', { id: 'export' });
+      // Show success message with appropriate context
+      const successMessage = filtersActive 
+        ? `Filtered AMC data exported successfully! (${amcs.length} contracts)`
+        : `All AMC data exported successfully! (${amcs.length} contracts)`;
+      
+      toast.success(successMessage, { id: 'export' });
     } catch (error: any) {
       console.error('Export error:', error);
       toast.error('Failed to export AMC data. Please try again.', { id: 'export' });
@@ -2354,6 +2408,8 @@ const AMCManagement: React.FC = () => {
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
+
+
 
   return (
     <div className="p-4 space-y-3">
@@ -2382,13 +2438,26 @@ const AMCManagement: React.FC = () => {
           <button
             onClick={handleExportToExcel}
             disabled={submitting}
-            className="bg-gradient-to-r from-green-600 to-green-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 disabled:opacity-50"
+            className={`px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105 disabled:opacity-50 ${
+              // Check if any filters are active
+              hasActiveFilters()
+                ? 'bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white'
+                : 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white'
+            }`}
+            title={
+              hasActiveFilters()
+                ? `Export ${amcs.length} filtered contracts\nActive filters: ${getActiveFiltersSummary()}`
+                : 'Export all AMC contracts'
+            }
           >
             <Download className="w-4 h-4" />
-            <span className="text-sm">Export Excel</span>
+            <span className="text-sm">
+              {hasActiveFilters()
+                ? `Export Filtered (${amcs.length})`
+                : 'Export All'
+              }
+            </span>
           </button>
-
-
 
           <button
             onClick={handleCreateAMC}

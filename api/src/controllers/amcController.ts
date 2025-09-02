@@ -67,7 +67,7 @@ export const getAMCContracts = async (
     const contracts = await AMC.find(query)
       .select('contractNumber customer customerAddress contactPersonName contactNumber engineSerialNumber engineModel kva dgMake dateOfCommissioning amcStartDate amcEndDate amcType numberOfVisits numberOfOilServices products startDate endDate contractValue scheduledVisits completedVisits status nextVisitDate visitSchedule terms createdBy createdAt updatedAt')
       .populate('customer', 'name email phone customerType address')
-      .populate('products', 'name category brand modelNumber')
+      .populate('products', 'name category brand')
       .populate('createdBy', 'firstName lastName email')
       .populate('visitSchedule.assignedTo', 'firstName lastName email')
       .sort(sort as string)
@@ -1739,7 +1739,8 @@ export const exportAMCToExcel = async (
       customer,
       dateFrom,
       dateTo,
-      expiringIn
+      expiringIn,
+      scheduledDate
     } = req.query as {
       search?: string;
       status?: AMCStatus;
@@ -1747,16 +1748,18 @@ export const exportAMCToExcel = async (
       dateFrom?: string;
       dateTo?: string;
       expiringIn?: string;
+      scheduledDate?: string;
     };
 
     // Build query based on filters
     const query: any = {};
+    const orConditions = [];
 
     if (search) {
-      query.$or = [
+      orConditions.push(
         { contractNumber: { $regex: search, $options: 'i' } },
         { terms: { $regex: search, $options: 'i' } }
-      ];
+      );
     }
 
     if (status) {
@@ -1773,14 +1776,58 @@ export const exportAMCToExcel = async (
       if (dateTo) query.createdAt.$lte = new Date(dateTo);
     }
 
-    // Handle expiring contracts filter
+    // Handle expiring contracts filter - FIXED: Don't override status if it's already set
     if (expiringIn) {
       const days = parseInt(expiringIn);
       const expiryDate = new Date();
       expiryDate.setDate(expiryDate.getDate() + days);
       query.endDate = { $lte: expiryDate };
-      query.status = AMCStatus.ACTIVE;
+      
+      // Only set status to ACTIVE if no status filter is already applied
+      if (!status) {
+        query.status = AMCStatus.ACTIVE;
+      }
     }
+
+    // Handle visit date filter - this is the key fix
+    if (scheduledDate) {
+      // Parse the scheduled date
+      let targetDate: Date;
+      if (scheduledDate.includes('/')) {
+        // Handle DD/MM/YYYY format
+        const [day, month, year] = scheduledDate.split('/');
+        targetDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      } else {
+        targetDate = new Date(scheduledDate);
+      }
+
+      if (!isNaN(targetDate.getTime())) {
+        // Set the date range for the entire day (00:00:00 to 23:59:59)
+        const startOfDay = new Date(targetDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        const endOfDay = new Date(targetDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Use $elemMatch to match array elements - EXACTLY like getAMCsByVisitDate
+        query.visitSchedule = {
+          $elemMatch: {
+            scheduledDate: {
+              $gte: startOfDay,
+              $lte: endOfDay
+            }
+          }
+        };
+      }
+    }
+
+    // Add $or conditions if any exist
+    if (orConditions.length > 0) {
+      query.$or = orConditions;
+    }
+
+    // Get total contracts count for comparison
+    const totalContracts = await AMC.countDocuments({});
 
     // Fetch contracts with all necessary data
     const contracts = await AMC.find(query)

@@ -98,7 +98,9 @@ export enum AMCStatus {
   ACTIVE = 'active',
   EXPIRED = 'expired',
   CANCELLED = 'cancelled',
-  PENDING = 'pending'
+  PENDING = 'pending',
+  SUSPENDED = 'suspended',
+  DRAFT = 'draft'
 }
 
 // Stock Transaction Types

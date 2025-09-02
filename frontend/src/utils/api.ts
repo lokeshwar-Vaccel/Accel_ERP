@@ -1821,6 +1821,35 @@ class ApiClient {
       getByEnquiry: (enquiryId: string) =>
         this.makeRequest<{ success: boolean; data: any[] }>(`/dg-quotations/by-enquiry/${enquiryId}`),
     },
+
+    // Delivery Challans
+    deliveryChallans: {
+      getAll: (params?: any) =>
+        this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/delivery-challans${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+      getById: (id: string) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/delivery-challans/${id}`),
+
+      create: (challanData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>('/delivery-challans', {
+          method: 'POST',
+          body: JSON.stringify(challanData),
+        }),
+
+      update: (id: string, challanData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/delivery-challans/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(challanData),
+        }),
+
+      delete: (id: string) =>
+        this.makeRequest<{ success: boolean; message: string }>(`/delivery-challans/${id}`, {
+          method: 'DELETE',
+        }),
+
+      getStats: () =>
+        this.makeRequest<{ success: boolean; data: any }>('/delivery-challans/stats'),
+    },
   };
 
   // Feedback APIs

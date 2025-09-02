@@ -157,6 +157,7 @@ export interface AMCQueryInput {
   valueMax?: number;
   upcomingVisits?: boolean;
   overdueVisits?: boolean;
+  scheduledDate?: string; // For filtering AMCs by visit date
 }
 
 export interface AMCNotificationInput {
@@ -429,7 +430,8 @@ export const amcQuerySchema = Joi.object<AMCQueryInput>({
   valueMin: Joi.number().min(0),
   valueMax: Joi.number().min(Joi.ref('valueMin')),
   upcomingVisits: Joi.boolean(),
-  overdueVisits: Joi.boolean()
+  overdueVisits: Joi.boolean(),
+  scheduledDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).description('Date in YYYY-MM-DD format for filtering AMCs by visit date')
 });
 
 // AMC notification settings schema
