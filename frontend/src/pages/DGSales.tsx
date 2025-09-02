@@ -15,7 +15,7 @@ import DGInvoiceForm from '../components/ui/DGInvoiceForm';
 import DGInvoiceManagement from './DGInvoiceManagement';
 import DGPaymentForm from '../components/ui/DGPaymentForm';
 
-import DGEnquiryForm from '../components/ui/DGEnquiryForm';
+import ComprehensiveDGEnquiryForm from '../components/ui/ComprehensiveDGEnquiryForm';
 import DGEnquiryViewModal from '../components/ui/DGEnquiryViewModal';
 import DGQuotationForm from '../components/ui/DGQuotationForm';
 import DGQuotationViewModal from '../components/ui/DGQuotationViewModal';
@@ -89,10 +89,6 @@ export default function DGSales() {
   const [showImportModal, setShowImportModal] = useState(false);
   console.log("previewData", previewData);
 
-
-  // Step 2: Prospective Customer Base
-  const [dgCustomers, setDgCustomers] = useState<any[]>([]);
-  const [generateResult, setGenerateResult] = useState<any>(null);
 
   // Step 2: DG Quotations
   const [dgQuotations, setDgQuotations] = useState<any[]>([]);
@@ -178,16 +174,16 @@ export default function DGSales() {
     { step: 5, title: "Final Invoice", icon: FileText, description: "Create final invoices and delivery tracking" },
     { step: 6, title: "List of OEMs", icon: Building, description: "Manage OEM suppliers and products" },
     { step: 7, title: "PO to OEM", icon: ShoppingCart, description: "Purchase orders to OEM suppliers" },
-    { step: 8, title: "OEM Payment Tracking", icon: CreditCard, description: "Track payments to OEM suppliers" },
-    { step: 10, title: "DG Movement Tracking", icon: Truck, description: "Track delivery, installation & commissioning" },
+    // { step: 8, title: "OEM Payment Tracking", icon: CreditCard, description: "Track payments to OEM suppliers" },
+    // { step: 10, title: "DG Movement Tracking", icon: Truck, description: "Track delivery, installation & commissioning" },
     { step: 11, title: "Profit & Loss Reports", icon: BarChart3, description: "Financial analytics and reporting" },
     { step: 12, title: "Old DG Buyback Enquiry", icon: Upload, description: "Old DG buyback enquiries" },
-    { step: 13, title: "Old DG Evaluation", icon: Eye, description: "Evaluate old DG condition and pricing" },
-    { step: 15, title: "Old DG Purchase Agreement", icon: FileText, description: "Purchase agreements for old DG" },
-    { step: 16, title: "Old DG Payment", icon: CreditCard, description: "Payment processing for old DG" },
-    { step: 17, title: "Old DG Collection", icon: Truck, description: "Collection and transportation" },
-    { step: 18, title: "Old DG Refurbishment", icon: Building, description: "Refurbishment and testing" },
-    { step: 19, title: "Old DG Resale", icon: ShoppingCart, description: "Resale of refurbished DG" },
+    // { step: 13, title: "Old DG Evaluation", icon: Eye, description: "Evaluate old DG condition and pricing" },
+    // { step: 15, title: "Old DG Purchase Agreement", icon: FileText, description: "Purchase agreements for old DG" },
+    // { step: 16, title: "Old DG Payment", icon: CreditCard, description: "Payment processing for old DG" },
+    // { step: 17, title: "Old DG Collection", icon: Truck, description: "Collection and transportation" },
+    // { step: 18, title: "Old DG Refurbishment", icon: Building, description: "Refurbishment and testing" },
+    // { step: 19, title: "Old DG Resale", icon: ShoppingCart, description: "Resale of refurbished DG" },
     { step: 20, title: "Lost/Won Customer Analysis", icon: BarChart3, description: "Customer conversion analysis" },
     { step: 21, title: "Executive Performance", icon: BarChart3, description: "Sales team performance monitoring" },
     { step: 22, title: "Comprehensive Reports", icon: BarChart3, description: "Complete business analytics dashboard" }
@@ -195,8 +191,22 @@ export default function DGSales() {
 
   // Load data based on active step
   useEffect(() => {
+    console.log(`Loading data for step ${activeStep}, page ${currentPage}, search: "${searchTerm}"`);
     loadStepData(activeStep);
   }, [activeStep, currentPage, searchTerm]);
+
+  // Reset pagination when step changes (but not on initial load)
+  const [initialLoad, setInitialLoad] = useState(true);
+  useEffect(() => {
+    if (!initialLoad) {
+      console.log(`Step changed to ${activeStep}, resetting pagination`);
+      setCurrentPage(1);
+      setTotalItems(0);
+      setTotalPages(0);
+    } else {
+      setInitialLoad(false);
+    }
+  }, [activeStep]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -219,26 +229,6 @@ export default function DGSales() {
     };
     fetchData();
   }, []);
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const customersResponse = await apiClient.customers.dgCustomers.getAll({limit: 100});
-        let customers: any[] = [];
-        if (customersResponse.data) {
-          if (Array.isArray(customersResponse.data)) {
-            customers = customersResponse.data;
-          } else if ((customersResponse.data as any).customers && Array.isArray((customersResponse.data as any).customers)) {
-            customers = (customersResponse.data as any).customers;
-          }
-        }
-        setDgCustomers(customers);
-      } catch (err) {
-        console.error("Failed to fetch DG Customers", err);
-      }
-      
-    };
-    fetchData();
-  }, []);
 
   // Development helper - set test auth token if not present
   useEffect(() => {
@@ -251,8 +241,16 @@ export default function DGSales() {
     }
   }, []);
 
+  // Helper function to handle page changes
+  const handlePageChange = (page: number) => {
+    console.log(`Changing to page ${page} for step ${activeStep}`);
+    setCurrentPage(page);
+    // The useEffect will trigger loadStepData when currentPage changes
+  };
+
   const loadStepData = async (step: number) => {
     setLoading(true);
+    
     try {
       const params: any = {
         page: currentPage,
@@ -267,22 +265,62 @@ export default function DGSales() {
       switch (step) {
         case 1: // DG Enquiries
           try {
-            const enquiriesResponse = await apiClient.dgSales.enquiries.getAll(params);
+            const enquiriesResponse: any = await apiClient.dgSales.enquiries.getAll(params);
             console.log("enquiriesResponse:", enquiriesResponse);
+            console.log("enquiriesResponse.pagination:", enquiriesResponse.pagination);
+            
             setEnquiries(enquiriesResponse.data || []);
-            setCurrentPage(enquiriesResponse.pagination.page);
-            setItemsPerPage(enquiriesResponse.pagination.limit);
-            setTotalItems(enquiriesResponse.pagination.total);
-            setTotalPages(enquiriesResponse.pagination.totalPages);
+            
+            // Debug: Show structure of first enquiry if available
+            if (enquiriesResponse.data && enquiriesResponse.data.length > 0) {
+              console.log("First enquiry structure:", enquiriesResponse.data[0]);
+              console.log("Available fields:", Object.keys(enquiriesResponse.data[0]));
+            }
+            
+            // Handle pagination data - try both nested and direct properties
+            const paginationData = enquiriesResponse.pagination || enquiriesResponse;
+            console.log("Pagination data:", paginationData);
+            console.log("Full enquiries response structure:", Object.keys(enquiriesResponse));
+            
+            if (paginationData && paginationData.page !== undefined) {
+              console.log("Setting pagination from response:", {
+                page: paginationData.page,
+                limit: paginationData.limit,
+                total: paginationData.total,
+                totalPages: paginationData.totalPages
+              });
+              setCurrentPage(paginationData.page || 1);
+              setItemsPerPage(paginationData.limit || 10);
+              setTotalItems(paginationData.total || 0);
+              setTotalPages(paginationData.totalPages || 1);
+            } else {
+              console.warn("No pagination data found in response, using fallback");
+              // Set default pagination for client-side pagination
+              const totalCount = enquiriesResponse.data?.length || 0;
+              setTotalItems(totalCount);
+              setTotalPages(Math.ceil(totalCount / itemsPerPage) || 1);
+              setCurrentPage(1);
+            }
           } catch (err) {
-            console.warn('Failed to load enquiries');
+            console.error('Failed to load enquiries:', err);
             setEnquiries([]);
+            setTotalItems(0);
+            setTotalPages(0);
           }
           break;
         case 2: // Quotations
           try {
-            const quotationsResponse = await apiClient.dgSales.quotations.getAll(params);
+            const quotationsResponse: any = await apiClient.dgSales.quotations.getAll(params);
             setDgQuotations(quotationsResponse.data || []);
+            
+            // Set pagination data from response
+            const paginationData = quotationsResponse.pagination || quotationsResponse;
+            if (paginationData && paginationData.page !== undefined) {
+              setCurrentPage(paginationData.page);
+              setItemsPerPage(paginationData.limit);
+              setTotalItems(paginationData.total);
+              setTotalPages(paginationData.totalPages);
+            }
           } catch (err) {
             console.warn('Failed to load quotations');
             setDgQuotations([]);
@@ -292,8 +330,17 @@ export default function DGSales() {
           break;
         case 4: // Proforma Invoices
           try {
-            const proformaResponse = await apiClient.dgSales.proformaInvoices.getAll(params);
+            const proformaResponse: any = await apiClient.dgSales.proformaInvoices.getAll(params);
             setProformaInvoices(proformaResponse.data || []);
+            
+            // Set pagination data from response
+            const paginationData = proformaResponse.pagination || proformaResponse;
+            if (paginationData && paginationData.page !== undefined) {
+              setCurrentPage(paginationData.page);
+              setItemsPerPage(paginationData.limit);
+              setTotalItems(paginationData.total);
+              setTotalPages(paginationData.totalPages);
+            }
           } catch (err) {
             console.warn('Failed to load proforma invoices');
             setProformaInvoices([]);
@@ -301,8 +348,17 @@ export default function DGSales() {
           break;
         case 5: // Final Invoices
           try {
-            const invoicesResponse = await apiClient.dgSales.invoices.getAll(params);
+            const invoicesResponse: any = await apiClient.dgSales.invoices.getAll(params);
             setFinalInvoices(invoicesResponse.data || []);
+            
+            // Set pagination data from response
+            const paginationData = invoicesResponse.pagination || invoicesResponse;
+            if (paginationData && paginationData.page !== undefined) {
+              setCurrentPage(paginationData.page);
+              setItemsPerPage(paginationData.limit);
+              setTotalItems(paginationData.total);
+              setTotalPages(paginationData.totalPages);
+            }
           } catch (err) {
             console.warn('Failed to load invoices');
             setFinalInvoices([]);
@@ -310,8 +366,17 @@ export default function DGSales() {
           break;
         case 6: // OEMs
           try {
-            const oemsResponse = await apiClient.dgSales.oems.getAll(params);
+            const oemsResponse: any = await apiClient.dgSales.oems.getAll(params);
             setOems(oemsResponse.data || []);
+            
+            // Set pagination data from response
+            const paginationData = oemsResponse.pagination || oemsResponse;
+            if (paginationData && paginationData.page !== undefined) {
+              setCurrentPage(paginationData.page);
+              setItemsPerPage(paginationData.limit);
+              setTotalItems(paginationData.total);
+              setTotalPages(paginationData.totalPages);
+            }
           } catch (err) {
             console.warn('Failed to load OEMs');
             setOems([]);
@@ -319,8 +384,17 @@ export default function DGSales() {
           break;
         case 7: // OEM Orders
           try {
-            const oemOrdersResponse = await apiClient.dgSales.oemOrders.getAll(params);
+            const oemOrdersResponse: any = await apiClient.dgSales.oemOrders.getAll(params);
             setOemOrders(oemOrdersResponse.data || []);
+            
+            // Set pagination data from response
+            const paginationData = oemOrdersResponse.pagination || oemOrdersResponse;
+            if (paginationData && paginationData.page !== undefined) {
+              setCurrentPage(paginationData.page);
+              setItemsPerPage(paginationData.limit);
+              setTotalItems(paginationData.total);
+              setTotalPages(paginationData.totalPages);
+            }
           } catch (err) {
             console.warn('Failed to load OEM orders');
             setOemOrders([]);
@@ -454,22 +528,6 @@ export default function DGSales() {
     } catch (error: any) {
       console.error('Failed to import enquiries:', error);
       setError(error.response?.data?.message || 'Failed to import enquiries. Please check your file and try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Generate customers from enquiries for Step 2
-  const generateCustomers = async () => {
-    setLoading(true);
-    try {
-      const result = await apiClient.dgSales.enquiries.generateCustomers();
-      setGenerateResult(result.data);
-      setError(null);
-      loadStepData(2);
-    } catch (error: any) {
-      console.error('Failed to generate customers:', error);
-      setError(error.response?.data?.message || 'Failed to generate customers. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -616,9 +674,9 @@ export default function DGSales() {
   const getStepCompletionStatus = (stepNumber: number): boolean => {
     switch (stepNumber) {
       case 1: return enquiries.length > 0;
-      case 2: return dgCustomers.length > 0;
-                      case 3: return true; // Handled by DGPurchaseOrderManagement component
-        case 4: return true; // Handled by DGPurchaseOrderManagement component
+      case 2: return dgQuotations.length > 0;
+      case 3: return true; // Handled by DGPurchaseOrderManagement component
+      case 4: return true; // Handled by DGPurchaseOrderManagement component
       case 5: return finalInvoices.length > 0;
       case 6: return oems.length > 0;
       case 7: return oemOrders.length > 0;
@@ -630,9 +688,9 @@ export default function DGSales() {
   const getStepCompletionCount = (stepNumber: number): number => {
     switch (stepNumber) {
       case 1: return enquiries.length;
-      case 2: return dgCustomers.length;
-                      case 3: return 0; // Handled by DGPurchaseOrderManagement component
-        case 4: return 0; // Handled by DGPurchaseOrderManagement component
+      case 2: return dgQuotations.length;
+      case 3: return 0; // Handled by DGPurchaseOrderManagement component
+      case 4: return 0; // Handled by DGPurchaseOrderManagement component
       case 5: return finalInvoices.length;
       case 6: return oems.length;
       case 7: return oemOrders.length;
@@ -882,74 +940,174 @@ export default function DGSales() {
                   <Table
                     columns={[
                       { key: 'enquiryNo', title: 'Enquiry No', sortable: true },
+                      { key: 'enquiryDate', title: 'Enquiry Date', sortable: true },
+                      { key: 'customerType', title: 'Customer Type' },
+                      { key: 'corporateName', title: 'Corporate Name' },
                       { key: 'customerName', title: 'Customer Name' },
-                      { key: 'location', title: 'Location' },
-                      { key: 'kva', title: 'KVA Required' },
-                      // { key: 'customerStatus', title: 'Customer Status' },
-                      { key: 'status', title: 'Enquiry Status' },
+                      // { key: 'contactPersonName', title: 'Contact Person' },
+                      { key: 'phoneNumber', title: 'Phone Number' },
+                      { key: 'email', title: 'Email' },
+                      { key: 'customerStatus', title: 'Customer Status' },
+                      { key: 'kva', title: 'KVA' },
+                      { key: 'phase', title: 'Phase' },
+                      { key: 'quantity', title: 'Quantity' },
+                      { key: 'enquiryStatus', title: 'Enquiry Status' },
+                      { key: 'enquiryType', title: 'Enquiry Type' },
+                      { key: 'enquiryStage', title: 'Enquiry Stage' },
+                      { key: 'source', title: 'Source' },
+                      { key: 'segment', title: 'Segment' },
+                      { key: 'subSegment', title: 'Sub Segment' },
+                      { key: 'dgOwnership', title: 'DG Ownership' },
+                      { key: 'financeRequired', title: 'Finance Required' },
+                      { key: 'assignedEmployeeCode', title: 'Employee Code' },
+                      { key: 'assignedEmployeeName', title: 'Employee Name' },
+                      { key: 'employeeStatus', title: 'Employee Status' },
+                      { key: 'panNumber', title: 'PAN Number' },
+                      { key: 'address', title: 'Address' },
+                      { key: 'district', title: 'District' },
+                      { key: 'state', title: 'State' },
+                      { key: 'pincode', title: 'Pincode' },
+                      { key: 'gstNumber', title: 'GST Number' },
+                      { key: 'notes', title: 'Notes' },
                       { key: 'actions', title: 'Actions' }
                     ]}
-                    data={pagedEnquiries.map(enquiry => ({
-                      enquiryNo: enquiry.enquiryNo || enquiry.enquiryId || '',
-                      customerName: enquiry.customerName || enquiry.corporateName || '',
-                      location: enquiry.location || (enquiry.district && enquiry.state ? `${enquiry.district}, ${enquiry.state}` : ''),
-                      kva: enquiry.kva || enquiry.kvaRequired || '',
-                      customerStatus: enquiry.customer ?
-                        <Badge variant="success">Customer Created</Badge> :
-                        <Badge variant="warning">Pending</Badge>,
-                      status: (() => {
-                        const status = enquiry.enquiryStatus || enquiry.status || 'Open';
-                        switch (status.toLowerCase()) {
-                          case 'open':
-                            return <Badge variant="info">Open</Badge>;
-                          case 'in progress':
-                            return <Badge variant="warning">In Progress</Badge>;
-                          case 'closed':
-                            return <Badge variant="success">Closed</Badge>;
-                          case 'cancelled':
-                            return <Badge variant="danger">Cancelled</Badge>;
-                          case 'qualified':
-                            return <Badge variant="success">Qualified</Badge>;
-                          default:
-                            return <Badge variant="info">{status}</Badge>;
-                        }
-                      })(),
-                      actions: (
-                        <div className="flex space-x-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedEnquiry(enquiry);
-                              setShowEnquiryViewModal(true);
-                            }}
-                          >
-                            View
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline"
-                            onClick={() => {
-                              setSelectedEnquiry(enquiry);
-                              setEnquiryFormMode('edit');
-                              setShowEnquiryForm(true);
-                            }}
-                          >
-                            Edit
-                          </Button>
+                    data={pagedEnquiries.map(enquiry => {
+                      // Debug: Log the raw enquiry data
+                      console.log('Processing enquiry:', enquiry);
+                      
+                      return {
+                        enquiryNo: enquiry.enquiryNo || enquiry.enquiryId || enquiry._id || 'N/A',
+                        enquiryDate: enquiry.enquiryDate ? 
+                          new Date(enquiry.enquiryDate).toLocaleDateString('en-IN') : 'N/A',
+                        customerType: enquiry.customerType || 'N/A',
+                        corporateName: enquiry.customerName || 'N/A',
+                        customerName: enquiry.contactPersonName || 'N/A',
+                        // contactPersonName: enquiry.contactPersonName || 'N/A',
+                        phoneNumber: enquiry.phoneNumber || 'N/A',
+                        email: enquiry.email || 'N/A',
+                        customerStatus: (() => {
+                          const customerStatus = enquiry.customer?.status || 'new';
+                          switch (customerStatus.toLowerCase()) {
+                            case 'new':
+                              return <Badge variant="info">New</Badge>;
+                            case 'converted':
+                              return <Badge variant="success">Converted</Badge>;
+                            case 'active':
+                              return <Badge variant="success">Active</Badge>;
+                            case 'inactive':
+                              return <Badge variant="warning">Inactive</Badge>;
+                            case 'lost':
+                              return <Badge variant="danger">Lost</Badge>;
+                            case 'prospect':
+                              return <Badge variant="warning">Prospect</Badge>;
+                            default:
+                              return <Badge variant="info">{customerStatus}</Badge>;
+                          }
+                        })(),
+                        kva: enquiry.kva || 'N/A',
+                        phase: enquiry.phase || 'N/A',
+                        quantity: enquiry.quantity || 'N/A',
+                        enquiryStatus: (() => {
+                          const status = enquiry.enquiryStatus || enquiry.status || 'Open';
+                          switch (status.toLowerCase()) {
+                            case 'open':
+                              return <Badge variant="info">Open</Badge>;
+                            case 'in progress':
+                              return <Badge variant="warning">In Progress</Badge>;
+                            case 'closed':
+                              return <Badge variant="success">Closed</Badge>;
+                            case 'cancelled':
+                              return <Badge variant="danger">Cancelled</Badge>;
+                            case 'qualified':
+                              return <Badge variant="success">Qualified</Badge>;
+                            default:
+                              return <Badge variant="info">{status}</Badge>;
+                          }
+                        })(),
+                        enquiryType: enquiry.enquiryType || 'N/A',
+                        enquiryStage: enquiry.enquiryStage || 'N/A',
+                        source: enquiry.source || 'N/A',
+                        segment: enquiry.segment || 'N/A',
+                        subSegment: enquiry.subSegment || 'N/A',
+                        dgOwnership: enquiry.dgOwnership || 'N/A',
+                        financeRequired: enquiry.financeRequired === 'true' ? 'Yes' : 'No',
+                        assignedEmployeeCode: enquiry.assignedEmployeeCode || 'N/A',
+                        assignedEmployeeName: enquiry.assignedEmployeeName || 'N/A',
+                        employeeStatus: enquiry.employeeStatus || 'N/A',
+                        panNumber: enquiry.panNumber || 'N/A',
+                        address: (() => {
+                          if (enquiry.addresses && enquiry.addresses.length > 0) {
+                            const primaryAddress = enquiry.addresses.find((addr: any) => addr.isPrimary) || enquiry.addresses[0];
+                            return primaryAddress?.address || 'N/A';
+                          }
+                          return 'N/A';
+                        })(),
+                        district: (() => {
+                          if (enquiry.addresses && enquiry.addresses.length > 0) {
+                            const primaryAddress = enquiry.addresses.find((addr: any) => addr.isPrimary) || enquiry.addresses[0];
+                            return primaryAddress?.district || 'N/A';
+                          }
+                          return enquiry.district || 'N/A';
+                        })(),
+                        state: (() => {
+                          if (enquiry.addresses && enquiry.addresses.length > 0) {
+                            const primaryAddress = enquiry.addresses.find((addr: any) => addr.isPrimary) || enquiry.addresses[0];
+                            return primaryAddress?.state || 'N/A';
+                          }
+                          return enquiry.state || 'N/A';
+                        })(),
+                        pincode: (() => {
+                          if (enquiry.addresses && enquiry.addresses.length > 0) {
+                            const primaryAddress = enquiry.addresses.find((addr: any) => addr.isPrimary) || enquiry.addresses[0];
+                            return primaryAddress?.pincode || 'N/A';
+                          }
+                          return enquiry.pincode || 'N/A';
+                        })(),
+                        gstNumber: (() => {
+                          if (enquiry.addresses && enquiry.addresses.length > 0) {
+                            const primaryAddress = enquiry.addresses.find((addr: any) => addr.isPrimary) || enquiry.addresses[0];
+                            return primaryAddress?.gstNumber || 'N/A';
+                          }
+                          return 'N/A';
+                        })(),
+                        notes: enquiry.notes || 'N/A',
+                        actions: (
+                          <div className="flex space-x-2">
                             <Button 
-                              size="sm"
+                              size="sm" 
+                              variant="outline"
                               onClick={() => {
-                                navigate('/dg-quotation/create', { 
-                                  state: { enquiry } 
-                                });
+                                setSelectedEnquiry(enquiry);
+                                setShowEnquiryViewModal(true);
                               }}
                             >
-                              Create DG Quotation
+                              View
                             </Button>
-                        </div>
-                      )
-                    }))}
+                            <Button 
+                              size="sm" 
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedEnquiry(enquiry);
+                                setEnquiryFormMode('edit');
+                                setShowEnquiryForm(true);
+                              }}
+                            >
+                              Edit
+                            </Button>
+                              <Button 
+                                size="sm"
+                                onClick={() => {
+                                  navigate('/dg-quotation/create', { 
+                                    state: { enquiry } 
+                                  });
+                                }}
+                              >
+                                Create DG Quotation
+                              </Button>
+                          </div>
+                        )
+                      };
+                    })}
                     loading={loading}
                     pagination={{
                       page: currentPage,
@@ -957,7 +1115,7 @@ export default function DGSales() {
                       total: totalItems,
                       limit: itemsPerPage
                     }}
-                    onPageChange={setCurrentPage}
+                    onPageChange={handlePageChange}
                   />
                 );
               })()}
@@ -1052,8 +1210,8 @@ export default function DGSales() {
                 loading={loading}
                 pagination={{
                   page: currentPage,
-                  pages: Math.ceil(dgQuotations.length / itemsPerPage) || 1,
-                  total: dgQuotations.length,
+                  pages: totalPages,
+                  total: totalItems,
                   limit: itemsPerPage
                 }}
                 onPageChange={setCurrentPage}
@@ -1171,8 +1329,8 @@ export default function DGSales() {
                 loading={loading}
                 pagination={{
                   page: currentPage,
-                  pages: Math.ceil(oems.length / itemsPerPage) || 1,
-                  total: oems.length,
+                  pages: totalPages,
+                  total: totalItems,
                   limit: itemsPerPage
                 }}
                 onPageChange={setCurrentPage}
@@ -1235,8 +1393,8 @@ export default function DGSales() {
                 loading={loading}
                 pagination={{
                   page: currentPage,
-                  pages: Math.ceil(oemOrders.length / itemsPerPage) || 1,
-                  total: oemOrders.length,
+                  pages: totalPages,
+                  total: totalItems,
                   limit: itemsPerPage
                 }}
                 onPageChange={setCurrentPage}
@@ -1475,7 +1633,7 @@ export default function DGSales() {
                 <div className="text-xs text-blue-700">Total Enquiries</div>
               </div>
               <div className="bg-green-50 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold text-green-600">{dgCustomers.length}</div>
+                <div className="text-2xl font-bold text-green-600">-</div>
                 <div className="text-xs text-green-700">Customers Created</div>
               </div>
               <div className="bg-purple-50 p-3 rounded-lg text-center">
@@ -1876,7 +2034,6 @@ export default function DGSales() {
             if (activeStep === 2) loadStepData(2);
           }}
           dgEnquiry={selectedDGQuotation?.dgEnquiry}
-          dgCustomers={dgCustomers}
           products={products}
           generalSettings={null}
           initialData={selectedDGQuotation}
@@ -1945,7 +2102,7 @@ export default function DGSales() {
 
       {/* DG Enquiry Form Modal */}
       {showEnquiryForm && (
-        <DGEnquiryForm
+        <ComprehensiveDGEnquiryForm
           isOpen={showEnquiryForm}
           onClose={() => {
             setShowEnquiryForm(false);

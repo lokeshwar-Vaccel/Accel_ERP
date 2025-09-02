@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { protect, restrictTo, checkPermission } from '../middleware/auth';
 import multer from 'multer';
-import { previewDGEnquiryImport, importDGEnquiries, getDGEnquiries, generateProspectiveCustomers } from '../controllers/dgEnquiryImportController';
+import { previewDGEnquiryImport, importDGEnquiries, getDGEnquiries } from '../controllers/dgEnquiryImportController';
 import { 
   createDGEnquiry, 
   getDGEnquiryById, 
@@ -59,13 +59,6 @@ router.post('/import',
   checkPermission('write'),
   upload.single('file'),
   importDGEnquiries
-);
-
-// Generate prospective customers from DG Enquiries
-router.post('/generate-customers',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
-  checkPermission('write'),
-  generateProspectiveCustomers
 );
 
 // List DG Enquiries (paginated, filtered) - Updated to use new controller

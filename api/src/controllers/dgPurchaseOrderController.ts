@@ -3,7 +3,6 @@ import { AuthenticatedRequest } from '../types';
 import { AppError } from '../errors/AppError';
 import { DGPurchaseOrder } from '../models/DGPurchaseOrder';
 import { DGQuotation } from '../models/DGQuotation';
-import { DGCustomer } from '../models/DGCustomer';
 import { Product } from '../models/Product';
 import { generateReferenceId } from '../utils/generateReferenceId';
 import {

@@ -287,7 +287,7 @@ const DGInvoiceFormPage: React.FC = () => {
       console.log('InvoiceForm: Received quotation data:', quotationData);
       
       // Recalculate totals when quotation data is loaded
-      const recalculatedData = calculateQuotationTotals(quotationData.items || [], quotationData.overallDiscount || 0);
+      const recalculatedData = calculateQuotationTotals(quotationData.items || [], [], null, quotationData.overallDiscount || 0);
       
       setFormData(prev => {
         const updatedData = {

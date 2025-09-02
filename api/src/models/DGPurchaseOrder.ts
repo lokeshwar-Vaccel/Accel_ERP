@@ -17,7 +17,7 @@ interface IDGPurchaseOrderSchema extends Document {
   poNumber: string;
   dgQuotation?: mongoose.Types.ObjectId; // Reference to DGQuotation
   customer: {
-    _id?: string; // DGCustomer ID for reference
+    _id?: string; // Customer ID for reference
     name: string;
     email: string;
     phone: string;

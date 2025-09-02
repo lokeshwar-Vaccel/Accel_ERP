@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { DGEnquiry } from '../models/DGEnquiry';
+import { Customer } from '../models/Customer';
 import { AppError } from '../errors/AppError';
 import { AuthenticatedRequest } from '../types';
 import { createDGEnquirySchema, updateDGEnquirySchema, getDGEnquiriesQuerySchema } from '../schemas/dgEnquirySchemas';
@@ -31,12 +32,101 @@ export const createDGEnquiry = async (
       }
     }
 
+    // Create customer data from enquiry data
+    const customerData = {
+      name: enquiryData.customerName,
+      alice: enquiryData.alice || undefined,
+      designation: enquiryData.designation || undefined,
+      contactPersonName: enquiryData.contactPersonName || enquiryData.customerName,
+      email: enquiryData.email || undefined,
+      phone: enquiryData.phoneNumber,
+      panNumber: enquiryData.panNumber || undefined,
+      addresses: enquiryData.addresses && enquiryData.addresses.length > 0 ? enquiryData.addresses.map((addr: any) => ({
+        id: addr.id || 1,
+        address: addr.address || 'Address to be updated',
+        state: addr.state || 'State to be updated',
+        district: addr.district || 'District to be updated',
+        pincode: addr.pincode || '000000',
+        isPrimary: addr.isPrimary || false,
+        gstNumber: addr.gstNumber || ''
+      })) : [{
+        id: 1,
+        address: 'Address to be updated',
+        state: 'State to be updated',
+        district: 'District to be updated',
+        pincode: '000000',
+        isPrimary: true,
+        gstNumber: ''
+      }],
+      customerType: 'dg', // Always set to 'dg' for DG enquiries
+      type: 'customer', // Always set to 'customer'
+      status: 'new',
+      notes: `Created from DG Enquiry: ${enquiryData.enquiryNo}`,
+      createdBy: req.user?.id
+    };
+
+    // Filter out undefined values from customerData
+    const filteredCustomerData = Object.fromEntries(
+      Object.entries(customerData).filter(([_, value]) => value !== undefined)
+    );
+
+    console.log('Customer data being created:', filteredCustomerData);
+    console.log('User ID from request:', req.user?.id);
+    console.log('Enquiry data received:', enquiryData);
+
+    // Create the customer first
+    let customer;
+    try {
+      customer = await Customer.create(filteredCustomerData);
+      console.log('Customer created successfully:', customer._id);
+    } catch (customerError: any) {
+      console.error('Error creating customer:', customerError);
+      console.error('Customer error details:', {
+        message: customerError.message,
+        code: customerError.code,
+        errors: customerError.errors
+      });
+      
+      if (customerError.code === 11000) {
+        // Customer with same name/phone already exists, try to find it
+        try {
+          customer = await Customer.findOne({
+            name: enquiryData.customerName,
+            phone: enquiryData.phoneNumber
+          });
+          if (!customer) {
+            return next(new AppError('Failed to create customer and no existing customer found', 500));
+          }
+          console.log('Using existing customer:', customer._id);
+        } catch (findError: any) {
+          console.error('Error finding existing customer:', findError);
+          return next(new AppError('Failed to create customer and error finding existing customer', 500));
+        }
+      } else {
+        // Log the specific validation errors
+        if (customerError.errors) {
+          const validationErrors = Object.keys(customerError.errors).map(key => 
+            `${key}: ${customerError.errors[key].message}`
+          ).join(', ');
+          return next(new AppError(`Customer validation failed: ${validationErrors}`, 400));
+        }
+        return next(new AppError(`Failed to create customer: ${customerError.message}`, 500));
+      }
+    }
+
+    // Add customer reference to enquiry data
+    enquiryData.customer = customer._id;
+
+    // Create the enquiry
     const enquiry = await DGEnquiry.create(enquiryData);
+
+    // Populate customer data in response
+    const populatedEnquiry = await DGEnquiry.findById(enquiry._id).populate('customer');
 
     res.status(201).json({
       success: true,
-      data: enquiry,
-      message: 'DG Enquiry created successfully'
+      data: populatedEnquiry,
+      message: 'DG Enquiry and Customer created successfully'
     });
   } catch (error: any) {
     if (error.code === 11000) {

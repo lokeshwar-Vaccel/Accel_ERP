@@ -1,5 +1,47 @@
 import Joi from 'joi';
 
+// Address schema for DG Enquiry
+const addressSchema = Joi.object({
+  id: Joi.number().required(),
+  address: Joi.string().required().trim().messages({
+    'string.empty': 'Address is required',
+    'any.required': 'Address is required'
+  }),
+  state: Joi.string().required().trim().messages({
+    'string.empty': 'State is required',
+    'any.required': 'State is required'
+  }),
+  district: Joi.string().required().trim().messages({
+    'string.empty': 'District is required',
+    'any.required': 'District is required'
+  }),
+  pincode: Joi.string().optional().trim().pattern(/^\d{6}$/).messages({
+    'string.pattern.base': 'Pincode must be 6 digits'
+  }),
+  isPrimary: Joi.boolean().default(false),
+  gstNumber: Joi.string().optional().trim().allow(''),
+  notes: Joi.string().optional().trim().allow('')
+});
+
+// DG Details schema for DG Enquiry
+const dgDetailsSchema = Joi.object({
+  dgSerialNumbers: Joi.string().optional().trim().allow(''),
+  alternatorMake: Joi.string().optional().trim().allow(''),
+  alternatorSerialNumber: Joi.string().optional().trim().allow(''),
+  dgMake: Joi.string().optional().trim().allow(''),
+  engineSerialNumber: Joi.string().optional().trim().allow(''),
+  dgModel: Joi.string().optional().trim().allow(''),
+  dgRatingKVA: Joi.number().min(0).default(0),
+  salesDealerName: Joi.string().optional().trim().allow(''),
+  commissioningDate: Joi.date().optional(),
+  warrantyStatus: Joi.string().valid('warranty', 'non_warranty').default('warranty'),
+  installationType: Joi.string().valid('infold', 'outfold').default('infold'),
+  amcStatus: Joi.string().valid('yes', 'no').default('yes'),
+  cluster: Joi.string().optional().trim().allow(''),
+  warrantyStartDate: Joi.date().optional().allow(null),
+  warrantyEndDate: Joi.date().optional().allow(null)
+});
+
 // Schema for creating a new DG Enquiry
 export const createDGEnquirySchema = Joi.object({
   // Basic Information
@@ -30,6 +72,9 @@ export const createDGEnquirySchema = Joi.object({
     'string.empty': 'Customer name is required',
     'any.required': 'Customer name is required'
   }),
+  alice: Joi.string().optional().trim().allow(''),
+  designation: Joi.string().optional().trim().allow(''),
+  contactPersonName: Joi.string().optional().trim().allow(''),
   phoneNumber: Joi.string().required().trim().pattern(/^\+?[1-9]\d{1,14}$/).messages({
     'string.empty': 'Phone number is required',
     'any.required': 'Phone number is required',
@@ -38,25 +83,12 @@ export const createDGEnquirySchema = Joi.object({
   email: Joi.string().email().optional().allow('').messages({
     'string.email': 'Please provide a valid email address'
   }),
+  panNumber: Joi.string().optional().trim().allow(''),
   
   // Address Information
-  address: Joi.string().required().trim().messages({
-    'string.empty': 'Address is required',
-    'any.required': 'Address is required'
-  }),
-  pincode: Joi.string().optional().trim().pattern(/^\d{6}$/).messages({
-    'string.empty': 'Pincode is required',
-    'any.required': 'Pincode is required',
-    'string.pattern.base': 'Pincode must be 6 digits'
-  }),
-  tehsil: Joi.string().optional().allow(''),
-  district: Joi.string().required().trim().messages({
-    'string.empty': 'District is required',
-    'any.required': 'District is required'
-  }),
-  state: Joi.string().required().trim().messages({
-    'string.empty': 'State is required',
-    'any.required': 'State is required'
+  addresses: Joi.array().items(addressSchema).min(1).required().messages({
+    'array.min': 'At least one address is required',
+    'any.required': 'Addresses are required'
   }),
   
   // DG Requirements
@@ -73,23 +105,16 @@ export const createDGEnquirySchema = Joi.object({
     'number.positive': 'Quantity must be positive',
     'any.required': 'Quantity is required'
   }),
-  segment: Joi.string().valid('Manufacturing', 'IT/Office', 'Healthcare', 'Education', 'Retail', 'Other').optional(),
+  segment: Joi.string().valid('Manufacturing', 'IT/Office', 'Healthcare', 'Education', 'Retail', 'Other').optional().allow(''),
   subSegment: Joi.string().optional().allow(''),
   dgOwnership: Joi.string().valid('NOT_OWNED', 'OWNED', 'RENTED').default('NOT_OWNED'),
   financeRequired: Joi.boolean().default(false),
-  // financeCompany: Joi.when('financeRequired', {
-  //   is: true,
-  //   then: Joi.string().required().trim().messages({
-  //     'string.empty': 'Finance company is required when finance is needed',
-  //     'any.required': 'Finance company is required when finance is needed'
-  //   }),
-  //   otherwise: Joi.string().optional().allow('')
-  // }),
+  financeCompany: Joi.string().optional().allow(''),
   
   // Employee Information
   assignedEmployeeCode: Joi.string().optional().allow(''),
   assignedEmployeeName: Joi.string().optional().allow(''),
-  employeeStatus: Joi.string().valid('Active', 'Inactive', 'On Leave').optional(),
+  employeeStatus: Joi.string().valid('Active', 'Inactive', 'On Leave').optional().allow(''),
   referenceEmployeeName: Joi.string().optional().allow(''),
   referenceEmployeeMobileNumber: Joi.string().optional().allow(''),
   referredBy: Joi.string().optional().allow(''),
@@ -97,6 +122,11 @@ export const createDGEnquirySchema = Joi.object({
   // Additional Information
   events: Joi.string().optional().allow(''),
   remarks: Joi.string().optional().allow(''),
+  notes: Joi.string().optional().allow(''),
+  
+  // DG Details
+  dgDetails: Joi.array().items(dgDetailsSchema).optional(),
+  numberOfDG: Joi.number().integer().min(0).default(1),
   
   // Optional fields from the model
   zone: Joi.string().optional().allow(''),
@@ -108,7 +138,6 @@ export const createDGEnquirySchema = Joi.object({
   plannedFollowUpDate: Joi.date().optional(),
   sourceFrom: Joi.string().optional().allow(''),
   numberOfFollowUps: Joi.number().integer().min(0).default(0),
-  panNumber: Joi.string().optional().allow(''),
   lastFollowUpDate: Joi.date().optional(),
   enquiryClosureDate: Joi.date().optional(),
   customer: Joi.string().optional() // ObjectId reference
@@ -128,21 +157,19 @@ export const updateDGEnquirySchema = Joi.object({
   customerType: Joi.string().valid('Retail', 'Corporate').optional(),
   corporateName: Joi.string().optional().allow(''),
   customerName: Joi.string().optional().trim(),
+  alice: Joi.string().optional().trim().allow(''),
+  designation: Joi.string().optional().trim().allow(''),
+  contactPersonName: Joi.string().optional().trim().allow(''),
   phoneNumber: Joi.string().optional().trim().pattern(/^\+?[1-9]\d{1,14}$/).messages({
     'string.pattern.base': 'Please provide a valid phone number'
   }),
   email: Joi.string().email().optional().allow('').messages({
     'string.email': 'Please provide a valid email address'
   }),
+  panNumber: Joi.string().optional().trim().allow(''),
   
   // Address Information
-  address: Joi.string().optional().trim(),
-  pincode: Joi.string().optional().trim().allow('').pattern(/^\d{6}$/).messages({
-    'string.pattern.base': 'Pincode must be 6 digits'
-  }),
-  tehsil: Joi.string().optional().allow(''),
-  district: Joi.string().optional().trim(),
-  state: Joi.string().optional().trim(),
+  addresses: Joi.array().items(addressSchema).optional(),
   
   // DG Requirements
   kva: Joi.number().integer().positive().optional().messages({
@@ -156,7 +183,7 @@ export const updateDGEnquirySchema = Joi.object({
     'number.integer': 'Quantity must be a whole number',
     'number.positive': 'Quantity must be positive'
   }),
-  segment: Joi.string().valid('Manufacturing', 'IT/Office', 'Healthcare', 'Education', 'Retail', 'Other').optional(),
+  segment: Joi.string().valid('Manufacturing', 'IT/Office', 'Healthcare', 'Education', 'Retail', 'Other').optional().allow(''),
   subSegment: Joi.string().optional().allow(''),
   dgOwnership: Joi.string().valid('NOT_OWNED', 'OWNED', 'RENTED').optional(),
   financeRequired: Joi.boolean().optional(),
@@ -165,7 +192,7 @@ export const updateDGEnquirySchema = Joi.object({
   // Employee Information
   assignedEmployeeCode: Joi.string().optional().allow(''),
   assignedEmployeeName: Joi.string().optional().allow(''),
-  employeeStatus: Joi.string().valid('Active', 'Inactive', 'On Leave').optional(),
+  employeeStatus: Joi.string().valid('Active', 'Inactive', 'On Leave').optional().allow(''),
   referenceEmployeeName: Joi.string().optional().allow(''),
   referenceEmployeeMobileNumber: Joi.string().optional().allow(''),
   referredBy: Joi.string().optional().allow(''),
@@ -173,6 +200,11 @@ export const updateDGEnquirySchema = Joi.object({
   // Additional Information
   events: Joi.string().optional().allow(''),
   remarks: Joi.string().optional().allow(''),
+  notes: Joi.string().optional().allow(''),
+  
+  // DG Details
+  dgDetails: Joi.array().items(dgDetailsSchema).optional(),
+  numberOfDG: Joi.number().integer().min(0).optional(),
   
   // Optional fields from the model
   zone: Joi.string().optional().allow(''),
@@ -184,7 +216,6 @@ export const updateDGEnquirySchema = Joi.object({
   plannedFollowUpDate: Joi.date().optional(),
   sourceFrom: Joi.string().optional().allow(''),
   numberOfFollowUps: Joi.number().integer().min(0).optional(),
-  panNumber: Joi.string().optional().allow(''),
   lastFollowUpDate: Joi.date().optional(),
   enquiryClosureDate: Joi.date().optional(),
   customer: Joi.string().optional() // ObjectId reference

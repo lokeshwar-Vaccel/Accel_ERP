@@ -27,7 +27,6 @@ import { ResetPasswordForm } from "components/features/auth/ResetPasswordForm";
 import DGSales from "pages/DGSales";
 import DGInvoiceForm from "pages/DGInvoiceForm";
 import DGQuotationForm from "pages/DGQuotationForm";
-import DGCustomers from "pages/DGCustomers";
 
 const AppRoutes: React.FC = () => {
     return (
@@ -93,9 +92,6 @@ const AppRoutes: React.FC = () => {
 
             {/* DG Sales */}
             <Route path="/dg-sales" element={<DGSales />} />
-            
-            {/* DG Customers */}
-            <Route path="/dg-customers" element={<DGCustomers />} />
             
             {/* DG Quotation Management */}
             <Route path="/dg-quotation/create" element={<DGQuotationForm />} />

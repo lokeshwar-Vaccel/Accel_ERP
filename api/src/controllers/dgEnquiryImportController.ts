@@ -5,7 +5,6 @@ import { AppError } from '../middleware/errorHandler';
 import * as XLSX from 'xlsx';
 import { dgEnquiryImportSchema } from '../schemas';
 import Joi from 'joi';
-import { DGCustomer, DGCustomerType, DGCustomerStatus, DGLeadSource, DGPhase } from '../models/DGCustomer';
 
 // Helper: Check if a row is a demo/test row
 const isDemoRow = (row: Record<string, any>): boolean => {
@@ -143,15 +142,11 @@ export const previewDGEnquiryImport = async (
       invalidRows: 0,
       errors: [] as string[],
       enquiriesToCreate: [] as any[],
-      customersToCreate: [] as any[],
-      existingCustomers: [] as any[],
       duplicateCount: 0,
       uniqueEnquiries: 0
     };
 
     const sampleData: any[] = [];
-    let newCustomersCount = 0;
-    let existingCustomersCount = 0;
     let actualDataRows = 0; // Counter for non-demo rows
 
     // --- Track unstored rows ---
@@ -234,100 +229,17 @@ export const previewDGEnquiryImport = async (
       }
     }
 
-    // Get all existing customers by phone numbers (single query)
-    const existingCustomers = await DGCustomer.find({
-      phone: { $in: Array.from(phoneNumbers) }
-    });
-    
-    const existingPhoneMap = new Map<string, any>();
-    existingCustomers.forEach(customer => {
-      existingPhoneMap.set(customer.phone, customer);
-    });
-
-    // Process valid rows and prepare customer data
-    const newCustomerPhoneMap = new Map<string, any>();
-    
+    // Process valid rows and prepare enquiry data
     for (const { row: mapped, index, rowNum } of validRows) {
-      let customer = null;
-      
-      if (mapped.phoneNumber) {
-        customer = existingPhoneMap.get(mapped.phoneNumber);
-        
-        if (customer) {
-          existingCustomersCount++;
-          preview.existingCustomers.push({
-            enquiryNo: mapped.enquiryNo,
-            customerName: customer.name,
-            email: customer.email,
-            phone: customer.phone,
-            isDGSalesCustomer: customer.isDGSalesCustomer || false
-          });
-        } else if (!newCustomerPhoneMap.has(mapped.phoneNumber)) {
-          // This is a new unique phone number
-          newCustomersCount++;
-          
-          const baseName = mapped.customerName || mapped.corporateName || 'Unknown Customer';
-          const uniqueName = `${baseName} (${mapped.enquiryNo})`;
-          
-          const customerData = {
-            name: uniqueName,
-            corporateName: mapped.corporateName,
-            contactPersonName: mapped.customerName,
-            email: mapped.email || undefined,
-            phone: mapped.phoneNumber,
-            addresses: [{
-              id: new Date().getTime() + index,
-              address: mapped.address || '',
-              state: mapped.state || '',
-              district: mapped.district || '',
-              pincode: mapped.pinCode || '',
-              tehsil: mapped.tehsil || '',
-              isPrimary: true
-            }],
-            dgRequirements: {
-              kva: mapped.kva || '',
-              phase: mapped.phase === '3' ? DGPhase.THREE : DGPhase.SINGLE,
-              quantity: mapped.quantity || 1,
-              segment: mapped.segment,
-              subSegment: mapped.subSegment || '',
-              dgOwnership: mapped.dgOwnership || 'NOT_OWNED',
-              financeRequired: mapped.financeRequired === 'Yes',
-              financeCompany: mapped.financeCompany || '',
-              remarks: mapped.remarks || ''
-            },
-            customerType: mapped.customerType === 'Corporate' ? DGCustomerType.CORPORATE : DGCustomerType.RETAIL,
-            status: DGCustomerStatus.NEW,
-            leadSource: DGLeadSource.PORTAL_UPLOAD,
-            sourceFrom: mapped.sourceFrom || '',
-            assignedEmployeeCode: mapped.assignedEmployeeCode || '',
-            assignedEmployeeName: mapped.assignedEmployeeName || '',
-            employeeStatus: mapped.employeeStatus || '',
-            referenceEmployeeName: mapped.referenceEmployeeName || '',
-            referenceEmployeeMobileNumber: mapped.referenceEmployeeMobileNumber || '',
-            referredBy: mapped.referredBy || '',
-            events: mapped.events || '',
-            notes: mapped.remarks || '',
-            createdBy: req.user?.id
-          };
-          
-          preview.customersToCreate.push(customerData);
-          newCustomerPhoneMap.set(mapped.phoneNumber, customerData);
-        }
-      }
-
       // Add enquiry to create list
       preview.enquiriesToCreate.push({
-        ...mapped,
-        customer: customer?._id,
-        status: customer ? 'existing_customer' : 'new_customer'
+        ...mapped
       });
 
       // Add to sample data (first 10 rows)
       if (sampleData.length < 10) {
         sampleData.push({
-          ...mapped,
-          status: customer ? 'existing_customer' : 'new_customer',
-          customerExists: !!customer
+          ...mapped
         });
       }
 
@@ -346,8 +258,6 @@ export const previewDGEnquiryImport = async (
           totalRows: actualDataRows, // Use actual data rows instead of raw rows
           validRows: preview.validRows,
           invalidRows: preview.invalidRows,
-          newCustomers: newCustomersCount,
-          existingCustomers: existingCustomersCount,
           duplicateCount: duplicateCount,
           uniqueEnquiries: uniqueEnquiries.length,
           enquiriesToCreate: preview.enquiriesToCreate.length
@@ -355,8 +265,6 @@ export const previewDGEnquiryImport = async (
         errors: preview.errors,
         sample: sampleData,
         enquiriesToCreate: preview.enquiriesToCreate,
-        customersToCreate: preview.customersToCreate,
-        existingCustomers: preview.existingCustomers,
         duplicateGroups: duplicateGroupsArray,
         duplicateRows: duplicateRowObjects,
         unstoredRows: unstoredRows
@@ -423,8 +331,7 @@ export const importDGEnquiries = async (
 
     let actualDataRows = 0;
 
-    // First, collect all unique phone numbers and check existing customers
-    const phoneNumbers = new Set<string>();
+    // Process valid rows and create enquiries
     const validRows: any[] = [];
     
     for (let i = 0; i < rawRows.length; i++) {
@@ -459,128 +366,23 @@ export const importDGEnquiries = async (
         results.skipped.push({ row: mapped, reason: 'Duplicate enquiryNo in database' });
         continue;
       }
-
-      if (mapped.phoneNumber) {
-        phoneNumbers.add(mapped.phoneNumber);
-      }
       
       validRows.push({ row: mapped, index: i });
     }
 
-    // Get all existing customers by phone numbers
-    const existingCustomers = await DGCustomer.find({
-      phone: { $in: Array.from(phoneNumbers) }
-    });
-    
-    const existingPhoneMap = new Map<string, any>();
-    existingCustomers.forEach(customer => {
-      existingPhoneMap.set(customer.phone, customer);
-    });
-
-    // Prepare bulk customer data for new customers
-    const newCustomerData: any[] = [];
-    const customerPhoneMap = new Map<string, any>();
-
-    for (const { row: mapped, index } of validRows) {
-      if (mapped.phoneNumber && !existingPhoneMap.has(mapped.phoneNumber) && !customerPhoneMap.has(mapped.phoneNumber)) {
-        // This is a new unique phone number, prepare customer data
-        const baseName = mapped.customerName || mapped.corporateName || 'Unknown Customer';
-        const uniqueName = `${baseName} (${mapped.enquiryNo})`;
-        
-        const customerData = {
-          name: uniqueName,
-          corporateName: mapped.corporateName,
-          contactPersonName: mapped.customerName,
-          email: mapped.email || undefined,
-          phone: mapped.phoneNumber,
-          addresses: [{
-            id: new Date().getTime() + index, // Make ID unique
-            address: mapped.address || '',
-            state: mapped.state || '',
-            district: mapped.district || '',
-            pincode: mapped.pinCode || '',
-            tehsil: mapped.tehsil || '',
-            isPrimary: true
-          }],
-          dgRequirements: {
-            kva: mapped.kva || '',
-            phase: mapped.phase === '3' ? DGPhase.THREE : DGPhase.SINGLE,
-            quantity: mapped.quantity || 1,
-            segment: mapped.segment,
-            subSegment: mapped.subSegment || '',
-            dgOwnership: mapped.dgOwnership || 'NOT_OWNED',
-            financeRequired: mapped.financeRequired === 'Yes',
-            financeCompany: mapped.financeCompany || '',
-            remarks: mapped.remarks || ''
-          },
-          customerType: mapped.customerType === 'Corporate' ? DGCustomerType.CORPORATE : DGCustomerType.RETAIL,
-          status: DGCustomerStatus.NEW,
-          leadSource: DGLeadSource.PORTAL_UPLOAD,
-          sourceFrom: mapped.sourceFrom || '',
-          assignedEmployeeCode: mapped.assignedEmployeeCode || '',
-          assignedEmployeeName: mapped.assignedEmployeeName || '',
-          employeeStatus: mapped.employeeStatus || '',
-          referenceEmployeeName: mapped.referenceEmployeeName || '',
-          referenceEmployeeMobileNumber: mapped.referenceEmployeeMobileNumber || '',
-          referredBy: mapped.referredBy || '',
-          events: mapped.events || '',
-          notes: mapped.remarks || '',
-          createdBy: req.user?.id
-        };
-        
-        newCustomerData.push(customerData);
-        customerPhoneMap.set(mapped.phoneNumber, customerData);
-      }
-    }
-
-    // Bulk create new customers
-    let createdCustomers: any[] = [];
-    if (newCustomerData.length > 0) {
-      try {
-        console.log(`Creating ${newCustomerData.length} new customers in bulk...`);
-        createdCustomers = await DGCustomer.insertMany(newCustomerData);
-        console.log(`Successfully created ${createdCustomers.length} customers`);
-        
-        // Add created customers to the map
-        createdCustomers.forEach(customer => {
-          existingPhoneMap.set(customer.phone, customer);
-        });
-      } catch (bulkErr: any) {
-        console.error('Bulk customer creation failed:', bulkErr);
-        results.errors.push({
-          row: { enquiryNo: 'BULK_CREATION' },
-          error: `Bulk customer creation failed: ${bulkErr.message}`
-        });
-      }
-    }
-
-    // Now process all valid rows and create enquiries
+    // Process valid rows and create enquiries
     for (const { row: mapped, index } of validRows) {
       try {
-        let customer: any = null;
-        
-        if (mapped.phoneNumber) {
-          customer = existingPhoneMap.get(mapped.phoneNumber);
-        }
-
         // Create DG Enquiry
         const enquiryData = {
           ...mapped,
-          customer: customer?._id,
           createdBy: req.user?.id
         };
 
         const createdEnquiry = await DGEnquiry.create(enquiryData);
 
         results.created.push({
-          enquiry: createdEnquiry,
-          customer: customer ? {
-            _id: customer._id,
-            name: customer.name,
-            email: customer.email,
-            phone: customer.phone,
-            isNew: createdCustomers.some(c => c._id.toString() === customer._id.toString())
-          } : null
+          enquiry: createdEnquiry
         });
       } catch (err: any) {
         console.error(`Error importing enquiry ${mapped.enquiryNo}:`, err);
@@ -643,103 +445,4 @@ export const getDGEnquiries = async (
   }
 };
 
-// @desc    Generate prospective customers from DG Enquiries
-// @route   POST /api/v1/dg-enquiries/generate-customers
-// @access  Private
-export const generateProspectiveCustomers = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const enquiries = await DGEnquiry.find({ customer: { $exists: false } });
-
-    const created: any[] = [];
-    let linked = 0;
-    const errors: any[] = [];
-
-    for (const enq of enquiries) {
-      try {
-        let customer = await DGCustomer.findOne({
-          $or: [
-            { phone: enq.phoneNumber },
-            { email: enq.email },
-            { name: enq.customerName }
-          ],
-          isDGSalesCustomer: true
-        });
-
-        if (!customer) {
-          // Create unique name to avoid conflicts
-          const baseName = enq.customerName || enq.corporateName || 'Unknown Customer';
-          const uniqueName = `${baseName} (${enq.enquiryNo})`;
-          
-          customer = await DGCustomer.create({
-            name: uniqueName,
-            corporateName: enq.corporateName,
-            contactPersonName: enq.customerName,
-            email: enq.email,
-            phone: enq.phoneNumber,
-            addresses: [{
-              id: new Date().getTime(),
-              address: enq.address,
-              state: enq.state,
-              district: enq.district,
-              pincode: enq.pinCode,
-              tehsil: enq.tehsil,
-              isPrimary: true
-            }],
-            dgRequirements: {
-              kva: enq.kva || '',
-              phase: enq.phase === '3' ? DGPhase.THREE : DGPhase.SINGLE,
-              quantity: enq.quantity || 1,
-              segment: enq.segment,
-              subSegment: enq.subSegment || '',
-              dgOwnership: enq.dgOwnership || 'NOT_OWNED',
-              financeRequired: enq.financeRequired === 'Yes',
-              financeCompany: enq.financeCompany || '',
-              remarks: enq.remarks || ''
-            },
-            customerType: enq.customerType === 'Corporate' ? DGCustomerType.CORPORATE : DGCustomerType.RETAIL,
-            status: DGCustomerStatus.NEW,
-            leadSource: DGLeadSource.PORTAL_UPLOAD,
-            sourceFrom: enq.sourceFrom || '',
-            assignedEmployeeCode: enq.assignedEmployeeCode || '',
-            assignedEmployeeName: enq.assignedEmployeeName || '',
-            employeeStatus: enq.employeeStatus || '',
-            referenceEmployeeName: enq.referenceEmployeeName || '',
-            referenceEmployeeMobileNumber: enq.referenceEmployeeMobileNumber || '',
-            referredBy: enq.referredBy || '',
-            events: enq.events || '',
-            notes: enq.remarks || '',
-            createdBy: enq.createdBy || req.user?.id
-          });
-
-          // Optional: populate any virtuals if needed
-          created.push(customer.toObject());
-        } else {
-          linked++;
-        }
-
-        enq.customer = customer._id;
-        await enq.save();
-      } catch (err: any) {
-        errors.push({ enquiryNo: enq.enquiryNo, error: err.message });
-      }
-    }
-
-    const response: APIResponse = {
-      success: true,
-      message: 'Prospective customers processed successfully',
-      data: {
-        created,
-        linked,
-        errors
-      }
-    };
-
-    res.json(response);
-  } catch (error) {
-    next(error);
-  }
-};
+// @desc    Get paginated list of DG Enquiries
