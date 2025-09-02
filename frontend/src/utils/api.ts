@@ -173,10 +173,6 @@ class ApiClient {
 
       return this.makeRequest<{ success: boolean; data:{customers:any[],counts:any}; pagination: any }>(`/customers${params ? `?${new URLSearchParams(params)}` : ''}`);
     },
-    dgCustomers: {
-      getAll: (params?: any) =>
-        this.makeRequest<{ success: boolean; data: any[]; page: number; limit: number; total: number; totalPages: number }>(`/customers/dg-customers${params ? `?${new URLSearchParams(params)}` : ''}`),
-    },
     oemCustomers: {
       getAll: (params?: any) =>
         this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/customers/oem${params ? `?${new URLSearchParams(params)}` : ''}`),
@@ -1345,10 +1341,6 @@ class ApiClient {
 
   // DG Sales APIs
   dgSales = {
-    dgCustomers: {
-      getAll: (params?: any) =>
-        this.makeRequest<{ success: boolean; data: any[]; page: number; limit: number; total: number; totalPages: number }>(`/customers/dg-sales${params ? `?${new URLSearchParams(params)}` : ''}`),
-    },
     // DG Enquiries
     enquiries: {
       previewImport: (file: File) => {
@@ -1412,11 +1404,6 @@ class ApiClient {
       delete: (id: string) =>
         this.makeRequest<{ success: boolean; message: string }>(`/dg-enquiries/${id}`, {
           method: 'DELETE',
-        }),
-      
-      generateCustomers: () =>
-        this.makeRequest<{ success: boolean; data: { created: number; linked: number; errors: any[] } }>('/dg-enquiries/generate-customers', {
-          method: 'POST',
         }),
     },
 

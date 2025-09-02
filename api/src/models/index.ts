@@ -1,5 +1,4 @@
 export * from './DGEnquiry';
-export * from './DGCustomer';
 export * from './DGPurchaseOrder';
 export * from './ProformaInvoice';
 export * from './DGInvoice';

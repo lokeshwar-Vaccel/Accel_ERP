@@ -287,7 +287,7 @@ const DGInvoiceFormPage: React.FC = () => {
       console.log('InvoiceForm: Received quotation data:', quotationData);
       
       // Recalculate totals when quotation data is loaded
-      const recalculatedData = calculateQuotationTotals(quotationData.items || [], quotationData.overallDiscount || 0);
+      const recalculatedData = calculateQuotationTotals(quotationData.items || [], [], null, quotationData.overallDiscount || 0);
       
       setFormData(prev => {
         const updatedData = {
@@ -713,7 +713,7 @@ const DGInvoiceFormPage: React.FC = () => {
       }
 
       // Recalculate totals with current overall discount
-      const calculationResult = calculateQuotationTotals(newItems, prev.overallDiscount || 0);
+      const calculationResult = calculateQuotationTotals(newItems, [], null, prev.overallDiscount || 0);
 
       return {
         ...prev,
@@ -792,7 +792,7 @@ const DGInvoiceFormPage: React.FC = () => {
       }
 
       // Recalculate totals with current overall discount
-      const calculationResult = calculateQuotationTotals(updatedItems, prev.overallDiscount || 0);
+      const calculationResult = calculateQuotationTotals(updatedItems, [], null, prev.overallDiscount || 0);
 
       return {
         ...prev,
@@ -2890,7 +2890,7 @@ const DGInvoiceFormPage: React.FC = () => {
                         console.log('Overall discount changed to:', value);
                         setFormData(prev => {
                           // Calculate totals with the new overall discount
-                          const calculationResult = calculateQuotationTotals(prev.items || [], value);
+                          const calculationResult = calculateQuotationTotals(prev.items || [], [], null, value);
                           console.log('Calculation result:', calculationResult);
                           const updatedData = {
                             ...prev,

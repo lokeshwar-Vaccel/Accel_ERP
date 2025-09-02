@@ -582,8 +582,8 @@ const InventoryManagement: React.FC = () => {
     if (selectedRack) {
       setRackFormData({
         name: selectedRack.name,
-        room: selectedRack.room._id,
-        location: selectedRack.location._id,
+        room: selectedRack.room?._id || selectedRack.room || '',
+        location: selectedRack.location?._id || selectedRack.location || '',
         description: selectedRack.description || '',
         isActive: selectedRack.isActive
       });
@@ -941,7 +941,7 @@ const InventoryManagement: React.FC = () => {
 
   useEffect(() => {
     if (rackFormData.location) {
-      const roomsInLocation = rooms.filter(room => room.location._id === rackFormData.location);
+      const roomsInLocation = rooms.filter(room => room.location && room.location._id === rackFormData.location);
       setFilteredRooms(roomsInLocation);
 
       // Reset room selection if current room is not in the selected location
@@ -2548,30 +2548,39 @@ const InventoryManagement: React.FC = () => {
             overflowX: 'scroll !important' as any
           }}
         >
-          <table className="w-full min-w-[1600px] table-fixed">
+          <table className="w-full min-w-[2400px] table-fixed">
             <thead className="bg-gray-50 sticky top-0">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48">Product Details</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Part No</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Stock Levels</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Location</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">CPCB No</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Unit Price</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">UOM</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Pricing</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-36">Status & Department</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Technical Info</th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Actions</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-40">Product Name</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">Part No</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Category</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Brand</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Department</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Current Qty</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Reserved Qty</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Available Qty</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Location</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Room</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Rack</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">UOM</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Unit Price</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">GST %</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">GNDP</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">CPCB No</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">HSN Number</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Status</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-28">Last Updated</th>
+                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-24">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200 overflow-y-scroll">
               {loading ? (
                 <tr>
-                  <td colSpan={11} className="px-6 py-8 text-center text-gray-500">Loading inventory...</td>
+                  <td colSpan={20} className="px-6 py-8 text-center text-gray-500">Loading inventory...</td>
                 </tr>
               ) : inventory.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="px-6 py-8 text-center text-gray-500">No inventory items found</td>
+                  <td colSpan={20} className="px-6 py-8 text-center text-gray-500">No inventory items found</td>
                 </tr>
               ) : (
                 inventory.map((item, idx) => {
@@ -2579,130 +2588,124 @@ const InventoryManagement: React.FC = () => {
                   const StatusIcon = status.icon;
                   return (
                     <tr key={item._id || idx} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-4 w-72 uppercase">
-                        <div className="flex items-start">
-                          <Package className="w-4 h-4 text-gray-400 mr-2 mt-1 flex-shrink-0" />
-                          <div className="min-w-0 flex-1">
-                            <div className="text-sm font-medium text-gray-900 break-words">
-                              {item.product?.name}
-                            </div>
-                            {/* <div className="text-xs text-gray-500">
-                              {item.product?.partNo}
-                            </div> */}
-                            <div className="text-xs text-gray-400 mt-1">
-                              {item.product?.brand} • {item.product?.category}
-                            </div>
-                          </div>
-                        </div>
+                      {/* Product Name */}
+                      <td className="px-3 py-3 text-sm font-medium text-gray-900 break-words">
+                        {item.product?.name || 'N/A'}
                       </td>
-                      <td className="px-4 py-4 text-xs font-bold text-black">{item.product?.partNo || 'N/A'}</td>
-                      <td className="px-4 py-4 w-36">
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Current:</span>
-                            <span className="text-sm font-bold text-gray-900">{item.quantity}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Reserved:</span>
-                            <span className="text-xs text-orange-600 font-medium">{item.reservedQuantity || 0}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span className="text-xs text-gray-500">Available:</span>
-                            <span className="text-xs text-green-600 font-medium">{item.availableQuantity}</span>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            {/* <span className="text-xs text-gray-500">UOM:</span>
-                            <span className="text-xs text-green-600 font-medium">{item.product?.uom || 'N/A'}</span> */}
-                          </div>
-                        </div>
+                      
+                      {/* Part No */}
+                      <td className="px-3 py-3 text-xs font-bold text-black font-mono">
+                        {item.product?.partNo || 'N/A'}
                       </td>
-
-                      <td className="px-4 py-4 w-40">
-                        <div className="space-y-1">
-                          <div className="flex items-center">
-                            <Building className="w-3 h-3 text-blue-500 mr-1" />
-                            <span className="text-sm font-medium text-gray-900 truncate">
-                              {item.location?.name || <span className="text-red-500">Unassigned</span>}
-                            </span>
-                          </div>
-                          <div className="flex items-center">
-                            <Archive className="w-3 h-3 text-green-500 mr-1" />
-                            <span className="text-xs text-gray-700 truncate">
-                              Room: {item.room?.name || <span className="text-red-500">Unassigned</span>}
-                            </span>
-                          </div>
-                          <div className="flex items-center">
-                            <MapPin className="w-3 h-3 text-purple-500 mr-1" />
-                            <span className="text-xs text-gray-600 truncate">
-                              Rack: {item.rack?.name || <span className="text-red-500">Unassigned</span>}
-                            </span>
-                          </div>
-                        </div>
+                      
+                      {/* Category */}
+                      <td className="px-3 py-3 text-xs text-gray-700 capitalize">
+                        {item.product?.category || 'N/A'}
                       </td>
-                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.cpcbNo || 'N/A'}</td>
-                      <td className="px-4 py-4 text-sm font-medium text-gray-900">{item.product?.price !== undefined ? `₹${item.product.price.toFixed(2)}` : 'N/A'}</td>
-                      <td className="px-4 py-4 text-xs text-gray-700">{item.product?.uom || 'N/A'}</td>
-
-                      <td className="px-4 py-4 w-36">
-                        <div className="space-y-1">
-                          {/* <div className="text-sm font-medium text-gray-900">
-                          MRP: ₹{(item.product?.price || 0).toFixed(2)}
-                          </div> */}
-                          <div className="text-xs text-gray-600">
-                            GST: {item.product?.gst}%
-                          </div>
-                          <div className="text-xs text-gray-700 font-bold">
-                            GNDP: ₹{(item.product?.gndp || 0).toFixed(2)}
-                          </div>
-                        </div>
+                      
+                      {/* Brand */}
+                      <td className="px-3 py-3 text-xs text-gray-700">
+                        {item.product?.brand || 'N/A'}
                       </td>
-
-                      <td className="px-4 py-4 w-36 uppercase">
-                        <div className="space-y-2">
-                          <Badge variant={status.variant} size="xs">
-                            <StatusIcon className="w-2 h-2 mr-1" />
-                            {status.label}
-                          </Badge>
-                          <div>
-                            <Badge variant="default" size="xs">
-                              {item.product?.dept}
-                            </Badge>
-                          </div>
-                        </div>
+                      
+                      {/* Department */}
+                      <td className="px-3 py-3 text-xs text-gray-700 uppercase">
+                        {item.product?.dept || 'N/A'}
                       </td>
-
-                      <td className="px-4 py-4 w-32 uppercase">
-                        <div className="space-y-1 text-xs text-gray-500">
-                          <div>
-                            HSN: {item.product?.hsnNumber}
-                          </div>
-                          <div>
-                            {new Date(item?.lastUpdated).toLocaleDateString()}
-                          </div>
-                          <div className="text-xs text-gray-400 truncate">
-                            {item.product?.productType2}
-                          </div>
-                        </div>
+                      
+                      {/* Current Quantity */}
+                      <td className="px-3 py-3 text-sm font-bold text-gray-900 text-center">
+                        {item.quantity}
                       </td>
-                      <td className="px-4 py-4 w-32 whitespace-nowrap text-sm font-medium">
+                      
+                      {/* Reserved Quantity */}
+                      <td className="px-3 py-3 text-sm font-medium text-orange-600 text-center">
+                        {item.reservedQuantity || 0}
+                      </td>
+                      
+                      {/* Available Quantity */}
+                      <td className="px-3 py-3 text-sm font-medium text-green-600 text-center">
+                        {item.availableQuantity}
+                      </td>
+                      
+                      {/* Location */}
+                      <td className="px-3 py-3 text-xs text-gray-900">
+                        {item.location?.name || <span className="text-red-500">Unassigned</span>}
+                      </td>
+                      
+                      {/* Room */}
+                      <td className="px-3 py-3 text-xs text-gray-700">
+                        {item.room?.name || <span className="text-red-500">Unassigned</span>}
+                      </td>
+                      
+                      {/* Rack */}
+                      <td className="px-3 py-3 text-xs text-gray-600">
+                        {item.rack?.name || <span className="text-red-500">Unassigned</span>}
+                      </td>
+                      
+                      {/* UOM */}
+                      <td className="px-3 py-3 text-xs text-gray-700">
+                        {item.product?.uom || 'N/A'}
+                      </td>
+                      
+                      {/* Unit Price */}
+                      <td className="px-3 py-3 text-sm font-medium text-gray-900">
+                        {item.product?.price !== undefined ? `₹${item.product.price.toFixed(2)}` : 'N/A'}
+                      </td>
+                      
+                      {/* GST % */}
+                      <td className="px-3 py-3 text-xs text-gray-700">
+                        {item.product?.gst || 0}%
+                      </td>
+                      
+                      {/* GNDP */}
+                      <td className="px-3 py-3 text-sm font-medium text-gray-900">
+                        ₹{(item.product?.gndp || 0).toFixed(2)}
+                      </td>
+                      
+                      {/* CPCB No */}
+                      <td className="px-3 py-3 text-xs text-gray-700">
+                        {item.product?.cpcbNo || 'N/A'}
+                      </td>
+                      
+                      {/* HSN Number */}
+                      <td className="px-3 py-3 text-xs text-gray-700">
+                        {item.product?.hsnNumber || 'N/A'}
+                      </td>
+                      
+                      {/* Status */}
+                      <td className="px-3 py-3">
+                        <Badge variant={status.variant} size="xs">
+                          <StatusIcon className="w-3 h-3 mr-1" />
+                          {status.label}
+                        </Badge>
+                      </td>
+                      
+                      {/* Last Updated */}
+                      <td className="px-3 py-3 text-xs text-gray-500">
+                        {new Date(item?.lastUpdated).toLocaleDateString()}
+                      </td>
+                      
+                      {/* Actions */}
+                      <td className="px-3 py-3 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center justify-center space-x-1">
                           <button
                             onClick={() => handleUpdateStock(item)}
-                            className="text-blue-600 hover:text-blue-900 p-2 rounded hover:bg-blue-50 transition-colors"
+                            className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
                             title="Adjust Stock"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => viewStockHistory(item)}
-                            className="text-green-600 hover:text-green-900 p-2 rounded hover:bg-green-50 transition-colors"
+                            className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
                             title="View History"
                           >
                             <Package className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleTransferStock(item)}
-                            className="text-purple-600 hover:text-purple-900 p-1 pe-3 rounded hover:bg-purple-50 transition-colors"
+                            className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-purple-50 transition-colors"
                             title="Transfer Stock"
                           >
                             <ArrowUpDown className="w-4 h-4" />
@@ -3217,7 +3220,7 @@ const InventoryManagement: React.FC = () => {
                                     {room.isActive ? 'Active' : 'Inactive'}
                                   </span>
                                   <span className="text-sm ml-4 text-gray-600">
-                                    Racks Count: {racks.filter(rack => rack.room._id === room._id).length}
+                                    Racks Count: {racks.filter(rack => rack.room && rack.room._id === room._id).length}
                                   </span>
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1">
@@ -3263,12 +3266,12 @@ const InventoryManagement: React.FC = () => {
                                     {room.isActive ? 'Active' : 'Inactive'}
                                   </span>
                                   <span className="text-sm ml-4 text-gray-600">
-                                    Racks Count: {racks.filter(rack => rack.room._id === room._id).length}
+                                    Racks Count: {racks.filter(rack => rack.room && rack.room._id === room._id).length}
                                   </span>
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1">
                                   Location: {
-                                    locations.find(loc => loc._id === room.location._id)?.name || 'Unknown'
+                                    locations.find(loc => loc._id === (room.location?._id || room.location))?.name || 'Unknown'
                                   }
                                 </p>
                                 {room.description && (
@@ -3359,9 +3362,9 @@ const InventoryManagement: React.FC = () => {
                                 </div>
                                 <p className="text-sm text-gray-600 mt-1">
                                   Location: {
-                                    locations.find(loc => loc._id === rack.location._id)?.name || 'Unknown'
+                                    locations.find(loc => loc._id === (rack.location?._id || rack.location))?.name || 'Unknown'
                                   } &rarr; Room: {
-                                    rooms.find(room => room._id === rack.room._id)?.name || 'Unknown'
+                                    rooms.find(room => room._id === (rack.room?._id || rack.room))?.name || 'Unknown'
                                   }
                                 </p>
                                 {rack.description && (
@@ -3643,7 +3646,7 @@ const InventoryManagement: React.FC = () => {
                         disabled={!transferFormData.toLocation}
                       >
                         <option value="">Select destination room</option>
-                        {rooms.filter(room => room.location._id === transferFormData.toLocation).map(room => (
+                        {rooms.filter(room => room.location && room.location._id === transferFormData.toLocation).map(room => (
                           <option key={room._id} value={room._id}>{room.name}</option>
                         ))}
                       </select>
@@ -3658,7 +3661,7 @@ const InventoryManagement: React.FC = () => {
                         disabled={!transferFormData.toRoom}
                       >
                         <option value="">Select destination rack</option>
-                        {racks.filter(rack => rack.room._id === transferFormData.toRoom).map(rack => (
+                        {racks.filter(rack => rack.room && rack.room._id === transferFormData.toRoom).map(rack => (
                           <option key={rack._id} value={rack._id}>{rack.name}</option>
                         ))}
                       </select>

@@ -13,7 +13,6 @@ interface DGPurchaseOrderFormProps {
   onClose: () => void;
   onSuccess: () => void;
   dgQuotation?: any;
-  dgCustomers?: any[];
   products?: any[];
   suppliers?: any[];
   initialData?: any;
@@ -75,7 +74,6 @@ const DGPurchaseOrderForm: React.FC<DGPurchaseOrderFormProps> = ({
   onClose,
   onSuccess,
   dgQuotation,
-  dgCustomers = [],
   products = [],
   suppliers = [],
   initialData,
@@ -181,14 +179,6 @@ const DGPurchaseOrderForm: React.FC<DGPurchaseOrderFormProps> = ({
     }
   };
 
-  const getFilteredCustomers = (searchTerm: string = '') => {
-    return dgCustomers.filter(customer =>
-      customer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      customer.phone?.includes(searchTerm)
-    );
-  };
-
   const getFilteredSuppliers = (searchTerm: string = '') => {
     return suppliers.filter(supplier =>
       supplier.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -205,29 +195,6 @@ const DGPurchaseOrderForm: React.FC<DGPurchaseOrderFormProps> = ({
        product.name?.toLowerCase().includes('genset') ||
        product.name?.toLowerCase().includes('generator'))
     );
-  };
-
-  const handleCustomerSelect = (customerId: string) => {
-    const customer = dgCustomers.find(c => c._id === customerId);
-    if (customer) {
-      setFormData(prev => ({
-        ...prev,
-        customer: {
-          _id: customer._id,
-          name: customer.name || '',
-          email: customer.email || '',
-          phone: customer.phone || '',
-          pan: customer.pan || '',
-          corporateName: customer.corporateName || '',
-          address: customer.address || '',
-          pinCode: customer.pinCode || '',
-          tehsil: customer.tehsil || '',
-          district: customer.district || ''
-        }
-      }));
-    }
-    setShowCustomerDropdown(false);
-    setCustomerSearchTerm('');
   };
 
   const handleSupplierSelect = (supplierId: string) => {
@@ -564,30 +531,6 @@ const DGPurchaseOrderForm: React.FC<DGPurchaseOrderFormProps> = ({
 
           {activeTab === 'customer' && (
             <div className="space-y-6">
-              <div className="relative">
-                <Input
-                  label="Customer"
-                  value={customerSearchTerm}
-                  onChange={(e) => setCustomerSearchTerm(e.target.value)}
-                  onFocus={() => setShowCustomerDropdown(true)}
-                  placeholder="Search customers..."
-                />
-                {showCustomerDropdown && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
-                    {getFilteredCustomers(customerSearchTerm).map(customer => (
-                      <div
-                        key={customer._id}
-                        className="px-4 py-2 hover:bg-gray-100 cursor-pointer"
-                        onClick={() => handleCustomerSelect(customer._id)}
-                      >
-                        <div className="font-medium">{customer.name}</div>
-                        <div className="text-sm text-gray-600">{customer.email} • {customer.phone}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Input
                   label="Customer Name"

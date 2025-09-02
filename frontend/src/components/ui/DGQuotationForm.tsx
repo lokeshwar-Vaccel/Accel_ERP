@@ -13,7 +13,6 @@ interface DGQuotationFormProps {
   onClose: () => void;
   onSuccess: () => void;
   dgEnquiry?: any;
-  dgCustomers?: any[];
   products?: any[];
   generalSettings?: any;
   initialData?: any;
@@ -111,7 +110,6 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
   onClose,
   onSuccess,
   dgEnquiry,
-  dgCustomers = [],
   products = [],
   generalSettings,
   initialData,
@@ -180,10 +178,8 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [showProductDropdowns, setShowProductDropdowns] = useState<Record<number, boolean>>({});
   const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
-  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
 
   // Initialize form data when modal opens or initialData changes
   useEffect(() => {
@@ -315,37 +311,6 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
     if (!value) return 'Select Genset Product';
     const product = products.find(p => p._id === value);
     return product ? `${product.name} - ₹${product.price?.toLocaleString()}` : 'Select Genset Product';
-  };
-
-  // Get customer label for display
-  const getCustomerLabel = (value: string) => {
-    if (!value) return 'Select Customer';
-    const customer = dgCustomers.find(c => c._id === value);
-    return customer ? `${customer.name} - ${customer.email || 'No email'}` : 'Select Customer';
-  };
-
-  // Handle customer selection
-  const handleCustomerSelect = (customerId: string) => {
-    const customer = dgCustomers.find(c => c._id === customerId);
-    if (customer) {
-      setFormData(prev => ({
-        ...prev,
-        customer: {
-          _id: customer._id,
-          name: customer.name,
-          email: customer.email || '',
-          phone: customer.phone || '',
-          pan: customer.pan || '',
-          corporateName: customer.corporateName || '',
-          address: customer.address || '',
-          pinCode: customer.pinCode || '',
-          tehsil: customer.tehsil || '',
-          district: customer.district || ''
-        }
-      }));
-    }
-    setShowCustomerDropdown(false);
-    setCustomerSearchTerm('');
   };
 
   // Handle product selection
@@ -731,86 +696,14 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Customer *
+                      Customer Name *
                     </label>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onClick={() => setShowCustomerDropdown(!showCustomerDropdown)}
-                        disabled={mode === 'view'}
-                        className={`flex items-center justify-between w-full px-3 py-2 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${getFieldError('customer.name') ? 'border-red-500' : 'border-gray-300'} hover:border-gray-400 ${mode === 'view' ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-                      >
-                        <span className="text-gray-700 truncate mr-1">
-                          {getCustomerLabel(formData.customer?._id || '')}
-                        </span>
-                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showCustomerDropdown ? 'rotate-180' : ''}`} />
-                      </button>
-
-                      {showCustomerDropdown && (
-                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                          <div className="p-2 border-b border-gray-200">
-                            <input
-                              type="text"
-                              placeholder="Search customers..."
-                              value={customerSearchTerm}
-                              onChange={e => setCustomerSearchTerm(e.target.value)}
-                              className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                              autoFocus
-                            />
-                          </div>
-                          <button
-                            onClick={() => {
-                              setFormData(prev => ({
-                                ...prev,
-                                customer: {
-                                  _id: '',
-                                  name: '',
-                                  email: '',
-                                  phone: '',
-                                  pan: '',
-                                  corporateName: '',
-                                  address: '',
-                                  pinCode: '',
-                                  tehsil: '',
-                                  district: ''
-                                }
-                              }));
-                              setShowCustomerDropdown(false);
-                              setCustomerSearchTerm('');
-                            }}
-                            className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.customer?._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                          >
-                            Select customer
-                          </button>
-                          {dgCustomers.length === 0 ? (
-                            <div className="px-3 py-2 text-sm text-gray-500">
-                              {!customerSearchTerm ? 'No customers found' : 'Loading customers...'}
-                            </div>
-                          ) : (
-                            dgCustomers
-                              .filter(customer =>
-                                customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                                customer.email?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                                customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase())
-                              )
-                              .map((customer) => (
-                                <button
-                                  key={customer._id}
-                                  onClick={() => {
-                                    handleCustomerSelect(customer._id);
-                                  }}
-                                  className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${formData.customer?._id === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                                >
-                                  <div>
-                                    <div className="font-medium">{customer.name}</div>
-                                    <div className="text-xs text-gray-500">{customer.email}</div>
-                                  </div>
-                                </button>
-                              ))
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <Input
+                      value={formData.customer?.name || ''}
+                      onChange={(e) => updateField('customer.name', e.target.value)}
+                      placeholder="Enter customer name"
+                      disabled={mode === 'view'}
+                    />
                     {getFieldError('customer.name') && (
                       <p className="mt-1 text-sm text-red-600">{getFieldError('customer.name')}</p>
                     )}
