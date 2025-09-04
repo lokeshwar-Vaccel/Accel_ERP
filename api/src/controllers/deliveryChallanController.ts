@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { DeliveryChallan, IDeliveryChallan } from '../models/DeliveryChallan';
+import { DeliveryChallan, IDeliveryChallan, IDeliveryChallanItem } from '../models/DeliveryChallan';
 import { Stock } from '../models/Stock';
 import { StockLedger } from '../models/StockLedger';
 import { AuthenticatedRequest, APIResponse, QueryParams } from '../types';
@@ -176,16 +176,11 @@ export const createDeliveryChallan = async (
       return next(new AppError('Destination is required', 400));
     }
 
-    if (!dispatchedThrough) {
-      return next(new AppError('Dispatched through is required', 400));
-    }
+    // dispatchedThrough is now optional
 
-    // Validate spares and services
-    if ((!spares || spares.length === 0) && (!services || services.length === 0)) {
-      return next(new AppError('At least one spare item or service is required', 400));
-    }
+    // Spares and services are optional; allow creation without either
 
-    // Validate spares and check stock availability
+    // Validate spares and check stock availability when provided
     if (spares && spares.length > 0) {
       for (let i = 0; i < spares.length; i++) {
         const item = spares[i];
@@ -195,7 +190,6 @@ export const createDeliveryChallan = async (
         if (item.quantity <= 0) {
           return next(new AppError(`Spare item ${i + 1} quantity must be greater than 0`, 400));
         }
-        
         // If product ID is provided, validate stock availability
         if (item.product) {
           const stock = await Stock.findOne({ product: item.product });
@@ -209,7 +203,7 @@ export const createDeliveryChallan = async (
       }
     }
 
-    // Validate services
+    // Validate services when provided
     if (services && services.length > 0) {
       for (let i = 0; i < services.length; i++) {
         const item = services[i];
@@ -343,6 +337,7 @@ export const updateDeliveryChallan = async (
 
     // Store original spares for inventory adjustment
     const originalSpares = deliveryChallan.spares;
+    const originalStatus = deliveryChallan.status;
 
     // Update fields
     if (customer) deliveryChallan.customer = customer;
@@ -367,17 +362,32 @@ export const updateDeliveryChallan = async (
     if (cleanNotes !== undefined) deliveryChallan.notes = cleanNotes;
     if (status) deliveryChallan.status = status;
 
-    // Validate new spares and check stock availability if status is being changed to 'sent' or 'delivered'
-    if (spares && (status === 'sent' || status === 'delivered')) {
+    // Validate new spares and check stock availability
+    // We need to check stock for any increases in quantity, regardless of status
+    if (spares && spares.length > 0) {
+             // Create maps for easier comparison
+       const originalSparesMap = new Map();
+       originalSpares.forEach((item: IDeliveryChallanItem) => {
+         if (item.product) {
+           originalSparesMap.set(item.product.toString(), item.quantity || 0);
+         }
+       });
+
       for (let i = 0; i < spares.length; i++) {
         const item = spares[i];
         if (item.product && item.quantity > 0) {
-          const stock = await Stock.findOne({ product: item.product });
-          if (!stock) {
-            return next(new AppError(`Product ${item.description} is not available in stock`, 400));
-          }
-          if (stock.availableQuantity < item.quantity) {
-            return next(new AppError(`Insufficient stock for ${item.description}. Available: ${stock.availableQuantity}, Requested: ${item.quantity}`, 400));
+          const originalQty = originalSparesMap.get(item.product.toString()) || 0;
+          const qtyIncrease = item.quantity - originalQty;
+          
+          // Only validate stock if quantity is increasing
+          if (qtyIncrease > 0) {
+            const stock = await Stock.findOne({ product: item.product });
+            if (!stock) {
+              return next(new AppError(`Product ${item.description} is not available in stock`, 400));
+            }
+            if (stock.availableQuantity < qtyIncrease) {
+              return next(new AppError(`Insufficient stock for ${item.description}. Need ${qtyIncrease} more units, but only ${stock.availableQuantity} available`, 400));
+            }
           }
         }
       }
@@ -385,64 +395,76 @@ export const updateDeliveryChallan = async (
 
     await deliveryChallan.save();
 
-    // Handle inventory adjustments if spares changed and status is 'sent' or 'delivered'
-    if (spares && (status === 'sent' || status === 'delivered')) {
-      // First, restore inventory from original spares
-      for (const item of originalSpares) {
-        if (item.product && item.quantity > 0) {
-          const stock = await Stock.findOne({ product: item.product });
-          if (stock) {
-            stock.quantity += item.quantity;
-            stock.availableQuantity = stock.quantity - stock.reservedQuantity;
-            stock.lastUpdated = new Date();
-            await stock.save();
+    // Smart inventory adjustment logic - inventory is always affected since it's reduced during creation
+    // We need to adjust inventory for any quantity changes regardless of status
+    if (spares) {
+      // Create maps for easier comparison
+      const originalSparesMap = new Map();
+      const newSparesMap = new Map();
 
-            // Create stock ledger entry for restoration
-            await StockLedger.create({
-              product: item.product,
-              location: stock.location,
-              transactionType: 'inward',
-              quantity: item.quantity,
-              reason: `Delivery Challan Update - ${deliveryChallan.challanNumber}`,
-              notes: `Restored from previous version`,
-              performedBy: req.user!.id,
-              transactionDate: new Date(),
-              resultingQuantity: stock.quantity,
-              previousQuantity: stock.quantity - item.quantity,
-              referenceId: deliveryChallan.challanNumber,
-              referenceType: 'delivery_challan'
-            });
-          }
-        }
-      }
+             // Build original spares map
+       originalSpares.forEach((item: IDeliveryChallanItem) => {
+         if (item.product) {
+           originalSparesMap.set(item.product.toString(), item.quantity || 0);
+         }
+       });
 
-      // Then, reduce inventory for new spares
-      for (const item of spares) {
-        if (item.product && item.quantity > 0) {
-          const stock = await Stock.findOne({ product: item.product });
+       // Build new spares map
+       spares.forEach((item: IDeliveryChallanItem) => {
+         if (item.product) {
+           newSparesMap.set(item.product.toString(), item.quantity || 0);
+         }
+       });
+
+      // Get all unique products from both maps
+      const allProducts = new Set([...originalSparesMap.keys(), ...newSparesMap.keys()]);
+
+      // Process inventory adjustments for each product
+      for (const productId of allProducts) {
+        const originalQty = originalSparesMap.get(productId) || 0;
+        const newQty = newSparesMap.get(productId) || 0;
+        const qtyDifference = newQty - originalQty;
+
+        // Only adjust if there's a difference
+        if (qtyDifference !== 0) {
+          const stock = await Stock.findOne({ product: productId });
           if (stock) {
-            const originalQuantity = stock.quantity;
-            
-            stock.quantity -= item.quantity;
+            const previousQuantity = stock.quantity;
+
+            // Apply the quantity difference
+            // If qtyDifference is positive, we need more items (reduce stock)
+            // If qtyDifference is negative, we need fewer items (increase stock)
+            stock.quantity -= qtyDifference;
             stock.availableQuantity = stock.quantity - stock.reservedQuantity;
             stock.lastUpdated = new Date();
             await stock.save();
 
             // Create stock ledger entry
+            const transactionType = qtyDifference > 0 ? 'outward' : 'inward';
+            const ledgerQuantity = qtyDifference > 0 ? -qtyDifference : Math.abs(qtyDifference);
+            
+            // Get product details for better logging
+            const productInfo = spares.find((s: IDeliveryChallanItem) => s.product && s.product.toString() === productId) || 
+                               originalSpares.find((s: IDeliveryChallanItem) => s.product && s.product.toString() === productId);
+            
             await StockLedger.create({
-              product: item.product,
+              product: productId,
               location: stock.location,
-              transactionType: 'outward',
-              quantity: -item.quantity,
+              transactionType,
+              quantity: ledgerQuantity,
               reason: `Delivery Challan Update - ${deliveryChallan.challanNumber}`,
-              notes: `Updated delivery challan`,
+              notes: qtyDifference > 0 
+                ? `Quantity increased from ${originalQty} to ${newQty} (${productInfo?.description || 'Unknown'})`
+                : `Quantity decreased from ${originalQty} to ${newQty} (${productInfo?.description || 'Unknown'})`,
               performedBy: req.user!.id,
               transactionDate: new Date(),
               resultingQuantity: stock.quantity,
-              previousQuantity: originalQuantity,
+              previousQuantity: previousQuantity,
               referenceId: deliveryChallan.challanNumber,
               referenceType: 'delivery_challan'
             });
+
+            console.log(`📦 Inventory adjusted for product ${productId}: ${originalQty} → ${newQty} (difference: ${qtyDifference})`);
           }
         }
       }

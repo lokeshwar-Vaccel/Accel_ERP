@@ -257,6 +257,17 @@ const ServiceManagement: React.FC = () => {
   const [showDigitalReportModal, setShowDigitalReportModal] = useState(false);
   const [showPartsModal, setShowPartsModal] = useState(false);
 
+  // Engineer Payment Report modal state
+  const [showEngineerReportModal, setShowEngineerReportModal] = useState(false);
+
+  // Engineer Payment Report states
+  const [reportMonth, setReportMonth] = useState<string>(new Date().toISOString().slice(0, 7));
+  const [reportEngineerId, setReportEngineerId] = useState<string>('');
+  const [engineerReportRows, setEngineerReportRows] = useState<any[]>([]);
+  const [engineerReportTotals, setEngineerReportTotals] = useState<{ byEngineer: { engineerId: string; engineerName: string; totalAmount: number }[]; grandTotal: number }>({ byEngineer: [], grandTotal: 0 });
+  const [loadingEngineerReport, setLoadingEngineerReport] = useState(false);
+  const [exportingEngineerReport, setExportingEngineerReport] = useState(false);
+
   // Excel upload states
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [uploadingExcel, setUploadingExcel] = useState(false);
@@ -2142,7 +2153,91 @@ const ServiceManagement: React.FC = () => {
     }
   };
 
+  // Engineer Payment Report fetch
+  const fetchEngineerReport = async () => {
+    try {
+      setLoadingEngineerReport(true);
+      const params: any = { month: reportMonth };
+      if (reportEngineerId) params.engineerId = reportEngineerId;
+      const res = await apiClient.services.getEngineerPaymentReport(params);
+      if (res.success && res.data) {
+        setEngineerReportRows(res.data.rows || []);
+        setEngineerReportTotals(res.data.totals || { byEngineer: [], grandTotal: 0 });
+      } else {
+        setEngineerReportRows([]);
+        setEngineerReportTotals({ byEngineer: [], grandTotal: 0 });
+      }
+    } catch (err: any) {
+      console.error('Engineer report fetch error:', err);
+      toast.error(err.message || 'Failed to fetch report');
+    } finally {
+      setLoadingEngineerReport(false);
+    }
+  };
 
+  const exportEngineerReportToExcel = async () => {
+    try {
+      setExportingEngineerReport(true);
+      const XLSX = await import('xlsx');
+
+      // Prepare worksheet data: add a header row
+      const headers = [
+        'Service Attended Date',
+        'Customer',
+        'Type of Visit',
+        'Nature of Work',
+        'Sub Nature of Work',
+        'Engineer',
+        'Ticket Number',
+        'Convenience Charges'
+      ];
+
+      const rows = engineerReportRows.map((r) => ([
+        r.serviceAttendedDate ? new Date(r.serviceAttendedDate).toISOString().replace('T', ' ').substring(0, 19) : '',
+        r.customerName || '',
+        r.typeOfVisit || '',
+        r.natureOfWork || '',
+        r.subNatureOfWork || '',
+        r.serviceEngineerName || '',
+        r.ticketNumber || '',
+        Number(r.convenienceCharges || 0)
+      ]));
+
+      const summarySheetTitle = 'Engineer Summary';
+      const detailsSheetTitle = 'Ticket Details';
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+
+      // Summary sheet (per engineer + grand total)
+      const summaryData = [
+        ['Engineer', 'Total Amount'],
+        ...engineerReportTotals.byEngineer.map(e => [e.engineerName, e.totalAmount]),
+        [],
+        ['Grand Total', engineerReportTotals.grandTotal]
+      ];
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, wsSummary, summarySheetTitle);
+
+      // Details sheet
+      const aoa = [headers, ...rows];
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      // Optional: Autosize columns
+      const colWidths = headers.map((h) => ({ wch: Math.max(h.length + 2, 18) }));
+      (ws as any)['!cols'] = colWidths;
+      XLSX.utils.book_append_sheet(wb, ws, detailsSheetTitle);
+
+      const filename = `engineer_payment_report_${reportMonth || new Date().toISOString().slice(0,7)}.xlsx`;
+      XLSX.writeFile(wb, filename);
+
+      toast.success('Report exported to Excel');
+    } catch (err: any) {
+      console.error('Export error:', err);
+      toast.error(err.message || 'Failed to export');
+    } finally {
+      setExportingEngineerReport(false);
+    }
+  };
 
   // Enhanced dropdown handlers
   const scrollToSelectedItem = (dropdownType: 'customer' | 'engine' | 'address' | 'product' | 'assignee' | 'typeOfVisit' | 'typeOfService') => {
@@ -2725,6 +2820,13 @@ const ServiceManagement: React.FC = () => {
             <span className="text-sm">Export Excel</span>
           </button>
           <button
+            onClick={() => setShowEngineerReportModal(true)}
+            className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-indigo-700 hover:to-indigo-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <FileText className="w-4 h-4" />
+            <span className="text-sm">Payment Summary</span>
+          </button>
+          <button
             onClick={handleCreateTicket}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
@@ -2753,7 +2855,7 @@ const ServiceManagement: React.FC = () => {
 
       {/* Filters */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="relative md:col-span-2">
             <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
@@ -2772,7 +2874,7 @@ const ServiceManagement: React.FC = () => {
                 setShowStatusDropdown(!showStatusDropdown);
                 setShowAssigneeDropdown(false);
               }}
-              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+              className="flex items-center justify-between w-full px-2 py-1.5 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm h-8"
             >
               <span className="text-gray-700 truncate mr-1">{getStatusLabel(statusFilter)}</span>
               <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showStatusDropdown ? 'rotate-180' : ''}`} />
@@ -2805,13 +2907,13 @@ const ServiceManagement: React.FC = () => {
                 setShowAssigneeDropdown(!showAssigneeDropdown);
                 setShowStatusDropdown(false);
               }}
-              className="flex items-center justify-between w-full px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+              className="flex items-center justify-between w-full px-2 py-1.5 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm h-8"
             >
               <span className="text-gray-700 truncate mr-1">{getAssigneeLabel(assigneeFilter)}</span>
               <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showAssigneeDropdown ? 'rotate-180' : ''}`} />
             </button>
             {showAssigneeDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
+              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-80 overflow-y-auto">
                 <button
                   onClick={() => {
                     setAssigneeFilter('all');
@@ -2844,7 +2946,6 @@ const ServiceManagement: React.FC = () => {
               </div>
             )}
           </div>
-
 
         </div>
 
@@ -5716,6 +5817,138 @@ const ServiceManagement: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Engineer Payment Report Modal */}
+      {showEngineerReportModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center space-x-3">
+                <FileText className="w-5 h-5 text-indigo-600" />
+                <h2 className="text-lg font-semibold text-gray-900">Engineer Payment Report</h2>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => { void exportEngineerReportToExcel(); }}
+                  disabled={exportingEngineerReport || engineerReportRows.length === 0}
+                  className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 flex items-center space-x-1"
+                  title="Export to Excel"
+                >
+                  <Download className="w-4 h-4" />
+                  <span>{exportingEngineerReport ? 'Exporting...' : 'Export Excel'}</span>
+                </button>
+                <button onClick={() => setShowEngineerReportModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+            </div>
+            <div className="p-6 space-y-4 max-h-[calc(90vh-120px)] overflow-y-auto">
+              {/* Report Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Month</label>
+                  <input
+                    type="month"
+                    value={reportMonth}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReportMonth(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Engineer</label>
+                  <select
+                    value={reportEngineerId}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setReportEngineerId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="">All Engineers</option>
+                    {users.map(u => (
+                      <option key={u._id} value={u._id}>{getUserName(u)}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <button
+                    onClick={() => { void fetchEngineerReport(); }}
+                    disabled={loadingEngineerReport}
+                    className="w-full bg-indigo-600 text-white px-3 py-2 rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {loadingEngineerReport ? 'Loading...' : 'Apply'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary Totals */}
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-gray-700">Grand Total</p>
+                  <p className="text-lg font-semibold text-gray-900">₹ {engineerReportTotals.grandTotal.toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Per Engineer Totals */}
+              {engineerReportTotals.byEngineer.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Engineer</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {engineerReportTotals.byEngineer.map((e, idx) => (
+                        <tr key={idx}>
+                          <td className="px-4 py-2 text-sm text-gray-900">{e.engineerName}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900 text-right">₹ {e.totalAmount.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Ticket Detail Rows */}
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <table className="w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Service Attended Date</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type of Visit</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nature of Work</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sub Nature of Work</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Engineer</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ticket Number</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Convenience Charges</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {engineerReportRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">No records</td>
+                      </tr>
+                    ) : (
+                      engineerReportRows.map((r, idx) => (
+                        <tr key={idx}>
+                          <td className="px-4 py-2 text-sm text-gray-900">{r.serviceAttendedDate ? formatDateTime(r.serviceAttendedDate) : '-'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{r.customerName || '-'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{r.typeOfVisit || '-'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{r.natureOfWork || '-'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{r.subNatureOfWork || '-'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{r.serviceEngineerName || '-'}</td>
+                          <td className="px-4 py-2 text-sm text-blue-600">{r.ticketNumber || '-'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900 text-right">₹ {Number(r.convenienceCharges || 0).toFixed(2)}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -110,7 +110,6 @@ const deliveryChallanSchema = new Schema<IDeliveryChallan>({
   },
   dispatchedThrough: {
     type: String,
-    required: true,
     trim: true
   },
   termsOfDelivery: {

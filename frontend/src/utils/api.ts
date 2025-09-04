@@ -610,7 +610,7 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/services${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     create: (serviceData: any) =>
-      this.makeRequest<{ success: boolean; data: any }>('/services', {
+      this.makeRequest<{ success: boolean; data: any }>( '/services', {
         method: 'POST',
         body: JSON.stringify(serviceData),
       }),
@@ -654,7 +654,7 @@ class ApiClient {
       }),
 
     bulkImport: (tickets: any[]) =>
-      this.makeRequest<{ success: boolean; data: any }>('/services/bulk-import', {
+      this.makeRequest<{ success: boolean; data: any }>( '/services/bulk-import', {
         method: 'POST',
         body: JSON.stringify({ tickets }),
       }),
@@ -669,7 +669,7 @@ class ApiClient {
       this.makeRequest<{ success: boolean; data: { addresses: any[]; count: number; customerName: string } }>(`/services/customer/${customerId}/addresses`),
 
     getStats: () =>
-      this.makeRequest<{ success: boolean; data: { totalTickets: number; openTickets: number; resolvedTickets: number; closedTickets: number; overdueTickets: number; ticketsByPriority: any[]; avgResolutionHours: number } }>('/services/stats/overview'),
+      this.makeRequest<{ success: boolean; data: { totalTickets: number; openTickets: number; resolvedTickets: number; closedTickets: number; overdueTickets: number; ticketsByPriority: any[]; avgResolutionHours: number } }>( '/services/stats/overview'),
 
     updateExcelTicket: (id: string, excelData: any) =>
       this.makeRequest<{ success: boolean; data: any }>(`/services/${id}/excel-update`, {
@@ -677,6 +677,8 @@ class ApiClient {
         body: JSON.stringify(excelData),
       }),
 
+    getEngineerPaymentReport: (params?: { month?: string; engineerId?: string; customerId?: string; status?: string }) =>
+      this.makeRequest<{ success: boolean; data: { period: any; rows: any[]; totals: { byEngineer: { engineerId: string; engineerName: string; totalAmount: number }[]; grandTotal: number } } }>(`/services/reports/engineer-payments${params ? `?${new URLSearchParams(params as any)}` : ''}`),
 
   };
 
