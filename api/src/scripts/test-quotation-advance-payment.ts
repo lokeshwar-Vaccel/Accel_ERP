@@ -75,9 +75,9 @@ async function testQuotationAdvancePayment() {
 
     if (updatedQuotation) {
       console.log('Advance payment updated successfully');
-      console.log('New advance amount:', updatedQuotation.advanceAmount);
-      console.log('New remaining amount:', updatedQuotation.remainingAmount);
-      console.log('New advance payment status:', updatedQuotation.advancePaymentStatus);
+      console.log('New advance amount:', (updatedQuotation as any).advanceAmount);
+      console.log('New remaining amount:', (updatedQuotation as any).remainingAmount);
+      console.log('New advance payment status:', (updatedQuotation as any).advancePaymentStatus);
       console.log('New quotation status:', updatedQuotation.status);
     }
 
@@ -95,9 +95,9 @@ async function testQuotationAdvancePayment() {
 
     if (fullyPaidQuotation) {
       console.log('Full payment processed successfully');
-      console.log('Final advance amount:', fullyPaidQuotation.advanceAmount);
-      console.log('Final remaining amount:', fullyPaidQuotation.remainingAmount);
-      console.log('Final advance payment status:', fullyPaidQuotation.advancePaymentStatus);
+      console.log('Final advance amount:', (fullyPaidQuotation as any).advanceAmount);
+      console.log('Final remaining amount:', (fullyPaidQuotation as any).remainingAmount);
+      console.log('Final advance payment status:', (fullyPaidQuotation as any).advancePaymentStatus);
       console.log('Final quotation status:', fullyPaidQuotation.status);
     }
 

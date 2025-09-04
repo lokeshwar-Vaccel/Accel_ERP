@@ -147,6 +147,15 @@ interface VisitSchedule {
     rating: number;
     comments?: string;
   };
+  serviceReport?: string;
+  issues?: Array<{
+    description: string;
+    severity: 'critical' | 'high' | 'medium' | 'low';
+    resolved?: boolean;
+    followUpRequired?: boolean;
+  }>;
+  nextVisitRecommendations?: string;
+  customerSignature?: string;
 }
 
 interface AMCNotification {
@@ -215,9 +224,9 @@ interface AMC {
   completionPercentage?: number;
   nextDueAmount?: number;
   overdueVisits?: number;
-  // Visit date filter specific fields
-  visitsOnDate?: VisitSchedule[];
-  visitCountOnDate?: number;
+  // Visit date range filter specific fields
+  visitsInRange?: VisitSchedule[];
+  visitCountInRange?: number;
 }
 
 interface AMCFormData {
@@ -268,12 +277,13 @@ const AMCManagement: React.FC = () => {
   // Filter and search states
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<AMCStatus | 'all'>('all');
-  const [customerFilter, setCustomerFilter] = useState('all');
+
   const [expiryFilter, setExpiryFilter] = useState('all'); // all, 30days, 60days, 90days
   const [paymentFilter, setPaymentFilter] = useState('all');
   
   // Visit date filter states
-  const [visitDateFilter, setVisitDateFilter] = useState('');
+  const [visitStartDate, setVisitStartDate] = useState('');
+  const [visitEndDate, setVisitEndDate] = useState('');
   const [filterMode, setFilterMode] = useState<'all' | 'visitDate'>('all');
   const [visitDateSummary, setVisitDateSummary] = useState<any>(null);
   
@@ -385,7 +395,7 @@ const AMCManagement: React.FC = () => {
 
   // Dropdown state
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
-  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+
   const [showExpiryDropdown, setShowExpiryDropdown] = useState(false);
   const [showPaymentDropdown, setShowPaymentDropdown] = useState(false);
   const [showBillingCycleDropdown, setShowBillingCycleDropdown] = useState(false);
@@ -524,12 +534,12 @@ const AMCManagement: React.FC = () => {
   // Effect to handle pagination changes
   useEffect(() => {
     fetchAMCs(currentPage, itemsPerPage);
-  }, [currentPage, itemsPerPage, searchTerm, statusFilter, customerFilter, filterMode, visitDateFilter]);
+  }, [currentPage, itemsPerPage, searchTerm, statusFilter, filterMode, visitStartDate, visitEndDate]);
 
   // Effect to reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, customerFilter, filterMode, visitDateFilter]);
+  }, [searchTerm, statusFilter, filterMode, visitStartDate, visitEndDate]);
 
   // Effect to initialize dropdown options when data is loaded
   useEffect(() => {
@@ -577,10 +587,10 @@ const AMCManagement: React.FC = () => {
   const fetchAMCs = async (page = currentPage, limit = itemsPerPage) => {
     try {
       // If we're in visit date filter mode, use the visit date API
-      if (filterMode === 'visitDate' && visitDateFilter) {
-        await fetchAMCsByVisitDate(page, limit);
-        return;
-      }
+          if (filterMode === 'visitDate' && visitStartDate && visitEndDate) {
+      await fetchAMCsByVisitDate(page, limit);
+      return;
+    }
 
       const params: any = {
         page,
@@ -597,10 +607,7 @@ const AMCManagement: React.FC = () => {
         params.status = statusFilter;
       }
 
-      // Only add customer if it's not 'all' and is a valid ObjectId
-      if (customerFilter !== 'all' && customerFilter.match(/^[0-9a-fA-F]{24}$/)) {
-        params.customer = customerFilter;
-      }
+
 
       // Only add expiringIn if it's not 'all' and convert to number
       if (expiryFilter !== 'all') {
@@ -672,7 +679,8 @@ const AMCManagement: React.FC = () => {
   const fetchAMCsByVisitDate = async (page = currentPage, limit = itemsPerPage) => {
     try {
       const params: any = {
-        scheduledDate: visitDateFilter,
+        startDate: visitStartDate,
+        endDate: visitEndDate,
         page,
         limit,
       };
@@ -680,10 +688,6 @@ const AMCManagement: React.FC = () => {
       // Add additional filters if specified
       if (statusFilter !== 'all') {
         params.status = statusFilter;
-      }
-
-      if (customerFilter !== 'all' && customerFilter.match(/^[0-9a-fA-F]{24}$/)) {
-        params.customer = customerFilter;
       }
 
       const response = await apiClient.amc.getByVisitDate(params);
@@ -725,162 +729,13 @@ const AMCManagement: React.FC = () => {
       
       setCustomers(customersData);
       
-      // If no customers found, create some sample data for development
+      // If no customers found, log a warning but don't set sample data
       if (customersData.length === 0) {
-        const sampleCustomers: Customer[] = [
-          {
-            _id: 'cust-1',
-            name: 'ABC Manufacturing Ltd',
-            email: 'contact@abcmfg.com',
-            phone: '+91-9876543210',
-            address: 'Industrial Area, Sector 45, Gurgaon, Haryana',
-            contactPersonName: 'Rajesh Kumar',
-            customerType: 'corporate',
-            addresses: [
-              { id: 1, address: '123 Main St, Gurgaon, Haryana', state: 'Haryana', district: 'Gurgaon', pincode: '122001', isPrimary: true, gstNumber: 'HR1234567890' },
-              { id: 2, address: '456 Elm St, Delhi, Delhi', state: 'Delhi', district: 'Delhi', pincode: '110001', isPrimary: false, gstNumber: 'DL1234567890' }
-            ],
-            location: {
-              latitude: 28.4595,
-              longitude: 77.0266,
-              address: '123 Main St, Gurgaon, Haryana'
-            }
-          },
-          {
-            _id: 'cust-2',
-            name: 'TechCorp Solutions',
-            email: 'admin@techcorp.co.in',
-            phone: '+91-8765432109',
-            address: 'IT Park, Electronic City, Bangalore, Karnataka',
-            contactPersonName: 'Priya Sharma',
-            customerType: 'enterprise',
-            addresses: [
-              { id: 1, address: '789 Oak St, Bangalore, Karnataka', state: 'Karnataka', district: 'Bangalore', pincode: '560001', isPrimary: true, gstNumber: 'KA1234567890' },
-              { id: 2, address: '101 Pine St, Mumbai, Maharashtra', state: 'Maharashtra', district: 'Mumbai', pincode: '400001', isPrimary: false, gstNumber: 'MH1234567890' }
-            ],
-            location: {
-              latitude: 12.9716,
-              longitude: 77.5946,
-              address: '789 Oak St, Bangalore, Karnataka'
-            }
-          },
-          {
-            _id: 'cust-3',
-            name: 'Global Textiles Pvt Ltd',
-            email: 'operations@globaltextiles.com',
-            phone: '+91-7654321098',
-            address: 'Textile Hub, Coimbatore, Tamil Nadu',
-            contactPersonName: 'Murugan S',
-            customerType: 'corporate',
-            addresses: [
-              { id: 1, address: '123 Cotton St, Coimbatore, Tamil Nadu', state: 'Tamil Nadu', district: 'Coimbatore', pincode: '641001', isPrimary: true, gstNumber: 'TN1234567890' },
-              { id: 2, address: '456 Silk St, Chennai, Tamil Nadu', state: 'Tamil Nadu', district: 'Chennai', pincode: '600001', isPrimary: false, gstNumber: 'TN1234567890' }
-            ],
-            location: {
-              latitude: 11.0168,
-              longitude: 76.9558,
-              address: '123 Cotton St, Coimbatore, Tamil Nadu'
-            }
-          },
-          {
-            _id: 'cust-4',
-            name: 'Metro Hospital',
-            email: 'admin@metrohospital.org',
-            phone: '+91-6543210987',
-            address: 'Medical District, Mumbai, Maharashtra',
-            contactPersonName: 'Dr. Anita Desai',
-            customerType: 'healthcare',
-            addresses: [
-              { id: 1, address: '123 Medical St, Mumbai, Maharashtra', state: 'Maharashtra', district: 'Mumbai', pincode: '400011', isPrimary: true, gstNumber: 'MH1234567890' },
-              { id: 2, address: '456 Hospital St, Delhi, Delhi', state: 'Delhi', district: 'Delhi', pincode: '110001', isPrimary: false, gstNumber: 'DL1234567890' }
-            ],
-            location: {
-              latitude: 19.0760,
-              longitude: 72.8777,
-              address: '123 Medical St, Mumbai, Maharashtra'
-            }
-          },
-          {
-            _id: 'cust-5',
-            name: 'Green Energy Solutions',
-            email: 'info@greenenergy.co.in',
-            phone: '+91-5432109876',
-            address: 'Renewable Park, Pune, Maharashtra',
-            contactPersonName: 'Amit Patel',
-            customerType: 'industrial',
-            addresses: [
-              { id: 1, address: '123 Solar St, Pune, Maharashtra', state: 'Maharashtra', district: 'Pune', pincode: '411001', isPrimary: true, gstNumber: 'MH1234567890' },
-              { id: 2, address: '456 Wind St, Bangalore, Karnataka', state: 'Karnataka', district: 'Bangalore', pincode: '560001', isPrimary: false, gstNumber: 'KA1234567890' }
-            ],
-            location: {
-              latitude: 18.5204,
-              longitude: 73.8567,
-              address: '123 Solar St, Pune, Maharashtra'
-            }
-          }
-        ];
-        setCustomers(sampleCustomers);
+        console.warn('No customers found in the system');
       }
     } catch (error) {
       console.error('Error fetching customers:', error);
-      // Set sample customers on error too
-      const sampleCustomers: Customer[] = [
-        {
-          _id: 'cust-1',
-          name: 'ABC Manufacturing Ltd',
-          email: 'contact@abcmfg.com',
-          phone: '+91-9876543210',
-          address: 'Industrial Area, Sector 45, Gurgaon, Haryana',
-          contactPersonName: 'Rajesh Kumar',
-          customerType: 'corporate',
-          addresses: [
-            { id: 1, address: '123 Main St, Gurgaon, Haryana', state: 'Haryana', district: 'Gurgaon', pincode: '122001', isPrimary: true, gstNumber: 'HR1234567890' },
-            { id: 2, address: '456 Elm St, Delhi, Delhi', state: 'Delhi', district: 'Delhi', pincode: '110001', isPrimary: false, gstNumber: 'DL1234567890' }
-          ],
-          location: {
-            latitude: 28.4595,
-            longitude: 77.0266,
-            address: '123 Main St, Gurgaon, Haryana'
-          }
-        },
-        {
-          _id: 'cust-2',
-          name: 'TechCorp Solutions',
-          email: 'admin@techcorp.co.in',
-          phone: '+91-8765432109',
-          address: 'IT Park, Electronic City, Bangalore, Karnataka',
-          contactPersonName: 'Priya Sharma',
-          customerType: 'enterprise',
-          addresses: [
-            { id: 1, address: '789 Oak St, Bangalore, Karnataka', state: 'Karnataka', district: 'Bangalore', pincode: '560001', isPrimary: true, gstNumber: 'KA1234567890' },
-            { id: 2, address: '101 Pine St, Mumbai, Maharashtra', state: 'Maharashtra', district: 'Mumbai', pincode: '400001', isPrimary: false, gstNumber: 'MH1234567890' }
-          ],
-          location: {
-            latitude: 12.9716,
-            longitude: 77.5946,
-            address: '789 Oak St, Bangalore, Karnataka'
-          }
-        },
-        {
-          _id: 'cust-3',
-          name: 'Global Textiles Pvt Ltd',
-          email: 'operations@globaltextiles.com',
-          phone: '+91-7654321098',
-          address: 'Textile Hub, Coimbatore, Tamil Nadu',
-          contactPersonName: 'Murugan S',
-          customerType: 'corporate',
-          addresses: [
-            { id: 1, address: '123 Cotton St, Coimbatore, Tamil Nadu', state: 'Tamil Nadu', district: 'Coimbatore', pincode: '641001', isPrimary: true, gstNumber: 'TN1234567890' },
-            { id: 2, address: '456 Silk St, Chennai, Tamil Nadu', state: 'Tamil Nadu', district: 'Chennai', pincode: '600001', isPrimary: false, gstNumber: 'TN1234567890' }
-          ],
-          location: {
-            latitude: 11.0168,
-            longitude: 76.9558,
-            address: '123 Cotton St, Coimbatore, Tamil Nadu'
-          }
-        }
-      ];
-      setCustomers(sampleCustomers);
+      // Don't set any sample data on error, just log the error
     }
   };
 
@@ -1722,11 +1577,7 @@ const AMCManagement: React.FC = () => {
     return option ? option.label : 'All Status';
   };
 
-  const getCustomerLabel = (value: string) => {
-    if (value === 'all') return 'All Customers';
-    const customer = customers.find(c => c._id === value);
-    return customer ? customer.name : 'All Customers';
-  };
+
 
   // Click outside handler for dropdowns
   useEffect(() => {
@@ -1734,7 +1585,7 @@ const AMCManagement: React.FC = () => {
       const target = event.target as HTMLElement;
       if (!target.closest('.dropdown-container')) {
         setShowStatusDropdown(false);
-        setShowCustomerDropdown(false);
+        
         setShowExpiryDropdown(false);
         setShowPaymentDropdown(false);
         setShowBillingCycleDropdown(false);
@@ -2035,8 +1886,19 @@ const AMCManagement: React.FC = () => {
   const handleCompleteVisit = (amc: AMC, visit: any, visitIndex: number) => {
     setSelectedAMC(amc);
     setSelectedVisitForUpdate(visit);
+    setVisitViewMode('edit');
     setShowVisitStatusUpdate(true);
   };
+
+  const handleViewVisitDetails = (amc: AMC, visit: any, visitIndex: number) => {
+    setSelectedAMC(amc);
+    setSelectedVisitForUpdate(visit);
+    setVisitViewMode('view');
+    setShowVisitStatusUpdate(true);
+  };
+
+  // Add state for visit view mode
+  const [visitViewMode, setVisitViewMode] = useState<'edit' | 'view'>('edit');
 
   const handleSubmitVisit = async () => {
     if (!selectedAMC) return;
@@ -2288,9 +2150,8 @@ const AMCManagement: React.FC = () => {
   const hasActiveFilters = () => {
     return searchTerm || 
            statusFilter !== 'all' || 
-           customerFilter !== 'all' || 
            expiryFilter !== 'all' || 
-           (filterMode === 'visitDate' && visitDateFilter);
+           (filterMode === 'visitDate' && visitStartDate && visitEndDate);
   };
 
   // Helper function to get a summary of active filters
@@ -2299,14 +2160,11 @@ const AMCManagement: React.FC = () => {
     
     if (searchTerm) filters.push(`Search: "${searchTerm}"`);
     if (statusFilter !== 'all') filters.push(`Status: ${statusFilter}`);
-    if (customerFilter !== 'all') {
-      const customer = customers.find(c => c._id === customerFilter);
-      filters.push(`Customer: ${customer?.name || customerFilter}`);
-    }
+
     if (expiryFilter !== 'all') filters.push(`Expiring: ${expiryFilter}`);
-    if (filterMode === 'visitDate' && visitDateFilter) {
-      filters.push(`Visit Date: ${visitDateFilter}`);
-    }
+          if (filterMode === 'visitDate' && visitStartDate && visitEndDate) {
+        filters.push(`Visit Date Range: ${visitStartDate} to ${visitEndDate}`);
+      }
     
     return filters.join(', ');
   };
@@ -2322,12 +2180,13 @@ const AMCManagement: React.FC = () => {
       // Add current filters
       if (searchTerm) exportParams.search = searchTerm;
       if (statusFilter !== 'all') exportParams.status = statusFilter;
-      if (customerFilter !== 'all') exportParams.customer = customerFilter;
+  
       if (expiryFilter !== 'all') exportParams.expiringIn = parseInt(expiryFilter.replace('days', ''));
 
       // Add visit date filter if active
-      if (filterMode === 'visitDate' && visitDateFilter) {
-        exportParams.scheduledDate = visitDateFilter;
+      if (filterMode === 'visitDate' && visitStartDate && visitEndDate) {
+        exportParams.startDate = visitStartDate;
+        exportParams.endDate = visitEndDate;
       }
 
       // Determine if we're exporting all data or filtered data
@@ -2396,11 +2255,11 @@ const AMCManagement: React.FC = () => {
   const clearAllFilters = () => {
     setSearchTerm('');
     setStatusFilter('all');
-    setCustomerFilter('all');
     setExpiryFilter('all');
     setPaymentFilter('all');
     setFilterMode('all');
-    setVisitDateFilter('');
+          setVisitStartDate('');
+      setVisitEndDate('');
     setVisitDateSummary(null);
   };
 
@@ -2542,7 +2401,7 @@ const AMCManagement: React.FC = () => {
             <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              placeholder="Search AMC contracts..."
+              placeholder="Search by contract number, customer name, or engine number..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -2554,7 +2413,7 @@ const AMCManagement: React.FC = () => {
             <button
               onClick={() => {
                 setShowStatusDropdown(!showStatusDropdown);
-                setShowCustomerDropdown(false);
+
                 setShowExpiryDropdown(false);
                 setShowPaymentDropdown(false);
                 setShowBillingCycleDropdown(false);
@@ -2586,53 +2445,7 @@ const AMCManagement: React.FC = () => {
             )}
           </div>
 
-          {/* Customer Custom Dropdown */}
-          <div className="relative dropdown-container">
-            <button
-              onClick={() => {
-                setShowCustomerDropdown(!showCustomerDropdown);
-                setShowStatusDropdown(false);
-                setShowExpiryDropdown(false);
-                setShowPaymentDropdown(false);
-                setShowBillingCycleDropdown(false);
-                setShowVisitTypeDropdown(false);
-                setShowAssigneeDropdown(false);
-              }}
-              className="flex items-center justify-between w-full md:w-40 px-2 py-1 text-left bg-white border border-gray-300 rounded-md hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-            >
-              <span className="text-gray-700 truncate mr-1">{getCustomerLabel(customerFilter)}</span>
-              <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showCustomerDropdown ? 'rotate-180' : ''}`} />
-            </button>
-            {showCustomerDropdown && (
-              <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                <button
-                  onClick={() => {
-                    setCustomerFilter('all');
-                    setShowCustomerDropdown(false);
-                  }}
-                  className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                    customerFilter === 'all' ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                  }`}
-                >
-                  All Customers
-                </button>
-                {customers.map((customer) => (
-                  <button
-                    key={customer._id}
-                    onClick={() => {
-                      setCustomerFilter(customer._id);
-                      setShowCustomerDropdown(false);
-                    }}
-                    className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${
-                      customerFilter === customer._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                    }`}
-                  >
-                    {customer.name}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+
 
           {/* Visit Date Filter */}
           <div className="flex items-center space-x-2">
@@ -2640,7 +2453,8 @@ const AMCManagement: React.FC = () => {
               onClick={() => {
                 if (filterMode === 'visitDate') {
                   setFilterMode('all');
-                  setVisitDateFilter('');
+                  setVisitStartDate('');
+      setVisitEndDate('');
                   setVisitDateSummary(null);
                 } else {
                   setFilterMode('visitDate');
@@ -2658,52 +2472,35 @@ const AMCManagement: React.FC = () => {
             
             {filterMode === 'visitDate' && (
               <div className="flex items-center space-x-2">
-                <input
-                  type="date"
-                  value={visitDateFilter}
-                  onChange={(e) => setVisitDateFilter(e.target.value)}
-                  className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                  placeholder="Select date"
-                />
-                
-                {/* Quick date selectors */}
-                <div className="flex items-center space-x-1">
-                  <button
-                    onClick={() => {
-                      const today = new Date().toISOString().split('T')[0];
-                      setVisitDateFilter(today);
-                    }}
-                    className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                  >
-                    Today
-                  </button>
-                  <button
-                    onClick={() => {
-                      const tomorrow = new Date();
-                      tomorrow.setDate(tomorrow.getDate() + 1);
-                      setVisitDateFilter(tomorrow.toISOString().split('T')[0]);
-                    }}
-                    className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                  >
-                    Tomorrow
-                  </button>
-                  <button
-                    onClick={() => {
-                      const nextWeek = new Date();
-                      nextWeek.setDate(nextWeek.getDate() + 7);
-                      setVisitDateFilter(nextWeek.toISOString().split('T')[0]);
-                    }}
-                    className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors"
-                  >
-                    Next Week
-                  </button>
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-gray-600">From:</label>
+                  <input
+                    type="date"
+                    value={visitStartDate}
+                    onChange={(e) => setVisitStartDate(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="Start date"
+                  />
                 </div>
+                
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm text-gray-600">To:</label>
+                  <input
+                    type="date"
+                    value={visitEndDate}
+                    onChange={(e) => setVisitEndDate(e.target.value)}
+                    className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                    placeholder="End date"
+                  />
+                </div>
+                
+
               </div>
             )}
           </div>
 
           {/* Clear Filters Button */}
-          {(searchTerm || statusFilter !== 'all' || customerFilter !== 'all' || filterMode === 'visitDate') && (
+          {(searchTerm || statusFilter !== 'all' || filterMode === 'visitDate') && (
             <button
               onClick={clearAllFilters}
               className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm flex items-center space-x-1"
@@ -2718,17 +2515,22 @@ const AMCManagement: React.FC = () => {
           <span className="text-xs text-gray-600">
             {filterMode === 'visitDate' && visitDateSummary ? (
               <span>
-                Showing {amcs.length} contracts with {visitDateSummary.totalVisitsOnDate} visits scheduled on {visitDateFilter}
+                Showing {amcs.length} contracts with {visitDateSummary.totalVisitsInRange} visits scheduled between {visitStartDate} and {visitEndDate}
                 {visitDateSummary.uniqueCustomers > 0 && ` • ${visitDateSummary.uniqueCustomers} unique customers`}
               </span>
             ) : (
-              <span>Showing {filteredAMCs.length} of {totalItems} contracts</span>
+              <span>
+                Showing {filteredAMCs.length} of {totalItems} contracts
+                {searchTerm && ` • Search results for "${searchTerm}"`}
+              </span>
             )}
           </span>
           
           {filterMode === 'visitDate' && visitDateSummary && (
             <div className="flex items-center space-x-4 text-xs text-gray-600">
               <span>Total Value: {formatCurrency(visitDateSummary.totalContractValue)}</span>
+              <span>Days in Range: {visitDateSummary.daysInRange}</span>
+              <span>Avg Visits/Day: {visitDateSummary.averageVisitsPerDay}</span>
             </div>
           )}
         </div>
@@ -2757,7 +2559,7 @@ const AMCManagement: React.FC = () => {
                 </th>
                 {filterMode === 'visitDate' && (
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Visits on {visitDateFilter}
+                    Visits between {visitStartDate} and {visitEndDate}
                   </th>
                 )}
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -2784,11 +2586,11 @@ const AMCManagement: React.FC = () => {
               {filteredAMCs.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="px-6 py-8 text-center">
-                    {filterMode === 'visitDate' && visitDateFilter ? (
+                    {filterMode === 'visitDate' && visitStartDate && visitEndDate ? (
                       <div className="text-gray-500">
                         <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                        <p className="text-lg font-medium mb-2">No visits scheduled for {visitDateFilter}</p>
-                        <p className="text-sm">Try selecting a different date or check if there are any AMC contracts with scheduled visits.</p>
+                        <p className="text-lg font-medium mb-2">No visits scheduled between {visitStartDate} and {visitEndDate}</p>
+                        <p className="text-sm">Try selecting a different date range or check if there are any AMC contracts with scheduled visits.</p>
                       </div>
                     ) : (
                       <div className="text-gray-500">
@@ -2826,10 +2628,10 @@ const AMCManagement: React.FC = () => {
                     {filterMode === 'visitDate' && (
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">
-                          <div className="font-medium">{amc.visitCountOnDate || 0} visit{(amc.visitCountOnDate || 0) !== 1 ? 's' : ''}</div>
-                          {amc.visitsOnDate && amc.visitsOnDate.length > 0 && (
+                          <div className="font-medium">{amc.visitCountInRange || 0} visit{(amc.visitCountInRange || 0) !== 1 ? 's' : ''}</div>
+                          {amc.visitsInRange && amc.visitsInRange.length > 0 && (
                             <div className="text-xs text-gray-500 mt-1">
-                              {amc.visitsOnDate.map((visit: any, index: number) => (
+                              {amc.visitsInRange.map((visit: any, index: number) => (
                                 <div key={index} className="flex items-center space-x-1">
                                   <span className={`w-2 h-2 rounded-full ${
                                     visit.status === 'completed' ? 'bg-green-500' :
@@ -3963,6 +3765,9 @@ const AMCManagement: React.FC = () => {
                           Status
                         </th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Completion Date
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Actions
                         </th>
                       </tr>
@@ -3970,13 +3775,13 @@ const AMCManagement: React.FC = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                       {selectedAMC.visitSchedule.length === 0 ? (
                         <tr>
-                          <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+                          <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
                             No visits scheduled yet
                           </td>
                         </tr>
                       ) : (
                         selectedAMC.visitSchedule.map((visit, index) => (
-                          <tr key={visit._id || index}>
+                          <tr key={visit._id || index} className="hover:bg-gray-50">
                             <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                               {formatDate(visit.scheduledDate)}
                             </td>
@@ -3993,19 +3798,43 @@ const AMCManagement: React.FC = () => {
                               </span>
                             </td>
                             <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
+                              {visit.completedDate ? (
+                                <div>
+                                  <div className="font-medium">{formatDate(visit.completedDate)}</div>
+                                  {visit.customerSignature && (
+                                    <span className="text-green-600 text-xs">✓ Signed</span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">Not completed</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                               {visit.status === 'pending' && (
-                                                        <button
-                          onClick={() => handleCompleteVisit(selectedAMC, visit, index)}
-                          className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50"
-                          title="Complete Visit"
-                        >
-                          <CheckCircle className="w-4 h-4" />
-                        </button>
+                                <button
+                                  onClick={() => handleCompleteVisit(selectedAMC, visit, index)}
+                                  className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
+                                  title="Complete Visit"
+                                >
+                                  <CheckCircle className="w-4 h-4" />
+                                </button>
                               )}
                               {visit.status === 'completed' && (
-                                <span className="text-xs text-green-600">
-                                  Completed {visit.completedDate ? formatDate(visit.completedDate) : ''}
-                                </span>
+                                <div className="flex items-center space-x-1">
+                                  <span className="text-green-600 text-xs">
+                                    ✓ Completed
+                                  </span>
+                                  <button
+                                    onClick={() => handleViewVisitDetails(selectedAMC, visit, index)}
+                                    className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50 transition-colors"
+                                    title="View Details"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
+                              {visit.status === 'cancelled' && (
+                                <span className="text-red-600 text-xs">Cancelled</span>
                               )}
                             </td>
                           </tr>
@@ -4133,7 +3962,11 @@ const AMCManagement: React.FC = () => {
         visit={selectedVisitForUpdate}
         visitIndex={selectedVisitForUpdate ? selectedAMC?.visitSchedule.findIndex((v: any) => v === selectedVisitForUpdate) || 0 : 0}
         amcId={selectedAMC?._id || ''}
-        onSuccess={fetchAMCs}
+        onSuccess={async () => {
+          await fetchAMCs();
+          setShowDetailsModal(false);
+        }}
+        mode={visitViewMode}
       />
 
 

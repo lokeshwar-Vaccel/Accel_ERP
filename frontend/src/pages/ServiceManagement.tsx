@@ -136,6 +136,7 @@ interface ServiceTicket {
   natureOfWork?: string;
   subNatureOfWork?: string;
   businessVertical?: string;
+  convenienceCharges?: string;
 
   // Legacy fields for backward compatibility
   ticketNumber: string;
@@ -159,14 +160,7 @@ interface ServiceTicket {
   turnaroundTime?: number;
   // Import tracking
   uploadedViaExcel?: boolean;
-  // PDF upload field
-  pdfFile?: {
-    filename: string;
-    originalName: string;
-    mimetype: string;
-    size: number;
-    url: string;
-  };
+
 }
 
 interface TicketFormData {
@@ -291,7 +285,8 @@ const ServiceManagement: React.FC = () => {
     typeOfService: '',
     natureOfWork: '',
     subNatureOfWork: '',
-    complaintDescription: ''
+    complaintDescription: '',
+    convenienceCharges: ''
   });
   const [isEditingVisitDetails, setIsEditingVisitDetails] = useState(false);
   const [updatingVisitDetails, setUpdatingVisitDetails] = useState(false);
@@ -436,11 +431,7 @@ const ServiceManagement: React.FC = () => {
   const [totalPages, setTotalPages] = useState(0);
   const [totalDatas, setTotalDatas] = useState(0);
 
-  // PDF upload state
-  const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [uploadingPdf, setUploadingPdf] = useState(false);
-  const [editPdfFile, setEditPdfFile] = useState<File | null>(null);
-  const [uploadingEditPdf, setUploadingEditPdf] = useState(false);
+
 
 
 
@@ -735,18 +726,13 @@ const ServiceManagement: React.FC = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll({
-        page: 1,
-        limit: 100,
-        type: 'customer'
-      });
+      // Use the API that fetches all customers without pagination
+      const response = await apiClient.customers.getAllForDropdown();
       let customersData: Customer[] = [];
       if (response.success && response.data) {
         if (Array.isArray(response.data)) {
           customersData = response.data;
-        } else if (response.data.customers && Array.isArray(response.data.customers)) {
-          customersData = response.data.customers;
-        }
+        } 
       }
       setCustomers(customersData);
     } catch (error) {
@@ -1136,7 +1122,8 @@ const ServiceManagement: React.FC = () => {
       typeOfService: '',
       natureOfWork: '',
       subNatureOfWork: '',
-      complaintDescription: ''
+      complaintDescription: '',
+      convenienceCharges: ''
     });
     setVisitDetailsHighlighted(false);
 
@@ -1238,27 +1225,7 @@ const ServiceManagement: React.FC = () => {
       if (response.success && response.data) {
         let newTicket = response.data.ticket || response.data;
         
-        // Upload PDF if provided
-        if (pdfFile && newTicket._id) {
-          try {
-            setUploadingPdf(true);
-            const pdfResponse = await apiClient.services.uploadPdf(newTicket._id, pdfFile);
-            toast.success('PDF uploaded successfully!');
-            
-            // Update the ticket with the new PDF data
-            if (pdfResponse.success && pdfResponse.data.ticket) {
-              newTicket = pdfResponse.data.ticket;
-            }
-            
-            // Refresh ticket data to ensure UI is updated
-            await refreshTicketData(newTicket._id);
-          } catch (pdfError: any) {
-            console.error('Error uploading PDF:', pdfError);
-            toast.error('Ticket created but PDF upload failed');
-          } finally {
-            setUploadingPdf(false);
-          }
-        }
+
         
         setTickets([newTicket, ...tickets]);
         fetchTickets();
@@ -1267,7 +1234,7 @@ const ServiceManagement: React.FC = () => {
 
       setShowCreateModal(false);
       resetTicketForm();
-      setPdfFile(null); // Reset PDF file
+
     } catch (error: any) {
       console.error('Error creating ticket:', error);
       if (error.response?.data?.errors) {
@@ -1367,27 +1334,7 @@ const ServiceManagement: React.FC = () => {
       if (response.success && response.data) {
         let updatedTicket = response.data.ticket || response.data;
         
-        // Upload PDF if provided
-        if (editPdfFile && updatedTicket._id) {
-          try {
-            setUploadingEditPdf(true);
-            const pdfResponse = await apiClient.services.uploadPdf(updatedTicket._id, editPdfFile);
-            toast.success('PDF uploaded successfully!');
-            
-            // Update the ticket with the new PDF data
-            if (pdfResponse.success && pdfResponse.data.ticket) {
-              updatedTicket = pdfResponse.data.ticket;
-            }
-            
-            // Refresh ticket data to ensure UI is updated
-            await refreshTicketData(updatedTicket._id);
-          } catch (pdfError: any) {
-            console.error('Error uploading PDF:', pdfError);
-            toast.error('Ticket updated but PDF upload failed');
-          } finally {
-            setUploadingEditPdf(false);
-          }
-        }
+
         
         setTickets(tickets.map(t => t._id === editingTicket._id ? updatedTicket : t));
         
@@ -1407,7 +1354,7 @@ const ServiceManagement: React.FC = () => {
       }
       setEditingTicket(null);
       resetTicketForm();
-      setEditPdfFile(null); // Reset edit PDF file
+
     } catch (error: any) {
       console.error('Error updating ticket:', error);
       if (error.response?.data?.errors) {
@@ -1478,9 +1425,7 @@ const ServiceManagement: React.FC = () => {
 
     setAssigneeDropdown(prev => ({ ...prev, isOpen: false, searchTerm: '', selectedIndex: 0 }));
     
-    // Reset PDF file
-    setPdfFile(null);
-    setEditPdfFile(null);
+
   };
 
   // Since filtering is now handled by the backend, we just use the tickets directly
@@ -1639,7 +1584,8 @@ const ServiceManagement: React.FC = () => {
         typeOfService: editableVisitDetails.typeOfService,
         natureOfWork: editableVisitDetails.natureOfWork,
         subNatureOfWork: editableVisitDetails.subNatureOfWork,
-        complaintDescription: editableVisitDetails.complaintDescription
+        complaintDescription: editableVisitDetails.complaintDescription,
+        convenienceCharges: editableVisitDetails.convenienceCharges
       };
 
       const response = await apiClient.services.update(selectedTicket._id, payload);
@@ -1648,12 +1594,13 @@ const ServiceManagement: React.FC = () => {
         // Update the ticket in the local state
         const updatedTicket = response.data.ticket || response.data;
         
-        // Ensure the updated ticket has the complaint description from the form
-        // Backend returns ComplaintDescription (capitalized), but we need complaintDescription (lowercase) for manual tickets
+        // Ensure the updated ticket has the complaint description and convenience charges from the form
+        // Update both lowercase and uppercase versions for consistency across all ticket types
         const ticketWithComplaint = {
           ...updatedTicket,
           complaintDescription: editableVisitDetails.complaintDescription,
-          ComplaintDescription: editableVisitDetails.complaintDescription // Also set the capitalized version for consistency
+          ComplaintDescription: editableVisitDetails.complaintDescription,
+          convenienceCharges: editableVisitDetails.convenienceCharges
         };
         
         setTickets(tickets.map(ticket =>
@@ -1690,18 +1637,17 @@ const ServiceManagement: React.FC = () => {
   const startEditingVisitDetails = () => {
     if (!selectedTicket) return;
     
-    // Get complaint description from the appropriate field based on ticket type
-    // For manual tickets, check both lowercase and uppercase versions
-    const complaintDesc = selectedTicket.uploadedViaExcel 
-      ? selectedTicket.ComplaintDescription || ''
-      : selectedTicket.complaintDescription || selectedTicket.ComplaintDescription || '';
+    // Get complaint description from the appropriate field for all ticket types
+    // Check both lowercase and uppercase versions to handle both Excel and manual tickets
+    const complaintDesc = selectedTicket.complaintDescription || selectedTicket.ComplaintDescription || '';
     
     setEditableVisitDetails({
       typeOfVisit: selectedTicket.typeOfVisit || '',
       typeOfService: selectedTicket.typeOfService || '',
       natureOfWork: selectedTicket.natureOfWork || '',
       subNatureOfWork: selectedTicket.subNatureOfWork || '',
-      complaintDescription: complaintDesc
+      complaintDescription: complaintDesc,
+      convenienceCharges: selectedTicket.convenienceCharges || ''
     });
     setIsEditingVisitDetails(true);
   };
@@ -1713,7 +1659,8 @@ const ServiceManagement: React.FC = () => {
       typeOfService: '',
       natureOfWork: '',
       subNatureOfWork: '',
-      complaintDescription: ''
+      complaintDescription: '',
+      convenienceCharges: ''
     });
   };
 
@@ -3700,10 +3647,10 @@ const ServiceManagement: React.FC = () => {
                         if (e.key === 'Tab' && !e.shiftKey) {
                           e.preventDefault();
                           e.stopPropagation();
-                          // Focus the PDF upload field
-                          const pdfInput = document.getElementById('pdf-file-input') as HTMLInputElement;
-                          if (pdfInput) {
-                            pdfInput.focus();
+                          // Move to next field
+                          const nextField = document.getElementById('create-ticket-button') as HTMLButtonElement;
+                          if (nextField) {
+                            nextField.focus();
                           }
                         }
                       }}
@@ -3713,63 +3660,7 @@ const ServiceManagement: React.FC = () => {
                     />
                   </div>
 
-                  {/* PDF Upload */}
-                  <div className="md:col-span-2 lg:col-span-3">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Upload PDF Document
-                    </label>
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
-                      <input
-                        type="file"
-                        id="pdf-file-input"
-                        accept=".pdf"
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (file) {
-                            if (file.size > 10 * 1024 * 1024) { // 10MB limit
-                              toast.error('PDF file size must be less than 10MB');
-                              return;
-                            }
-                            setPdfFile(file);
-                          }
-                        }}
-                        className="hidden"
-                      />
-                      <label htmlFor="pdf-file-input" className="cursor-pointer">
-                        <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600">
-                          <span className="font-medium text-blue-600">Click to upload</span> or drag and drop
-                        </p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          PDF files only (max 10MB)
-                        </p>
-                      </label>
-                    </div>
-                    {pdfFile && (
-                      <div className="mt-2 bg-green-50 border border-green-200 rounded-lg p-3">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                            <CheckCircle className="w-5 h-5 text-green-600" />
-                          </div>
-                          <div>
-                            <p className="text-sm font-medium text-green-800">
-                              {pdfFile.name}
-                            </p>
-                            <p className="text-xs text-green-600">
-                              {(pdfFile.size / 1024 / 1024).toFixed(2)} MB
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setPdfFile(null)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+
 
                 </div>
               </div>
@@ -3892,13 +3783,13 @@ const ServiceManagement: React.FC = () => {
                 <button
                   id="create-ticket-button"
                   type="submit"
-                  disabled={submitting || uploadingPdf}
+                  disabled={submitting}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
                 >
-                  {submitting || uploadingPdf ? (
+                  {submitting ? (
                     <>
                       <LoadingSpinner size="sm" className="text-white" />
-                      <span>{uploadingPdf ? 'Uploading PDF...' : 'Creating...'}</span>
+                      <span>Creating...</span>
                     </>
                   ) : (
                     'Create Ticket'
@@ -4254,115 +4145,7 @@ const ServiceManagement: React.FC = () => {
                 </div>
               </div>
 
-              {/* PDF Upload Section */}
-              <div className="border-t border-gray-200 pt-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">PDF Document</h3>
-                
-                {/* Current PDF Display */}
-                {editingTicket.pdfFile && (
-                  <div className="mb-4 bg-gray-50 p-4 rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                          <FileText className="w-6 h-6 text-red-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{editingTicket.pdfFile.originalName}</p>
-                          <p className="text-sm text-gray-500">
-                            {(editingTicket.pdfFile.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <a
-                          href={editingTicket.pdfFile.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center space-x-1"
-                        >
-                          <Eye className="w-4 h-4" />
-                          <span>View</span>
-                        </a>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await apiClient.services.deletePdf(editingTicket._id);
-                              toast.success('PDF deleted successfully');
-                              // Update the editing ticket
-                              setEditingTicket({ ...editingTicket, pdfFile: undefined });
-                            } catch (error: any) {
-                              console.error('Error deleting PDF:', error);
-                              toast.error('Failed to delete PDF');
-                            }
-                          }}
-                          className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm flex items-center space-x-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span>Delete</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
 
-                {/* PDF Upload */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {editingTicket.pdfFile ? 'Replace PDF Document' : 'Upload PDF Document'}
-                  </label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
-                    <input
-                      type="file"
-                      id="edit-pdf-file-input"
-                      accept=".pdf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          if (file.size > 10 * 1024 * 1024) { // 10MB limit
-                            toast.error('PDF file size must be less than 10MB');
-                            return;
-                          }
-                          setEditPdfFile(file);
-                        }
-                      }}
-                      className="hidden"
-                    />
-                    <label htmlFor="edit-pdf-file-input" className="cursor-pointer">
-                      <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                      <p className="text-sm text-gray-600">
-                        <span className="font-medium text-blue-600">Click to upload</span> or drag and drop
-                      </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        PDF files only (max 10MB)
-                      </p>
-                    </label>
-                  </div>
-                  {editPdfFile && (
-                    <div className="mt-2 bg-green-50 border border-green-200 rounded-lg p-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                          <CheckCircle className="w-5 h-5 text-green-600" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-green-800">
-                            {editPdfFile.name}
-                          </p>
-                          <p className="text-xs text-green-600">
-                            {(editPdfFile.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setEditPdfFile(null)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
 
               {/* Footer Buttons */}
               <div className="flex space-x-3 pt-6 border-t border-gray-200">
@@ -4375,13 +4158,13 @@ const ServiceManagement: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={submitting || uploadingEditPdf}
+                  disabled={submitting}
                   className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center space-x-2"
                 >
-                  {submitting || uploadingEditPdf ? (
+                  {submitting ? (
                     <>
                       <LoadingSpinner size="sm" className="text-white" />
-                      <span>{uploadingEditPdf ? 'Uploading PDF...' : 'Updating...'}</span>
+                      <span>Updating...</span>
                     </>
                   ) : (
                     'Update Ticket'
@@ -4754,27 +4537,45 @@ const ServiceManagement: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Complaint Description - Only show for non-Excel tickets */}
-                  {!selectedTicket.uploadedViaExcel && (
-                    <div className="md:col-span-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Complaint Description
-                      </label>
-                      {isEditingVisitDetails ? (
-                        <textarea
-                          value={editableVisitDetails.complaintDescription}
-                          onChange={(e) => setEditableVisitDetails(prev => ({ ...prev, complaintDescription: e.target.value }))}
-                          rows={3}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                          placeholder="Enter complaint description..."
-                        />
-                      ) : (
-                        <p className="font-medium transition-colors duration-500 text-green-700">
-                          {selectedTicket.complaintDescription || selectedTicket.ComplaintDescription || 'No complaint description provided'}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  {/* Complaint Description - Available for all tickets */}
+                  <div className="md:col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Complaint Description
+                    </label>
+                    {isEditingVisitDetails ? (
+                      <textarea
+                        value={editableVisitDetails.complaintDescription}
+                        onChange={(e) => setEditableVisitDetails(prev => ({ ...prev, complaintDescription: e.target.value }))}
+                        rows={3}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
+                        placeholder="Enter complaint description..."
+                      />
+                    ) : (
+                      <p className="font-medium transition-colors duration-500 text-green-700">
+                        {selectedTicket.complaintDescription || selectedTicket.ComplaintDescription || 'No complaint description provided'}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Convenience Charges - Available for all tickets */}
+                  <div className="md:col-span-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Convenience Charges
+                    </label>
+                    {isEditingVisitDetails ? (
+                      <input
+                        type="text"
+                        value={editableVisitDetails.convenienceCharges}
+                        onChange={(e) => setEditableVisitDetails(prev => ({ ...prev, convenienceCharges: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Enter convenience charges..."
+                      />
+                    ) : (
+                      <p className="font-medium transition-colors duration-500 text-green-700">
+                        {selectedTicket.convenienceCharges || 'No convenience charges specified'}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -4839,73 +4640,7 @@ const ServiceManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* PDF Document */}
-              {selectedTicket.pdfFile && (
-                <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-3 flex items-center">
-                    <FileText className="w-5 h-5 mr-2" />
-                    PDF Document
-                  </h3>
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-                          <FileText className="w-6 h-6 text-red-600" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{selectedTicket.pdfFile.originalName}</p>
-                          <p className="text-sm text-gray-500">
-                            {(selectedTicket.pdfFile.size / 1024 / 1024).toFixed(2)} MB
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex space-x-2">
-                        <a
-                          href={selectedTicket.pdfFile.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm flex items-center space-x-1"
-                        >
-                          <Eye className="w-4 h-4" />
-                          <span>View</span>
-                        </a>
-                        <a
-                          href={selectedTicket.pdfFile.url}
-                          download={selectedTicket.pdfFile.originalName}
-                          className="px-3 py-1 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-1"
-                        >
-                          <Download className="w-4 h-4" />
-                          <span>Download</span>
-                        </a>
-                        <button
-                          onClick={async () => {
-                            try {
-                              await apiClient.services.deletePdf(selectedTicket._id);
-                              toast.success('PDF deleted successfully');
-                              // Refresh the ticket data from server
-                              await refreshTicketData(selectedTicket._id);
-                            } catch (error: any) {
-                              console.error('Error deleting PDF:', error);
-                              toast.error('Failed to delete PDF');
-                            }
-                          }}
-                          className="px-3 py-1 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm flex items-center space-x-1"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span>Delete</span>
-                        </button>
-                      </div>
-                    </div>
-                    <div className="bg-white border border-gray-200 rounded-lg p-4">
-                      <iframe
-                        src={selectedTicket.pdfFile.url}
-                        className="w-full h-96 border-0"
-                        title="PDF Viewer"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
+
 
               {/* Status Update Section */}
               <div className="bg-gray-50 p-4 rounded-lg">

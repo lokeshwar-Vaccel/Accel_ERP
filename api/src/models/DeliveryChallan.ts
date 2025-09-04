@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IDeliveryChallanItem {
   slNo: number;
+  product?: mongoose.Types.ObjectId; // Reference to Product model
   description: string;
   partNo: string;
   hsnSac: string;
@@ -23,7 +24,6 @@ export interface IDeliveryChallan extends Document {
   termsOfDelivery: string;
   consignee: string;
   customer: mongoose.Types.ObjectId;
-  supplier?: mongoose.Types.ObjectId;
   spares: IDeliveryChallanItem[];
   services: IDeliveryChallanItem[];
   status: 'draft' | 'sent' | 'delivered' | 'cancelled';
@@ -38,6 +38,10 @@ const deliveryChallanItemSchema = new Schema<IDeliveryChallanItem>({
     type: Number,
     required: true,
     min: 1
+  },
+  product: {
+    type: Schema.Types.ObjectId,
+    ref: 'Product'
   },
   description: {
     type: String,
@@ -122,10 +126,6 @@ const deliveryChallanSchema = new Schema<IDeliveryChallan>({
     ref: 'Customer',
     required: true
   },
-  supplier: {
-    type: Schema.Types.ObjectId,
-    ref: 'Customer'
-  },
   spares: {
     type: [deliveryChallanItemSchema],
     default: []
@@ -153,7 +153,6 @@ const deliveryChallanSchema = new Schema<IDeliveryChallan>({
 });
 
 // Index for better query performance
-deliveryChallanSchema.index({ challanNumber: 1 });
 deliveryChallanSchema.index({ customer: 1 });
 deliveryChallanSchema.index({ status: 1 });
 deliveryChallanSchema.index({ dated: 1 });

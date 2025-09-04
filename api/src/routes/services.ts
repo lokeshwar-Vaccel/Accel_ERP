@@ -25,11 +25,8 @@ import {
   bulkImportServiceTickets,
   exportServiceTickets,
   getCustomerEngines,
-  getCustomerAddresses,
-  uploadServiceTicketPdf,
-  deleteServiceTicketPdf
+  getCustomerAddresses
 } from '../controllers/serviceController';
-import { uploadPdfSingle } from '../middleware/upload';
 
 const router = Router();
 
@@ -65,9 +62,7 @@ router.route('/:id')
 // Excel-specific update route (must come before /:id/assign to avoid conflicts)
 router.put('/:id/excel-update', checkPermission('write'), updateExcelServiceTicket);
 
-// PDF upload and delete routes
-router.post('/:id/upload-pdf', uploadPdfSingle, checkPermission('write'), uploadServiceTicketPdf);
-router.delete('/:id/pdf', checkPermission('write'), deleteServiceTicketPdf);
+
 
 // Service ticket actions
 router.post('/:id/assign', validate(assignServiceSchema), checkPermission('write'), assignServiceTicket);

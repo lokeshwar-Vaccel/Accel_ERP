@@ -9,4 +9,5 @@ export * from './DGMovement';
 export * from './DGQuotation';
 export * from './PurchaseOrderPayment';
 export * from './DGDetails';
-export * from './DeliveryChallan'; 
+export * from './DeliveryChallan';
+export * from './TransactionCounter'; 

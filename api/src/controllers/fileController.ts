@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { AuthenticatedRequest, APIResponse } from '../types';
 import { AppError } from '../middleware/errorHandler';
-import { uploadSingle, uploadMultiple, uploadFields, uploadPdfSingle, getFileUrl, getPdfFileUrl, deleteFile, deletePdfFile } from '../middleware/upload';
+import { uploadSingle, uploadMultiple, uploadFields, getFileUrl, deleteFile } from '../middleware/upload';
 
 // @desc    Upload single file
 // @route   POST /api/v1/files/upload
@@ -40,40 +40,7 @@ export const uploadFile = async (
   });
 };
 
-// @desc    Upload PDF file
-// @route   POST /api/v1/files/upload-pdf
-// @access  Private
-export const uploadPdfFile = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  uploadPdfSingle(req, res, (err) => {
-    if (err) {
-      return next(new AppError(err.message, 400));
-    }
 
-    if (!req.file) {
-      return next(new AppError('No PDF file uploaded', 400));
-    }
-
-    const fileUrl = getPdfFileUrl(req.file.filename);
-
-    const response: APIResponse = {
-      success: true,
-      message: 'PDF file uploaded successfully',
-      data: {
-        filename: req.file.filename,
-        originalName: req.file.originalname,
-        size: req.file.size,
-        mimetype: req.file.mimetype,
-        url: fileUrl
-      }
-    };
-
-    res.status(200).json(response);
-  });
-};
 
 // @desc    Upload multiple files
 // @route   POST /api/v1/files/upload-multiple

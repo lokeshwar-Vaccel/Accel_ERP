@@ -5,7 +5,9 @@ import {
   createDeliveryChallan,
   updateDeliveryChallan,
   deleteDeliveryChallan,
-  getDeliveryChallanStats
+  getDeliveryChallanStats,
+  updateDeliveryChallanStatus,
+  generateDeliveryChallanPDFEndpoint
 } from '../controllers/deliveryChallanController';
 import { protect } from '../middleware/auth';
 
@@ -19,6 +21,8 @@ router.route('/')
   .get(getDeliveryChallans)
   .post(createDeliveryChallan);
 
+
+
 router.route('/stats')
   .get(getDeliveryChallanStats);
 
@@ -26,5 +30,11 @@ router.route('/:id')
   .get(getDeliveryChallan)
   .put(updateDeliveryChallan)
   .delete(deleteDeliveryChallan);
+
+router.route('/:id/status')
+  .patch(updateDeliveryChallanStatus);
+
+router.route('/:id/pdf')
+  .get(generateDeliveryChallanPDFEndpoint);
 
 export default router; 

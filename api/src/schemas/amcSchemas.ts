@@ -179,7 +179,7 @@ export interface AMCNotificationInput {
 }
 
 export interface AMCReportInput {
-  reportType: 'contract_summary' | 'revenue_analysis' | 'visit_completion' | 'customer_satisfaction' | 'expiring_contracts';
+  reportType: 'contract_summary' | 'revenue_analysis' | 'visit_completion' | 'expiring_contracts' | 'performance_metrics';
   dateFrom: string;
   dateTo: string;
   customer?: string;
@@ -459,8 +459,8 @@ export const amcReportSchema = Joi.object<AMCReportInput>({
     'contract_summary',
     'revenue_analysis',
     'visit_completion',
-    'customer_satisfaction',
-    'expiring_contracts'
+    'expiring_contracts',
+    'performance_metrics'
   ).required(),
   dateFrom: Joi.date().iso().required(),
   dateTo: Joi.date().iso().greater(Joi.ref('dateFrom')).required(),

@@ -27,8 +27,6 @@ import { ResetPasswordForm } from "components/features/auth/ResetPasswordForm";
 import DGSales from "pages/DGSales";
 import DGInvoiceForm from "pages/DGInvoiceForm";
 import DGQuotationForm from "pages/DGQuotationForm";
-import DGCustomers from "pages/DGCustomers";
-import DeliveryChallanManagement from "../pages/DeliveryChallanManagement";
 import DeliveryChallanForm from "../components/DeliveryChallanForm";
 
 const AppRoutes: React.FC = () => {
@@ -105,12 +103,6 @@ const AppRoutes: React.FC = () => {
             {/* DG Invoice Management */}
             <Route path="/dg-sales/invoice/create" element={<DGInvoiceForm />} />
             <Route path="/dg-sales/invoice/edit/:id" element={<DGInvoiceForm />} />
-
-            {/* Delivery Challan Management */}
-            <Route path="/delivery-challans" element={<DeliveryChallanManagement />} />
-            <Route path="/delivery-challans/create" element={<DeliveryChallanForm />} />
-            <Route path="/delivery-challans/:id" element={<DeliveryChallanForm />} />
-            <Route path="/delivery-challans/:id/edit" element={<DeliveryChallanForm />} />
 
             {/* 404 - Page not found */}
             <Route path="*" element={<NotFound />} />

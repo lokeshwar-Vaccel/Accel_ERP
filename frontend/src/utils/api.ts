@@ -1,7 +1,7 @@
 // Remove circular import
 // import { forgotPassword } from "redux/auth/authSlice";
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 class ApiClient {
   private baseURL: string;
@@ -277,6 +277,9 @@ class ApiClient {
   products = {
     getAll: (params?: any) =>
       this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/products${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getForDropdown: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[] }>(`/products/productListWithoutPagination${params ? `?${new URLSearchParams(params)}` : ''}`),
 
     getWithInventory: (params?: any) =>
       this.makeRequest<{ success: boolean; data: { products: any[]; totalProducts: number } }>(`/products/with-inventory${params ? `?${new URLSearchParams(params)}` : ''}`),
@@ -674,20 +677,7 @@ class ApiClient {
         body: JSON.stringify(excelData),
       }),
 
-    uploadPdf: (id: string, pdfFile: File) => {
-      const formData = new FormData();
-      formData.append('pdfFile', pdfFile);
-      
-      return this.makeRequest<{ success: boolean; data: { ticket: any; pdfFile: any } }>(`/services/${id}/upload-pdf`, {
-        method: 'POST',
-        body: formData,
-      });
-    },
 
-    deletePdf: (id: string) =>
-      this.makeRequest<{ success: boolean; data: any }>(`/services/${id}/pdf`, {
-        method: 'DELETE',
-      }),
   };
 
   // Digital Service Report APIs
@@ -1393,6 +1383,59 @@ class ApiClient {
       }).then(res => res.blob()),
   };
 
+  // Delivery Challans
+  deliveryChallans = {
+    getAll: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: { deliveryChallans: any[]; pagination: any } }>(`/delivery-challans${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/delivery-challans/${id}`),
+
+    create: (challanData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/delivery-challans', {
+        method: 'POST',
+        body: JSON.stringify(challanData),
+      }),
+
+    update: (id: string, challanData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/delivery-challans/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(challanData),
+      }),
+
+    updateStatus: (id: string, status: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/delivery-challans/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/delivery-challans/${id}`, {
+        method: 'DELETE',
+      }),
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/delivery-challans/stats'),
+
+    getNextNumber: () =>
+      this.makeRequest<{ success: boolean; data: { nextChallanNumber: string } }>('/delivery-challans/next-number'),
+
+    exportPDF: async (id: string) => {
+      const token = localStorage.getItem('authToken');
+      const response = await fetch(`${API_BASE_URL}/delivery-challans/${id}/pdf`, {
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate PDF');
+      }
+
+      return response.blob();
+    },
+  };
+
   // DG Sales APIs
   dgSales = {
     // DG Enquiries
@@ -1813,34 +1856,7 @@ class ApiClient {
         this.makeRequest<{ success: boolean; data: any[] }>(`/dg-quotations/by-enquiry/${enquiryId}`),
     },
 
-    // Delivery Challans
-    deliveryChallans: {
-      getAll: (params?: any) =>
-        this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/delivery-challans${params ? `?${new URLSearchParams(params)}` : ''}`),
 
-      getById: (id: string) =>
-        this.makeRequest<{ success: boolean; data: any }>(`/delivery-challans/${id}`),
-
-      create: (challanData: any) =>
-        this.makeRequest<{ success: boolean; data: any }>('/delivery-challans', {
-          method: 'POST',
-          body: JSON.stringify(challanData),
-        }),
-
-      update: (id: string, challanData: any) =>
-        this.makeRequest<{ success: boolean; data: any }>(`/delivery-challans/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify(challanData),
-        }),
-
-      delete: (id: string) =>
-        this.makeRequest<{ success: boolean; message: string }>(`/delivery-challans/${id}`, {
-          method: 'DELETE',
-        }),
-
-      getStats: () =>
-        this.makeRequest<{ success: boolean; data: any }>('/delivery-challans/stats'),
-    },
   };
 
   // Feedback APIs

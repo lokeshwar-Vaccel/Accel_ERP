@@ -1,8 +1,11 @@
 import { Request, Response, NextFunction } from 'express';
 import { DeliveryChallan, IDeliveryChallan } from '../models/DeliveryChallan';
+import { Stock } from '../models/Stock';
+import { StockLedger } from '../models/StockLedger';
 import { AuthenticatedRequest, APIResponse, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
-import { generateReferenceId } from '../utils/generateReferenceId';
+import { generateReferenceId, generateDeliveryChallanNumber } from '../utils/generateReferenceId';
+import { generateDeliveryChallanPDF } from '../utils/deliveryChallanPdf';
 
 // @desc    Get all delivery challans
 // @route   GET /api/v1/delivery-challans
@@ -61,7 +64,6 @@ export const getDeliveryChallans = async (
 
     const deliveryChallans = await DeliveryChallan.find(query)
       .populate('customer', 'name email phone address')
-      .populate('supplier', 'name email phone addresses')
       .populate('createdBy', 'firstName lastName')
       .sort(sort as string)
       .skip(skip)
@@ -99,8 +101,7 @@ export const getDeliveryChallan = async (
 ): Promise<void> => {
   try {
     const deliveryChallan = await DeliveryChallan.findById(req.params.id)
-      .populate('customer', 'name email phone address customerType')
-      .populate('supplier', 'name email phone addresses')
+      .populate('customer', 'name email phone address customerType addresses')
       .populate('createdBy', 'firstName lastName email');
 
     if (!deliveryChallan) {
@@ -130,7 +131,6 @@ export const createDeliveryChallan = async (
   try {
     const {
       customer,
-      supplier,
       spares,
       services,
       dated,
@@ -148,10 +148,19 @@ export const createDeliveryChallan = async (
       notes
     } = req.body;
 
+    // Clean up empty string fields
+    const cleanModeOfPayment = modeOfPayment && modeOfPayment.trim() !== '' ? modeOfPayment : undefined;
+    const cleanReferenceNo = referenceNo && referenceNo.trim() !== '' ? referenceNo : undefined;
+    const cleanOtherReferenceNo = otherReferenceNo && otherReferenceNo.trim() !== '' ? otherReferenceNo : undefined;
+    const cleanBuyersOrderNo = buyersOrderNo && buyersOrderNo.trim() !== '' ? buyersOrderNo : undefined;
+    const cleanDispatchDocNo = dispatchDocNo && dispatchDocNo.trim() !== '' ? dispatchDocNo : undefined;
+    const cleanTermsOfDelivery = termsOfDelivery && termsOfDelivery.trim() !== '' ? termsOfDelivery : undefined;
+    const cleanNotes = notes && notes.trim() !== '' ? notes : undefined;
+
     // Generate challan number if not provided
     let challanNumber = req.body.challanNumber;
     if (!challanNumber) {
-      challanNumber = await generateReferenceId('CHALLAN');
+      challanNumber = await generateDeliveryChallanNumber();
     }
 
     // Validate required fields
@@ -176,7 +185,7 @@ export const createDeliveryChallan = async (
       return next(new AppError('At least one spare item or service is required', 400));
     }
 
-    // Validate spares
+    // Validate spares and check stock availability
     if (spares && spares.length > 0) {
       for (let i = 0; i < spares.length; i++) {
         const item = spares[i];
@@ -185,6 +194,17 @@ export const createDeliveryChallan = async (
         }
         if (item.quantity <= 0) {
           return next(new AppError(`Spare item ${i + 1} quantity must be greater than 0`, 400));
+        }
+        
+        // If product ID is provided, validate stock availability
+        if (item.product) {
+          const stock = await Stock.findOne({ product: item.product });
+          if (!stock) {
+            return next(new AppError(`Product ${item.description} is not available in stock`, 400));
+          }
+          if (stock.availableQuantity < item.quantity) {
+            return next(new AppError(`Insufficient stock for ${item.description}. Available: ${stock.availableQuantity}, Requested: ${item.quantity}`, 400));
+          }
         }
       }
     }
@@ -206,31 +226,63 @@ export const createDeliveryChallan = async (
     const deliveryChallan = new DeliveryChallan({
       challanNumber,
       customer,
-      supplier,
       spares: spares || [],
       services: services || [],
       dated: dated ? new Date(dated) : new Date(),
-      modeOfPayment,
+      modeOfPayment: cleanModeOfPayment,
       department,
-      referenceNo,
-      otherReferenceNo,
-      buyersOrderNo,
+      referenceNo: cleanReferenceNo,
+      otherReferenceNo: cleanOtherReferenceNo,
+      buyersOrderNo: cleanBuyersOrderNo,
       buyersOrderDate: buyersOrderDate ? new Date(buyersOrderDate) : undefined,
-      dispatchDocNo,
+      dispatchDocNo: cleanDispatchDocNo,
       destination,
       dispatchedThrough,
-      termsOfDelivery,
-      consignee,
-      notes,
+      termsOfDelivery: cleanTermsOfDelivery,
+      consignee: consignee && consignee.trim() !== '' ? consignee : undefined,
+      notes: cleanNotes,
       createdBy: req.user!.id
     });
 
     await deliveryChallan.save();
 
+    // Reduce inventory for spare items with product IDs
+    if (spares && spares.length > 0) {
+      for (const item of spares) {
+        if (item.product && item.quantity > 0) {
+          const stock = await Stock.findOne({ product: item.product });
+          if (stock) {
+            const originalQuantity = stock.quantity;
+            
+            // Reduce stock
+            stock.quantity -= item.quantity;
+            stock.availableQuantity = stock.quantity - stock.reservedQuantity;
+            stock.lastUpdated = new Date();
+            await stock.save();
+
+            // Create stock ledger entry
+            await StockLedger.create({
+              product: item.product,
+              location: stock.location,
+              transactionType: 'outward',
+              quantity: -item.quantity,
+              reason: `Delivery Challan - ${challanNumber}`,
+              notes: `Delivery challan created for customer`,
+              performedBy: req.user!.id,
+              transactionDate: new Date(),
+              resultingQuantity: stock.quantity,
+              previousQuantity: originalQuantity,
+              referenceId: challanNumber,
+              referenceType: 'delivery_challan'
+            });
+          }
+        }
+      }
+    }
+
     // Populate references for response
     await deliveryChallan.populate([
       'customer',
-      'supplier',
       'createdBy'
     ]);
 
@@ -257,7 +309,6 @@ export const updateDeliveryChallan = async (
   try {
     const {
       customer,
-      supplier,
       spares,
       services,
       dated,
@@ -276,39 +327,130 @@ export const updateDeliveryChallan = async (
       status
     } = req.body;
 
+    // Clean up empty string fields
+    const cleanModeOfPayment = modeOfPayment && modeOfPayment.trim() !== '' ? modeOfPayment : undefined;
+    const cleanReferenceNo = referenceNo && referenceNo.trim() !== '' ? referenceNo : undefined;
+    const cleanOtherReferenceNo = otherReferenceNo && otherReferenceNo.trim() !== '' ? otherReferenceNo : undefined;
+    const cleanBuyersOrderNo = buyersOrderNo && buyersOrderNo.trim() !== '' ? buyersOrderNo : undefined;
+    const cleanDispatchDocNo = dispatchDocNo && dispatchDocNo.trim() !== '' ? dispatchDocNo : undefined;
+    const cleanTermsOfDelivery = termsOfDelivery && termsOfDelivery.trim() !== '' ? termsOfDelivery : undefined;
+    const cleanNotes = notes && notes.trim() !== '' ? notes : undefined;
+
     const deliveryChallan = await DeliveryChallan.findById(req.params.id);
     if (!deliveryChallan) {
       return next(new AppError('Delivery challan not found', 404));
     }
 
+    // Store original spares for inventory adjustment
+    const originalSpares = deliveryChallan.spares;
+
     // Update fields
     if (customer) deliveryChallan.customer = customer;
-    if (supplier !== undefined) deliveryChallan.supplier = supplier;
     if (spares) deliveryChallan.spares = spares;
     if (services) deliveryChallan.services = services;
     if (dated) deliveryChallan.dated = new Date(dated);
-    if (modeOfPayment !== undefined) deliveryChallan.modeOfPayment = modeOfPayment;
+    if (cleanModeOfPayment !== undefined) deliveryChallan.modeOfPayment = cleanModeOfPayment;
     if (department) deliveryChallan.department = department;
-    if (referenceNo !== undefined) deliveryChallan.referenceNo = referenceNo;
-    if (otherReferenceNo !== undefined) deliveryChallan.otherReferenceNo = otherReferenceNo;
-    if (buyersOrderNo !== undefined) deliveryChallan.buyersOrderNo = buyersOrderNo;
+    if (cleanReferenceNo !== undefined) deliveryChallan.referenceNo = cleanReferenceNo;
+    if (cleanOtherReferenceNo !== undefined) deliveryChallan.otherReferenceNo = cleanOtherReferenceNo;
+    if (cleanBuyersOrderNo !== undefined) deliveryChallan.buyersOrderNo = cleanBuyersOrderNo;
     if (buyersOrderDate !== undefined) {
       deliveryChallan.buyersOrderDate = buyersOrderDate ? new Date(buyersOrderDate) : undefined;
     }
-    if (dispatchDocNo !== undefined) deliveryChallan.dispatchDocNo = dispatchDocNo;
+    if (cleanDispatchDocNo !== undefined) deliveryChallan.dispatchDocNo = cleanDispatchDocNo;
     if (destination) deliveryChallan.destination = destination;
     if (dispatchedThrough) deliveryChallan.dispatchedThrough = dispatchedThrough;
-    if (termsOfDelivery !== undefined) deliveryChallan.termsOfDelivery = termsOfDelivery;
-    if (consignee !== undefined) deliveryChallan.consignee = consignee;
-    if (notes !== undefined) deliveryChallan.notes = notes;
+    if (cleanTermsOfDelivery !== undefined) deliveryChallan.termsOfDelivery = cleanTermsOfDelivery;
+    if (consignee !== undefined) {
+      deliveryChallan.consignee = consignee && consignee.trim() !== '' ? consignee : undefined;
+    }
+    if (cleanNotes !== undefined) deliveryChallan.notes = cleanNotes;
     if (status) deliveryChallan.status = status;
 
+    // Validate new spares and check stock availability if status is being changed to 'sent' or 'delivered'
+    if (spares && (status === 'sent' || status === 'delivered')) {
+      for (let i = 0; i < spares.length; i++) {
+        const item = spares[i];
+        if (item.product && item.quantity > 0) {
+          const stock = await Stock.findOne({ product: item.product });
+          if (!stock) {
+            return next(new AppError(`Product ${item.description} is not available in stock`, 400));
+          }
+          if (stock.availableQuantity < item.quantity) {
+            return next(new AppError(`Insufficient stock for ${item.description}. Available: ${stock.availableQuantity}, Requested: ${item.quantity}`, 400));
+          }
+        }
+      }
+    }
+
     await deliveryChallan.save();
+
+    // Handle inventory adjustments if spares changed and status is 'sent' or 'delivered'
+    if (spares && (status === 'sent' || status === 'delivered')) {
+      // First, restore inventory from original spares
+      for (const item of originalSpares) {
+        if (item.product && item.quantity > 0) {
+          const stock = await Stock.findOne({ product: item.product });
+          if (stock) {
+            stock.quantity += item.quantity;
+            stock.availableQuantity = stock.quantity - stock.reservedQuantity;
+            stock.lastUpdated = new Date();
+            await stock.save();
+
+            // Create stock ledger entry for restoration
+            await StockLedger.create({
+              product: item.product,
+              location: stock.location,
+              transactionType: 'inward',
+              quantity: item.quantity,
+              reason: `Delivery Challan Update - ${deliveryChallan.challanNumber}`,
+              notes: `Restored from previous version`,
+              performedBy: req.user!.id,
+              transactionDate: new Date(),
+              resultingQuantity: stock.quantity,
+              previousQuantity: stock.quantity - item.quantity,
+              referenceId: deliveryChallan.challanNumber,
+              referenceType: 'delivery_challan'
+            });
+          }
+        }
+      }
+
+      // Then, reduce inventory for new spares
+      for (const item of spares) {
+        if (item.product && item.quantity > 0) {
+          const stock = await Stock.findOne({ product: item.product });
+          if (stock) {
+            const originalQuantity = stock.quantity;
+            
+            stock.quantity -= item.quantity;
+            stock.availableQuantity = stock.quantity - stock.reservedQuantity;
+            stock.lastUpdated = new Date();
+            await stock.save();
+
+            // Create stock ledger entry
+            await StockLedger.create({
+              product: item.product,
+              location: stock.location,
+              transactionType: 'outward',
+              quantity: -item.quantity,
+              reason: `Delivery Challan Update - ${deliveryChallan.challanNumber}`,
+              notes: `Updated delivery challan`,
+              performedBy: req.user!.id,
+              transactionDate: new Date(),
+              resultingQuantity: stock.quantity,
+              previousQuantity: originalQuantity,
+              referenceId: deliveryChallan.challanNumber,
+              referenceType: 'delivery_challan'
+            });
+          }
+        }
+      }
+    }
 
     // Populate references for response
     await deliveryChallan.populate([
       'customer',
-      'supplier',
       'createdBy'
     ]);
 
@@ -343,6 +485,37 @@ export const deleteDeliveryChallan = async (
       return next(new AppError('Only draft delivery challans can be deleted', 400));
     }
 
+    // If status was 'sent' or 'delivered', restore inventory
+    if (['sent', 'delivered'].includes(deliveryChallan.status)) {
+      for (const item of deliveryChallan.spares) {
+        if (item.product && item.quantity > 0) {
+          const stock = await Stock.findOne({ product: item.product });
+          if (stock) {
+            stock.quantity += item.quantity;
+            stock.availableQuantity = stock.quantity - stock.reservedQuantity;
+            stock.lastUpdated = new Date();
+            await stock.save();
+
+            // Create stock ledger entry for restoration
+            await StockLedger.create({
+              product: item.product,
+              location: stock.location,
+              transactionType: 'inward',
+              quantity: item.quantity,
+              reason: `Delivery Challan Deletion - ${deliveryChallan.challanNumber}`,
+              notes: `Restored from deleted delivery challan`,
+              performedBy: req.user!.id,
+              transactionDate: new Date(),
+              resultingQuantity: stock.quantity,
+              previousQuantity: stock.quantity - item.quantity,
+              referenceId: deliveryChallan.challanNumber,
+              referenceType: 'delivery_challan'
+            });
+          }
+        }
+      }
+    }
+
     await DeliveryChallan.findByIdAndDelete(req.params.id);
 
     const response: APIResponse = {
@@ -353,6 +526,139 @@ export const deleteDeliveryChallan = async (
 
     res.status(200).json(response);
   } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update delivery challan status
+// @route   PATCH /api/v1/delivery-challans/:id/status
+// @access  Private
+export const updateDeliveryChallanStatus = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { status } = req.body;
+    const deliveryChallan = await DeliveryChallan.findById(req.params.id);
+    
+    if (!deliveryChallan) {
+      return next(new AppError('Delivery challan not found', 404));
+    }
+
+    const previousStatus = deliveryChallan.status;
+    deliveryChallan.status = status;
+
+    // Handle inventory changes based on status transitions
+    if (['sent', 'delivered'].includes(status)) {
+      // Reduce inventory when status changes to sent/delivered
+      for (const item of deliveryChallan.spares) {
+        if (item.product && item.quantity > 0) {
+          const stock = await Stock.findOne({ product: item.product });
+          if (stock) {
+            // Check if we already reduced inventory (e.g., from draft to sent)
+            if (['draft', 'cancelled'].includes(previousStatus)) {
+              const originalQuantity = stock.quantity;
+              stock.quantity -= item.quantity;
+              stock.availableQuantity = stock.quantity - stock.reservedQuantity;
+              stock.lastUpdated = new Date();
+              await stock.save();
+
+              // Create stock ledger entry
+              await StockLedger.create({
+                product: item.product,
+                location: stock.location,
+                transactionType: 'outward',
+                quantity: -item.quantity,
+                reason: `Delivery Challan Status Change - ${deliveryChallan.challanNumber}`,
+                notes: `Status changed to ${status}`,
+                performedBy: req.user!.id,
+                transactionDate: new Date(),
+                resultingQuantity: stock.quantity,
+                previousQuantity: originalQuantity,
+                referenceId: deliveryChallan.challanNumber,
+                referenceType: 'delivery_challan'
+              });
+            }
+          }
+        }
+      }
+    } else if (status === 'draft' && ['sent', 'delivered'].includes(previousStatus)) {
+      // Restore inventory when status changes back to draft
+      for (const item of deliveryChallan.spares) {
+        if (item.product && item.quantity > 0) {
+          const stock = await Stock.findOne({ product: item.product });
+          if (stock) {
+            stock.quantity += item.quantity;
+            stock.availableQuantity = stock.quantity - stock.reservedQuantity;
+            stock.lastUpdated = new Date();
+            await stock.save();
+
+            // Create stock ledger entry for restoration
+            await StockLedger.create({
+              product: item.product,
+              location: stock.location,
+              transactionType: 'inward',
+              quantity: item.quantity,
+              reason: `Delivery Challan Status Change - ${deliveryChallan.challanNumber}`,
+              notes: `Status changed back to draft`,
+              performedBy: req.user!.id,
+              transactionDate: new Date(),
+              resultingQuantity: stock.quantity,
+              previousQuantity: stock.quantity - item.quantity,
+              referenceId: deliveryChallan.challanNumber,
+              referenceType: 'delivery_challan'
+            });
+          }
+        }
+      }
+    }
+
+    await deliveryChallan.save();
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Delivery challan status updated successfully',
+      data: { deliveryChallan }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+
+
+// @desc    Generate PDF for delivery challan
+// @route   GET /api/v1/delivery-challans/:id/pdf
+// @access  Private
+export const generateDeliveryChallanPDFEndpoint = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const deliveryChallan = await DeliveryChallan.findById(req.params.id)
+      .populate('customer', 'name email phone address customerType addresses')
+      .populate('createdBy', 'firstName lastName email');
+
+    if (!deliveryChallan) {
+      return next(new AppError('Delivery challan not found', 404));
+    }
+
+    const pdfBuffer = await generateDeliveryChallanPDF(deliveryChallan as any);
+
+    // Set headers for PDF download
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="delivery-challan-${deliveryChallan.challanNumber}.pdf"`,
+      'Content-Length': pdfBuffer.length
+    });
+
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('PDF generation error:', error);
     next(error);
   }
 };

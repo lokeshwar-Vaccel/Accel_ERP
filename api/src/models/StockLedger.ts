@@ -14,7 +14,7 @@ const stockLedgerSchema = new Schema<IStockLedger>(
     resultingQuantity: { type: Number, required: true },
     previousQuantity: { type: Number, required: true },
     referenceId: { type: String}, // e.g., "AD250627-A-123456"   //, required: true 
-    referenceType: { type: String, enum: ['purchase_order', 'service_ticket', 'adjustment', 'transfer', 'sale', 'reservation'] },
+    referenceType: { type: String, enum: ['purchase_order', 'service_ticket', 'adjustment', 'transfer', 'sale', 'reservation', 'delivery_challan'] },
   },
   { timestamps: true }
 );

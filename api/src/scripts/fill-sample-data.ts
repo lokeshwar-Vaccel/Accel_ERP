@@ -288,7 +288,7 @@ async function main() {
       transactionDate: new Date(Date.now() - randomInt(0, 100) * 86400000),
       resultingQuantity: randomInt(1, 100),
       referenceId: `REF${randomInt(1000, 9999)}`,
-      referenceType: pickRandom(['purchase_order', 'service_ticket', 'adjustment', 'transfer', 'sale', 'reservation'])
+      referenceType: pickRandom(['purchase_order', 'service_ticket', 'adjustment', 'transfer', 'sale', 'reservation', 'delivery_challan'])
     }))
   );
 

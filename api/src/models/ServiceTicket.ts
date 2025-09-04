@@ -31,14 +31,7 @@ interface IServiceTicketSchema extends Document {
   ServiceRequestStatus?: string; // SRStatus from Excel
   OemName?: string; // OEMName from Excel
   
-  // PDF upload field
-  pdfFile?: {
-    filename: string;
-    originalName: string;
-    mimetype: string;
-    size: number;
-    url: string;
-  };
+
   
   // Essential fields for system functionality
   createdBy?: mongoose.Types.ObjectId; // For backward compatibility
@@ -184,28 +177,7 @@ const serviceTicketSchema = new Schema({
     default: Date.now
   },
 
-  // PDF upload field
-  pdfFile: {
-    filename: {
-      type: String,
-      trim: true
-    },
-    originalName: {
-      type: String,
-      trim: true
-    },
-    mimetype: {
-      type: String,
-      trim: true
-    },
-    size: {
-      type: Number
-    },
-    url: {
-      type: String,
-      trim: true
-    }
-  },
+
 
   // Legacy fields for backward compatibility
   customer: {

@@ -222,6 +222,71 @@ export const createProduct = async (
   }
 };
 
+// @desc    Get all products for dropdown (no pagination)
+// @route   GET /api/v1/products/dropdown
+// @access  Private
+export const getProductsForDropdown = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { 
+      search, 
+      category, 
+      brand,
+      isActive,
+      limit = 1000 // Higher limit for dropdown but still capped
+    } = req.query as {
+      search?: string;
+      category?: ProductCategory;
+      brand?: string;
+      isActive?: string | boolean;
+      limit?: string;
+    };
+
+    // Build query
+    const query: any = { isActive: true }; // Only active products for dropdown
+    
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { partNo: { $regex: search, $options: 'i' } },
+        { brand: { $regex: search, $options: 'i' } },
+        { category: { $regex: search, $options: 'i' } }
+      ];
+    }
+    
+    if (category) {
+      query.category = category;
+    }
+    
+    if (brand) {
+      query.brand = { $regex: brand, $options: 'i' };
+    }
+    
+    if (isActive !== undefined) {
+      query.isActive = isActive === true || isActive === 'true';
+    }
+
+    // Execute query without pagination, optimized for dropdown
+    const products = await Product.find(query)
+      .select('name partNo hsnNumber category brand price isActive') // Only essential fields
+      .sort({ name: 1 }) // Sort by name for better UX
+      .limit(Number(limit));
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Products for dropdown retrieved successfully',
+      data: products
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 // @desc    Create new product
 // @route   POST /api/v1/products

@@ -176,7 +176,7 @@ export interface IStockLedger extends Document {
   resultingQuantity: number;
   previousQuantity: number;
   referenceId: string;
-  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'sale' | 'reservation';
+  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'sale' | 'reservation' | 'delivery_challan';
   unitCost?: number;
   totalCost?: number;
   batchNumber?: string;
