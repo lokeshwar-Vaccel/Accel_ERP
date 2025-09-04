@@ -1804,15 +1804,24 @@ export const updateExcelServiceTicket = async (
     if (SiteID !== undefined) {
       updateData.SiteID = SiteID;
     }
-    if (SREngineerId !== undefined && SREngineerId) {
-      updateData.ServiceEngineerName = SREngineerId; // Set the service engineer objectId in ServiceEngineerName field
-      updateData.assignedTo = SREngineerId; // Also set in assignedTo field for backward compatibility
+    if (OEMName !== undefined) {
+      updateData.OemName = OEMName;
     }
+
+    // Map engineer name/id
+    if (SREngineerId !== undefined) {
+      updateData.ServiceEngineerName = SREngineerId || undefined;
+      updateData.assignedTo = SREngineerId || undefined;
+    } else if (SREngineer !== undefined && typeof SREngineer === 'string' && SREngineer.trim() !== '') {
+      updateData.ServiceEngineerName = undefined; // Keep as-is if not resolvable here
+    }
+
     if (ComplaintCode !== undefined) {
       updateData.ComplaintCode = ComplaintCode;
     }
     if (ComplaintDescription !== undefined) {
       updateData.ComplaintDescription = ComplaintDescription;
+      updateData.description = ComplaintDescription;
     }
     if (ResolutionDescription !== undefined) {
       updateData.ResolutionDescription = ResolutionDescription;
@@ -1825,40 +1834,153 @@ export const updateExcelServiceTicket = async (
     }
     if (ServiceRequestStatus !== undefined) {
       updateData.ServiceRequestStatus = ServiceRequestStatus;
-      updateData.status = ServiceRequestStatus; // Also update the standard status field
-    }
-    if (OEMName !== undefined) {
-      updateData.OemName = OEMName;
+      updateData.serviceRequestStatus = ServiceRequestStatus;
     }
     
-    // Handle additional fields
-    if (typeOfVisit !== undefined) {
-      updateData.typeOfVisit = typeOfVisit;
-    }
-    if (natureOfWork !== undefined) {
-      updateData.natureOfWork = natureOfWork;
-    }
-    if (subNatureOfWork !== undefined) {
-      updateData.subNatureOfWork = subNatureOfWork;
-    }
+    if (typeOfVisit !== undefined) updateData.typeOfVisit = typeOfVisit;
+    if (natureOfWork !== undefined) updateData.natureOfWork = natureOfWork;
+    if (subNatureOfWork !== undefined) updateData.subNatureOfWork = subNatureOfWork;
 
     const updatedTicket = await ServiceTicket.findByIdAndUpdate(
       req.params.id,
       updateData,
       { new: true, runValidators: true }
-    ).populate('ServiceEngineerName', 'firstName lastName email phone');
+    );
 
-    if (!updatedTicket) {
-      return next(new AppError('Failed to update service ticket', 500));
+    const response: APIResponse = {
+      success: true,
+      message: 'Excel Service ticket updated successfully',
+      data: { ticket: updatedTicket }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Engineer payment report by month with ticket details and totals
+// @route   GET /api/v1/services/reports/engineer-payments
+// @access  Private
+export const getEngineerPaymentReport = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { month, engineerId, customerId, status } = req.query as { month?: string; engineerId?: string; customerId?: string; status?: string };
+
+    // Determine period: default to current month
+    const now = new Date();
+    const [y, m] = (month && /^\d{4}-\d{2}$/.test(month)) ? month.split('-').map(v => parseInt(v, 10)) : [now.getFullYear(), now.getMonth() + 1];
+    const periodStart = new Date(y, m - 1, 1, 0, 0, 0, 0);
+    const periodEnd = new Date(y, m, 0, 23, 59, 59, 999); // end of month
+
+    const match: any = {
+      ServiceAttendedDate: { $gte: periodStart, $lte: periodEnd }
+    };
+
+    // Optional status filter; default consider resolved and closed
+    if (status && typeof status === 'string' && status.trim() !== '') {
+      match.ServiceRequestStatus = status;
+    } else {
+      match.ServiceRequestStatus = { $in: [TicketStatus.RESOLVED, TicketStatus.CLOSED] };
     }
 
-    res.status(200).json({
-      success: true,
-      data: {
-        ticket: updatedTicket
+    if (engineerId && /^[0-9a-fA-F]{24}$/.test(engineerId)) {
+      match.$or = [
+        { ServiceEngineerName: new mongoose.Types.ObjectId(engineerId) },
+        { assignedTo: new mongoose.Types.ObjectId(engineerId) }
+      ];
+    }
+
+    if (customerId) {
+      if (mongoose.Types.ObjectId.isValid(customerId)) {
+        match.customer = new mongoose.Types.ObjectId(customerId);
+      } else {
+        // When not ObjectId, allow CustomerName text filter
+        match.CustomerName = { $regex: customerId, $options: 'i' };
+      }
+    }
+
+    const rows = await ServiceTicket.aggregate([
+      { $match: match },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'ServiceEngineerName',
+          foreignField: '_id',
+          as: 'engineer'
+        }
       },
-      message: 'Excel service ticket updated successfully'
-    });
+      {
+        $lookup: {
+          from: 'customers',
+          localField: 'customer',
+          foreignField: '_id',
+          as: 'customerDoc'
+        }
+      },
+      {
+        $addFields: {
+          engineerObj: { $arrayElemAt: ['$engineer', 0] },
+          customerObj: { $arrayElemAt: ['$customerDoc', 0] }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          ticketNumber: { $ifNull: ['$ServiceRequestNumber', ''] },
+          serviceAttendedDate: '$ServiceAttendedDate',
+          customerName: { $ifNull: ['$CustomerName', { $ifNull: ['$customerObj.name', ''] }] },
+          typeOfVisit: { $ifNull: ['$typeOfVisit', ''] },
+          natureOfWork: { $ifNull: ['$natureOfWork', ''] },
+          subNatureOfWork: { $ifNull: ['$subNatureOfWork', ''] },
+          serviceEngineerName: {
+            $trim: {
+              input: {
+                $concat: [
+                  { $ifNull: ['$engineerObj.firstName', ''] },
+                  ' ',
+                  { $cond: [{ $in: ['$engineerObj.lastName', [null, '', 'Unknown']] }, '', { $ifNull: ['$engineerObj.lastName', ''] }] }
+                ]
+              }
+            }
+          },
+          engineerId: { $ifNull: ['$ServiceEngineerName', '$assignedTo'] },
+          convenienceCharges: { $ifNull: ['$serviceCharge', 0] }
+        }
+      },
+      { $sort: { serviceEngineerName: 1, serviceAttendedDate: 1 } }
+    ]);
+
+    // Compute totals per engineer and grand total
+    const totalsMap = new Map<string, { engineerId: string; engineerName: string; totalAmount: number }>();
+    let grandTotal = 0;
+    for (const r of rows) {
+      const key = String(r.engineerId || r.serviceEngineerName || 'unassigned');
+      const current = totalsMap.get(key) || { engineerId: key, engineerName: r.serviceEngineerName || 'Unassigned', totalAmount: 0 };
+      current.totalAmount += Number(r.convenienceCharges || 0);
+      totalsMap.set(key, current);
+      grandTotal += Number(r.convenienceCharges || 0);
+    }
+
+    const totals = {
+      byEngineer: Array.from(totalsMap.values()).sort((a, b) => a.engineerName.localeCompare(b.engineerName)),
+      grandTotal
+    };
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Engineer payment report generated successfully',
+      data: {
+        period: { month: `${y}-${String(m).padStart(2, '0')}`, start: periodStart, end: periodEnd },
+        rows,
+        totals
+      }
+    };
+
+    res.status(200).json(response);
   } catch (error) {
     next(error);
   }

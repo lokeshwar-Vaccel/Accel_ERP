@@ -35,9 +35,9 @@ export const generateDeliveryChallanPDF = (challan: PopulatedDeliveryChallan): P
         resolve(pdfBuffer);
       });
 
-      // Header - DELIVERY NOTE
+      // Header - DELIVERY CHALLAN
       doc.fontSize(18).font('Helvetica-Bold');
-      doc.text('DELIVERY NOTE', 0, 40, { align: 'center', width: doc.page.width });
+      doc.text('DELIVERY CHALLAN', 0, 40, { align: 'center', width: doc.page.width });
       
       // Create invoice-style table structure with borders
       const startY = 80;
@@ -84,14 +84,14 @@ export const generateDeliveryChallanPDF = (challan: PopulatedDeliveryChallan): P
         companyCurrentY += 12;
       });
       
-      // Right side - Delivery Note Details (clean layout without internal borders)
+      // Right side - Delivery Challan Details (clean layout without internal borders)
       let detailsCurrentY = currentY + 15;
       doc.fontSize(9).font('Helvetica-Bold');
       
              // Define delivery details array for clean layout
        // Only show placeholder text for mandatory fields, empty string for optional fields
        const deliveryDetails = [
-         { label: 'Delivery Note No.', value: challan.challanNumber || 'Auto Update' }, // Mandatory - keep placeholder
+         { label: 'Delivery Challan No.', value: challan.challanNumber || 'Auto Update' }, // Mandatory - keep placeholder
          { label: 'Dated', value: new Date(challan.dated).toLocaleDateString('en-GB') }, // Mandatory - always has value
          { label: 'Mode/Terms of Payment', value: challan.modeOfPayment || '' }, // Optional - empty if not provided
          { label: 'Department', value: challan.department }, // Mandatory - always has value
@@ -108,7 +108,7 @@ export const generateDeliveryChallanPDF = (challan: PopulatedDeliveryChallan): P
              // Render delivery details in a clean format (only show fields with values)
        deliveryDetails.forEach((detail, index) => {
          // Only render fields that have values or are mandatory
-         const isMandatory = ['Delivery Note No.', 'Dated', 'Department', 'Destination', 'Dispatched through'].includes(detail.label);
+         const isMandatory = ['Delivery Challan No.', 'Dated', 'Department', 'Destination', 'Dispatched through'].includes(detail.label);
          const hasValue = detail.value && detail.value.trim() !== '';
          
          if (isMandatory || hasValue) {
@@ -192,43 +192,45 @@ export const generateDeliveryChallanPDF = (challan: PopulatedDeliveryChallan): P
          .stroke();
       
       // Spares Section
-      doc.fontSize(12).font('Helvetica-Bold');
-      doc.fillColor('#FFA500'); // Orange background color
-      doc.rect(leftColumnX, currentY, 515, 20).fill();
-      doc.fillColor('black');
-      doc.text('Spares', leftColumnX + 5, currentY + 5);
-      currentY += 20;
-      
-      // Spares Table Header
-      doc.fontSize(9).font('Helvetica-Bold');
-      doc.rect(leftColumnX, currentY, 515, 20).stroke();
-      
-      const colWidths = [50, 200, 100, 80, 85]; // SI No, Description, Part No, HSN/SAC, Quantity
-      let colX = leftColumnX;
-      
-      doc.text('SI\nNo', colX + 5, currentY + 3);
-      colX += colWidths[0];
-      doc.rect(colX, currentY, 0, 20).stroke(); // Vertical line
-      
-      doc.text('Description of Goods', colX + 5, currentY + 7);
-      colX += colWidths[1];
-      doc.rect(colX, currentY, 0, 20).stroke();
-      
-      doc.text('Part No.', colX + 5, currentY + 7);
-      colX += colWidths[2];
-      doc.rect(colX, currentY, 0, 20).stroke();
-      
-      doc.text('HSN/SAC', colX + 5, currentY + 7);
-      colX += colWidths[3];
-      doc.rect(colX, currentY, 0, 20).stroke();
-      
-      doc.text('Quantity', colX + 5, currentY + 7);
-      currentY += 20;
-      
-      // Spares Table Rows
-      doc.fontSize(8).font('Helvetica');
-      
+      // Only show Spares Section if there are spares
       if (challan.spares && challan.spares.length > 0) {
+        currentY += 20;
+        doc.fontSize(12).font('Helvetica-Bold');
+        doc.fillColor('#FFA500'); // Orange background color
+        doc.rect(leftColumnX, currentY, 515, 20).fill();
+        doc.fillColor('black');
+        doc.text('Spares', leftColumnX + 5, currentY + 5);
+        currentY += 20;
+        
+        // Spares Table Header
+        doc.fontSize(9).font('Helvetica-Bold');
+        doc.rect(leftColumnX, currentY, 515, 20).stroke();
+        
+        const colWidths = [50, 200, 100, 80, 85]; // SI No, Description, Part No, HSN/SAC, Quantity
+        let colX = leftColumnX;
+        
+        doc.text('SI\nNo', colX + 5, currentY + 3);
+        colX += colWidths[0];
+        doc.rect(colX, currentY, 0, 20).stroke(); // Vertical line
+        
+        doc.text('Description of Goods', colX + 5, currentY + 7);
+        colX += colWidths[1];
+        doc.rect(colX, currentY, 0, 20).stroke();
+        
+        doc.text('Part No.', colX + 5, currentY + 7);
+        colX += colWidths[2];
+        doc.rect(colX, currentY, 0, 20).stroke();
+        
+        doc.text('HSN/SAC', colX + 5, currentY + 7);
+        colX += colWidths[3];
+        doc.rect(colX, currentY, 0, 20).stroke();
+        
+        doc.text('Quantity', colX + 5, currentY + 7);
+        currentY += 20;
+        
+        // Spares Table Rows
+        doc.fontSize(8).font('Helvetica');
+        
         challan.spares.forEach((item, index) => {
           doc.rect(leftColumnX, currentY, 515, 20).stroke();
           
@@ -252,70 +254,47 @@ export const generateDeliveryChallanPDF = (challan: PopulatedDeliveryChallan): P
           doc.text(item.quantity.toString(), colX + 5, currentY + 7);
           currentY += 20;
         });
-      } else {
-        // Empty rows for spares
-        for (let i = 0; i < 4; i++) {
-          doc.rect(leftColumnX, currentY, 515, 20).stroke();
-          
-          colX = leftColumnX;
-          doc.text((i + 1).toString(), colX + 5, currentY + 7);
-          colX += colWidths[0];
-          doc.rect(colX, currentY, 0, 20).stroke();
-          
-          if (i === 0) doc.text('Type & Search', colX + 5, currentY + 7);
-          colX += colWidths[1];
-          doc.rect(colX, currentY, 0, 20).stroke();
-          
-          if (i === 0) doc.text('Type & Search', colX + 5, currentY + 7);
-          colX += colWidths[2];
-          doc.rect(colX, currentY, 0, 20).stroke();
-          
-          if (i === 0) doc.text('Auto select', colX + 5, currentY + 7);
-          colX += colWidths[3];
-          doc.rect(colX, currentY, 0, 20).stroke();
-          
-          if (i === 0) doc.text('Manual', colX + 5, currentY + 7);
-          currentY += 20;
-        }
       }
       
       // Service Section
-      currentY += 10;
-      doc.fontSize(12).font('Helvetica-Bold');
-      doc.fillColor('#FFA500'); // Orange background color
-      doc.rect(leftColumnX, currentY, 515, 20).fill();
-      doc.fillColor('black');
-      doc.text('Service', leftColumnX + 5, currentY + 5);
-      currentY += 20;
-      
-      // Service Table Header
-      doc.fontSize(9).font('Helvetica-Bold');
-      doc.rect(leftColumnX, currentY, 515, 20).stroke();
-      
-      colX = leftColumnX;
-      doc.text('SI\nNo', colX + 5, currentY + 3);
-      colX += colWidths[0];
-      doc.rect(colX, currentY, 0, 20).stroke();
-      
-      doc.text('Description of Goods', colX + 5, currentY + 7);
-      colX += colWidths[1];
-      doc.rect(colX, currentY, 0, 20).stroke();
-      
-      doc.text('Part No.', colX + 5, currentY + 7);
-      colX += colWidths[2];
-      doc.rect(colX, currentY, 0, 20).stroke();
-      
-      doc.text('HSN/SAC', colX + 5, currentY + 7);
-      colX += colWidths[3];
-      doc.rect(colX, currentY, 0, 20).stroke();
-      
-      doc.text('Quantity', colX + 5, currentY + 7);
-      currentY += 20;
-      
-      // Service Table Rows
-      doc.fontSize(8).font('Helvetica');
-      
+      // Only show Service Section if there are services
       if (challan.services && challan.services.length > 0) {
+        currentY += 10;
+        doc.fontSize(12).font('Helvetica-Bold');
+        doc.fillColor('#FFA500'); // Orange background color
+        doc.rect(leftColumnX, currentY, 515, 20).fill();
+        doc.fillColor('black');
+        doc.text('Service', leftColumnX + 5, currentY + 5);
+        currentY += 20;
+        
+        // Service Table Header
+        doc.fontSize(9).font('Helvetica-Bold');
+        doc.rect(leftColumnX, currentY, 515, 20).stroke();
+        
+        const colWidths = [50, 200, 100, 80, 85]; // Redefine colWidths for services
+        let colX = leftColumnX;
+        doc.text('SI\nNo', colX + 5, currentY + 3);
+        colX += colWidths[0];
+        doc.rect(colX, currentY, 0, 20).stroke();
+        
+        doc.text('Description of Goods', colX + 5, currentY + 7);
+        colX += colWidths[1];
+        doc.rect(colX, currentY, 0, 20).stroke();
+        
+        doc.text('Part No.', colX + 5, currentY + 7);
+        colX += colWidths[2];
+        doc.rect(colX, currentY, 0, 20).stroke();
+        
+        doc.text('HSN/SAC', colX + 5, currentY + 7);
+        colX += colWidths[3];
+        doc.rect(colX, currentY, 0, 20).stroke();
+        
+        doc.text('Quantity', colX + 5, currentY + 7);
+        currentY += 20;
+        
+        // Service Table Rows
+        doc.fontSize(8).font('Helvetica');
+        
         challan.services.forEach((item, index) => {
           doc.rect(leftColumnX, currentY, 515, 20).stroke();
           
@@ -337,37 +316,6 @@ export const generateDeliveryChallanPDF = (challan: PopulatedDeliveryChallan): P
           doc.rect(colX, currentY, 0, 20).stroke();
           
           doc.text(item.quantity.toString(), colX + 5, currentY + 7);
-          currentY += 20;
-        });
-      } else {
-        // Default service rows
-        const defaultServices = [
-          'Manual (For service purpose)',
-          'FIP for calibration purpose',
-          'Radiator for Repair purpose'
-        ];
-        
-        defaultServices.forEach((service, index) => {
-          doc.rect(leftColumnX, currentY, 515, 20).stroke();
-          
-          colX = leftColumnX;
-          doc.text((index + 1).toString(), colX + 5, currentY + 7);
-          colX += colWidths[0];
-          doc.rect(colX, currentY, 0, 20).stroke();
-          
-          doc.text(service, colX + 5, currentY + 7);
-          colX += colWidths[1];
-          doc.rect(colX, currentY, 0, 20).stroke();
-          
-          doc.text('Manual', colX + 5, currentY + 7);
-          colX += colWidths[2];
-          doc.rect(colX, currentY, 0, 20).stroke();
-          
-          doc.text('Manual', colX + 5, currentY + 7);
-          colX += colWidths[3];
-          doc.rect(colX, currentY, 0, 20).stroke();
-          
-          doc.text('Manual', colX + 5, currentY + 7);
           currentY += 20;
         });
       }

@@ -2594,7 +2594,7 @@ const InvoiceManagement: React.FC = () => {
     doc.text(`Buyer's Order No: ${selectedInvoice.buyersOrderNo || ''}`, 80, y);
     doc.text(`Dispatch Doc No: ${selectedInvoice.dispatchDocNo || ''}`, 150, y);
     y += 5;
-    doc.text(`Delivery Note Date: ${selectedInvoice.deliveryNoteDate || ''}`, 10, y);
+    doc.text(`Delivery Challan Date: ${selectedInvoice.deliveryNoteDate || ''}`, 10, y);
     doc.text(`Dispatched Through: ${selectedInvoice.dispatchedThrough || ''}`, 80, y);
     doc.text(`Destination: ${selectedInvoice.destination || ''}`, 150, y);
     y += 8;

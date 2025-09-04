@@ -474,7 +474,7 @@ export const receivePOSchema = Joi.object<ReceivePOInput>({
       notes: Joi.string().max(500).allow('')
     }).or('product', 'productId').or('receivedQuantity', 'quantityReceived')
   ).min(1).required(),
-  deliveryNote: Joi.string().max(100).allow(''), // Delivery note number
+  deliveryNote: Joi.string().max(100).allow(''), // Delivery challan number
   invoice: Joi.object({
     invoiceNumber: Joi.string().max(100),
     invoiceDate: Joi.date().iso(),

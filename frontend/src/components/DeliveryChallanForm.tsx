@@ -105,7 +105,7 @@ const DeliveryChallanForm: React.FC = () => {
     termsOfDelivery: '',
     consignee: '',
     customer: '',
-    spares: [{ slNo: 1, product: '', description: '', partNo: '', hsnSac: '', quantity: 0 }],
+    spares: [],
     services: [], // Start with no services since they're optional
     status: 'draft',
     notes: '',
@@ -118,7 +118,14 @@ const DeliveryChallanForm: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [stockValidation, setStockValidation] = useState<Record<string, { available: number; isValid: boolean; message: string }>>({});
+  const [productAvailability, setProductAvailability] = useState<Record<string, number>>({});
+  const requestedAvailabilityRef = useRef<Set<string>>(new Set());
 
+  const getAvailabilityClass = (productId: string) => {
+    const available = productAvailability[productId];
+    if (available === undefined) return 'text-gray-400';
+    return available > 0 ? 'text-green-600' : 'text-red-500';
+  };
 
   // Dropdown states
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -346,7 +353,7 @@ const DeliveryChallanForm: React.FC = () => {
           termsOfDelivery: challan.termsOfDelivery || '',
           consignee: challan.consignee || '',
           customer: challan.customer?._id || challan.customer || '',
-          spares: challan.spares || [{ slNo: 1, product: '', description: '', partNo: '', hsnSac: '', quantity: 0 }],
+          spares: challan.spares || [],
           services: challan.services || [],
           status: challan.status || 'draft',
           notes: challan.notes || '',
@@ -449,12 +456,10 @@ const DeliveryChallanForm: React.FC = () => {
   };
 
   const removeSpareItem = (index: number) => {
-    if (formData.spares.length > 1) {
-      const updatedSpares = formData.spares.filter((_, i) => i !== index);
-      // Reorder sl numbers
-      updatedSpares.forEach((item, i) => { item.slNo = i + 1; });
-      setFormData(prev => ({ ...prev, spares: updatedSpares }));
-    }
+    const updatedSpares = formData.spares.filter((_, i) => i !== index);
+    // Reorder sl numbers
+    updatedSpares.forEach((item, i) => { item.slNo = i + 1; });
+    setFormData(prev => ({ ...prev, spares: updatedSpares }));
   };
 
   const addServiceItem = () => {
@@ -480,17 +485,38 @@ const DeliveryChallanForm: React.FC = () => {
     setCustomerSearchTerm(customer.name);
     setSelectedAddressId(''); // Reset address selection when customer changes
     console.log('Customer selection updated, customer ID:', customer._id);
+   
+    // Clear customer-related errors
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors.customer;
+      return newErrors;
+    });
   };
 
   const handleAddressSelect = (addressId: string) => {
     console.log('Address selected:', addressId);
     setSelectedAddressId(addressId);
     setShowAddressDropdown(false);
+   
+    // Clear address error
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors.address;
+      return newErrors;
+    });
   };
 
   const handleShipToAddressSelect = (addressId: string) => {
     console.log('Ship-to address selected:', addressId);
     setSelectedShipToAddressId(addressId);
+   
+    // Clear ship-to address error
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      delete newErrors.shipToAddress;
+      return newErrors;
+    });
   };
 
   const getFilteredCustomers = () => {
@@ -570,6 +596,34 @@ const DeliveryChallanForm: React.FC = () => {
     );
   };
 
+  const fetchAvailabilityForProduct = async (productId: string) => {
+    if (!productId) return;
+    if (requestedAvailabilityRef.current.has(productId)) return;
+    requestedAvailabilityRef.current.add(productId);
+    try {
+      const response = await apiClient.stock.getStock({ product: productId });
+      let stockData: any[] = [];
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          stockData = response.data;
+        } else if (response.data.stockLevels && Array.isArray(response.data.stockLevels)) {
+          stockData = response.data.stockLevels;
+        }
+      }
+      const stockItem = stockData.length > 0 ? stockData[0] : null;
+      const available = stockItem ? (stockItem.availableQuantity || (stockItem.quantity - (stockItem.reservedQuantity || 0))) : 0;
+      setProductAvailability(prev => ({ ...prev, [productId]: available }));
+    } catch (e) {
+      setProductAvailability(prev => ({ ...prev, [productId]: 0 }));
+    }
+  };
+
+  const prefetchAvailabilityForVisibleProducts = (itemIndex: number, searchTerm?: string) => {
+    const term = searchTerm !== undefined ? searchTerm : (productSearchTerms[`spares-${itemIndex}`] || '');
+    const visible = getFilteredProducts(term).slice(0, 30);
+    visible.forEach(p => fetchAvailabilityForProduct(p._id));
+  };
+
   const updateProductSearchTerm = (itemIndex: number, searchTerm: string, type: 'spares' | 'services') => {
     setProductSearchTerms(prev => ({ ...prev, [`${type}-${itemIndex}`]: searchTerm }));
   };
@@ -638,21 +692,22 @@ const DeliveryChallanForm: React.FC = () => {
       const available = stockItem ? (stockItem.availableQuantity || (stockItem.quantity - (stockItem.reservedQuantity || 0))) : 0;
 
       const isValid = quantity <= available && available > 0;
-      const message = available === 0
-        ? `Out of stock`
-        : !isValid
-          ? `Only ${available} units available`
-          : `${available} units available`;
+      // Show toast if quantity exceeds available stock
+      if (!isValid && available === 0) {
+        toast.error(`Product is out of stock`);
+      } else if (!isValid) {
+        toast.error(`Quantity ${quantity} exceeds available stock. Only ${available} units available`);
+      }
 
       setStockValidation(prev => ({
         ...prev,
-        [itemIndex]: { available, isValid, message }
+        [itemIndex]: { available, isValid, message: '' }
       }));
     } catch (error) {
       console.error('Error validating stock:', error);
       setStockValidation(prev => ({
         ...prev,
-        [itemIndex]: { available: 0, isValid: false, message: 'Error checking stock' }
+        [itemIndex]: { available: 0, isValid: false, message: '' }
       }));
     }
   };
@@ -675,24 +730,39 @@ const DeliveryChallanForm: React.FC = () => {
     if (!selectedShipToAddressId && !(formData.consignee && formData.consignee.trim() !== '')) newErrors.shipToAddress = 'Ship-to address or saved consignee is required';
     if (!formData.department) newErrors.department = 'Department is required';
     if (!formData.destination) newErrors.destination = 'Destination is required';
-    if (!formData.dispatchedThrough) newErrors.dispatchedThrough = 'Dispatched through is required';
 
-    // Validate spares - at least one spare item is required
+    // Validate spares - once a row is added, all mandatory fields must be filled
     formData.spares.forEach((item, index) => {
-      if (!item.description) newErrors[`spare-${index}-description`] = 'Description is required';
-      if (!item.product) newErrors[`spare-${index}-product`] = 'Product is required';
-      if (item.quantity <= 0) newErrors[`spare-${index}-quantity`] = 'Quantity must be greater than 0';
+      // Check if this is an empty row (all fields empty/default)
+      const isEmpty = !item.product && !item.description && !item.partNo && !item.hsnSac && item.quantity === 0;
+      
+      if (!isEmpty) {
+        // Row has some data, validate all mandatory fields
+        if (!item.description) {
+          newErrors[`spare-${index}-description`] = 'Description is required - fill all fields or remove this row';
+        }
+        if (!item.product) {
+          newErrors[`spare-${index}-product`] = 'Product selection is required - fill all fields or remove this row';
+        }
+        if (item.quantity <= 0) {
+          newErrors[`spare-${index}-quantity`] = 'Quantity must be greater than 0 - fill all fields or remove this row';
+        }
+      }
     });
 
-    // Validate services - only if they have content (optional)
+    // Validate services - once a row is added, all mandatory fields must be filled
     formData.services.forEach((item, index) => {
-      // Only validate if description is provided (making services optional)
-      if (item.description && item.quantity <= 0) {
-        newErrors[`service-${index}-quantity`] = 'Quantity must be greater than 0 if service is provided';
-      }
-      // If quantity is provided, description should also be provided
-      if (item.quantity > 0 && !item.description) {
-        newErrors[`service-${index}-description`] = 'Description is required if quantity is provided';
+      // Check if this is an empty row (all fields empty/default)
+      const isEmpty = !item.description && !item.partNo && !item.hsnSac && item.quantity === 0;
+      
+      if (!isEmpty) {
+        // Row has some data, validate all mandatory fields
+        if (!item.description) {
+          newErrors[`service-${index}-description`] = 'Description is required - fill all fields or remove this row';
+        }
+        if (item.quantity <= 0) {
+          newErrors[`service-${index}-quantity`] = 'Quantity must be greater than 0 - fill all fields or remove this row';
+        }
       }
     });
 
@@ -734,7 +804,7 @@ const DeliveryChallanForm: React.FC = () => {
   // Submit handler
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     console.log('Form submitted, validating...');
     if (!validateForm()) {
       console.log('Validation failed, errors:', errors);
@@ -746,6 +816,16 @@ const DeliveryChallanForm: React.FC = () => {
     setSubmitting(true);
     try {
       // Prepare data for API - include all fields from the form
+      // Filter out completely empty rows from spares
+      const sanitizedSpares = (formData.spares || []).filter((item) => {
+        return item.product || item.description || item.partNo || item.hsnSac || item.quantity > 0;
+      });
+      
+      // Filter out completely empty rows from services
+      const sanitizedServices = (formData.services || []).filter((item) => {
+        return item.description || item.partNo || item.hsnSac || item.quantity > 0;
+      });
+      
       const challanData = {
         // Only include challanNumber for edit mode, let backend generate for new challans
         ...(isEditMode && { challanNumber: formData.challanNumber }),
@@ -762,8 +842,8 @@ const DeliveryChallanForm: React.FC = () => {
         termsOfDelivery: formData.termsOfDelivery || '',
         consignee: selectedShipToAddressId ? (getSelectedShipToAddress()?.address || '') : (formData.consignee || ''),
         customer: formData.customer,
-        spares: formData.spares,
-        services: formData.services,
+        spares: sanitizedSpares,
+        services: sanitizedServices,
         status: formData.status,
         notes: formData.notes || ''
       };
@@ -866,7 +946,7 @@ const DeliveryChallanForm: React.FC = () => {
           {/* Header Section */}
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-gray-900">DELIVERY NOTE</h2>
+              <h2 className="text-2xl font-bold text-gray-900">DELIVERY CHALLAN</h2>
               <p className="text-sm text-gray-600 mt-2">Challan number will be auto-generated when saved</p>
             </div>
           </div>
@@ -1132,7 +1212,7 @@ const DeliveryChallanForm: React.FC = () => {
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Dispatched through *
+                    Dispatched through
                   </label>
                   <input
                     type="text"
@@ -1141,7 +1221,6 @@ const DeliveryChallanForm: React.FC = () => {
                     placeholder="Manual Entry"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  {errors.dispatchedThrough && <p className="text-red-500 text-sm mt-1">{errors.dispatchedThrough}</p>}
                 </div>
               </div>
             </div>
@@ -1251,7 +1330,16 @@ const DeliveryChallanForm: React.FC = () => {
 
               {/* Table Body */}
               <div className="divide-y divide-gray-200 min-w-[1000px] border-b border-gray-300">
-                {formData.spares.map((item, index) => (
+                {formData.spares.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-gray-500">
+                    <div className="flex flex-col items-center space-y-2">
+                      <Package className="w-8 h-8 text-gray-300" />
+                      <p className="text-sm">No spares added</p>
+                      <p className="text-xs text-gray-400">Click "Add Item" to add spare items (optional)</p>
+                    </div>
+                  </div>
+                ) : (
+                  formData.spares.map((item, index) => (
                   <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}
                        style={{ gridTemplateColumns: '60px 1fr 120px 100px 80px 60px' }}>
                     
@@ -1271,6 +1359,7 @@ const DeliveryChallanForm: React.FC = () => {
                             ...prev,
                             [`spares-${index}`]: true
                           }));
+                          prefetchAvailabilityForVisibleProducts(index, e.target.value);
                         }}
                         onFocus={() => {
                           // If there's already a selected product, clear the search term to show the product description
@@ -1281,6 +1370,7 @@ const DeliveryChallanForm: React.FC = () => {
                             ...prev,
                             [`spares-${index}`]: true
                           }));
+                          prefetchAvailabilityForVisibleProducts(index);
                         }}
                         onBlur={() => {
                           setTimeout(() => {
@@ -1341,6 +1431,7 @@ const DeliveryChallanForm: React.FC = () => {
                                     e.preventDefault();
                                     handleProductSelect(index, product._id);
                                   }}
+                                  onMouseEnter={() => fetchAvailabilityForProduct(product._id)}
                                   className="w-full px-4 py-3 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 text-gray-700"
                                 >
                                   <div className="flex justify-between items-start">
@@ -1350,7 +1441,7 @@ const DeliveryChallanForm: React.FC = () => {
                                       </div>
                                       <div className="text-xs text-gray-600 space-y-0.5">
                                         <div><span className="font-medium">Product Name:</span> {product?.name || 'N/A'}</div>
-                                        <div><span className="font-medium">HSN:</span> {product?.hsnNumber || 'N/A'}</div>
+                                        <div className={getAvailabilityClass(product._id)}><span className="font-medium">Available:</span> {productAvailability[product._id] !== undefined ? productAvailability[product._id] : '—'}</div>
                                       </div>
                                     </div>
                                   </div>
@@ -1427,18 +1518,11 @@ const DeliveryChallanForm: React.FC = () => {
                       {errors[`spare-${index}-quantity`] && (
                         <p className="text-red-500 text-xs mt-1">{errors[`spare-${index}-quantity`]}</p>
                       )}
-                      {stockValidation[index] && stockValidation[index].message && (
-                        <p className={`text-xs mt-1 ${
-                          stockValidation[index].isValid ? 'text-green-600' : 'text-red-500'
-                        }`}>
-                          {stockValidation[index].message}
-                        </p>
-                      )}
                     </div>
 
                     {/* Action */}
                     <div className="p-2 text-center">
-                      {formData.spares.length > 1 && (
+                      {formData.spares.length > 0 && (
                         <button
                           type="button"
                           onClick={() => removeSpareItem(index)}
@@ -1449,8 +1533,9 @@ const DeliveryChallanForm: React.FC = () => {
                       )}
                     </div>
                   </div>
-                ))}
-              </div>
+                ))
+              )}
+                          </div>
             </div>
           </div>
 

@@ -25,7 +25,8 @@ import {
   bulkImportServiceTickets,
   exportServiceTickets,
   getCustomerEngines,
-  getCustomerAddresses
+  getCustomerAddresses,
+  getEngineerPaymentReport
 } from '../controllers/serviceController';
 
 const router = Router();
@@ -53,6 +54,9 @@ router.route('/')
 // Bulk operations (must come before /:id routes)
 router.post('/bulk-import', validate(bulkServiceImportSchema), checkPermission('write'), bulkImportServiceTickets);
 router.get('/export', checkPermission('read'), exportServiceTickets);
+
+// Reports
+router.get('/reports/engineer-payments', checkPermission('read'), getEngineerPaymentReport);
 
 router.route('/:id')
   .get(checkPermission('read'), getServiceTicket)
