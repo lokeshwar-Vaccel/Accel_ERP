@@ -274,6 +274,18 @@ serviceTicketSchema.index({
   serviceReport: 'text'
 });
 
+// Virtual for convenience charges mapped to serviceCharge
+serviceTicketSchema.virtual('convenienceCharges')
+  .get(function(this: IServiceTicketSchema) {
+    const charge = (this as any).serviceCharge;
+    if (charge === undefined || charge === null) return '';
+    return String(charge);
+  })
+  .set(function(this: any, value: any) {
+    const num = typeof value === 'string' ? parseFloat(value) : Number(value);
+    this.set('serviceCharge', isNaN(num) ? 0 : num);
+  });
+
 // Virtual for turnaround time
 serviceTicketSchema.virtual('turnaroundTime').get(function(this: IServiceTicketSchema) {
   if (this.completedDate && this.requestSubmissionDate) {

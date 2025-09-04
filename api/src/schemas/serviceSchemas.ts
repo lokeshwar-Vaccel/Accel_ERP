@@ -19,6 +19,7 @@ export interface CreateServiceTicketInput {
   stateName?: string;
   siteLocation?: string;
   typeOfService?: string; // NEW: Type of service field
+  convenienceCharges?: number | string; // NEW: Convenience charges field
   
   // Visit Details fields
   typeOfVisit?: TypeOfVisit;
@@ -63,6 +64,7 @@ export interface UpdateServiceTicketInput {
   stateName?: string;
   siteLocation?: string;
   typeOfService?: string; // NEW: Type of service field
+  convenienceCharges?: number | string; // NEW: Convenience charges field
   
   // Visit Details fields
   typeOfVisit?: TypeOfVisit;
@@ -261,6 +263,11 @@ const baseServiceTicketFields = {
   serviceType: Joi.string().valid('installation', 'repair', 'maintenance', 'inspection', 'other')
 };
 
+// Add convenienceCharges to base fields
+(Object.assign(baseServiceTicketFields, {
+  convenienceCharges: Joi.alternatives().try(Joi.number(), Joi.string()).allow('')
+}));
+
 // Create service ticket schema
 export const createServiceTicketSchema = Joi.object<CreateServiceTicketInput>({
   // Standardized fields
@@ -283,6 +290,9 @@ export const createServiceTicketSchema = Joi.object<CreateServiceTicketInput>({
   typeOfVisit: baseServiceTicketFields.typeOfVisit,
   natureOfWork: baseServiceTicketFields.natureOfWork,
   subNatureOfWork: baseServiceTicketFields.subNatureOfWork,
+
+  // Charges
+  convenienceCharges: (baseServiceTicketFields as any).convenienceCharges,
 
   // Legacy fields for backward compatibility
   customer: baseServiceTicketFields.customer.required(),
@@ -328,6 +338,9 @@ export const updateServiceTicketSchema = Joi.object<UpdateServiceTicketInput>({
   typeOfVisit: baseServiceTicketFields.typeOfVisit,
   natureOfWork: baseServiceTicketFields.natureOfWork,
   subNatureOfWork: baseServiceTicketFields.subNatureOfWork,
+
+  // Charges
+  convenienceCharges: (baseServiceTicketFields as any).convenienceCharges,
 
   // Legacy fields for backward compatibility
   assignedTo: baseServiceTicketFields.assignedTo,

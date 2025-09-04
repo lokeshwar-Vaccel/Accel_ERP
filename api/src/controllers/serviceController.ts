@@ -454,7 +454,8 @@ export const createServiceTicket = async (
       serviceRequestNumber,
       serviceRequestType,
       products,
-      serviceCharge
+      serviceCharge,
+      convenienceCharges
     } = req.body;
 
     // Debug logging for request body
@@ -582,7 +583,7 @@ export const createServiceTicket = async (
       
       // Products and service charge
       products: productIds,
-      serviceCharge: serviceCharge || 0,
+      serviceCharge: convenienceCharges !== undefined && convenienceCharges !== null && convenienceCharges !== '' ? Number(convenienceCharges) : (serviceCharge || 0),
       
       // System fields
       createdBy: req.user!.id,
@@ -692,7 +693,8 @@ export const updateServiceTicket = async (
       products,
       serviceCharge,
       serviceRequestStatus,
-      ServiceRequestStatus
+      ServiceRequestStatus,
+      convenienceCharges
     } = req.body;
 
 
@@ -830,6 +832,10 @@ export const updateServiceTicket = async (
     // Handle service charge
     if (serviceCharge !== undefined) {
       updateData.serviceCharge = serviceCharge || 0;
+    }
+    if (convenienceCharges !== undefined) {
+      const parsed = typeof convenienceCharges === 'string' ? parseFloat(convenienceCharges) : Number(convenienceCharges);
+      updateData.serviceCharge = isNaN(parsed) ? 0 : parsed;
     }
 
     // Handle status updates
