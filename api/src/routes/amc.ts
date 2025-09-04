@@ -38,7 +38,8 @@ import {
   regenerateVisitSchedule,
   getAMCsByVisitDate,
   getVisitScheduleSummary,
-  exportAMCToExcel
+  exportAMCToExcel,
+  exportAMCReportToExcel
 } from '../controllers/amcController';
 
 const router = Router();
@@ -100,5 +101,6 @@ router.put('/:id/regenerate-visits', checkPermission('write'), regenerateVisitSc
 
 // Reports
 router.get('/reports/:type', checkPermission('read'), generateAMCReport);
+router.get('/report/export-excel', checkPermission('read'), exportAMCReportToExcel);
 
 export default router; 

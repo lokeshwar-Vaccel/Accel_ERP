@@ -16,7 +16,8 @@ import {
   toggleProductStatus,
   getProductCategories,
   searchProducts,
-  getProductsWithInventory
+  getProductsWithInventory,
+  getProductsForDropdown
 } from '../controllers/productController';
 
 const router = Router();
@@ -31,6 +32,7 @@ router.use(checkModuleAccess('inventory_management'));
 router.get('/categories', checkPermission('read'), getProductCategories);
 router.get('/search', checkPermission('read'), searchProducts);
 router.get('/with-inventory', checkPermission('read'), getProductsWithInventory);
+router.get('/productListWithoutPagination', checkPermission('read'), getProductsForDropdown);
 
 // Product routes
 router.route('/')

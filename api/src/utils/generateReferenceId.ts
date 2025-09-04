@@ -40,3 +40,22 @@ export const generateReferenceId = async (type: string): Promise<string> => {
 
   return `${prefix}${date}-${letter}-${counter.sequence.toString().padStart(6, '0')}`; // e.g., "AD250627-A-123456"
 };
+
+// Generate delivery challan number in format: DC2025090001
+export const generateDeliveryChallanNumber = async (): Promise<string> => {
+  const currentDate = new Date();
+  const year = currentDate.getFullYear();
+  const month = (currentDate.getMonth() + 1).toString().padStart(2, '0');
+  const dateKey = `${year}${month}`;
+  
+  // Use findOneAndUpdate with $inc to atomically increment the sequence
+  // This prevents race conditions when multiple challans are created simultaneously
+  const result = await TransactionCounter.findOneAndUpdate(
+    { type: 'delivery_challan', date: dateKey, letter: 'A' },
+    { $inc: { sequence: 1 } },
+    { upsert: true, new: true }
+  );
+
+  return `DC${dateKey}${result.sequence.toString().padStart(4, '0')}`;
+};
+

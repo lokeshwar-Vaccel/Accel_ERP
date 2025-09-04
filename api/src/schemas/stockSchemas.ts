@@ -372,7 +372,7 @@ export const stockTransactionSchema = Joi.object<StockTransactionInput>({
   toLocation: Joi.string().hex().length(24),
   quantity: Joi.number().min(1).required(),
   reference: Joi.string().max(100),
-  referenceType: Joi.string().valid('purchase_order', 'service_ticket', 'adjustment', 'transfer', 'sale'),
+  referenceType: Joi.string().valid('purchase_order', 'service_ticket', 'adjustment', 'transfer', 'sale', 'delivery_challan'),
   notes: Joi.string().max(500).allow(''),
   unitCost: Joi.number().min(0),
   totalCost: Joi.number().min(0)

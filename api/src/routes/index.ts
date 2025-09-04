@@ -34,6 +34,7 @@ import dgReportsRoutes from './dgReports';
 import dgQuotationsRoutes from './dgQuotations';
 import purchaseOrderPaymentRoutes from './purchaseOrderPayments';
 import qrCodeRoutes from './qrCode';
+import deliveryChallanRoutes from './deliveryChallans';
 
 const router = Router();
 
@@ -63,6 +64,7 @@ router.get('/', (req, res) => {
       paymentLinks: '/payment-links',
       inventory: '/inventory',
       purchaseOrderPayments: '/purchase-order-payments',
+      deliveryChallans: '/delivery-challans',
     }
   });
 });
@@ -103,5 +105,6 @@ router.use('/dg-reports', dgReportsRoutes);
 router.use('/dg-quotations', dgQuotationsRoutes);
 router.use('/purchase-order-payments', purchaseOrderPaymentRoutes);
 router.use('/qr-code', qrCodeRoutes);
+router.use('/delivery-challans', deliveryChallanRoutes);
 
 export default router;

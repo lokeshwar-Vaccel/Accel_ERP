@@ -28,7 +28,8 @@ import {
   Printer,
   Receipt,
   Calculator,
-  Battery
+  Battery,
+  Trash2
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -462,6 +463,10 @@ const InvoiceManagement: React.FC = () => {
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [quotations, setQuotations] = useState<any[]>([]);
   const [quotationLoading, setQuotationLoading] = useState(false);
+  const [deliveryChallans, setDeliveryChallans] = useState<any[]>([]);
+  const [deliveryChallanLoading, setDeliveryChallanLoading] = useState(false);
+  const [viewDeliveryChallan, setViewDeliveryChallan] = useState<any>(null);
+  const [showDeliveryChallanViewModal, setShowDeliveryChallanViewModal] = useState(false);
 
   const [currentPage, setCurrentPage] = useState(1);
   const [limit, setLimit] = useState(10);
@@ -1029,6 +1034,8 @@ const InvoiceManagement: React.FC = () => {
   useEffect(() => {
     if (invoiceType === 'quotation') {
       fetchQuotations();
+    } else if (invoiceType === 'challan') {
+      fetchDeliveryChallans();
     } else {
       fetchInvoices();
     }
@@ -1113,7 +1120,39 @@ const InvoiceManagement: React.FC = () => {
     }
   };
 
+  const fetchDeliveryChallans = async () => {
+    setDeliveryChallanLoading(true);
+    try {
+      const response = await apiClient.deliveryChallans.getAll({
+        page: currentPage,
+        limit,
+        sort,
+        search: searchTerm,
+        ...(statusFilter !== 'all' && { status: statusFilter }),
+      });
 
+      const responseData = response.data as any;
+      console.log("Delivery challans response:", responseData);
+
+      let challansData = [];
+      if (responseData.pagination) {
+        challansData = responseData.deliveryChallans || [];
+        setCurrentPage(responseData.pagination.page);
+        setLimit(responseData.pagination.limit);
+        setTotalDatas(responseData.pagination.total);
+        setTotalPages(responseData.pagination.pages);
+      } else {
+        challansData = responseData || [];
+      }
+
+      setDeliveryChallans(challansData);
+    } catch (error) {
+      console.error('Error fetching delivery challans:', error);
+      setDeliveryChallans([]);
+    } finally {
+      setDeliveryChallanLoading(false);
+    }
+  };
 
   const fetchProducts = async () => {
     try {
@@ -1218,9 +1257,16 @@ const InvoiceManagement: React.FC = () => {
     const typeToUse = specificType || invoiceType;
     console.log("typeToUse:", typeToUse);
 
-    const path = typeToUse === 'quotation'
-      ? '/billing/quotation/create'
-      : '/billing/create';
+    let path: string;
+    
+    if (typeToUse === 'quotation') {
+      path = '/billing/quotation/create';
+    } else if (typeToUse === 'challan') {
+      // For challan, we render the form directly on this page, no navigation needed
+      return;
+    } else {
+      path = '/billing/create';
+    }
 
     navigate(path, {
       state: { invoiceType: typeToUse }
@@ -1229,6 +1275,7 @@ const InvoiceManagement: React.FC = () => {
 
 
   const handleCreateInvoiceClick = () => {
+    // For other types, navigate to their respective create pages
     handleCreateInvoice();
   };
 
@@ -1300,6 +1347,69 @@ const InvoiceManagement: React.FC = () => {
       type: 'danger'
     });
     setShowConfirmationModal(true);
+  };
+
+  const handleDeleteDeliveryChallan = async (challanId: string) => {
+    setConfirmationData({
+      title: 'Delete Delivery Challan',
+      message: `Are you sure you want to delete this delivery challan? This action cannot be undone.`,
+      onConfirm: async () => {
+        try {
+          await apiClient.deliveryChallans.delete(challanId);
+          toast.success('Delivery challan deleted successfully');
+          fetchDeliveryChallans();
+          setShowConfirmationModal(false);
+        } catch (error) {
+          console.error('Error deleting delivery challan:', error);
+          toast.error('Failed to delete delivery challan');
+        }
+      },
+      type: 'danger'
+    });
+    setShowConfirmationModal(true);
+  };
+
+  const handleExportDeliveryChallanPDF = async (challanId: string) => {
+    try {
+      setSubmitting(true);
+      const pdfBlob = await apiClient.deliveryChallans.exportPDF(challanId);
+      
+      // Find the challan for filename
+      const challan = deliveryChallans.find(c => c._id === challanId);
+      const filename = `delivery-challan-${challan?.challanNumber || 'draft'}.pdf`;
+      
+      // Create download link
+      const url = window.URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('PDF exported successfully');
+    } catch (error: any) {
+      console.error('Error exporting PDF:', error);
+      toast.error(error.message || 'Failed to export PDF');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleViewDeliveryChallan = async (challanId: string) => {
+    try {
+      const response = await apiClient.deliveryChallans.getById(challanId);
+      if (response.success && response.data?.deliveryChallan) {
+        setViewDeliveryChallan(response.data.deliveryChallan);
+        setShowDeliveryChallanViewModal(true);
+      } else {
+        toast.error('Failed to fetch delivery challan details');
+      }
+    } catch (error: any) {
+      console.error('Error fetching delivery challan:', error);
+      toast.error('Failed to fetch delivery challan details');
+    }
   };
 
   const handleCreateInvoiceFromQuotation = async (quotation: any) => {
@@ -2260,6 +2370,18 @@ const InvoiceManagement: React.FC = () => {
 
   console.log("filteredQuotations:", filteredQuotations);
 
+  const filteredDeliveryChallans = deliveryChallans.filter(challan => {
+    const matchesSearch =
+      challan?.challanNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      challan?.customer?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      challan?.referenceNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      challan?.buyersOrderNo?.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    return matchesSearch;
+  });
+
+  console.log("filteredDeliveryChallans:", filteredDeliveryChallans);
+
 
 
   const getStatusIcon = (status: string) => {
@@ -2273,7 +2395,46 @@ const InvoiceManagement: React.FC = () => {
     return icons[status];
   };
 
-  const statCards = [
+  const statCards = invoiceType === 'challan' ? [
+    {
+      title: 'Total Challans',
+      value: deliveryChallans.length,
+      icon: <Package className="w-6 h-6" />,
+      color: 'blue'
+    },
+    {
+      title: 'This Month',
+      value: deliveryChallans.filter(c => {
+        const challanDate = new Date(c.dated);
+        const now = new Date();
+        return challanDate.getMonth() === now.getMonth() && challanDate.getFullYear() === now.getFullYear();
+      }).length,
+      icon: <Calendar className="w-6 h-6" />,
+      color: 'green'
+    },
+    {
+      title: 'This Week',
+      value: deliveryChallans.filter(c => {
+        const challanDate = new Date(c.dated);
+        const now = new Date();
+        const weekStart = new Date(now.setDate(now.getDate() - now.getDay()));
+        const weekEnd = new Date(now.setDate(now.getDate() - now.getDay() + 6));
+        return challanDate >= weekStart && challanDate <= weekEnd;
+      }).length,
+      icon: <Calendar className="w-6 h-6" />,
+      color: 'purple'
+    },
+    {
+      title: 'Today',
+      value: deliveryChallans.filter(c => {
+        const challanDate = new Date(c.dated);
+        const today = new Date();
+        return challanDate.toDateString() === today.toDateString();
+      }).length,
+      icon: <Calendar className="w-6 h-6" />,
+      color: 'orange'
+    }
+  ] : [
     {
       title: 'Total Invoices',
       value: stats.totalInvoices,
@@ -3704,16 +3865,22 @@ const InvoiceManagement: React.FC = () => {
         title="Billing"
         subtitle="Create and manage customer invoices"
       >
-        {(invoiceType === 'sale' || invoiceType === 'challan') && (
+        {invoiceType === 'sale' && (
           <Button
             onClick={handleCreateInvoiceClick}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Plus className="w-4 h-4" />
-            <span>
-              {invoiceType === 'sale' ? 'Create Invoice' :
-                invoiceType === 'challan' ? 'Create Challan' : 'Create Invoice'}
-            </span>
+            <span>Create Invoice</span>
+          </Button>
+        )}
+        {invoiceType === 'challan' && (
+          <Button
+            onClick={() => navigate('/billing/challan/create')}
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Challan</span>
           </Button>
         )}
         {invoiceType === 'quotation' && (
@@ -3736,6 +3903,8 @@ const InvoiceManagement: React.FC = () => {
         )}
       </PageHeader>
 
+
+
       {/* 🚀 KEYBOARD SHORTCUTS GUIDE */}
       {/* <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-4 mb-4">
         <div className="flex items-center mb-2">
@@ -3748,6 +3917,7 @@ const InvoiceManagement: React.FC = () => {
             <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+1</kbd> Create Quotation</p>
             <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+2</kbd> Create Sales Invoice</p>
             <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+3</kbd> Create Delivery Challan</p>
+
             <p className="text-gray-500 italic">Purchase Invoice: View/Edit only (no create)</p>
           </div>
           <div>
@@ -3791,7 +3961,7 @@ const InvoiceManagement: React.FC = () => {
               <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder={invoiceType === 'quotation' ? "Search quotations..." : "Search invoices, PO numbers..."}
+                placeholder={invoiceType === 'quotation' ? "Search quotations..." : invoiceType === 'challan' ? "Search challans, reference numbers..." : "Search invoices, PO numbers..."}
                 value={invoiceType === 'quotation' ? searchQuotationTerm : searchTerm}
                 onChange={(e) => {
                   if (invoiceType === 'quotation') {
@@ -3806,7 +3976,7 @@ const InvoiceManagement: React.FC = () => {
             </div>
 
             {/* Status Filter Custom Dropdown */}
-            {invoiceType !== 'quotation' && <div className="relative dropdown-container">
+            {invoiceType !== 'quotation' && invoiceType !== 'challan' && <div className="relative dropdown-container">
               <button
                 onClick={() => setShowStatusFilterDropdown(!showStatusFilterDropdown)}
                 className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
@@ -3841,7 +4011,7 @@ const InvoiceManagement: React.FC = () => {
             </div>}
 
             {/* Payment Filter Custom Dropdown */}
-            {invoiceType !== 'quotation' && <div className="relative dropdown-container">
+            {invoiceType !== 'quotation' && invoiceType !== 'challan' && <div className="relative dropdown-container">
               <button
                 onClick={() => setShowPaymentFilterDropdown(!showPaymentFilterDropdown)}
                 className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
@@ -3901,7 +4071,7 @@ const InvoiceManagement: React.FC = () => {
 
         <div className="mt-4 flex items-center justify-between">
           <span className="text-xs text-gray-600">
-            Showing {invoiceType === 'quotation' ? filteredQuotations.length : filteredInvoices.length} of {invoiceType === 'quotation' ? quotations.length : invoices.length} {invoiceType === 'quotation' ? 'quotations' : 'invoices'}
+                            Showing {invoiceType === 'quotation' ? filteredQuotations.length : invoiceType === 'challan' ? filteredDeliveryChallans.length : filteredInvoices.length} of {invoiceType === 'quotation' ? quotations.length : invoiceType === 'challan' ? deliveryChallans.length : invoices.length} {invoiceType === 'quotation' ? 'quotations' : invoiceType === 'challan' ? 'delivery challans' : 'invoices'}
           </span>
         </div>
       </div>
@@ -3919,6 +4089,18 @@ const InvoiceManagement: React.FC = () => {
                     invoiceType === 'challan' ? 'Challan No' :
                       'Invoice No'}
                 </th>
+                {invoiceType === 'challan' && 
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reference No</th>
+                }
+                {invoiceType === 'challan' && 
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Buyer's Order No</th>
+                }
+                {invoiceType === 'challan' && 
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Department</th>
+                }
+                {invoiceType === 'challan' && 
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Destination</th>
+                }
                 {/* {invoiceType === 'sale' && 
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quotation Ref</th>
                 } */}
@@ -3928,43 +4110,45 @@ const InvoiceManagement: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {invoiceType === 'purchase' ? 'Supplier' : 'Customer'}
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {invoiceType === 'quotation' ? 'Total Amount' : 'Amount'}
-                </th>
+                {invoiceType !== 'challan' && (
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {invoiceType === 'quotation' ? 'Total Amount' : 'Amount'}
+                  </th>
+                )}
                 {(invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') && 
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Paid</th>
                 }
                 {(invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'quotation') && 
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
                 }
-                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase' || invoiceType === 'challan') && 
+                {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') && 
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 }
                 {(invoiceType === 'sale' || invoiceType === 'quotation' || invoiceType === 'purchase') && 
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Payment</th>
                 }
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  {invoiceType === 'quotation' ? 'Valid Until' : 'Due Date'}
+                  {invoiceType === 'quotation' ? 'Valid Until' : invoiceType === 'challan' ? 'Dated' : 'Due Date'}
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {(invoiceType === 'quotation' ? quotationLoading : loading) ? (
+              {(invoiceType === 'quotation' ? quotationLoading : invoiceType === 'challan' ? deliveryChallanLoading : loading) ? (
                 <tr>
-                  <td colSpan={invoiceType === 'quotation' ? 9 : 10} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={invoiceType === 'quotation' ? 9 : invoiceType === 'challan' ? 8 : 10} className="px-6 py-8 text-center text-gray-500">
                     <div className="flex justify-center items-center space-x-2">
                       <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-                      <span>Loading {invoiceType === 'quotation' ? 'quotations' : 'invoices'}...</span>
+                      <span>Loading {invoiceType === 'quotation' ? 'quotations' : invoiceType === 'challan' ? 'delivery challans' : 'invoices'}...</span>
                     </div>
                   </td>
                 </tr>
-              ) : (invoiceType === 'quotation' ? filteredQuotations : filteredInvoices).length === 0 ? (
+              ) : (invoiceType === 'quotation' ? filteredQuotations : invoiceType === 'challan' ? filteredDeliveryChallans : filteredInvoices).length === 0 ? (
                 <tr>
-                  <td colSpan={invoiceType === 'quotation' ? 9 : 10} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={invoiceType === 'quotation' ? 9 : invoiceType === 'challan' ? 8 : 10} className="px-6 py-8 text-center text-gray-500">
                     <div className="text-center">
                       <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                      <p className="text-lg font-medium text-gray-900 mb-2">No {invoiceType === 'quotation' ? 'quotations' : 'invoices'} found</p>
+                      <p className="text-lg font-medium text-gray-900 mb-2">No {invoiceType === 'quotation' ? 'quotations' : invoiceType === 'challan' ? 'delivery challans' : 'invoices'} found</p>
                       <p className="text-gray-500">Try adjusting your search or filters</p>
                     </div>
                   </td>
@@ -4100,6 +4284,84 @@ const InvoiceManagement: React.FC = () => {
                             className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded transition-colors duration-200"
                           >
                             <X className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : invoiceType === 'challan' ? (
+                filteredDeliveryChallans.map((challan) => (
+                  <tr key={challan._id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-sm font-medium text-blue-600">
+                      {challan.challanNumber}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {challan.referenceNo || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-600">
+                      {challan.buyersOrderNo || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {challan.department || '-'}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      {challan.destination || '-'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">
+                          {challan.customer?.name || '-'}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {challan.customer?.email || '-'}
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3 text-sm text-gray-900">
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4 text-gray-400" />
+                        <span>{new Date(challan.dated).toLocaleDateString()}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center space-x-2">
+                        <Tooltip content="View" position="top">
+                          <button
+                            onClick={() => handleViewDeliveryChallan(challan._id)}
+                            className="text-blue-600 hover:text-blue-900 p-1.5 hover:bg-blue-50 rounded transition-colors duration-200"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="Edit" position="top">
+                          <button
+                            onClick={() => navigate(`/billing/challan/edit/${challan._id}`)}
+                            className="text-green-600 hover:text-green-900 p-1.5 hover:bg-green-50 rounded transition-colors duration-200"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="Export PDF" position="top">
+                          <button
+                            onClick={() => handleExportDeliveryChallanPDF(challan._id)}
+                            disabled={submitting}
+                            className="text-purple-600 hover:text-purple-900 p-1.5 hover:bg-purple-50 rounded transition-colors duration-200 disabled:opacity-50"
+                          >
+                            {submitting ? (
+                              <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+                            ) : (
+                              <Printer className="w-4 h-4" />
+                            )}
+                          </button>
+                        </Tooltip>
+                        <Tooltip content="Delete" position="top">
+                          <button
+                            onClick={() => handleDeleteDeliveryChallan(challan._id)}
+                            className="text-red-600 hover:text-red-900 p-1.5 hover:bg-red-50 rounded transition-colors duration-200"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </Tooltip>
                       </div>
@@ -4700,54 +4962,6 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* Battery Buy Back Section */}
-              {selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.description && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <h4 className="font-medium text-orange-900 mb-3 flex items-center">
-                    <Battery className="w-4 h-4 mr-2" />
-                    Battery Buy Back (Deduction)
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Description</label>
-                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
-                        {selectedInvoice.batteryBuyBack.description}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Quantity</label>
-                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
-                        {selectedInvoice.batteryBuyBack.quantity}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Unit Price</label>
-                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
-                        ₹{selectedInvoice.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Discount</label>
-                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
-                        {selectedInvoice.batteryBuyBack.discount || 0}%
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Tax Rate</label>
-                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
-                        {selectedInvoice.batteryBuyBack.taxRate || 0}%
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Total Amount</label>
-                      <p className="text-sm font-medium text-red-600 bg-white px-3 py-2 rounded border border-orange-200">
-                        -₹{selectedInvoice.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Edit Mode Actions */}
               {editMode && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -4799,28 +5013,6 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* Notes and Terms */}
-              {(selectedInvoice?.notes || selectedInvoice?.terms) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {selectedInvoice?.notes && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Notes:</h4>
-                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        {selectedInvoice?.notes}
-                      </p>
-                    </div>
-                  )}
-                  {selectedInvoice?.terms && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Terms & Conditions:</h4>
-                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        {selectedInvoice?.terms}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Invoice Summary */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-end">
@@ -4850,14 +5042,6 @@ const InvoiceManagement: React.FC = () => {
                       </div>
                     )}
                     
-                    {/* Battery Buyback Total */}
-                    {selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.totalPrice && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Battery Buyback:</span>
-                        <span className="font-medium text-red-600">-₹{(selectedInvoice.batteryBuyBack.totalPrice || 0).toFixed(2)}</span>
-                      </div>
-                    )}
-                    
                     <div className="flex justify-between font-bold text-lg border-t pt-3">
                       <span>Grand Total:</span>
                       <span className={hasAmountMismatch(selectedInvoice) ? 'text-red-600' : 'text-blue-600'}>
@@ -4877,28 +5061,6 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
-
-              {/* Notes and Terms */}
-              {(selectedQuotation?.notes || selectedQuotation?.terms) && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {selectedQuotation?.notes && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Notes:</h4>
-                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        {selectedQuotation?.notes}
-                      </p>
-                    </div>
-                  )}
-                  {selectedQuotation.terms && (
-                    <div>
-                      <h4 className="font-medium text-gray-900 mb-2">Terms & Conditions:</h4>
-                      <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-                        {selectedQuotation.terms}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -4990,19 +5152,6 @@ const InvoiceManagement: React.FC = () => {
                     </div>
                   </div>
                 )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Notes <span className="text-gray-500">(Optional)</span>
-                </label>
-                <textarea
-                  value={statusUpdate.notes}
-                  onChange={(e) => setStatusUpdate({ ...statusUpdate, notes: e.target.value })}
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-                  placeholder="Add notes about this status change..."
-                />
               </div>
 
               <div className="flex space-x-3 pt-4">
@@ -5844,54 +5993,6 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* Battery Buy Back Section */}
-              {selectedQuotation.batteryBuyBack && selectedQuotation.batteryBuyBack.description && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                  <h4 className="font-medium text-orange-900 mb-3 flex items-center">
-                    <Battery className="w-4 h-4 mr-2" />
-                    Battery Buy Back (Deduction)
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Description</label>
-                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
-                        {selectedQuotation.batteryBuyBack.description}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Quantity</label>
-                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
-                        {selectedQuotation.batteryBuyBack.quantity}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Unit Price</label>
-                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
-                        ₹{selectedQuotation.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Discount</label>
-                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
-                        {selectedQuotation.batteryBuyBack.discount || 0}%
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Tax Rate</label>
-                      <p className="text-sm text-orange-900 bg-white px-3 py-2 rounded border border-orange-200">
-                        {selectedQuotation.batteryBuyBack.taxRate || 0}%
-                      </p>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-orange-700 uppercase tracking-wide mb-1">Total Amount</label>
-                      <p className="text-sm font-medium text-red-600 bg-white px-3 py-2 rounded border border-orange-200">
-                        -₹{selectedQuotation.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
               {/* Quotation Summary */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-end">
@@ -5918,14 +6019,6 @@ const InvoiceManagement: React.FC = () => {
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Service Charges:</span>
                         <span className="font-medium text-green-600">+₹{(selectedQuotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
-                      </div>
-                    )}
-                    
-                    {/* Battery Buyback Total */}
-                    {selectedQuotation.batteryBuyBack && selectedQuotation.batteryBuyBack.totalPrice && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Battery Buyback:</span>
-                        <span className="font-medium text-red-600">-₹{(selectedQuotation.batteryBuyBack.totalPrice || 0).toFixed(2)}</span>
                       </div>
                     )}
                     
@@ -6003,9 +6096,251 @@ const InvoiceManagement: React.FC = () => {
         />
       )}
 
+      {/* Delivery Challan View Modal */}
+      {showDeliveryChallanViewModal && viewDeliveryChallan && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Delivery Challan Details</h2>
+                <p className="text-sm text-gray-600 mt-1">Challan #{viewDeliveryChallan.challanNumber}</p>
+              </div>
+              <button
+                onClick={() => setShowDeliveryChallanViewModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-6">
+              {/* Company and Customer Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Company Info */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Sun Power Services</h3>
+                  <div className="space-y-1 text-sm text-gray-600">
+                    <p>D No.53, Plot No.4, 4th Street, Phase-1 Extension,</p>
+                    <p>Annai Velankanni Nagar, Madhananthapuram, Porur,</p>
+                    <p>Chennai - 600116</p>
+                    <p>Contact: 044-24828218, 9176660123</p>
+                    <p>GSTIN/UIN: 33BLFPS9951M1ZC</p>
+                  </div>
+                </div>
+
+                {/* Customer Info */}
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Customer Details</h3>
+                  <div className="space-y-2 text-sm">
+                    <div>
+                      <span className="font-medium text-gray-700">Name:</span>
+                      <span className="ml-2 text-gray-900">{viewDeliveryChallan.customer?.name || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Email:</span>
+                      <span className="ml-2 text-gray-900">{viewDeliveryChallan.customer?.email || 'N/A'}</span>
+                    </div>
+                    <div>
+                      <span className="font-medium text-gray-700">Phone:</span>
+                      <span className="ml-2 text-gray-900">{viewDeliveryChallan.customer?.phone || 'N/A'}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Challan Details */}
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Challan Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-gray-700">Challan Number:</span>
+                    <span className="ml-2 text-gray-900 font-mono">{viewDeliveryChallan.challanNumber}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Date:</span>
+                    <span className="ml-2 text-gray-900">{new Date(viewDeliveryChallan.dated).toLocaleDateString()}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Department:</span>
+                    <span className="ml-2 text-gray-900">{viewDeliveryChallan.department || 'N/A'}</span>
+                  </div>
+
+                  <div>
+                    <span className="font-medium text-gray-700">Reference No:</span>
+                    <span className="ml-2 text-gray-900">{viewDeliveryChallan.referenceNo || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Buyer's Order No:</span>
+                    <span className="ml-2 text-gray-900">{viewDeliveryChallan.buyersOrderNo || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Buyer's Order Date:</span>
+                    <span className="ml-2 text-gray-900">
+                      {viewDeliveryChallan.buyersOrderDate ? new Date(viewDeliveryChallan.buyersOrderDate).toLocaleDateString() : 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Dispatch Doc No:</span>
+                    <span className="ml-2 text-gray-900">{viewDeliveryChallan.dispatchDocNo || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Mode of Payment:</span>
+                    <span className="ml-2 text-gray-900">{viewDeliveryChallan.modeOfPayment || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Terms of Delivery:</span>
+                    <span className="ml-2 text-gray-900">{viewDeliveryChallan.termsOfDelivery || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Delivery Details */}
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Delivery Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-gray-700">Destination:</span>
+                    <span className="ml-2 text-gray-900">{viewDeliveryChallan.destination || 'N/A'}</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Dispatched Through:</span>
+                    <span className="ml-2 text-gray-900">{viewDeliveryChallan.dispatchedThrough || 'N/A'}</span>
+                  </div>
+                  <div className="md:col-span-2">
+                    <span className="font-medium text-gray-700">Consignee (Ship-to Address):</span>
+                    <span className="ml-2 text-gray-900">{viewDeliveryChallan.consignee || 'N/A'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Spares Table */}
+              {viewDeliveryChallan.spares && viewDeliveryChallan.spares.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Spares</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part No</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">HSN/SAC</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {viewDeliveryChallan.spares.map((item: any, index: number) => (
+                          <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.slNo}</td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.description || 'N/A'}</td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.partNo || 'N/A'}</td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.hsnSac || 'N/A'}</td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.quantity || 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Services Table */}
+              {viewDeliveryChallan.services && viewDeliveryChallan.services.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Services</h3>
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">S.No</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Part No</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">HSN/SAC</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quantity</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {viewDeliveryChallan.services.map((item: any, index: number) => (
+                          <tr key={index} className={index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.slNo}</td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.description || 'N/A'}</td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.partNo || 'N/A'}</td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.hsnSac || 'N/A'}</td>
+                            <td className="px-3 py-2 text-sm text-gray-900">{item.quantity || 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Notes */}
+              {viewDeliveryChallan.notes && (
+                <div className="bg-white border border-gray-200 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Notes</h3>
+                  <p className="text-sm text-gray-700">{viewDeliveryChallan.notes}</p>
+                </div>
+              )}
+
+              {/* Footer */}
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="font-medium text-gray-700">Company's PAN:</span>
+                    <span className="ml-2 text-gray-900">BLFPS9951M</span>
+                  </div>
+                  <div>
+                    <span className="font-medium text-gray-700">Created:</span>
+                    <span className="ml-2 text-gray-900">
+                      {viewDeliveryChallan.createdAt ? new Date(viewDeliveryChallan.createdAt).toLocaleString() : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setShowDeliveryChallanViewModal(false)}
+                className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => handleExportDeliveryChallanPDF(viewDeliveryChallan._id)}
+                disabled={submitting}
+                className="px-4 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
+              >
+                {submitting ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <Printer className="w-4 h-4" />
+                )}
+                <span>{submitting ? 'Generating...' : 'Export PDF'}</span>
+              </button>
+              <button
+                onClick={() => {
+                  setShowDeliveryChallanViewModal(false);
+                  navigate(`/billing/challan/edit/${viewDeliveryChallan._id}`);
+                }}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Edit Challan
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
-};
+}
 
 export default InvoiceManagement;
 

@@ -157,6 +157,7 @@ export interface AMCQueryInput {
   valueMax?: number;
   upcomingVisits?: boolean;
   overdueVisits?: boolean;
+  scheduledDate?: string; // For filtering AMCs by visit date
 }
 
 export interface AMCNotificationInput {
@@ -178,7 +179,7 @@ export interface AMCNotificationInput {
 }
 
 export interface AMCReportInput {
-  reportType: 'contract_summary' | 'revenue_analysis' | 'visit_completion' | 'customer_satisfaction' | 'expiring_contracts';
+  reportType: 'contract_summary' | 'revenue_analysis' | 'visit_completion' | 'expiring_contracts' | 'performance_metrics';
   dateFrom: string;
   dateTo: string;
   customer?: string;
@@ -429,7 +430,8 @@ export const amcQuerySchema = Joi.object<AMCQueryInput>({
   valueMin: Joi.number().min(0),
   valueMax: Joi.number().min(Joi.ref('valueMin')),
   upcomingVisits: Joi.boolean(),
-  overdueVisits: Joi.boolean()
+  overdueVisits: Joi.boolean(),
+  scheduledDate: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).description('Date in YYYY-MM-DD format for filtering AMCs by visit date')
 });
 
 // AMC notification settings schema
@@ -457,8 +459,8 @@ export const amcReportSchema = Joi.object<AMCReportInput>({
     'contract_summary',
     'revenue_analysis',
     'visit_completion',
-    'customer_satisfaction',
-    'expiring_contracts'
+    'expiring_contracts',
+    'performance_metrics'
   ).required(),
   dateFrom: Joi.date().iso().required(),
   dateTo: Joi.date().iso().greater(Joi.ref('dateFrom')).required(),

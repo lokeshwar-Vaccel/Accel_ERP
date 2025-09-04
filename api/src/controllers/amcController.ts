@@ -1,7 +1,47 @@
 import { Response, NextFunction } from 'express';
 import { AMC } from '../models/AMC';
+import { Customer } from '../models/Customer';
 import { AuthenticatedRequest, APIResponse, AMCStatus, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
+import * as XLSX from 'xlsx';
+
+// Utility function to generate unique contract numbers
+const generateUniqueContractNumber = async (): Promise<string> => {
+  const currentYear = new Date().getFullYear();
+  const yearPrefix = `AMC-${currentYear}-`;
+  
+  // Find the highest existing contract number for this year
+  const existingContracts = await AMC.find({
+    contractNumber: { $regex: `^${yearPrefix}` }
+  }).sort({ contractNumber: -1 }).limit(1);
+  
+  let nextSequence = 1;
+  if (existingContracts.length > 0) {
+    const lastContractNumber = existingContracts[0].contractNumber;
+    const lastSequence = parseInt(lastContractNumber.split('-')[2]);
+    if (!isNaN(lastSequence)) {
+      nextSequence = lastSequence + 1;
+    }
+  }
+  
+  // Try up to 10 times to find a unique contract number
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const contractNumber = `${yearPrefix}${String(nextSequence).padStart(4, '0')}`;
+    
+    // Check if this contract number already exists
+    const existingContract = await AMC.findOne({ contractNumber });
+    if (!existingContract) {
+      return contractNumber;
+    }
+    
+    // If collision detected, try the next sequence number
+    console.warn(`Contract number collision detected: ${contractNumber}, trying next sequence (attempt ${attempt + 1})`);
+    nextSequence++;
+  }
+  
+  // If we've tried 10 times and still can't find a unique number, throw an error
+  throw new Error(`Failed to generate unique contract number after 10 attempts. Last attempted: ${yearPrefix}${String(nextSequence).padStart(4, '0')}`);
+};
 
 // @desc    Get all AMC contracts
 // @route   GET /api/v1/amc
@@ -12,6 +52,7 @@ export const getAMCContracts = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    console.log('getAMCContracts called with query:', req.query);
     const {
       page = 1,
       limit = 10,
@@ -34,10 +75,31 @@ export const getAMCContracts = async (
     const query: any = {};
 
     if (search) {
+      console.log('Building search query for term:', search);
       query.$or = [
         { contractNumber: { $regex: search, $options: 'i' } },
-        { terms: { $regex: search, $options: 'i' } }
+        { terms: { $regex: search, $options: 'i' } },
+        { engineSerialNumber: { $regex: search, $options: 'i' } }
       ];
+      
+      // Add customer name search
+      try {
+        console.log('Searching customers with name pattern:', search);
+        const matchingCustomers = await Customer.find({
+          name: { $regex: search, $options: 'i' }
+        }).select('_id');
+        
+        console.log('Found matching customers:', matchingCustomers.length);
+        
+        if (matchingCustomers.length > 0) {
+          const customerIds = matchingCustomers.map((c: any) => c._id);
+          query.$or.push({ customer: { $in: customerIds } });
+          console.log('Added customer IDs to search query:', customerIds);
+        }
+      } catch (error) {
+        console.error('Error searching customers:', error);
+        // Continue with other search criteria if customer search fails
+      }
     }
 
     if (status) {
@@ -64,18 +126,23 @@ export const getAMCContracts = async (
     }
 
     // Execute query with pagination
+    console.log('Executing AMC query:', JSON.stringify(query, null, 2));
+    
     const contracts = await AMC.find(query)
       .select('contractNumber customer customerAddress contactPersonName contactNumber engineSerialNumber engineModel kva dgMake dateOfCommissioning amcStartDate amcEndDate amcType numberOfVisits numberOfOilServices products startDate endDate contractValue scheduledVisits completedVisits status nextVisitDate visitSchedule terms createdBy createdAt updatedAt')
       .populate('customer', 'name email phone customerType address')
-      .populate('products', 'name category brand modelNumber')
+      .populate('products', 'name category brand')
       .populate('createdBy', 'firstName lastName email')
       .populate('visitSchedule.assignedTo', 'firstName lastName email')
-      .sort(sort as string)
+      .sort('-createdAt')
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
 
+    // Get total count for pagination
     const total = await AMC.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));
+
+    console.log(`Query completed. Found ${contracts.length} contracts out of ${total} total`);
 
     const response: APIResponse = {
       success: true,
@@ -107,7 +174,7 @@ export const getAMCContract = async (
     const contract = await AMC.findById(req.params.id)
       .select('contractNumber customer customerAddress contactPersonName contactNumber engineSerialNumber engineModel kva dgMake dateOfCommissioning amcStartDate amcEndDate amcType numberOfVisits numberOfOilServices products startDate endDate contractValue scheduledVisits completedVisits status nextVisitDate visitSchedule terms createdBy createdAt updatedAt')
       .populate('customer', 'name email phone address customerType')
-      .populate('products', 'name category brand modelNumber specifications')
+      .populate('products', 'name category brand modelNumber')
       .populate('createdBy', 'firstName lastName email')
       .populate('visitSchedule.assignedTo', 'firstName lastName email phone');
 
@@ -136,13 +203,19 @@ export const createAMCContract = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    // Generate contract number
-    const contractCount = await AMC.countDocuments();
-    const contractNumber = `AMC-${new Date().getFullYear()}-${String(contractCount + 1).padStart(4, '0')}`;
+    // Generate unique contract number
+    let contractNumber: string;
+    try {
+      contractNumber = await generateUniqueContractNumber();
+      console.log(`Generated contract number: ${contractNumber}`);
+    } catch (error) {
+      console.error('Error generating contract number:', error);
+      return next(new AppError('Failed to generate unique contract number. Please try again.', 500));
+    }
 
     // Calculate next visit date (30 days from start)
     const nextVisitDate = new Date(req.body.amcStartDate);
-    nextVisitDate.setDate(nextVisitDate.getDate() + 30);
+    nextVisitDate.setDate(nextVisitDate.getDate() + 1);
 
     // Map new fields to legacy fields for backward compatibility
     const contractData = {
@@ -557,10 +630,17 @@ export const generateAMCReport = async (
 
     const query: any = {};
 
+    // Build query based on new AMC structure
     if (dateFrom || dateTo) {
-      query.createdAt = {};
-      if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
-      if (dateTo) query.createdAt.$lte = new Date(dateTo);
+      query.$or = [];
+      if (dateFrom || dateTo) {
+        const dateQuery: any = {};
+        if (dateFrom) dateQuery.$gte = new Date(dateFrom);
+        if (dateTo) dateQuery.$lte = new Date(dateTo);
+        query.$or.push({ createdAt: dateQuery });
+        query.$or.push({ amcStartDate: dateQuery });
+        query.$or.push({ amcEndDate: dateQuery });
+      }
     }
 
     if (customer) {
@@ -571,118 +651,361 @@ export const generateAMCReport = async (
       query.status = status;
     }
 
+    // If no date filters, remove $or
+    if (query.$or && query.$or.length === 0) {
+      delete query.$or;
+    }
+
     const contracts = await AMC.find(query)
-      .populate('customer', 'name email phone customerType')
+      .populate('customer', 'name email phone customerType addresses')
       .populate('products', 'name category brand modelNumber')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('createdBy', 'firstName lastName email')
+      .populate('visitSchedule.assignedTo', 'firstName lastName email')
+      .lean();
+
+    // Calculate virtual fields manually since .lean() doesn't include them
+    const contractsWithVirtuals = contracts.map(contract => {
+      // Calculate days until expiry
+      let daysUntilExpiry = null;
+      if (contract.amcEndDate) {
+        const now = new Date();
+        const endDate = new Date(contract.amcEndDate);
+        const diff = endDate.getTime() - now.getTime();
+        daysUntilExpiry = Math.ceil(diff / (1000 * 60 * 60 * 24));
+      }
+
+      // Calculate completion percentage
+      let completionPercentage = 0;
+      if (contract.numberOfVisits && contract.numberOfVisits > 0) {
+        completionPercentage = Math.round(((contract.completedVisits || 0) / contract.numberOfVisits) * 100);
+      }
+
+      return {
+        ...contract,
+        daysUntilExpiry,
+        completionPercentage
+      };
+    });
 
     let reportData: any = {};
 
     switch (type) {
       case 'contract_summary':
+        const totalValue = contractsWithVirtuals.reduce((sum, c) => sum + (c.contractValue || 0), 0);
+        const activeContracts = contractsWithVirtuals.filter(c => c.status === AMCStatus.ACTIVE);
+        const expiredContracts = contractsWithVirtuals.filter(c => c.status === AMCStatus.EXPIRED);
+        const pendingContracts = contractsWithVirtuals.filter(c => c.status === AMCStatus.PENDING);
+        const draftContracts = contractsWithVirtuals.filter(c => c.status === AMCStatus.DRAFT);
+        const cancelledContracts = contractsWithVirtuals.filter(c => c.status === AMCStatus.CANCELLED);
+        const suspendedContracts = contractsWithVirtuals.filter(c => c.status === AMCStatus.SUSPENDED);
+
         reportData = {
-          totalContracts: contracts.length,
-          activeContracts: contracts.filter(c => c.status === AMCStatus.ACTIVE).length,
-          expiredContracts: contracts.filter(c => c.status === AMCStatus.EXPIRED).length,
-          totalValue: contracts.reduce((sum, c) => sum + c.contractValue, 0),
-          averageContractValue: contracts.length > 0 ? contracts.reduce((sum, c) => sum + c.contractValue, 0) / contracts.length : 0,
-          contractsByStatus: contracts.reduce((acc, c) => {
-            acc[c.status] = (acc[c.status] || 0) + 1;
+          totalContracts: contractsWithVirtuals.length,
+          activeContracts: activeContracts.length,
+          expiredContracts: expiredContracts.length,
+          pendingContracts: pendingContracts.length,
+          draftContracts: draftContracts.length,
+          cancelledContracts: cancelledContracts.length,
+          suspendedContracts: suspendedContracts.length,
+          totalValue,
+          averageContractValue: contractsWithVirtuals.length > 0 ? totalValue / contractsWithVirtuals.length : 0,
+          contractsByStatus: {
+            active: activeContracts.length,
+            expired: expiredContracts.length,
+            pending: pendingContracts.length,
+            draft: draftContracts.length,
+            cancelled: cancelledContracts.length,
+            suspended: suspendedContracts.length
+          },
+          contractsByType: contractsWithVirtuals.reduce((acc, c) => {
+            acc[c.amcType || 'AMC'] = (acc[c.amcType || 'AMC'] || 0) + 1;
             return acc;
           }, {} as Record<string, number>),
-          contracts: contracts
-        };
-        break;
-
-      case 'revenue_analysis':
-        const monthlyRevenue = contracts.reduce((acc, c) => {
-          const month = new Date(c.createdAt).toISOString().slice(0, 7);
-          acc[month] = (acc[month] || 0) + c.contractValue;
-          return acc;
-        }, {} as Record<string, number>);
-
-        reportData = {
-          totalRevenue: contracts.reduce((sum, c) => sum + c.contractValue, 0),
-          monthlyRevenue,
-          averageRevenuePerContract: contracts.length > 0 ? contracts.reduce((sum, c) => sum + c.contractValue, 0) / contracts.length : 0,
-          revenueByStatus: contracts.reduce((acc, c) => {
-            acc[c.status] = (acc[c.status] || 0) + c.contractValue;
-            return acc;
-          }, {} as Record<string, number>)
-        };
-        break;
-
-      case 'visit_completion':
-        const visitStats = contracts.reduce((acc, c) => {
-          acc.totalScheduled += c.scheduledVisits;
-          acc.totalCompleted += c.completedVisits;
-          acc.overdueVisits += Math.max(0, c.scheduledVisits - c.completedVisits);
-          return acc;
-        }, { totalScheduled: 0, totalCompleted: 0, overdueVisits: 0 });
-
-        reportData = {
-          ...visitStats,
-          completionRate: visitStats.totalScheduled > 0 ? (visitStats.totalCompleted / visitStats.totalScheduled) * 100 : 0,
-          contracts: contracts.map(c => ({
+          totalVisits: contractsWithVirtuals.reduce((sum, c) => sum + (c.numberOfVisits || 0), 0),
+          totalOilServices: contractsWithVirtuals.reduce((sum, c) => sum + (c.numberOfOilServices || 0), 0),
+          contracts: contractsWithVirtuals.slice(0, 50).map(c => ({
             contractNumber: c.contractNumber,
-            customer: (c.customer as any)?.name || 'Unknown',
-            scheduledVisits: c.scheduledVisits,
-            completedVisits: c.completedVisits,
-            completionRate: c.scheduledVisits > 0 ? (c.completedVisits / c.scheduledVisits) * 100 : 0
+            customer: c.customer ? {
+              name: (c.customer as any).name,
+              email: (c.customer as any).email,
+              phone: (c.customer as any).phone,
+              customerType: (c.customer as any).customerType
+            } : null,
+            engineSerialNumber: c.engineSerialNumber,
+            engineModel: c.engineModel,
+            kva: c.kva,
+            dgMake: c.dgMake,
+            amcType: c.amcType,
+            numberOfVisits: c.numberOfVisits,
+            numberOfOilServices: c.numberOfOilServices,
+            amcStartDate: c.amcStartDate,
+            amcEndDate: c.amcEndDate,
+            contractValue: c.contractValue || 0,
+            status: c.status,
+            daysUntilExpiry: c.daysUntilExpiry,
+            completionPercentage: c.completionPercentage,
+            createdBy: c.createdBy ? {
+              name: `${(c.createdBy as any).firstName} ${(c.createdBy as any).lastName}`,
+              email: (c.createdBy as any).email
+            } : null,
+            createdAt: c.createdAt
           }))
         };
         break;
 
-      case 'customer_satisfaction':
-        const customerStats = contracts.reduce((acc, c) => {
-          const customerName = (c.customer as any)?.name || 'Unknown';
-          if (!acc[customerName]) {
-            acc[customerName] = {
-              totalContracts: 0,
-              totalValue: 0,
-              averageSatisfaction: 0,
-              contracts: []
-            };
-          }
-          acc[customerName].totalContracts++;
-          acc[customerName].totalValue += c.contractValue;
-          acc[customerName].contracts.push(c);
+      case 'revenue_analysis':
+        const monthlyRevenue = contractsWithVirtuals.reduce((acc, c) => {
+          const month = new Date(c.createdAt).toISOString().slice(0, 7);
+          acc[month] = (acc[month] || 0) + (c.contractValue || 0);
           return acc;
-        }, {} as Record<string, any>);
+        }, {} as Record<string, number>);
+
+        const revenueByStatus = contractsWithVirtuals.reduce((acc, c) => {
+          acc[c.status] = (acc[c.status] || 0) + (c.contractValue || 0);
+          return acc;
+        }, {} as Record<string, number>);
+
+        const revenueByType = contractsWithVirtuals.reduce((acc, c) => {
+          acc[c.amcType || 'AMC'] = (acc[c.amcType || 'AMC'] || 0) + (c.contractValue || 0);
+          return acc;
+        }, {} as Record<string, number>);
 
         reportData = {
-          customerStats,
-          topCustomers: Object.entries(customerStats)
-            .sort(([, a], [, b]) => b.totalValue - a.totalValue)
+          totalRevenue: contractsWithVirtuals.reduce((sum, c) => sum + (c.contractValue || 0), 0),
+          monthlyRevenue,
+          revenueByStatus,
+          revenueByType,
+          averageRevenuePerContract: contractsWithVirtuals.length > 0 ? contractsWithVirtuals.reduce((sum, c) => sum + (c.contractValue || 0), 0) / contractsWithVirtuals.length : 0,
+          topRevenueContracts: contractsWithVirtuals
+            .filter(c => c.contractValue && c.contractValue > 0)
+            .sort((a, b) => (b.contractValue || 0) - (a.contractValue || 0))
             .slice(0, 10)
+            .map(c => ({
+              contractNumber: c.contractNumber,
+              customer: c.customer ? (c.customer as any).name : 'Unknown',
+              contractValue: c.contractValue,
+              amcType: c.amcType,
+              status: c.status,
+              createdAt: c.createdAt
+            }))
         };
         break;
+
+      case 'visit_completion':
+        const visitStats = contractsWithVirtuals.reduce((acc, c) => {
+          acc.totalScheduled += c.numberOfVisits || 0;
+          acc.totalCompleted += c.completedVisits || 0;
+          acc.overdueVisits += Math.max(0, (c.numberOfVisits || 0) - (c.completedVisits || 0));
+          
+          // Count visits by status from visitSchedule
+          if (c.visitSchedule && Array.isArray(c.visitSchedule)) {
+            c.visitSchedule.forEach((visit: any) => {
+              if (visit.status === 'completed') acc.completedVisitsDetailed++;
+              else if (visit.status === 'pending') acc.pendingVisitsDetailed++;
+              else if (visit.status === 'cancelled') acc.cancelledVisitsDetailed++;
+            });
+          }
+          
+          return acc;
+        }, { 
+          totalScheduled: 0, 
+          totalCompleted: 0, 
+          overdueVisits: 0,
+          completedVisitsDetailed: 0,
+          pendingVisitsDetailed: 0,
+          cancelledVisitsDetailed: 0
+        });
+
+        reportData = {
+          ...visitStats,
+          completionRate: visitStats.totalScheduled > 0 ? (visitStats.totalCompleted / visitStats.totalScheduled) * 100 : 0,
+          contracts: contractsWithVirtuals.map(c => ({
+            contractNumber: c.contractNumber,
+            customer: c.customer ? (c.customer as any).name : 'Unknown',
+            engineSerialNumber: c.engineSerialNumber,
+            scheduledVisits: c.numberOfVisits || 0,
+            completedVisits: c.completedVisits || 0,
+            completionRate: (c.numberOfVisits || 0) > 0 ? ((c.completedVisits || 0) / (c.numberOfVisits || 0)) * 100 : 0,
+            nextVisitDate: c.nextVisitDate,
+            visitSchedule: c.visitSchedule?.map((visit: any) => ({
+              scheduledDate: visit.scheduledDate,
+              status: visit.status,
+              completedDate: visit.completedDate,
+              assignedTo: visit.assignedTo ? `${(visit.assignedTo as any).firstName} ${(visit.assignedTo as any).lastName}` : 'Unassigned'
+            })) || []
+          }))
+        };
+        break;
+
+
 
       case 'expiring_contracts':
         const thirtyDaysFromNow = new Date();
         thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
 
-        const expiringContracts = contracts.filter(c => {
-          const endDate = new Date(c.endDate);
-          return endDate <= thirtyDaysFromNow && c.status === AMCStatus.ACTIVE;
+        const expiringContracts = contractsWithVirtuals.filter(c => {
+          if (c.status !== AMCStatus.ACTIVE) return false;
+          if (!c.amcEndDate) return false;
+          const endDate = new Date(c.amcEndDate);
+          return endDate <= thirtyDaysFromNow;
+        });
+
+        const sixtyDaysFromNow = new Date();
+        sixtyDaysFromNow.setDate(sixtyDaysFromNow.getDate() + 60);
+
+        const expiringIn60Days = contractsWithVirtuals.filter(c => {
+          if (c.status !== AMCStatus.ACTIVE) return false;
+          if (!c.amcEndDate) return false;
+          const endDate = new Date(c.amcEndDate);
+          return endDate > thirtyDaysFromNow && endDate <= sixtyDaysFromNow;
         });
 
         reportData = {
           expiringContracts: expiringContracts.length,
-          totalValueAtRisk: expiringContracts.reduce((sum, c) => sum + c.contractValue, 0),
+          expiringIn60Days: expiringIn60Days.length,
+          totalValueAtRisk: expiringContracts.reduce((sum, c) => sum + (c.contractValue || 0), 0),
+          totalValueAtRisk60Days: expiringIn60Days.reduce((sum, c) => sum + (c.contractValue || 0), 0),
           contracts: expiringContracts.map(c => ({
             contractNumber: c.contractNumber,
-            customer: (c.customer as any)?.name || 'Unknown',
-            endDate: c.endDate,
-            contractValue: c.contractValue,
-            daysUntilExpiry: Math.ceil((new Date(c.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+            customer: c.customer ? {
+              name: (c.customer as any).name,
+              email: (c.customer as any).email,
+              phone: (c.customer as any).phone
+            } : null,
+            engineSerialNumber: c.engineSerialNumber,
+            engineModel: c.engineModel,
+            amcType: c.amcType,
+            amcEndDate: c.amcEndDate,
+            contractValue: c.contractValue || 0,
+            daysUntilExpiry: c.daysUntilExpiry,
+            numberOfVisits: c.numberOfVisits,
+            completedVisits: c.completedVisits,
+            completionPercentage: c.completionPercentage,
+            contactPersonName: c.contactPersonName,
+            contactNumber: c.contactNumber
+          })),
+          contracts60Days: expiringIn60Days.map(c => ({
+            contractNumber: c.contractNumber,
+            customer: c.customer ? (c.customer as any).name : 'Unknown',
+            amcEndDate: c.amcEndDate,
+            contractValue: c.contractValue || 0,
+            daysUntilExpiry: c.daysUntilExpiry
           }))
+        };
+        break;
+
+      case 'performance_metrics':
+        const performanceData = contractsWithVirtuals.reduce((acc, c) => {
+          // Response time calculation (if visitSchedule has completion dates)
+          if (c.visitSchedule && Array.isArray(c.visitSchedule)) {
+            c.visitSchedule.forEach((visit: any) => {
+              if (visit.status === 'completed' && visit.completedDate && visit.scheduledDate) {
+                const scheduled = new Date(visit.scheduledDate);
+                const completed = new Date(visit.completedDate);
+                const responseTime = Math.abs(completed.getTime() - scheduled.getTime()) / (1000 * 60 * 60); // hours
+                acc.totalResponseTime += responseTime;
+                acc.completedVisitsCount++;
+              }
+            });
+          }
+          
+          // Contract duration analysis
+          if (c.amcStartDate && c.amcEndDate) {
+            const startDate = new Date(c.amcStartDate);
+            const endDate = new Date(c.amcEndDate);
+            const duration = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24); // days
+            acc.totalDuration += duration;
+            acc.contractsWithDuration++;
+          }
+          
+          return acc;
+        }, {
+          totalResponseTime: 0,
+          completedVisitsCount: 0,
+          totalDuration: 0,
+          contractsWithDuration: 0
+        });
+
+        // Aggregate engineer performance based on completed visits
+        const engineerStats = new Map<string, { completed: number; total: number; user: any }>();
+        contractsWithVirtuals.forEach((contract: any) => {
+          if (contract.visitSchedule && Array.isArray(contract.visitSchedule)) {
+            contract.visitSchedule.forEach((visit: any) => {
+              const assigned = visit.assignedTo;
+              if (!assigned) return;
+
+              const engineerId = typeof assigned === 'string'
+                ? assigned
+                : (assigned._id?.toString?.() || assigned.toString?.());
+              if (!engineerId) return;
+
+              const existing = engineerStats.get(engineerId) || { completed: 0, total: 0, user: assigned };
+              existing.total += 1;
+              if (visit.status === 'completed') existing.completed += 1;
+              if (typeof assigned === 'object') {
+                existing.user = assigned;
+              }
+              engineerStats.set(engineerId, existing);
+            });
+          }
+        });
+
+        let bestEngineer: any = null;
+        if (engineerStats.size > 0) {
+          bestEngineer = Array.from(engineerStats.entries())
+            .map(([id, stat]) => ({
+              id,
+              name: (stat.user?.fullName) || [stat.user?.firstName, stat.user?.lastName].filter(Boolean).join(' ') || stat.user?.email || 'Unknown',
+              email: stat.user?.email || '',
+              completedVisits: stat.completed,
+              totalVisits: stat.total,
+              completionRate: stat.total > 0 ? Math.round((stat.completed / stat.total) * 100) : 0
+            }))
+            .sort((a, b) => b.completedVisits - a.completedVisits)[0];
+        }
+
+        reportData = {
+          averageResponseTime: performanceData.completedVisitsCount > 0 ? 
+            performanceData.totalResponseTime / performanceData.completedVisitsCount : 0,
+          averageContractDuration: performanceData.contractsWithDuration > 0 ? 
+            performanceData.totalDuration / performanceData.contractsWithDuration : 0,
+          totalContracts: contractsWithVirtuals.length,
+          activeContracts: contractsWithVirtuals.filter(c => c.status === AMCStatus.ACTIVE).length,
+          completionRate: contractsWithVirtuals.reduce((sum, c) => {
+            if (c.numberOfVisits && c.numberOfVisits > 0) {
+              return sum + ((c.completedVisits || 0) / c.numberOfVisits);
+            }
+            return sum;
+          }, 0) / contractsWithVirtuals.length * 100,
+          contracts: contractsWithVirtuals.slice(0, 20).map(c => ({
+            contractNumber: c.contractNumber,
+            customer: c.customer ? (c.customer as any).name : 'Unknown',
+            status: c.status,
+            completionRate: (c.numberOfVisits || 0) > 0 ? ((c.completedVisits || 0) / (c.numberOfVisits || 0)) * 100 : 0,
+            daysUntilExpiry: c.daysUntilExpiry,
+            contractValue: c.contractValue || 0
+          })),
+          bestEngineer
         };
         break;
 
       default:
         throw new AppError('Invalid report type', 400);
     }
+
+    // Add metadata for traceability
+    reportData.metadata = {
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user?.id || 'unknown',
+      filters: {
+        dateFrom,
+        dateTo,
+        customer,
+        status
+      },
+      totalRecords: contractsWithVirtuals.length,
+      reportType: type
+    };
 
     const response: APIResponse = {
       success: true,
@@ -1473,7 +1796,7 @@ export const regenerateVisitSchedule = async (
   }
 }; 
 
-// @desc    Get AMC contracts by visit scheduled date
+// @desc    Get AMC contracts by visit scheduled date range
 // @route   GET /api/v1/amc/visits-by-date
 // @access  Private
 export const getAMCsByVisitDate = async (
@@ -1483,46 +1806,57 @@ export const getAMCsByVisitDate = async (
 ): Promise<void> => {
   try {
     const { 
-      scheduledDate, 
+      startDate, 
+      endDate,
       page = 1, 
       limit = 10, 
       status = 'all',
       customer = 'all'
     } = req.query as {
-      scheduledDate: string;
+      startDate: string;
+      endDate: string;
       page?: string;
       limit?: string;
       status?: string;
       customer?: string;
     };
 
-    if (!scheduledDate) {
-      return next(new AppError('Scheduled date is required', 400));
+    if (!startDate || !endDate) {
+      return next(new AppError('Start date and end date are required', 400));
     }
 
-    // Parse the scheduled date
-    let targetDate: Date;
-    if (scheduledDate.includes('/')) {
+    // Parse the dates
+    let startDateParsed: Date;
+    let endDateParsed: Date;
+    
+    if (startDate.includes('/')) {
       // Handle DD/MM/YYYY format
-      const [day, month, year] = scheduledDate.split('/');
-      targetDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      const [day, month, year] = startDate.split('/');
+      startDateParsed = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
     } else {
-      // Handle YYYY-MM-DD format
-      targetDate = new Date(scheduledDate);
+      startDateParsed = new Date(startDate);
     }
     
-    if (isNaN(targetDate.getTime())) {
+    if (endDate.includes('/')) {
+      // Handle DD/MM/YYYY format
+      const [day, month, year] = endDate.split('/');
+      endDateParsed = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    } else {
+      endDateParsed = new Date(endDate);
+    }
+    
+    if (isNaN(startDateParsed.getTime()) || isNaN(endDateParsed.getTime())) {
       return next(new AppError('Invalid date format', 400));
     }
 
-    // Set the date range for the entire day (00:00:00 to 23:59:59)
-    const startOfDay = new Date(targetDate);
+    // Set the date range to cover full days (00:00:00 to 23:59:59)
+    const startOfDay = new Date(startDateParsed);
     startOfDay.setHours(0, 0, 0, 0);
     
-    const endOfDay = new Date(targetDate);
+    const endOfDay = new Date(endDateParsed);
     endOfDay.setHours(23, 59, 59, 999);
 
-    // Build the query - use $elemMatch to match array elements
+    // Build the query - use $elemMatch to match array elements within date range
     const query: any = {
       visitSchedule: {
         $elemMatch: {
@@ -1544,8 +1878,6 @@ export const getAMCsByVisitDate = async (
       query.customer = customer;
     }
 
-
-
     // Execute query with pagination
     const contracts = await AMC.find(query)
       .select('contractNumber customer customerAddress contactPersonName contactNumber engineSerialNumber engineModel kva dgMake dateOfCommissioning amcStartDate amcEndDate amcType numberOfVisits numberOfOilServices products startDate endDate contractValue scheduledVisits completedVisits status nextVisitDate visitSchedule terms createdBy createdAt updatedAt')
@@ -1557,45 +1889,72 @@ export const getAMCsByVisitDate = async (
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
 
-
-
     // Get total count for pagination
     const total = await AMC.countDocuments(query);
     const pages = Math.ceil(total / Number(limit));
 
-    // Process the results to include visit details for the specific date
-    const processedContracts = contracts.map(contract => {
-      const contractObj = contract.toObject();
-      
-      // Filter visit schedule to only include visits on the target date
-      const visitsOnDate = contract.visitSchedule.filter((visit: any) => {
+    // Calculate virtual fields manually since .lean() doesn't include them
+    const contractsWithVirtuals = contracts.map(contract => {
+      // Calculate days until expiry
+      let daysUntilExpiry = null;
+      if (contract.amcEndDate) {
+        const now = new Date();
+        const endDate = new Date(contract.amcEndDate);
+        const diff = endDate.getTime() - now.getTime();
+        daysUntilExpiry = Math.ceil(diff / (1000 * 60 * 60 * 24));
+      }
+
+      // Calculate completion percentage
+      let completionPercentage = 0;
+      if (contract.numberOfVisits && contract.numberOfVisits > 0) {
+        completionPercentage = Math.round(((contract.completedVisits || 0) / contract.numberOfVisits) * 100);
+      }
+
+      return {
+        ...contract.toObject(),
+        daysUntilExpiry,
+        completionPercentage
+      };
+    });
+
+    // Process the results to include visit details for the date range
+    const processedContracts = contractsWithVirtuals.map(contract => {
+      // Filter visit schedule to only include visits within the date range
+      const visitsInRange = (contract.visitSchedule || []).filter((visit: any) => {
         const visitDate = new Date(visit.scheduledDate);
         return visitDate >= startOfDay && visitDate <= endOfDay;
       });
 
       return {
-        ...contractObj,
-        visitsOnDate,
-        visitCountOnDate: visitsOnDate.length
+        ...contract,
+        visitsInRange,
+        visitCountInRange: visitsInRange.length
       };
     });
 
-    // Calculate summary statistics
-    const totalVisitsOnDate = processedContracts.reduce((sum, contract) => sum + contract.visitCountOnDate, 0);
+    // Calculate summary statistics for the date range
+    const totalVisitsInRange = processedContracts.reduce((sum, contract) => sum + contract.visitCountInRange, 0);
     const uniqueCustomers = new Set(processedContracts.map(c => c.customer._id.toString())).size;
     const totalContractValue = processedContracts.reduce((sum, contract) => sum + (contract.contractValue || 0), 0);
 
+    // Calculate visits per day in the range
+    const daysInRange = Math.ceil((endOfDay.getTime() - startOfDay.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const averageVisitsPerDay = daysInRange > 0 ? totalVisitsInRange / daysInRange : 0;
+
     const response: APIResponse = {
       success: true,
-      message: `AMC contracts with visits scheduled on ${scheduledDate} retrieved successfully`,
+      message: `AMC contracts with visits scheduled between ${startDate} and ${endDate} retrieved successfully`,
       data: { 
         contracts: processedContracts,
         summary: {
           totalContracts: processedContracts.length,
-          totalVisitsOnDate,
+          totalVisitsInRange,
           uniqueCustomers,
           totalContractValue,
-          scheduledDate
+          startDate: startDate,
+          endDate: endDate,
+          daysInRange,
+          averageVisitsPerDay: Math.round(averageVisitsPerDay * 100) / 100
         }
       },
       pagination: {
@@ -1739,7 +2098,9 @@ export const exportAMCToExcel = async (
       customer,
       dateFrom,
       dateTo,
-      expiringIn
+      expiringIn,
+      startDate,
+      endDate
     } = req.query as {
       search?: string;
       status?: AMCStatus;
@@ -1747,16 +2108,35 @@ export const exportAMCToExcel = async (
       dateFrom?: string;
       dateTo?: string;
       expiringIn?: string;
+      startDate?: string;
+      endDate?: string;
     };
 
     // Build query based on filters
     const query: any = {};
+    const orConditions: any[] = [];
 
     if (search) {
-      query.$or = [
+      orConditions.push(
         { contractNumber: { $regex: search, $options: 'i' } },
-        { terms: { $regex: search, $options: 'i' } }
-      ];
+        { terms: { $regex: search, $options: 'i' } },
+        { engineSerialNumber: { $regex: search, $options: 'i' } }
+      );
+      
+      // Add customer name search for export as well
+      try {
+        const matchingCustomers = await Customer.find({
+          name: { $regex: search, $options: 'i' }
+        }).select('_id');
+        
+        if (matchingCustomers.length > 0) {
+          const customerIds = matchingCustomers.map((c: any) => c._id);
+          orConditions.push({ customer: { $in: customerIds } });
+        }
+      } catch (error) {
+        console.error('Error searching customers for export:', error);
+        // Continue with other search criteria if customer search fails
+      }
     }
 
     if (status) {
@@ -1773,14 +2153,68 @@ export const exportAMCToExcel = async (
       if (dateTo) query.createdAt.$lte = new Date(dateTo);
     }
 
-    // Handle expiring contracts filter
+    // Handle expiring contracts filter - FIXED: Don't override status if it's already set
     if (expiringIn) {
       const days = parseInt(expiringIn);
       const expiryDate = new Date();
       expiryDate.setDate(expiryDate.getDate() + days);
       query.endDate = { $lte: expiryDate };
-      query.status = AMCStatus.ACTIVE;
+      
+      // Only set status to ACTIVE if no status filter is already applied
+      if (!status) {
+        query.status = AMCStatus.ACTIVE;
+      }
     }
+
+    // Handle visit date range filter
+    if (startDate && endDate) {
+      // Parse the dates
+      let startDateParsed: Date;
+      let endDateParsed: Date;
+      
+      if (startDate.includes('/')) {
+        // Handle DD/MM/YYYY format
+        const [day, month, year] = startDate.split('/');
+        startDateParsed = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      } else {
+        startDateParsed = new Date(startDate);
+      }
+      
+      if (endDate.includes('/')) {
+        // Handle DD/MM/YYYY format
+        const [day, month, year] = endDate.split('/');
+        endDateParsed = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      } else {
+        endDateParsed = new Date(endDate);
+      }
+
+      if (!isNaN(startDateParsed.getTime()) && !isNaN(endDateParsed.getTime())) {
+        // Set the date range to cover full days (00:00:00 to 23:59:59)
+        const startOfDay = new Date(startDateParsed);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        const endOfDay = new Date(endDateParsed);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        // Use $elemMatch to match array elements within date range
+        query.visitSchedule = {
+          $elemMatch: {
+            scheduledDate: {
+              $gte: startOfDay,
+              $lte: endOfDay
+            }
+          }
+        };
+      }
+    }
+
+    // Add $or conditions if any exist
+    if (orConditions.length > 0) {
+      query.$or = orConditions;
+    }
+
+    // Get total contracts count for comparison
+    const totalContracts = await AMC.countDocuments({});
 
     // Fetch contracts with all necessary data
     const contracts = await AMC.find(query)
@@ -1789,6 +2223,30 @@ export const exportAMCToExcel = async (
       .populate('createdBy', 'firstName lastName email')
       .populate('visitSchedule.assignedTo', 'firstName lastName email')
       .sort('-createdAt');
+
+    // Calculate virtual fields manually since .lean() doesn't include them
+    const contractsWithVirtuals = contracts.map(contract => {
+      // Calculate days until expiry
+      let daysUntilExpiry = null;
+      if (contract.amcEndDate) {
+        const now = new Date();
+        const endDate = new Date(contract.amcEndDate);
+        const diff = endDate.getTime() - now.getTime();
+        daysUntilExpiry = Math.ceil(diff / (1000 * 60 * 60 * 24));
+      }
+
+      // Calculate completion percentage
+      let completionPercentage = 0;
+      if (contract.numberOfVisits && contract.numberOfVisits > 0) {
+        completionPercentage = Math.round(((contract.completedVisits || 0) / contract.numberOfVisits) * 100);
+      }
+
+      return {
+        ...contract.toObject(),
+        daysUntilExpiry,
+        completionPercentage
+      };
+    });
 
     // Helper function to format dates for Excel
     const formatDateForExcel = (date: Date | string): string => {
@@ -1845,7 +2303,7 @@ export const exportAMCToExcel = async (
     };
 
         // Export data with all information
-    const excelData = contracts.map((contract, index) => {
+    const excelData = contractsWithVirtuals.map((contract, index) => {
       // Get visit schedule information
       const maxVisits = Math.max(contract.numberOfVisits || contract.scheduledVisits || 0, 
                                 contract.visitSchedule ? contract.visitSchedule.length : 0);
@@ -1975,6 +2433,448 @@ export const exportAMCToExcel = async (
 
     // Send the file
     res.send(buffer);
+
+  } catch (error) {
+    next(error);
+  }
+}; 
+
+// @desc    Export AMC report to Excel
+// @route   GET /api/v1/amc/report/export-excel
+// @access  Private
+export const exportAMCReportToExcel = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const {
+      reportType,
+      dateFrom,
+      dateTo,
+      status,
+      format = 'excel'
+    } = req.query as {
+      reportType: string;
+      dateFrom?: string;
+      dateTo?: string;
+      status?: string;
+      format?: string;
+    };
+
+    if (!reportType) {
+      return next(new AppError('Report type is required', 400));
+    }
+
+    // Build query based on filters
+    const query: any = {};
+    const orConditions: any[] = [];
+
+    if (dateFrom || dateTo) {
+      query.$or = [];
+      if (dateFrom) {
+        query.$or.push({ createdAt: { $gte: new Date(dateFrom) } });
+        query.$or.push({ amcStartDate: { $gte: new Date(dateFrom) } });
+        query.$or.push({ amcEndDate: { $gte: new Date(dateFrom) } });
+      }
+      if (dateTo) {
+        query.$or.push({ createdAt: { $lte: new Date(dateTo) } });
+        query.$or.push({ amcStartDate: { $lte: new Date(dateTo) } });
+        query.$or.push({ amcEndDate: { $lte: new Date(dateTo) } });
+      }
+    }
+
+    if (status) {
+      query.status = status;
+    }
+
+    // Add $or conditions if any exist
+    if (orConditions.length > 0) {
+      query.$or = orConditions;
+    }
+
+    // Fetch contracts with all necessary data
+    const contracts = await AMC.find(query)
+      .populate('customer', 'name email phone customerType address')
+      .populate('products', 'name category brand modelNumber')
+      .populate('createdBy', 'firstName lastName email')
+      .populate('visitSchedule.assignedTo', 'firstName lastName email')
+      .sort('-createdAt')
+      .lean();
+
+    // Calculate virtual fields manually since .lean() doesn't include them
+    const contractsWithVirtuals = contracts.map(contract => {
+      // Calculate days until expiry
+      let daysUntilExpiry = null;
+      if (contract.amcEndDate) {
+        const now = new Date();
+        const endDate = new Date(contract.amcEndDate);
+        const diff = endDate.getTime() - now.getTime();
+        daysUntilExpiry = Math.ceil(diff / (1000 * 60 * 60 * 24));
+      }
+
+      // Calculate completion percentage
+      let completionPercentage = 0;
+      if (contract.numberOfVisits && contract.numberOfVisits > 0) {
+        completionPercentage = Math.round(((contract.completedVisits || 0) / contract.numberOfVisits) * 100);
+      }
+
+      return {
+        ...contract,
+        daysUntilExpiry,
+        completionPercentage
+      };
+    });
+
+    // Generate report data based on report type
+    let reportData: any = {};
+    
+    switch (reportType) {
+      case 'contract_summary':
+        reportData = {
+          totalContracts: contractsWithVirtuals.length,
+          activeContracts: contractsWithVirtuals.filter(c => c.status === AMCStatus.ACTIVE).length,
+          expiredContracts: contractsWithVirtuals.filter(c => c.status === AMCStatus.EXPIRED).length,
+          pendingContracts: contractsWithVirtuals.filter(c => c.status === AMCStatus.PENDING).length,
+          draftContracts: contractsWithVirtuals.filter(c => c.status === AMCStatus.DRAFT).length,
+          totalValue: contractsWithVirtuals.reduce((sum, c) => sum + (c.contractValue || 0), 0),
+          contracts: contractsWithVirtuals.map(c => ({
+            contractNumber: c.contractNumber,
+            customerName: c.customer ? (c.customer as any).name : 'Unknown',
+            engineSerialNumber: c.engineSerialNumber,
+            engineModel: c.engineModel,
+            kva: c.kva,
+            dgMake: c.dgMake,
+            amcType: c.amcType,
+            numberOfVisits: c.numberOfVisits,
+            numberOfOilServices: c.numberOfOilServices,
+            amcStartDate: c.amcStartDate,
+            amcEndDate: c.amcEndDate,
+            contractValue: c.contractValue || 0,
+            status: c.status,
+            daysUntilExpiry: c.daysUntilExpiry,
+            completionPercentage: c.completionPercentage,
+            createdBy: c.createdBy ? `${(c.createdBy as any).firstName} ${(c.createdBy as any).lastName}` : 'Unknown',
+            createdAt: c.createdAt
+          }))
+        };
+        break;
+
+      case 'revenue_analysis':
+        const monthlyRevenue = contractsWithVirtuals.reduce((acc, c) => {
+          const month = new Date(c.createdAt).toISOString().slice(0, 7);
+          acc[month] = (acc[month] || 0) + (c.contractValue || 0);
+          return acc;
+        }, {} as Record<string, number>);
+
+        reportData = {
+          totalRevenue: contractsWithVirtuals.reduce((sum, c) => sum + (c.contractValue || 0), 0),
+          monthlyRevenue,
+          revenueByStatus: contractsWithVirtuals.reduce((acc, c) => {
+            acc[c.status] = (acc[c.status] || 0) + (c.contractValue || 0);
+            return acc;
+          }, {} as Record<string, number>),
+          contracts: contractsWithVirtuals.map(c => ({
+            contractNumber: c.contractNumber,
+            customerName: c.customer ? (c.customer as any).name : 'Unknown',
+            contractValue: c.contractValue,
+            amcType: c.amcType,
+            status: c.status,
+            createdAt: c.createdAt,
+            monthlyRevenue: monthlyRevenue[new Date(c.createdAt).toISOString().slice(0, 7)] || 0
+          }))
+        };
+        break;
+
+      case 'visit_completion':
+        const visitStats = contractsWithVirtuals.reduce((acc, c) => {
+          acc.totalScheduled += c.numberOfVisits || 0;
+          acc.totalCompleted += c.completedVisits || 0;
+          return acc;
+        }, { totalScheduled: 0, totalCompleted: 0 });
+
+        reportData = {
+          ...visitStats,
+          completionRate: visitStats.totalScheduled > 0 ? (visitStats.totalCompleted / visitStats.totalScheduled) * 100 : 0,
+          contracts: contractsWithVirtuals.map(c => ({
+            contractNumber: c.contractNumber,
+            customerName: c.customer ? (c.customer as any).name : 'Unknown',
+            engineSerialNumber: c.engineSerialNumber,
+            scheduledVisits: c.numberOfVisits || 0,
+            completedVisits: c.completedVisits || 0,
+            completionRate: (c.numberOfVisits || 0) > 0 ? ((c.completedVisits || 0) / (c.numberOfVisits || 0)) * 100 : 0,
+            nextVisitDate: c.nextVisitDate
+          }))
+        };
+        break;
+
+      case 'expiring_contracts':
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+
+        const expiringContracts = contractsWithVirtuals.filter(c => {
+          if (c.status !== AMCStatus.ACTIVE) return false;
+          if (!c.amcEndDate) return false;
+          const endDate = new Date(c.amcEndDate);
+          return endDate <= thirtyDaysFromNow;
+        });
+
+        reportData = {
+          expiringContracts: expiringContracts.length,
+          totalValueAtRisk: expiringContracts.reduce((sum, c) => sum + (c.contractValue || 0), 0),
+          contracts: expiringContracts.map(c => ({
+            contractNumber: c.contractNumber,
+            customerName: c.customer ? (c.customer as any).name : 'Unknown',
+            customerEmail: c.customer ? (c.customer as any).email : 'N/A',
+            customerPhone: c.customer ? (c.customer as any).phone : 'N/A',
+            engineSerialNumber: c.engineSerialNumber,
+            engineModel: c.engineModel,
+            amcType: c.amcType,
+            amcEndDate: c.amcEndDate,
+            contractValue: c.contractValue || 0,
+            daysUntilExpiry: c.daysUntilExpiry,
+            numberOfVisits: c.numberOfVisits,
+            completedVisits: c.completedVisits,
+            completionPercentage: c.completionPercentage,
+            contactPersonName: c.contactPersonName,
+            contactNumber: c.contactNumber
+          }))
+        };
+        break;
+
+      case 'performance_metrics':
+        const performanceData = contractsWithVirtuals.reduce((acc, c) => {
+          if (c.visitSchedule && Array.isArray(c.visitSchedule)) {
+            c.visitSchedule.forEach((visit: any) => {
+              if (visit.status === 'completed' && visit.completedDate && visit.scheduledDate) {
+                const scheduled = new Date(visit.scheduledDate);
+                const completed = new Date(visit.completedDate);
+                const responseTime = Math.abs(completed.getTime() - scheduled.getTime()) / (1000 * 60 * 60);
+                acc.totalResponseTime += responseTime;
+                acc.completedVisitsCount++;
+              }
+            });
+          }
+          
+          if (c.amcStartDate && c.amcEndDate) {
+            const startDate = new Date(c.amcStartDate);
+            const endDate = new Date(c.amcEndDate);
+            const duration = (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+            acc.totalDuration += duration;
+            acc.contractsWithDuration++;
+          }
+          
+          return acc;
+        }, {
+          totalResponseTime: 0,
+          completedVisitsCount: 0,
+          totalDuration: 0,
+          contractsWithDuration: 0
+        });
+
+        reportData = {
+          averageResponseTime: performanceData.completedVisitsCount > 0 ? 
+            performanceData.totalResponseTime / performanceData.completedVisitsCount : 0,
+          averageContractDuration: performanceData.contractsWithDuration > 0 ? 
+            performanceData.totalDuration / performanceData.contractsWithDuration : 0,
+          totalContracts: contractsWithVirtuals.length,
+          activeContracts: contractsWithVirtuals.filter(c => c.status === AMCStatus.ACTIVE).length,
+          completionRate: contractsWithVirtuals.reduce((sum, c) => {
+            if (c.numberOfVisits && c.numberOfVisits > 0) {
+              return sum + ((c.completedVisits || 0) / c.numberOfVisits);
+            }
+            return sum;
+          }, 0) / contractsWithVirtuals.length * 100,
+          contracts: contractsWithVirtuals.map(c => ({
+            contractNumber: c.contractNumber,
+            customerName: c.customer ? (c.customer as any).name : 'Unknown',
+            status: c.status,
+            completionRate: (c.numberOfVisits || 0) > 0 ? ((c.completedVisits || 0) / (c.numberOfVisits || 0)) * 100 : 0,
+            daysUntilExpiry: c.daysUntilExpiry,
+            contractValue: c.contractValue || 0
+          }))
+        };
+        break;
+
+      default:
+        return next(new AppError('Invalid report type', 400));
+    }
+
+    // Add metadata
+    reportData.metadata = {
+      generatedAt: new Date().toISOString(),
+      generatedBy: req.user?.id || 'unknown',
+      filters: {
+        dateFrom,
+        dateTo,
+        status
+      },
+      totalRecords: contractsWithVirtuals.length,
+      reportType
+    };
+
+    // Set response headers for Excel download
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="AMC_Report_${reportType}_${new Date().toISOString().split('T')[0]}.xlsx"`);
+
+    // Generate Excel data based on report type
+    let excelData = [];
+    let sheetName = 'AMC Report';
+    
+    switch (reportType) {
+      case 'contract_summary':
+        sheetName = 'Contract Summary';
+        excelData = contractsWithVirtuals.map(c => ({
+          'Contract Number': c.contractNumber,
+          'Customer Name': c.customer ? (c.customer as any).name : 'Unknown',
+          'Customer Email': c.customer ? (c.customer as any).email : 'N/A',
+          'Customer Phone': c.customer ? (c.customer as any).phone : 'N/A',
+          'Engine Serial Number': c.engineSerialNumber,
+          'Engine Model': c.engineModel,
+          'KVA': c.kva,
+          'DG Make': c.dgMake,
+          'AMC Type': c.amcType,
+          'Number of Visits': c.numberOfVisits,
+          'Number of Oil Services': c.numberOfOilServices,
+          'AMC Start Date': c.amcStartDate,
+          'AMC End Date': c.amcEndDate,
+          'Contract Value': c.contractValue || 0,
+          'Status': c.status,
+          'Days Until Expiry': c.daysUntilExpiry,
+          'Completion Percentage': c.completionPercentage,
+          'Created By': c.createdBy ? (c.createdBy as any).firstName + ' ' + (c.createdBy as any).lastName : 'Unknown',
+          'Created At': c.createdAt
+        }));
+        break;
+
+      case 'revenue_analysis':
+        sheetName = 'Revenue Analysis';
+        excelData = contractsWithVirtuals.map(c => ({
+          'Contract Number': c.contractNumber,
+          'Customer Name': c.customer ? (c.customer as any).name : 'Unknown',
+          'Contract Value': c.contractValue || 0,
+          'AMC Type': c.amcType,
+          'Status': c.status,
+          'Created Date': c.createdAt,
+          'AMC Start Date': c.amcStartDate,
+          'AMC End Date': c.amcEndDate
+        }));
+        break;
+
+      case 'visit_completion':
+        sheetName = 'Visit Completion';
+        excelData = contractsWithVirtuals.map(c => ({
+          'Contract Number': c.contractNumber,
+          'Customer Name': c.customer ? (c.customer as any).name : 'Unknown',
+          'Engine Serial Number': c.engineSerialNumber,
+          'Scheduled Visits': c.numberOfVisits || 0,
+          'Completed Visits': c.completedVisits || 0,
+          'Completion Rate (%)': (c.numberOfVisits || 0) > 0 ? ((c.completedVisits || 0) / (c.numberOfVisits || 0)) * 100 : 0,
+          'Next Visit Date': c.nextVisitDate || 'N/A',
+          'Status': c.status
+        }));
+        break;
+
+      case 'expiring_contracts':
+        sheetName = 'Expiring Contracts';
+        const thirtyDaysFromNow = new Date();
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        
+        const expiringContracts = contractsWithVirtuals.filter(c => {
+          if (c.status !== AMCStatus.ACTIVE) return false;
+          if (!c.amcEndDate) return false;
+          const endDate = new Date(c.amcEndDate);
+          return endDate <= thirtyDaysFromNow;
+        });
+
+        excelData = expiringContracts.map(c => ({
+          'Contract Number': c.contractNumber,
+          'Customer Name': c.customer ? (c.customer as any).name : 'Unknown',
+          'Customer Email': c.customer ? (c.customer as any).email : 'N/A',
+          'Customer Phone': c.customer ? (c.customer as any).phone : 'N/A',
+          'Engine Serial Number': c.engineSerialNumber,
+          'Engine Model': c.engineModel,
+          'AMC Type': c.amcType,
+          'AMC End Date': c.amcEndDate,
+          'Contract Value': c.contractValue || 0,
+          'Days Until Expiry': c.daysUntilExpiry,
+          'Number of Visits': c.numberOfVisits,
+          'Completed Visits': c.completedVisits,
+          'Completion Percentage': c.completionPercentage,
+          'Contact Person': c.contactPersonName,
+          'Contact Number': c.contactNumber
+        }));
+        break;
+
+      case 'performance_metrics':
+        sheetName = 'Performance Metrics';
+        excelData = contractsWithVirtuals.map(c => ({
+          'Contract Number': c.contractNumber,
+          'Customer Name': c.customer ? (c.customer as any).name : 'Unknown',
+          'Status': c.status,
+          'Completion Rate (%)': (c.numberOfVisits || 0) > 0 ? ((c.completedVisits || 0) / (c.numberOfVisits || 0)) * 100 : 0,
+          'Days Until Expiry': c.daysUntilExpiry,
+          'Contract Value': c.contractValue || 0,
+          'AMC Type': c.amcType,
+          'Number of Visits': c.numberOfVisits,
+          'Completed Visits': c.completedVisits
+        }));
+        break;
+
+      default:
+        return next(new AppError('Invalid report type', 400));
+    }
+
+    // Validate excelData before creating Excel file
+    if (!excelData || !Array.isArray(excelData) || excelData.length === 0) {
+      return next(new AppError('No data available for export', 400));
+    }
+
+    // Clean the data to ensure all values are valid
+    const cleanedData = excelData.map(row => {
+      const cleanedRow: any = {};
+      Object.keys(row).forEach(key => {
+        const value = (row as any)[key];
+        // Convert undefined, null, or invalid values to empty string
+        if (value === undefined || value === null || value === 'undefined' || value === 'null') {
+          cleanedRow[key] = '';
+        } else if (typeof value === 'object' && value !== null) {
+          // Convert objects to string representation
+          cleanedRow[key] = JSON.stringify(value);
+        } else {
+          cleanedRow[key] = value;
+        }
+      });
+      return cleanedRow;
+    });
+
+    // Create a new workbook and worksheet
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(cleanedData);
+
+    // Set column widths for better formatting
+    if (cleanedData.length > 0) {
+      const columnWidths = Object.keys(cleanedData[0]).map(key => ({
+        wch: Math.max(key.length, 15)
+      }));
+      worksheet['!cols'] = columnWidths;
+    }
+
+    // Add the worksheet to the workbook
+    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+    // Generate Excel buffer with proper options
+    const excelBuffer = XLSX.write(workbook, { 
+      type: 'buffer', 
+      bookType: 'xlsx',
+      compression: true
+    });
+
+    // Set response headers for Excel download
+    res.setHeader('Content-Length', excelBuffer.length);
+
+    // Send the Excel file
+    res.send(excelBuffer);
 
   } catch (error) {
     next(error);

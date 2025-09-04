@@ -1420,6 +1420,7 @@ const InventoryManagement: React.FC = () => {
       case 'purchase_order': return 'Purchase Order';
       case 'service_ticket': return 'Service Ticket';
       case 'sale': return 'Sale';
+      case 'delivery_challan': return 'Delivery Challan';
       default: return 'System Transaction';
     }
   };

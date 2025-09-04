@@ -27,6 +27,7 @@ import { ResetPasswordForm } from "components/features/auth/ResetPasswordForm";
 import DGSales from "pages/DGSales";
 import DGInvoiceForm from "pages/DGInvoiceForm";
 import DGQuotationForm from "pages/DGQuotationForm";
+import DeliveryChallanForm from "../components/DeliveryChallanForm";
 
 const AppRoutes: React.FC = () => {
     return (
@@ -55,6 +56,8 @@ const AppRoutes: React.FC = () => {
             <Route path="/billing/edit/:id" element={<InvoiceForm />} />
             <Route path="/billing/quotation/create" element={<QuotationFormPage />} />
             <Route path="/billing/quotation/edit" element={<QuotationFormPage />} />
+            <Route path="/billing/challan/create" element={<DeliveryChallanForm />} />
+            <Route path="/billing/challan/edit/:id" element={<DeliveryChallanForm />} />
 
             {/* Purchase Invoice Management */}
             <Route path="/purchase-invoice/create" element={<CreatePurchaseinvoiceForm />} />

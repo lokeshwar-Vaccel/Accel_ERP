@@ -8,4 +8,6 @@ export * from './OEMOrder';
 export * from './DGMovement';
 export * from './DGQuotation';
 export * from './PurchaseOrderPayment';
-export * from './DGDetails'; 
+export * from './DGDetails';
+export * from './DeliveryChallan';
+export * from './TransactionCounter'; 

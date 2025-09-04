@@ -98,7 +98,9 @@ export enum AMCStatus {
   ACTIVE = 'active',
   EXPIRED = 'expired',
   CANCELLED = 'cancelled',
-  PENDING = 'pending'
+  PENDING = 'pending',
+  SUSPENDED = 'suspended',
+  DRAFT = 'draft'
 }
 
 // Stock Transaction Types
@@ -174,7 +176,7 @@ export interface IStockLedger extends Document {
   resultingQuantity: number;
   previousQuantity: number;
   referenceId: string;
-  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'sale' | 'reservation';
+  referenceType?: 'purchase_order' | 'service_ticket' | 'adjustment' | 'transfer' | 'sale' | 'reservation' | 'delivery_challan';
   unitCost?: number;
   totalCost?: number;
   batchNumber?: string;
