@@ -29,16 +29,16 @@ export const getInvoices = async (
       paymentStatus,
       customer,
       supplier,
-      dateFrom,
-      dateTo,
+      startDate,
+      endDate,
       invoiceType
     } = req.query as QueryParams & {
       status?: string;
       paymentStatus?: string;
       customer?: string;
       supplier?: string;
-      dateFrom?: string;
-      dateTo?: string;
+      startDate?: string;
+      endDate?: string;
       invoiceType?: 'sale' | 'purchase';
     };
 
@@ -51,17 +51,19 @@ export const getInvoices = async (
     if (supplier) query.supplier = supplier;
     if (invoiceType) query.invoiceType = invoiceType;
 
-    if (dateFrom || dateTo) {
+    if (startDate || endDate) {
       query.issueDate = {};
-      if (dateFrom) query.issueDate.$gte = new Date(dateFrom);
-      if (dateTo) query.issueDate.$lte = new Date(dateTo);
+      if (startDate) query.issueDate.$gte = new Date(startDate);
+      if (endDate) query.issueDate.$lte = new Date(endDate);
     }
 
     // Search functionality
     if (search) {
       query.$or = [
         { invoiceNumber: { $regex: search, $options: 'i' } },
-        { notes: { $regex: search, $options: 'i' } }
+        { notes: { $regex: search, $options: 'i' } },
+        { externalInvoiceNumber: { $regex: search, $options: 'i' } },
+        { poNumber: { $regex: search, $options: 'i' } }
       ];
     }
 
@@ -75,7 +77,9 @@ export const getInvoices = async (
       .populate('location', 'name address')
       .populate('createdBy', 'firstName lastName')
       .populate('assignedEngineer', 'firstName lastName email phone')
+      .populate('sourceQuotation', 'quotationNumber issueDate validUntil grandTotal status paymentStatus')
       .populate('items.product', 'name category brand partNo hsnNumber')
+      .populate('poFromCustomer', 'poNumber status totalAmount orderDate expectedDeliveryDate poPdf')
       .sort(sort as string)
       .skip(skip)
       .limit(Number(limit));
@@ -121,7 +125,8 @@ export const getInvoice = async (
       .populate('location', 'name address type')
       .populate('createdBy', 'firstName lastName email')
       .populate('assignedEngineer', 'firstName lastName email phone')
-      .populate('items.product', 'name category brand modelNumber');
+      .populate('items.product', 'name category brand modelNumber')
+      .populate('poFromCustomer', 'poNumber status totalAmount orderDate expectedDeliveryDate poPdf');
 
     if (!invoice) {
       return next(new AppError('Invoice not found', 404));
@@ -182,6 +187,10 @@ export const createInvoice = async (
       sourceQuotation,
       quotationNumber,
       quotationPaymentDetails,
+      // PO From Customer fields
+      poFromCustomer,
+      poNumber,
+      poPdf,
       // New fields from quotation
       subject,
       engineSerialNumber,
@@ -195,6 +204,23 @@ export const createInvoice = async (
 
     // Generate invoice number
     const invoiceNumber = await generateReferenceId('invoice');
+
+    // Debug quotation and PO From Customer data
+    console.log('Quotation and PO From Customer data received:', {
+      quotation: {
+        sourceQuotation,
+        quotationNumber,
+        hasSourceQuotation: !!sourceQuotation
+      },
+      poFromCustomer: {
+        poFromCustomer,
+        poNumber,
+        poPdf,
+        hasPoFromCustomer: !!poFromCustomer,
+        hasPoNumber: !!poNumber,
+        hasPoPdf: !!poPdf
+      }
+    });
 
     // Validate and calculate items
     let calculatedItems = [];
@@ -354,6 +380,15 @@ export const createInvoice = async (
       });
     }
     
+    // Prepare PO From Customer fields for inclusion
+    const poFromCustomerFields = poFromCustomer ? {
+      poFromCustomer,
+      poNumber,
+      poPdf
+    } : {};
+
+    console.log('PO From Customer fields to be included:', poFromCustomerFields);
+
     const invoice = new Invoice({
       invoiceNumber,
       customer,
@@ -399,6 +434,8 @@ export const createInvoice = async (
         quotationNumber,
         quotationPaymentDetails
       }),
+      // PO From Customer fields
+      ...poFromCustomerFields,
       // New fields from quotation
       ...(subject && { subject }),
       ...(engineSerialNumber && { engineSerialNumber }),
@@ -412,8 +449,16 @@ export const createInvoice = async (
 
     await invoice.save();
 
+    // Verify both IDs are stored correctly
+    if (sourceQuotation && !invoice.sourceQuotation) {
+      console.warn('⚠️ Warning: sourceQuotation was provided but not stored in invoice');
+    }
+    if (poFromCustomer && !invoice.poFromCustomer) {
+      console.warn('⚠️ Warning: poFromCustomer was provided but not stored in invoice');
+    }
+
     // Log the created invoice details
-    console.log('Invoice created successfully:', {
+    console.log('Invoice created successfully with IDs:', {
       invoiceNumber: invoice.invoiceNumber,
       subtotal: invoice.subtotal,
       taxAmount: invoice.taxAmount,
@@ -421,8 +466,14 @@ export const createInvoice = async (
       paidAmount: invoice.paidAmount,
       remainingAmount: invoice.remainingAmount,
       paymentStatus: invoice.paymentStatus,
+      // Quotation reference
       sourceQuotation: invoice.sourceQuotation,
       quotationNumber: invoice.quotationNumber,
+      // PO From Customer reference
+      poFromCustomer: invoice.poFromCustomer,
+      poNumber: invoice.poNumber,
+      poPdf: invoice.poPdf,
+      // Additional fields
       batteryBuyBack: invoice.batteryBuyBack,
       serviceCharges: invoice.serviceCharges
     });
@@ -755,21 +806,32 @@ export const getInvoiceStats = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    const { invoiceType } = req.query;
+    
+    // Build match criteria based on invoice type
+    const matchCriteria: any = {};
+    if (invoiceType && invoiceType !== 'all') {
+      matchCriteria.invoiceType = invoiceType;
+    }
+
+    console.log('Invoice stats query - invoiceType:', invoiceType, 'matchCriteria:', matchCriteria);
+
     const [
       totalInvoices,
       paidInvoices,
       overdueInvoices,
       totalRevenue
     ] = await Promise.all([
-      Invoice.countDocuments(),
-      Invoice.countDocuments({ paymentStatus: 'paid' }),
+      Invoice.countDocuments(matchCriteria),
+      Invoice.countDocuments({ ...matchCriteria, paymentStatus: 'paid' }),
       Invoice.countDocuments({
+        ...matchCriteria,
         status: 'sent',
         dueDate: { $lt: new Date() },
         paymentStatus: { $ne: 'paid' }
       }),
       Invoice.aggregate([
-        { $match: { paymentStatus: 'paid' } },
+        { $match: { ...matchCriteria, paymentStatus: 'paid' } },
         { $group: { _id: null, total: { $sum: '$totalAmount' } } }
       ])
     ]);
@@ -781,10 +843,12 @@ export const getInvoiceStats = async (
         totalInvoices,
         paidInvoices,
         overdueInvoices,
-        totalRevenue: totalRevenue[0]?.total || 0
+        totalRevenue: totalRevenue[0]?.total || 0,
+        invoiceType: invoiceType || 'all'
       }
     };
 
+    console.log('Invoice stats response:', response.data);
     res.status(200).json(response);
   } catch (error) {
     next(error);
@@ -1127,6 +1191,77 @@ export const createInvoiceFromQuotation = async (
   } catch (error) {
     console.error('Error creating invoice from quotation:', error);
     next(new AppError('Failed to create invoice from quotation', 500));
+  }
+};
+
+// @desc    Export invoices to Excel
+// @route   GET /api/v1/invoices/export
+// @access  Private
+export const exportInvoices = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const search = req.query.search as string;
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+    const invoiceType = req.query.invoiceType as string;
+
+    // Build filter object (same pattern as quotation export)
+    const filter: any = {};
+
+    if (search) {
+      filter.$or = [
+        { invoiceNumber: { $regex: search, $options: 'i' } },
+        { notes: { $regex: search, $options: 'i' } },
+        { externalInvoiceNumber: { $regex: search, $options: 'i' } },
+        { poNumber: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    if (startDate && startDate !== 'undefined' && startDate !== 'null') {
+      filter.issueDate = filter.issueDate || {};
+      filter.issueDate.$gte = new Date(startDate);
+    }
+    if (endDate && endDate !== 'undefined' && endDate !== 'null') {
+      filter.issueDate = filter.issueDate || {};
+      filter.issueDate.$lte = new Date(endDate);
+    }
+
+    if (invoiceType) {
+      filter.invoiceType = invoiceType;
+    }
+
+    // Get all invoices matching the filter
+    const invoices = await Invoice.find(filter)
+      .populate('customer', 'name email phone addresses')
+      .populate('supplier', 'name email phone addresses')
+      .populate('user', 'firstName lastName email')
+      .populate('items.product', 'name partNo hsnNumber')
+      .sort({ issueDate: -1 });
+
+    // Prepare data for Excel export with proper formatting
+    const exportData = invoices.map((invoice: any, index: number) => ({
+      'S.No': index + 1,
+      'Invoice Number': invoice.invoiceNumber || '',
+      'Customer/Supplier Name': invoice.customer?.name || invoice.supplier?.name || '',
+      'Customer/Supplier Email': invoice.customer?.email || invoice.supplier?.email || '',
+      'Customer/Supplier Phone': invoice.customer?.phone || invoice.supplier?.phone || '',
+      'Issue Date': invoice.issueDate ? new Date(invoice.issueDate).toLocaleDateString('en-GB') : '',
+      'Due Date': invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-GB') : '',
+      'Status': invoice.status || 'Draft',
+      'Payment Status': invoice.paymentStatus || 'Pending',
+      'Total Amount': `₹${(invoice.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+      'Paid Amount': `₹${(invoice.paidAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+      'Remaining Amount': `₹${(invoice.remainingAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+      'External Invoice Number': invoice.externalInvoiceNumber || '',
+      'PO Number': invoice.poNumber || '',
+      'Invoice Type': invoice.invoiceType || '',
+      'Created By': invoice.user ? `${invoice.user.firstName} ${invoice.user.lastName}` : '',
+      'Created At': invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString('en-GB') : '',
+    }));
+
+    res.json({ success: true, data: exportData, message: 'Invoices data prepared for export' });
+  } catch (error) {
+    console.error('Error exporting invoices:', error);
+    next(new AppError('Failed to export invoices', 500));
   }
 };
 

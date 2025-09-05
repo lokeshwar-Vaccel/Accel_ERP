@@ -263,26 +263,158 @@ export const getQuotations = async (req: Request, res: Response, next: NextFunct
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
+    const search = req.query.search as string;
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+    const status = req.query.status as string;
+    const paymentStatus = req.query.paymentStatus as string;
+
+    // Build filter object
+    const filter: any = {};
+
+    // Add search filter
+    if (search) {
+      filter.$or = [
+        { quotationNumber: { $regex: search, $options: 'i' } },
+        { 'customer.name': { $regex: search, $options: 'i' } },
+        { 'customer.email': { $regex: search, $options: 'i' } },
+        { 'customer.phone': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Add status filter
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+
+    // Add payment status filter
+    if (paymentStatus && paymentStatus !== 'all') {
+      filter.paymentStatus = paymentStatus;
+    }
+
+    // Add date filter
+    if (startDate && startDate !== 'undefined' && startDate !== 'null') {
+      filter.issueDate = filter.issueDate || {};
+      filter.issueDate.$gte = new Date(startDate);
+    }
+    if (endDate && endDate !== 'undefined' && endDate !== 'null') {
+      filter.issueDate = filter.issueDate || {};
+      filter.issueDate.$lte = new Date(endDate);
+    }
 
     const [quotations, total] = await Promise.all([
-      Quotation.find()
+      Quotation.find(filter)
         .populate('location', 'name address type gstNumber') // populate location details including GST
         .populate('customer', 'name email phone pan addresses') // populate customer details including addresses
         .populate('assignedEngineer', 'firstName lastName email phone') // populate assigned engineer details
+        // .populate('pofromcustomers', 'poNumber status totalAmount orderDate expectedDeliveryDate')
+        .populate('pofromcustomer', 'poNumber status totalAmount orderDate expectedDeliveryDate poPdf')
         .skip(skip)
         .limit(limit)
         .sort({ issueDate: -1 }),
-      Quotation.countDocuments()
+      Quotation.countDocuments(filter)
     ]);
     
+    console.log('PO from Customer (single object):', (quotations[0] as any)?.pofromcustomer);
+    // Log the PO from Customer data (single instance)
+    if (quotations.length > 0) {
+      console.log('PO from Customer (single instance):', (quotations[0] as any)?.pofromcustomer);
+      console.log('Full quotation data:', quotations[0]);
+    }
 
     res.json({
+      success: true,
       data: quotations,
-      page,
-      limit,
-      total,
-      totalPages: Math.ceil(total / limit)
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit)
+      }
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Export quotations to Excel
+// @route   GET /api/v1/quotations/export
+export const exportQuotations = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const search = req.query.search as string;
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+    const status = req.query.status as string;
+    const paymentStatus = req.query.paymentStatus as string;
+
+    // Build filter object (same as getQuotations)
+    const filter: any = {};
+
+    if (search) {
+      filter.$or = [
+        { quotationNumber: { $regex: search, $options: 'i' } },
+        { 'customer.name': { $regex: search, $options: 'i' } },
+        { 'customer.email': { $regex: search, $options: 'i' } },
+        { 'customer.phone': { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Add status filter
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+
+    // Add payment status filter
+    if (paymentStatus && paymentStatus !== 'all') {
+      filter.paymentStatus = paymentStatus;
+    }
+
+    if (startDate && startDate !== 'undefined' && startDate !== 'null') {
+      filter.issueDate = filter.issueDate || {};
+      filter.issueDate.$gte = new Date(startDate);
+    }
+    if (endDate && endDate !== 'undefined' && endDate !== 'null') {
+      filter.issueDate = filter.issueDate || {};
+      filter.issueDate.$lte = new Date(endDate);
+    }
+
+    // Get all quotations matching the filter
+    const quotations = await Quotation.find(filter)
+      .populate('location', 'name address type gstNumber')
+      .populate('customer', 'name email phone pan addresses')
+      .populate('assignedEngineer', 'firstName lastName email phone')
+      .sort({ issueDate: -1 });
+
+    // Prepare data for Excel export with proper formatting
+    const exportData = quotations.map((quotation: any, index: number) => ({
+      'S.No': index + 1,
+      'Quotation Number': quotation.quotationNumber || '',
+      'Customer Name': quotation.customer?.name || '',
+      'Customer Email': quotation.customer?.email || '',
+      'Customer Phone': quotation.customer?.phone || '',
+      'Issue Date': quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString('en-GB') : '',
+      'Valid Until': quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString('en-GB') : '',
+      'Status': quotation.status || 'Draft',
+      'Payment Status': quotation.paymentStatus || 'Pending',
+      'Total Amount': `₹${(quotation.grandTotal || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+      'Paid Amount': `₹${(quotation.paidAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+      'Remaining Amount': `₹${(quotation.remainingAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+      'Location': quotation.location?.name || '',
+      'Assigned Engineer': quotation.assignedEngineer ? `${quotation.assignedEngineer.firstName} ${quotation.assignedEngineer.lastName}` : '',
+      'Created At': quotation.createdAt ? new Date(quotation.createdAt).toLocaleDateString('en-GB') : '',
+    }));
+
+    // Set response headers for Excel download
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=quotations.xlsx');
+
+    // For now, return JSON data (you can implement actual Excel generation later)
+    res.json({
+      success: true,
+      data: exportData,
+      message: 'Quotations data prepared for export'
+    });
+
   } catch (error) {
     next(error);
   }
@@ -725,24 +857,41 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
       return next(new AppError('Quotation not found', 404));
     }
 
-    // Sanitize and validate the update data
-    const sanitizedData = sanitizeQuotationData(req.body);
+    // Check if this is a status-only update
+    const isStatusOnlyUpdate = Object.keys(req.body).length === 1 && req.body.status;
+    console.log('Is status-only update:', isStatusOnlyUpdate);
+    console.log('Request body keys:', Object.keys(req.body));
+    console.log('Request body:', req.body);
     
-    // Preserve the original quotation number and dates
-    sanitizedData.quotationNumber = existingQuotation.quotationNumber;
-    sanitizedData.issueDate = existingQuotation.issueDate;
-    sanitizedData.validUntil = existingQuotation.validUntil;
-    
-    const validationResult = validateQuotationData(sanitizedData);
+    let sanitizedData;
+    if (isStatusOnlyUpdate) {
+      // For status-only updates, just validate the status
+      const validStatuses = ['draft', 'sent', 'accepted', 'rejected'];
+      if (!validStatuses.includes(req.body.status)) {
+        return next(new AppError('Invalid status. Must be one of: draft, sent, accepted, rejected', 400));
+      }
+      sanitizedData = { status: req.body.status };
+      console.log('Status-only update, sanitized data:', sanitizedData);
+    } else {
+      // For full updates, sanitize and validate all data
+      sanitizedData = sanitizeQuotationData(req.body);
+      
+      // Preserve the original quotation number and dates
+      sanitizedData.quotationNumber = existingQuotation.quotationNumber;
+      sanitizedData.issueDate = existingQuotation.issueDate;
+      sanitizedData.validUntil = existingQuotation.validUntil;
+      
+      const validationResult = validateQuotationData(sanitizedData);
 
-    if (!validationResult.isValid) {
-      const error = new AppError('Validation failed', 400);
-      (error as any).errors = validationResult.errors;
-      return next(error);
+      if (!validationResult.isValid) {
+        const error = new AppError('Validation failed', 400);
+        (error as any).errors = validationResult.errors;
+        return next(error);
+      }
     }
 
-    // Calculate totals if items are provided
-    if (sanitizedData.items && sanitizedData.items.length > 0) {
+    // Calculate totals if items are provided (only for full updates)
+    if (!isStatusOnlyUpdate && sanitizedData.items && sanitizedData.items.length > 0) {
       const calculationResult = calculateQuotationTotals(sanitizedData.items, sanitizedData.overallDiscount || 0);
       sanitizedData.subtotal = calculationResult.subtotal;
       sanitizedData.totalDiscount = calculationResult.totalDiscount;
@@ -754,8 +903,8 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
       sanitizedData.items = calculationResult.items;
     }
 
-    // Handle advance payment calculations if advance amount is provided
-    if (sanitizedData.paidAmount !== undefined) {
+    // Handle advance payment calculations if advance amount is provided (only for full updates)
+    if (!isStatusOnlyUpdate && sanitizedData.paidAmount !== undefined) {
       const totalAmount = sanitizedData.grandTotal || existingQuotation.grandTotal || 0;
       const advanceAmount = sanitizedData.paidAmount || 0;
       
@@ -1310,5 +1459,49 @@ export const sendQuotationEmailToCustomer = async (
     }
     
     next(new AppError(errorMessage, statusCode));
+  }
+};
+
+// @desc    Get quotation statistics
+// @route   GET /api/v1/quotations/stats
+// @access  Private
+export const getQuotationStats = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const [
+      totalQuotations,
+      sentQuotations,
+      acceptedQuotations,
+      rejectedQuotations,
+      totalValue
+    ] = await Promise.all([
+      Quotation.countDocuments(),
+      Quotation.countDocuments({ status: 'sent' }),
+      Quotation.countDocuments({ status: 'accepted' }),
+      Quotation.countDocuments({ status: 'rejected' }),
+      Quotation.aggregate([
+        { $group: { _id: null, total: { $sum: '$grandTotal' } } }
+      ])
+    ]);
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Quotation statistics retrieved successfully',
+      data: {
+        totalQuotations,
+        sentQuotations,
+        acceptedQuotations,
+        rejectedQuotations,
+        quotationValue: totalValue[0]?.total || 0
+      }
+    };
+
+    console.log('Quotation stats response:', response.data);
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
   }
 }; 

@@ -464,8 +464,10 @@ class ApiClient {
         body: JSON.stringify(data),
       }),
 
-    getStats: () =>
-      this.makeRequest<{ success: boolean; data: any }>('/invoices/stats'),
+    getStats: (invoiceType?: string) => {
+      const queryString = invoiceType ? `?invoiceType=${invoiceType}` : '';
+      return this.makeRequest<{ success: boolean; data: any }>(`/invoices/stats${queryString}`);
+    },
 
     sendEmail: (id: string) =>
       this.makeRequest<{ success: boolean; data: { paymentLink: string }; message: string }>(`/invoices/${id}/send-email`, {
@@ -476,6 +478,11 @@ class ApiClient {
       this.makeRequest<{ success: boolean; message: string }>(`/invoices/${id}/send-reminder`, {
         method: 'PUT',
       }),
+
+    export: (params?: any) => {
+      const queryString = params ? `?${new URLSearchParams(params)}` : '';
+      return this.makeRequest<{ success: boolean; data: any[]; message: string }>(`/invoices/export${queryString}`);
+    },
   };
 
   // DG Invoice APIs
@@ -603,6 +610,34 @@ class ApiClient {
     getInfo: (filename: string) =>
       this.makeRequest<{ success: boolean; data: any }>(`/qr-code/${filename}`),
   };
+
+    // PO Files Management APIs
+    poFiles = {
+      upload: (file: File) => {
+        const formData = new FormData();
+        formData.append('pdfFile', file);
+        
+        console.log('PO Files Upload - File details:', {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          hasToken: !!localStorage.getItem('authToken')
+        });
+        
+        return this.makeRequest<{ success: boolean; data: any }>('/po-files/upload', {
+          method: 'POST',
+          body: formData,
+        });
+      },
+  
+      delete: (filename: string) =>
+        this.makeRequest<{ success: boolean; message: string }>(`/po-files/${filename}`, {
+          method: 'DELETE',
+        }),
+  
+      getInfo: (filename: string) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/po-files/${filename}`),
+    };
 
   // Service Management APIs
   services = {
@@ -1383,6 +1418,14 @@ class ApiClient {
           Authorization: `Bearer ${localStorage.getItem('authToken') || ''}`
         }
       }).then(res => res.blob()),
+
+    export: (params?: any) => {
+      const queryString = params ? `?${new URLSearchParams(params)}` : '';
+      return this.makeRequest<{ success: boolean; data: any[]; message: string }>(`/quotations/export${queryString}`);
+    },
+
+    getStats: () =>
+      this.makeRequest<{ success: boolean; data: any }>('/quotations/stats'),
   };
 
   // Delivery Challans
@@ -1860,6 +1903,56 @@ class ApiClient {
 
 
   };
+
+    // PO From Customer APIs
+    poFromCustomers = {
+      getAll: (params?: any) =>
+        this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/po-from-customers${params ? `?${new URLSearchParams(params)}` : ''}`),
+  
+      getById: (id: string) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/po-from-customers/${id}`),
+  
+      create: (poData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>('/po-from-customers', {
+          method: 'POST',
+          body: JSON.stringify(poData),
+        }),
+  
+      update: (id: string, poData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>(`/po-from-customers/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(poData),
+        }),
+  
+      delete: (id: string) =>
+        this.makeRequest<{ success: boolean; message: string }>(`/po-from-customers/${id}`, {
+          method: 'DELETE',
+        }),
+  
+      updateStatus: (id: string, statusData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>(`/po-from-customers/${id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify(statusData),
+        }),
+  
+      export: (params?: any) => {
+        const queryString = params ? `?${new URLSearchParams(params)}` : '';
+        return this.makeRequest<{ success: boolean; data: any[]; message: string }>(`/po-from-customers/export${queryString}`);
+      },
+  
+      getStats: () =>
+        this.makeRequest<{ success: boolean; data: any }>('/po-from-customers/stats'),
+  
+      // uploadPdf: (id: string, formData: FormData) =>
+      //   this.makeRequest<{ success: boolean; data: any; message: string }>(`/po-from-customers/${id}/upload-pdf`, {
+      //     method: 'POST',
+      //     body: formData,
+      //     headers: {
+      //       // Don't set Content-Type, let the browser set it with boundary for FormData
+      //       Authorization: `Bearer ${localStorage.getItem('authToken')}`,
+      //     },
+      //   }),
+    };
 
   // Feedback APIs
   feedback = {

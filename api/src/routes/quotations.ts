@@ -13,7 +13,9 @@ import {
   createDGSalesQuotation,
   listDGSalesQuotations,
   updateQuotationPayment,
-  sendQuotationEmailToCustomer
+  sendQuotationEmailToCustomer,
+  exportQuotations,
+  getQuotationStats
 } from '../controllers/quotationController';
 
 const router = Router();
@@ -31,6 +33,8 @@ router.post('/dg-sales', checkPermission('write'), createDGSalesQuotation);
 
 // CRUD routes for Quotation
 router.get('/', checkPermission('read'), getQuotations);
+router.get('/stats', checkPermission('read'), getQuotationStats);
+router.get('/export', checkPermission('read'), exportQuotations);
 router.get('/:id', checkPermission('read'), getQuotationById);
 router.post('/', checkPermission('write'), createQuotation);
 router.post('/from-image', checkPermission('write'), createQuotationFromImage);

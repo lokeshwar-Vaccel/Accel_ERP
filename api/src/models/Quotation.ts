@@ -321,6 +321,23 @@ QuotationSchema.pre('save', function(next) {
 
   next();
 });
+// Virtual populate for PO from Customers that reference this quotation (array)
+QuotationSchema.virtual('pofromcustomers', {
+  ref: 'POFromCustomer',
+  localField: '_id',
+  foreignField: 'quotationNumber'
+});
 
+// Virtual populate for single PO from Customer instance
+QuotationSchema.virtual('pofromcustomer', {
+  ref: 'POFromCustomer',
+  localField: '_id',
+  foreignField: 'quotationNumber',
+  justOne: true
+});
+
+// Ensure virtual fields are serialized
+QuotationSchema.set('toJSON', { virtuals: true });
+QuotationSchema.set('toObject', { virtuals: true });
 
 export const Quotation = mongoose.model<IQuotation>('Quotation', QuotationSchema); 

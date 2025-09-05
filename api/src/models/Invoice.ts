@@ -73,6 +73,8 @@ export interface IInvoice extends mongoose.Document {
     remainingAmount: number; // Remaining amount from quotation
     paymentStatus: string; // Payment status from quotation
   };
+  poFromCustomer?: mongoose.Types.ObjectId; // Reference to PO From Customer
+  poPdf?: string; // PO PDF file URL or base64
   location: mongoose.Types.ObjectId;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -170,7 +172,7 @@ const invoiceItemSchema = new Schema({
   },
   uom: {
     type: String,
-    enum: ['kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'],
+    enum: ['kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos', 'eu'],
     default: 'nos'
   },
   discount: {
@@ -327,7 +329,7 @@ const invoiceSchema = new Schema<IInvoice>({
   terms: {
     type: String,
     trim: true,
-    default: 'Payment due within 30 days'
+    default: ''
   },
   invoiceType: {
     type: String,
@@ -370,6 +372,21 @@ const invoiceSchema = new Schema<IInvoice>({
       required: false
     }
   },
+  // PO From Customer reference
+  poFromCustomer: {
+    type: Schema.Types.ObjectId,
+    ref: 'POFromCustomer',
+    required: false
+  },
+  poNumber: {
+    type: String,
+    trim: true,
+    required: false
+  },
+  poPdf: {
+    type: String,
+    required: false
+  },
   location: {
     type: Schema.Types.ObjectId,
     ref: 'StockLocation',
@@ -391,10 +408,6 @@ const invoiceSchema = new Schema<IInvoice>({
     default: null
   },
   supplierEmail: {
-    type: String,
-    trim: true
-  },
-  poNumber: {
     type: String,
     trim: true
   },

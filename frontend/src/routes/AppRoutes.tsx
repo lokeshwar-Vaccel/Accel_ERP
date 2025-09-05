@@ -28,6 +28,8 @@ import DGSales from "pages/DGSales";
 import DGInvoiceForm from "pages/DGInvoiceForm";
 import DGQuotationForm from "pages/DGQuotationForm";
 import DeliveryChallanForm from "../components/DeliveryChallanForm";
+import CreatePOFromCustomerForm from "pages/CreatePOFromCustomerForm";
+import POFromCustomerManagement from "pages/POFromCustomerManagement";
 
 const AppRoutes: React.FC = () => {
     return (
@@ -62,6 +64,12 @@ const AppRoutes: React.FC = () => {
             {/* Purchase Invoice Management */}
             <Route path="/purchase-invoice/create" element={<CreatePurchaseinvoiceForm />} />
             <Route path="/purchase-invoice/edit/:id" element={<CreatePurchaseinvoiceForm />} />
+
+            {/* PO From Customer Management */}
+            <Route path="/po-from-customer-management" element={<POFromCustomerManagement />} />
+            <Route path="/po-from-customer/create" element={<CreatePOFromCustomerForm />} />
+            <Route path="/po-from-customer/edit/:id" element={<CreatePOFromCustomerForm />} />
+            <Route path="/po-from-customer/:id" element={<CreatePOFromCustomerForm />} />
 
             {/* Service Management */}
             <Route path="/service-management" element={<ServiceManagement />} />

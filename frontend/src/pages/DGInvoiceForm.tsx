@@ -2763,7 +2763,7 @@ const DGInvoiceFormPage: React.FC = () => {
                         />
                         {showUomDropdowns[index] && (
                           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50">
-                            {['nos', 'kg', 'litre', 'meter', 'sq.ft', 'pieces'].map(uomOption => (
+                            {['nos', 'kg', 'litre', 'meter', 'sq.ft', 'pieces', 'eu'].map(uomOption => (
                               <button
                                 key={uomOption}
                                 onClick={() => {

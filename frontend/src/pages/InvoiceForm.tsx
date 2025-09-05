@@ -352,6 +352,7 @@ const InvoiceFormPage: React.FC = () => {
         state: billToMatch.state,
         district: billToMatch.district,
         pincode: billToMatch.pincode,
+        gstNumber: billToMatch.gstNumber || '',
         addressId: billToMatch.id
       } : billToAddress,
       shipToAddress: shipToMatch ? {
@@ -359,6 +360,7 @@ const InvoiceFormPage: React.FC = () => {
         state: shipToMatch.state,
         district: shipToMatch.district,
         pincode: shipToMatch.pincode,
+        gstNumber: shipToMatch.gstNumber || '',
         addressId: shipToMatch.id
       } : shipToAddress
     };
@@ -436,6 +438,10 @@ const InvoiceFormPage: React.FC = () => {
             sourceQuotation: quotationData.sourceQuotation,
             quotationNumber: quotationData.quotationNumber,
             quotationPaymentDetails: quotationData.quotationPaymentDetails
+          }),
+          // Add PO From Customer data if available
+          ...(quotationData.poFromCustomer && {
+            poFromCustomer: quotationData.poFromCustomer
           })
         };
         
@@ -1497,11 +1503,31 @@ const InvoiceFormPage: React.FC = () => {
           sourceQuotation: sanitizedData.sourceQuotation,
           quotationNumber: sanitizedData.quotationNumber,
           quotationPaymentDetails: sanitizedData.quotationPaymentDetails
+        }),
+        // Include PO From Customer data if available
+        ...(sanitizedData.poFromCustomer && {
+          poFromCustomer: sanitizedData.poFromCustomer._id,
+          poNumber: sanitizedData.poFromCustomer.poNumber,
+          poPdf: sanitizedData.poFromCustomer.pdfFile
         })
       };
 
       console.log('Submitting invoice data:', invoiceData);
       console.log('Overall discount amount being sent:', invoiceData.overallDiscountAmount);
+      console.log('Quotation reference fields being sent:', {
+        sourceQuotation: invoiceData.sourceQuotation,
+        quotationNumber: invoiceData.quotationNumber,
+        quotationPaymentDetails: invoiceData.quotationPaymentDetails
+      });
+      console.log('PO From Customer fields being sent:', {
+        poFromCustomer: invoiceData.poFromCustomer,
+        poNumber: invoiceData.poNumber,
+        poPdf: invoiceData.poPdf
+      });
+      console.log('Both IDs being stored in invoice:', {
+        quotationId: invoiceData.sourceQuotation,
+        poFromCustomerId: invoiceData.poFromCustomer
+      });
 
       if (isEditMode) {
         await apiClient.invoices.update(id!, invoiceData);
@@ -2292,6 +2318,51 @@ const InvoiceFormPage: React.FC = () => {
         </div>
       )}
 
+      {/* PO From Customer Banner */}
+      {formData.poFromCustomer && (() => {
+        console.log('PO From Customer data in form:', formData.poFromCustomer);
+        return (
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mt-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-3">
+              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                <FileText className="w-4 h-4 text-green-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-medium text-green-900">
+                  PO From Customer Details
+                </h3>
+                <p className="text-xs text-green-700">
+                  PO Number: {formData.poFromCustomer.poNumber} • 
+                  Status: {formData.poFromCustomer.status} • 
+                  Amount: ₹{formData.poFromCustomer.totalAmount?.toFixed(2) || '0.00'} • 
+                  Order Date: {formData.poFromCustomer.orderDate ? new Date(formData.poFromCustomer.orderDate).toLocaleDateString() : 'N/A'}
+                  {formData.poFromCustomer.expectedDeliveryDate && (
+                    <span className="ml-2">
+                      • Expected Delivery: {new Date(formData.poFromCustomer.expectedDeliveryDate).toLocaleDateString()}
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {formData.poFromCustomer?.pdfFile && (
+                <button
+                  onClick={() => window.open(formData.poFromCustomer?.pdfFile, '_blank')}
+                  className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full hover:bg-green-200 transition-colors"
+                >
+                  View PDF
+                </button>
+              )}
+              <div className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                Auto-filled from PO
+              </div>
+            </div>
+          </div>
+        </div>
+        );
+      })()}
+
       {/* Form Content */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="p-6 space-y-6">
@@ -2327,9 +2398,6 @@ const InvoiceFormPage: React.FC = () => {
                     if (isFromQuotation) return; // Disable dropdown when from quotation
                     setShowLocationDropdown(true);
                     setHighlightedLocationIndex(-1);
-                    if (!locationSearchTerm && formData.location) {
-                      setLocationSearchTerm('');
-                    }
                   }}
                   autoComplete="off"
                   onKeyDown={isFromQuotation ? undefined : handleLocationKeyDown}
@@ -2398,12 +2466,12 @@ const InvoiceFormPage: React.FC = () => {
                   </div>
                 )}
               </div>
-              {isFromQuotation && (
+              {/* {isFromQuotation && (
                 <p className="mt-1 text-sm text-blue-600 bg-blue-50 p-2 rounded-md border border-blue-200">
                   ℹ️ Location field is locked because this invoice is being created from a quotation. 
                   The location cannot be changed.
                 </p>
-              )}
+              )} */}
             </div>
 
             <div>
@@ -2506,12 +2574,12 @@ const InvoiceFormPage: React.FC = () => {
                   </div>
                 )}
               </div>
-              {isFromQuotation && (
+              {/* {isFromQuotation && (
                 <p className="mt-1 text-sm text-blue-600 bg-blue-50 p-2 rounded-md border border-blue-200">
                   ℹ️ Customer field is locked because this invoice is being created from a quotation. 
                   The customer cannot be changed.
                 </p>
-              )}
+              )} */}
             </div>
 
             {/* Bill To and Ship To Addresses */}
@@ -2576,6 +2644,7 @@ const InvoiceFormPage: React.FC = () => {
                                 state: address.state,
                                 district: address.district,
                                 pincode: address.pincode,
+                                gstNumber: address.gstNumber || '',
                                 ...(address.id && { addressId: address.id })
                               } as any
                             });
@@ -2667,6 +2736,7 @@ const InvoiceFormPage: React.FC = () => {
                                 state: address.state,
                                 district: address.district,
                                 pincode: address.pincode,
+                                gstNumber: address.gstNumber || '',
                                 ...(address.id && { addressId: address.id })
                               } as any
                             });
@@ -3661,7 +3731,7 @@ const InvoiceFormPage: React.FC = () => {
                         />
                         {showUomDropdowns[index] && (
                           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50">
-                            {['nos', 'kg', 'litre', 'meter', 'sq.ft', 'pieces'].map(uomOption => (
+                            {['nos', 'kg', 'litre', 'meter', 'sq.ft', 'pieces', 'eu'].map(uomOption => (
                               <button
                                 key={uomOption}
                                 onClick={() => {
@@ -4183,19 +4253,19 @@ const InvoiceFormPage: React.FC = () => {
                 <div className="overflow-x-auto">
                   <div className="bg-gray-100 border-b border-gray-300 min-w-[1000px]">
                     <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
-                      style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                      style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px' }}>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
-                      <div className="p-3 border-r border-gray-300 bg-gray-200">GST %</div>
+                      {/* <div className="p-3 border-r border-gray-300 bg-gray-200">GST %</div> */}
                       <div className="p-3 text-center bg-gray-200">Total</div>
                     </div>
                   </div>
 
                   <div className="divide-y divide-gray-200 min-w-[1000px]">
                     <div className="grid group hover:bg-blue-50 transition-colors bg-white"
-                      style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                      style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px' }}>
                       
                       {/* Description */}
                       <div className="p-2 border-r border-gray-200">
@@ -4387,7 +4457,7 @@ const InvoiceFormPage: React.FC = () => {
                       </div>
 
                       {/* Tax Rate */}
-                      <div className="p-2 border-r border-gray-200">
+                      {/* <div className="p-2 border-r border-gray-200">
                         <input
                           type="number"
                           min="0"
@@ -4435,7 +4505,7 @@ const InvoiceFormPage: React.FC = () => {
                           }}
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500 text-right"
                         />
-                      </div>
+                      </div> */}
 
                       {/* Total */}
                       <div className="p-2 text-center">
@@ -4540,7 +4610,7 @@ const InvoiceFormPage: React.FC = () => {
           </div>
 
           {/* Overall Discount - Only for Sales Invoices */}
-          {isSalesInvoice && (
+          {/* {isSalesInvoice && (
             <div className="border-t border-gray-200 pt-4">
               <div className="flex justify-end">
                 <div className="w-80">
@@ -4601,7 +4671,7 @@ const InvoiceFormPage: React.FC = () => {
                 </div>
               </div>
             </div>
-          )}
+          )} */}
 
           {/* Totals */}
           <div className="border-t border-gray-200 pt-4">

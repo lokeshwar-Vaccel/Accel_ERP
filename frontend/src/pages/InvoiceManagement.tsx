@@ -45,7 +45,129 @@ import { Pagination } from 'components/ui/Pagination';
 import apiClientQuotation from '../utils/api';
 import UpdatePaymentModal from '../components/UpdatePaymentModal';
 import QuotationPrintModal from '../components/QuotationPrintModal';
+import * as XLSX from 'xlsx';
 
+// Helper function to convert data to Excel with proper formatting
+const convertToExcel = (data: any[]) => {
+  if (!data || data.length === 0) return new Blob([], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  
+  // Create a new workbook
+  const wb = XLSX.utils.book_new();
+  
+  // Convert data to worksheet
+  const ws = XLSX.utils.json_to_sheet(data);
+  
+  // Set column widths for better display
+  const columnWidths = [
+    { wch: 8 },   // S.No
+    { wch: 20 },  // Quotation Number
+    { wch: 25 },  // Customer Name
+    { wch: 30 },  // Customer Email
+    { wch: 15 },  // Customer Phone
+    { wch: 12 },  // Issue Date
+    { wch: 12 },  // Valid Until
+    { wch: 12 },  // Status
+    { wch: 15 },  // Payment Status
+    { wch: 18 },  // Total Amount
+    { wch: 15 },  // Paid Amount
+    { wch: 18 },  // Remaining Amount
+    { wch: 20 },  // Location
+    { wch: 25 },  // Assigned Engineer
+    { wch: 12 },  // Created At
+  ];
+  
+  ws['!cols'] = columnWidths;
+  
+  // Set row heights for better readability
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let row = range.s.r; row <= range.e.r; row++) {
+    ws[`!rows`] = ws[`!rows`] || [];
+    ws[`!rows`][row] = { hpt: 20 }; // Set row height to 20 points
+  }
+  
+  // Add header styling (bold headers)
+  const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+    if (!ws[cellAddress]) continue;
+    
+    ws[cellAddress].s = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "366092" } },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+  }
+  
+  // Add summary row
+  const summaryRow = data.length + 2; // Add 2 rows after data
+  const summaryData = {
+    'S.No': '',
+    'Quotation Number': 'SUMMARY',
+    'Customer Name': '',
+    'Customer Email': '',
+    'Customer Phone': '',
+    'Issue Date': '',
+    'Valid Until': '',
+    'Status': '',
+    'Payment Status': '',
+    'Total Amount': `₹${data.reduce((sum, item) => {
+      const amount = parseFloat(item['Total Amount']?.replace(/[₹,]/g, '') || '0');
+      return sum + amount;
+    }, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+    'Paid Amount': `₹${data.reduce((sum, item) => {
+      const amount = parseFloat(item['Paid Amount']?.replace(/[₹,]/g, '') || '0');
+      return sum + amount;
+    }, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+    'Remaining Amount': `₹${data.reduce((sum, item) => {
+      const amount = parseFloat(item['Remaining Amount']?.replace(/[₹,]/g, '') || '0');
+      return sum + amount;
+    }, 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+    'Location': '',
+    'Assigned Engineer': '',
+    'Created At': '',
+  };
+  
+  // Add summary row to worksheet
+  XLSX.utils.sheet_add_json(ws, [summaryData], { origin: -1, skipHeader: true });
+  
+  // Style the summary row
+  const summaryRowRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let col = summaryRowRange.s.c; col <= summaryRowRange.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: summaryRow - 1, c: col });
+    if (!ws[cellAddress]) continue;
+    
+    ws[cellAddress].s = {
+      font: { bold: true },
+      fill: { fgColor: { rgb: "F2F2F2" } },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "medium", color: { rgb: "000000" } },
+        bottom: { style: "medium", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+  }
+  
+  // Add the worksheet to workbook
+  XLSX.utils.book_append_sheet(wb, ws, 'Quotations');
+  
+  // Generate Excel file buffer
+  const excelBuffer = XLSX.write(wb, { 
+    bookType: 'xlsx', 
+    type: 'array',
+    cellStyles: true,
+    compression: true
+  });
+  
+  return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
 
 // Types
 interface Invoice {
@@ -142,6 +264,7 @@ interface Invoice {
   shipToAddress?: {
     id: number;
     address: string;
+    state: string;
     district: string;
     pincode: string;
     isPrimary: boolean;
@@ -343,6 +466,7 @@ interface NewInvoice {
   shipToAddress?: {
     id: number;
     address: string;
+    state: string;
     district: string;
     pincode: string;
     isPrimary: boolean;
@@ -447,11 +571,23 @@ const InvoiceManagement: React.FC = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [locations, setLocations] = useState<StockLocationData[]>([]);
   const [generalSettings, setGeneralSettings] = useState<any>(null);
-  const [stats, setStats] = useState<InvoiceStats>({
+  const [stats, setStats] = useState<any>({
+    // Invoice stats
     totalInvoices: 0,
     paidInvoices: 0,
     overdueInvoices: 0,
-    totalRevenue: 0
+    totalRevenue: 0,
+    // Quotation stats
+    totalQuotations: 0,
+    sentQuotations: 0,
+    acceptedQuotations: 0,
+    rejectedQuotations: 0,
+    quotationValue: 0,
+    // Purchase invoice stats
+    totalPurchaseInvoices: 0,
+    paidPurchaseInvoices: 0,
+    pendingPurchaseInvoices: 0,
+    totalPurchaseAmount: 0
   });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -463,6 +599,14 @@ const InvoiceManagement: React.FC = () => {
   const [paymentFilter, setPaymentFilter] = useState('all');
   const [quotations, setQuotations] = useState<any[]>([]);
   const [quotationLoading, setQuotationLoading] = useState(false);
+  const [updatingQuotationStatus, setUpdatingQuotationStatus] = useState<string | null>(null);
+  const [openStatusDropdown, setOpenStatusDropdown] = useState<string | null>(null);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [fromDateSale, setFromDateSale] = useState('');
+  const [toDateSale, setToDateSale] = useState('');
+  const [fromDatePurchase, setFromDatePurchase] = useState('');
+  const [toDatePurchase, setToDatePurchase] = useState('');
   const [deliveryChallans, setDeliveryChallans] = useState<any[]>([]);
   const [deliveryChallanLoading, setDeliveryChallanLoading] = useState(false);
   const [viewDeliveryChallan, setViewDeliveryChallan] = useState<any>(null);
@@ -966,7 +1110,7 @@ const InvoiceManagement: React.FC = () => {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as Element;
-      if (!target.closest('.dropdown-container')) {
+      if (!target.closest('.dropdown-container') && !target.closest('.status-dropdown-container')) {
         setShowStatusFilterDropdown(false);
         setShowPaymentFilterDropdown(false);
         setShowCustomerDropdown(false);
@@ -975,6 +1119,7 @@ const InvoiceManagement: React.FC = () => {
         setShowProductDropdowns({});
         setShowStatusUpdateDropdown(false);
         setShowPaymentStatusDropdown(false);
+        setOpenStatusDropdown(null);
         setShowPaymentMethodDropdown(false);
       }
     };
@@ -991,9 +1136,10 @@ const InvoiceManagement: React.FC = () => {
         fetchCustomers(),
         fetchProducts(),
         fetchLocations(),
-        fetchStats(),
         fetchGeneralSettings()
       ]);
+      // Fetch stats after data is loaded
+      await fetchStats();
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -1011,6 +1157,17 @@ const InvoiceManagement: React.FC = () => {
       ...(statusFilter !== 'all' && { status: statusFilter }),
       ...(invoiceType && { invoiceType }),
     };
+
+    // Add date filters based on invoice type
+    if (invoiceType === 'sale') {
+      if (fromDateSale) params.startDate = fromDateSale;
+      if (toDateSale) params.endDate = toDateSale;
+    } else if (invoiceType === 'purchase') {
+      if (fromDatePurchase) params.startDate = fromDatePurchase;
+      if (toDatePurchase) params.endDate = toDatePurchase;
+    }
+
+    console.log('Fetching invoices with params:', params);
 
     try {
       const response = await apiClient.invoices.getAll(params);
@@ -1032,14 +1189,21 @@ const InvoiceManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    if (invoiceType === 'quotation') {
-      fetchQuotations();
-    } else if (invoiceType === 'challan') {
-      fetchDeliveryChallans();
-    } else {
-      fetchInvoices();
-    }
-  }, [currentPage, limit, sort, searchTerm, statusFilter, paymentFilter, invoiceType, searchQuotationTerm]);
+    const loadDataAndStats = async () => {
+      if (invoiceType === 'quotation') {
+        await fetchQuotations();
+      } else if (invoiceType === 'challan') {
+        fetchDeliveryChallans();
+      }  else {
+        await fetchInvoices();
+      }
+      // Fetch stats after data is loaded
+      await fetchStats();
+    };
+    
+    loadDataAndStats();
+  }, [currentPage, limit, sort, searchTerm, statusFilter, paymentFilter, invoiceType, searchQuotationTerm, fromDate, toDate, fromDateSale, toDateSale, fromDatePurchase, toDatePurchase]);
+
 
 
 
@@ -1059,26 +1223,43 @@ const InvoiceManagement: React.FC = () => {
   const fetchQuotations = async () => {
     setQuotationLoading(true);
     try {
-      const response = await apiClientQuotation.quotations.getAll({
+      const params: any = {
         page: currentPage,
         limit,
         sort,
         search: searchQuotationTerm,
-      });
+      };
+      
+      if (fromDate) params.startDate = fromDate;
+      if (toDate) params.endDate = toDate;
+      if (statusFilter && statusFilter !== 'all') params.status = statusFilter;
+      if (paymentFilter && paymentFilter !== 'all') params.paymentStatus = paymentFilter;
+
+      const response = await apiClientQuotation.quotations.getAll(params) as any;
 
       const responseData = response.data as any;
       console.log("responseData:", responseData);
-
+      console.log("responseData.pagination:", responseData.pagination);
 
       let quotationsData = [];
-      if (responseData.pagination) {
-        quotationsData = responseData.quotations || [];
-        setCurrentPage(responseData.pagination.page);
-        setLimit(responseData.pagination.limit);
-        setTotalDatas(responseData.pagination.total);
-        setTotalPages(responseData.pagination.pages);
+      if (response?.pagination) {
+        quotationsData = response?.data || [];
+        setCurrentPage(response?.pagination.page);
+        setLimit(response?.pagination.limit);
+        setTotalDatas(response?.pagination.total);
+        setTotalPages(response?.pagination.pages);
+        console.log("Pagination set:", {
+          page: response?.pagination.page,
+          limit: response?.pagination.limit,
+          total: response?.pagination.total,
+          pages: response?.pagination.pages
+        });
       } else {
-        quotationsData = responseData || [];
+        quotationsData = response || [];
+        console.log("No pagination data found, using fallback");
+        // Set default pagination values if not provided
+        setTotalDatas(response?.length);
+        setTotalPages(response?.pagination.pages);
       }
 
       // Resolve address IDs to actual address text for existing quotations
@@ -1220,10 +1401,73 @@ const InvoiceManagement: React.FC = () => {
 
   const fetchStats = async () => {
     try {
-      const response = await apiClient.invoices.getStats();
-      setStats(response.data);
+      console.log('Fetching stats for invoice type:', invoiceType);
+      if (invoiceType === 'quotation') {
+        console.log('Fetching quotation stats...');
+        await fetchQuotationStats();
+      } else if (invoiceType === 'purchase') {
+        console.log('Fetching purchase invoice stats...');
+        await fetchPurchaseInvoiceStats();
+      } else {
+        console.log('Fetching sales invoice stats...');
+        await fetchSalesInvoiceStats();
+      }
+      console.log('Current stats state:', stats);
     } catch (error) {
       console.error('Error fetching stats:', error);
+    }
+  };
+
+  const fetchSalesInvoiceStats = async () => {
+    try {
+      console.log('Fetching sales invoice stats...');
+      const response = await apiClient.invoices.getStats('sale');
+      console.log('Sales invoice stats response:', response);
+      setStats((prev: any) => ({
+        ...prev,
+        totalInvoices: response.data.totalInvoices || 0,
+        paidInvoices: response.data.paidInvoices || 0,
+        overdueInvoices: response.data.overdueInvoices || 0,
+        totalRevenue: response.data.totalRevenue || 0
+      }));
+    } catch (error) {
+      console.error('Error fetching sales invoice stats:', error);
+    }
+  };
+
+  const fetchQuotationStats = async () => {
+    try {
+      console.log('Fetching quotation stats from API...');
+      const response = await apiClient.quotations.getStats();
+      console.log('Quotation stats response:', response);
+      
+      setStats((prev: any) => ({
+        ...prev,
+        totalQuotations: response.data.totalQuotations || 0,
+        sentQuotations: response.data.sentQuotations || 0,
+        acceptedQuotations: response.data.acceptedQuotations || 0,
+        rejectedQuotations: response.data.rejectedQuotations || 0,
+        quotationValue: response.data.quotationValue || 0
+      }));
+    } catch (error) {
+      console.error('Error fetching quotation stats:', error);
+    }
+  };
+
+  const fetchPurchaseInvoiceStats = async () => {
+    try {
+      console.log('Fetching purchase invoice stats...');
+      const response = await apiClient.invoices.getStats('purchase');
+      console.log('Purchase invoice stats response:', response);
+      setStats((prev: any) => ({
+        ...prev,
+        totalPurchaseInvoices: response.data.totalInvoices || 0,
+        paidPurchaseInvoices: response.data.paidInvoices || 0,
+        pendingPurchaseInvoices: response.data.overdueInvoices || 0, // Using overdue as pending for purchase
+        totalPurchaseAmount: response.data.totalRevenue || 0 // Using totalRevenue as totalAmount for purchase
+      }));
+    } catch (error) {
+      console.error('Error fetching purchase invoice stats:', error);
     }
   };
 
@@ -1298,9 +1542,144 @@ const InvoiceManagement: React.FC = () => {
     navigate('/billing/quotation/create');
   };
 
+  const handleExportQuotations = async () => {
+    try {
+      // Show loading toast
+      const loadingToast = toast.loading('Exporting quotations to Excel...');
+
+      // Prepare export parameters with current filters
+      const exportParams: any = {
+        search: searchQuotationTerm,
+      };
+      
+      if (fromDate) exportParams.startDate = fromDate;
+      if (toDate) exportParams.endDate = toDate;
+
+      // Call the export API
+      const response = await apiClientQuotation.quotations.export(exportParams);
+      
+      // Convert JSON data to Excel format with proper column widths
+      const blob = convertToExcel(response.data);
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename with current date and filters
+      const currentDate = new Date().toISOString().split('T')[0];
+      const filterSuffix = fromDate || toDate ? `_${fromDate || 'start'}_to_${toDate || 'end'}` : '';
+      link.download = `quotations_${currentDate}${filterSuffix}.xlsx`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.dismiss(loadingToast);
+      toast.success('Quotations exported successfully!');
+    } catch (error) {
+      console.error('Error exporting quotations:', error);
+      toast.error('Failed to export quotations. Please try again.');
+    }
+  };
+
+  const handleExportSaleInvoices = async () => {
+    try {
+      const loadingToast = toast.loading('Exporting sale invoices to Excel...');
+      
+      // Prepare export parameters with current filters
+      const exportParams: any = {
+        search: searchTerm,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        paymentStatus: paymentFilter !== 'all' ? paymentFilter : undefined,
+        invoiceType: 'sale',
+      };
+      
+      if (fromDateSale) exportParams.startDate = fromDateSale;
+      if (toDateSale) exportParams.endDate = toDateSale;
+
+      console.log('Exporting sale invoices with params:', exportParams);
+
+      // Call the export API
+      const response = await apiClient.invoices.export(exportParams);
+      
+      // Convert JSON data to Excel format with proper column widths
+      const blob = convertToExcel(response.data);
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename with current date and filters
+      const currentDate = new Date().toISOString().split('T')[0];
+      const filterSuffix = fromDateSale || toDateSale ? `_${fromDateSale || 'start'}_to_${toDateSale || 'end'}` : '';
+      link.download = `sale_invoices_${currentDate}${filterSuffix}.xlsx`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.dismiss(loadingToast);
+      toast.success('Sale invoices exported successfully!');
+    } catch (error) {
+      console.error('Error exporting sale invoices:', error);
+      toast.error('Failed to export sale invoices. Please try again.');
+    }
+  };
+
+  const handleExportPurchaseInvoices = async () => {
+    try {
+      const loadingToast = toast.loading('Exporting purchase invoices to Excel...');
+      
+      // Prepare export parameters with current filters
+      const exportParams: any = {
+        search: searchTerm,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+        paymentStatus: paymentFilter !== 'all' ? paymentFilter : undefined,
+        invoiceType: 'purchase',
+      };
+      
+      if (fromDatePurchase) exportParams.startDate = fromDatePurchase;
+      if (toDatePurchase) exportParams.endDate = toDatePurchase;
+
+      console.log('Exporting purchase invoices with params:', exportParams);
+
+      // Call the export API
+      const response = await apiClient.invoices.export(exportParams);
+      
+      // Convert JSON data to Excel format with proper column widths
+      const blob = convertToExcel(response.data);
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename with current date and filters
+      const currentDate = new Date().toISOString().split('T')[0];
+      const filterSuffix = fromDatePurchase || toDatePurchase ? `_${fromDatePurchase || 'start'}_to_${toDatePurchase || 'end'}` : '';
+      link.download = `purchase_invoices_${currentDate}${filterSuffix}.xlsx`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.dismiss(loadingToast);
+      toast.success('Purchase invoices exported successfully!');
+    } catch (error) {
+      console.error('Error exporting purchase invoices:', error);
+      toast.error('Failed to export purchase invoices. Please try again.');
+    }
+  };
+
   // Purchase Invoice handlers
   const handleCreatePurchaseInvoice = () => {
     navigate('/purchase-invoice/create');
+  };
+
+  const handleCreatePOFromCustomer = () => {
+    navigate('/po-from-customer-management');
   };
 
   const handleViewQuotation = (quotation: any) => {
@@ -1415,6 +1794,8 @@ const InvoiceManagement: React.FC = () => {
   const handleCreateInvoiceFromQuotation = async (quotation: any) => {
     try {
       console.log('Preparing to create invoice from quotation:', quotation);
+      console.log('Quotation _id:', quotation._id);
+      console.log('Quotation quotationNumber:', quotation.quotationNumber);
 
       // Close the quotation view modal
       setShowQuotationViewModal(false);
@@ -1434,6 +1815,7 @@ const InvoiceManagement: React.FC = () => {
         shipToAddress: quotation.shipToAddress ? {
           id: quotation.shipToAddress.id || quotation.shipToAddress.addressId || 0,
           address: quotation.shipToAddress.address || '',
+          state: quotation.shipToAddress.state || '',
           district: quotation.shipToAddress.district || '',
           pincode: quotation.shipToAddress.pincode || '',
           isPrimary: quotation.shipToAddress.isPrimary || false,
@@ -1482,7 +1864,17 @@ const InvoiceManagement: React.FC = () => {
           paidAmount: quotation.paidAmount || 0,
           remainingAmount: quotation.remainingAmount || 0,
           paymentStatus: quotation.paymentStatus || 'pending'
-        }
+        },
+        // PO From Customer data
+        poFromCustomer: quotation.pofromcustomer ? {
+          _id: quotation.pofromcustomer._id,
+          poNumber: quotation.pofromcustomer.poNumber,
+          status: quotation.pofromcustomer.status,
+          totalAmount: quotation.pofromcustomer.totalAmount,
+          orderDate: quotation.pofromcustomer.orderDate,
+          expectedDeliveryDate: quotation.pofromcustomer.expectedDeliveryDate,
+          pdfFile: quotation.pofromcustomer.poPdf
+        } : null
       };
 
       console.log('Prepared quotation data for InvoiceFormPage:', quotationData);
@@ -1805,6 +2197,53 @@ const InvoiceManagement: React.FC = () => {
       console.error('Error updating invoice status:', error);
       toast.error('Failed to update invoice status. Please try again.');
     }
+  };
+
+  const handleUpdateQuotationStatus = async (quotationId: string, status: string) => {
+    try {
+      console.log('Updating quotation status:', { quotationId, status });
+      
+      // Validate inputs
+      if (!quotationId || !status) {
+        toast.error('Invalid quotation ID or status');
+        return;
+      }
+      
+      setUpdatingQuotationStatus(quotationId);
+      setOpenStatusDropdown(null); // Close dropdown
+      
+      const response = await apiClient.quotations.update(quotationId, { status });
+      console.log('Quotation update response:', response);
+      
+      await fetchQuotations();
+      toast.success(`Quotation status updated to ${status} successfully!`);
+    } catch (error: any) {
+      console.error('Error updating quotation status:', error);
+      console.error('Error details:', {
+        message: error.message,
+        status: error.status,
+        response: error.response
+      });
+      toast.error(`Failed to update quotation status: ${error.message || 'Unknown error'}`);
+    } finally {
+      setUpdatingQuotationStatus(null);
+    }
+  };
+
+  const getStatusOptions = (currentStatus: string) => {
+    const allOptions = [
+      { value: 'draft', label: 'Draft', color: 'bg-yellow-100 text-yellow-800' },
+      { value: 'sent', label: 'Sent', color: 'bg-blue-100 text-blue-800' },
+      { value: 'accepted', label: 'Accepted', color: 'bg-green-100 text-green-800' },
+      { value: 'rejected', label: 'Rejected', color: 'bg-red-100 text-red-800' }
+    ];
+
+    // Filter out current status and final statuses if current is final
+    if (currentStatus === 'accepted' || currentStatus === 'rejected') {
+      return allOptions.filter(option => option.value === currentStatus);
+    }
+    
+    return allOptions.filter(option => option.value !== currentStatus);
   };
 
   const handlePaymentUpdateQuick = async (invoiceId: string, paymentData: any) => {
@@ -2364,8 +2803,12 @@ const InvoiceManagement: React.FC = () => {
   const filteredQuotations = quotations.filter(quotation => {
     const matchesSearch =
       quotation?.quotationNumber?.toLowerCase().includes(searchQuotationTerm.toLowerCase()) ||
-      quotation?.customer?.name?.toLowerCase().includes(searchQuotationTerm.toLowerCase())
-    return matchesSearch;
+      quotation?.customer?.name?.toLowerCase().includes(searchQuotationTerm.toLowerCase());
+    
+    const matchesStatus = statusFilter === 'all' || quotation?.status === statusFilter;
+    const matchesPayment = paymentFilter === 'all' || quotation?.paymentStatus === paymentFilter;
+    
+    return matchesSearch && matchesStatus && matchesPayment;
   });
 
   console.log("filteredQuotations:", filteredQuotations);
@@ -2395,93 +2838,235 @@ const InvoiceManagement: React.FC = () => {
     return icons[status];
   };
 
-  const statCards = invoiceType === 'challan' ? [
-    {
-      title: 'Total Challans',
-      value: deliveryChallans.length,
-      icon: <Package className="w-6 h-6" />,
-      color: 'blue'
-    },
-    {
-      title: 'This Month',
-      value: deliveryChallans.filter(c => {
-        const challanDate = new Date(c.dated);
-        const now = new Date();
-        return challanDate.getMonth() === now.getMonth() && challanDate.getFullYear() === now.getFullYear();
-      }).length,
-      icon: <Calendar className="w-6 h-6" />,
-      color: 'green'
-    },
-    {
-      title: 'This Week',
-      value: deliveryChallans.filter(c => {
-        const challanDate = new Date(c.dated);
-        const now = new Date();
-        const weekStart = new Date(now.setDate(now.getDate() - now.getDay()));
-        const weekEnd = new Date(now.setDate(now.getDate() - now.getDay() + 6));
-        return challanDate >= weekStart && challanDate <= weekEnd;
-      }).length,
-      icon: <Calendar className="w-6 h-6" />,
-      color: 'purple'
-    },
-    {
-      title: 'Today',
-      value: deliveryChallans.filter(c => {
-        const challanDate = new Date(c.dated);
-        const today = new Date();
-        return challanDate.toDateString() === today.toDateString();
-      }).length,
-      icon: <Calendar className="w-6 h-6" />,
-      color: 'orange'
+  const getStatCards = () => {
+    console.log('getStatCards called with invoiceType:', invoiceType, 'stats:', stats);
+    
+    if (invoiceType === 'quotation') {
+      const cards = [
+        {
+          title: 'Total Quotations',
+          value: stats.totalQuotations || 0,
+          icon: <FileText className="w-6 h-6" />,
+          color: 'blue'
+        },
+        {
+          title: 'Sent',
+          value: stats.sentQuotations || 0,
+          icon: <Send className="w-6 h-6" />,
+          color: 'orange'
+        },
+        {
+          title: 'Accepted',
+          value: stats.acceptedQuotations || 0,
+          icon: <CheckCircle className="w-6 h-6" />,
+          color: 'green'
+        },
+        {
+          title: 'Total Value',
+          value: `₹${(stats.quotationValue || 0).toLocaleString()}`,
+          icon: <IndianRupee className="w-6 h-6" />,
+          color: 'purple'
+        }
+      ];
+      console.log('Quotation stat cards:', cards);
+      return cards;
+    } else if (invoiceType === 'purchase') {
+      const cards = [
+        {
+          title: 'Total Purchase Invoices',
+          value: stats.totalPurchaseInvoices || 0,
+          icon: <FileText className="w-6 h-6" />,
+          color: 'blue'
+        },
+        {
+          title: 'Paid',
+          value: stats.paidPurchaseInvoices || 0,
+          icon: <CheckCircle className="w-6 h-6" />,
+          color: 'green'
+        },
+        {
+          title: 'Pending',
+          value: stats.pendingPurchaseInvoices || 0,
+          icon: <Clock className="w-6 h-6" />,
+          color: 'yellow'
+        },
+        {
+          title: 'Total Amount',
+          value: `₹${(stats.totalPurchaseAmount || 0).toLocaleString()}`,
+          icon: <IndianRupee className="w-6 h-6" />,
+          color: 'purple'
+        }
+      ];
+      console.log('Purchase invoice stat cards:', cards);
+      return cards;
+    } else if (invoiceType === 'sale') {
+      // Sales invoices
+      const cards = [
+        {
+          title: 'Total Invoices',
+          value: stats.totalInvoices || 0,
+          icon: <FileText className="w-6 h-6" />,
+          color: 'blue'
+        },
+        {
+          title: 'Paid Invoices',
+          value: stats.paidInvoices || 0,
+          icon: <CheckCircle className="w-6 h-6" />,
+          color: 'green'
+        },
+        {
+          title: 'Overdue',
+          value: stats.overdueInvoices || 0,
+          icon: <AlertTriangle className="w-6 h-6" />,
+          color: 'red'
+        },
+        {
+          title: 'Total Revenue',
+          value: `₹${(stats.totalRevenue || 0).toLocaleString()}`,
+          icon: <IndianRupee className="w-6 h-6" />,
+          color: 'purple'
+        }
+      ];
+      console.log('Sales invoice stat cards:', cards);
+      return cards;
+    } else if (invoiceType === 'challan') {
+      const cards = [
+        {
+          title: 'Total Challans',
+          value: deliveryChallans.length,
+          icon: <Package className="w-6 h-6" />,
+          color: 'blue'
+        },
+        {
+          title: 'This Month',
+          value: deliveryChallans.filter(c => {
+            const challanDate = new Date(c.dated);
+            const now = new Date();
+            return challanDate.getMonth() === now.getMonth() && challanDate.getFullYear() === now.getFullYear();
+          }).length,
+          icon: <Calendar className="w-6 h-6" />,
+          color: 'green'
+        },
+        {
+          title: 'This Week',
+          value: deliveryChallans.filter(c => {
+            const challanDate = new Date(c.dated);
+            const now = new Date();
+            const weekStart = new Date(now.setDate(now.getDate() - now.getDay()));
+            const weekEnd = new Date(now.setDate(now.getDate() - now.getDay() + 6));
+            return challanDate >= weekStart && challanDate <= weekEnd;
+          }).length,
+          icon: <Calendar className="w-6 h-6" />,
+          color: 'purple'
+        },
+        {
+          title: 'Today',
+          value: deliveryChallans.filter(c => {
+            const challanDate = new Date(c.dated);
+            const today = new Date();
+            return challanDate.toDateString() === today.toDateString();
+          }).length,
+          icon: <Calendar className="w-6 h-6" />,
+          color: 'orange'
+        }
+      ];
+      console.log('Challan stat cards:', cards);
+      return cards;
+    } else {
+      // Default fallback
+      const cards = [
+        {
+          title: 'Total Invoices',
+          value: stats.totalInvoices || 0,
+          icon: <FileText className="w-6 h-6" />,
+          color: 'blue'
+        },
+        {
+          title: 'Paid Invoices',
+          value: stats.paidInvoices || 0,
+          icon: <CheckCircle className="w-6 h-6" />,
+          color: 'green'
+        },
+        {
+          title: 'Overdue',
+          value: stats.overdueInvoices || 0,
+          icon: <AlertTriangle className="w-6 h-6" />,
+          color: 'red'
+        },
+        {
+          title: 'Total Revenue',
+          value: `₹${(stats.totalRevenue || 0).toLocaleString()}`,
+          icon: <IndianRupee className="w-6 h-6" />,
+          color: 'purple'
+        }
+      ];
+      console.log('Default stat cards:', cards);
+      return cards;
     }
-  ] : [
-    {
-      title: 'Total Invoices',
-      value: stats.totalInvoices,
-      icon: <FileText className="w-6 h-6" />,
-      color: 'blue'
-    },
-    {
-      title: 'Paid Invoices',
-      value: stats.paidInvoices,
-      icon: <CheckCircle className="w-6 h-6" />,
-      color: 'green'
-    },
-    {
-      title: 'Overdue',
-      value: stats.overdueInvoices,
-      icon: <AlertTriangle className="w-6 h-6" />,
-      color: 'red'
-    },
-    {
-      title: 'Total Revenue',
-      value: `₹${stats.totalRevenue.toLocaleString()}`,
-      icon: <IndianRupee className="w-6 h-6" />,
-      color: 'purple'
-    }
-  ];
+  };
+
+  const statCards = getStatCards();
 
   // Helper functions for dropdown labels
+  const getInvoiceTypeLabel = (type: string) => {
+    const typeMap: { [key: string]: string } = {
+      'quotation': 'Quotation',
+      'sale': 'Sales Invoice',
+      'purchase': 'Purchase Invoice',
+      'challan': 'Delivery Challan'
+    };
+    return typeMap[type] || 'Invoice';
+  };
+
   const getStatusFilterLabel = (value: string) => {
-    const options = [
-      { value: 'all', label: 'All Status' },
-      { value: 'draft', label: 'Draft' },
-      { value: 'sent', label: 'Sent' },
-      { value: 'paid', label: 'Paid' },
-      { value: 'overdue', label: 'Overdue' },
-      { value: 'cancelled', label: 'Cancelled' }
-    ];
+    const options = (invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') ? 
+      (invoiceType === 'quotation' ? [
+        { value: 'all', label: 'All Status' },
+        { value: 'draft', label: 'Draft' },
+        { value: 'sent', label: 'Sent' },
+        { value: 'accepted', label: 'Accepted' },
+        { value: 'rejected', label: 'Rejected' },
+        { value: 'expired', label: 'Expired' }
+      ] : [
+        { value: 'all', label: 'All Status' },
+        { value: 'draft', label: 'Draft' },
+        { value: 'sent', label: 'Sent' },
+        { value: 'paid', label: 'Paid' },
+        { value: 'overdue', label: 'Overdue' },
+        { value: 'cancelled', label: 'Cancelled' }
+      ]) : [
+        { value: 'all', label: 'All Status' },
+        { value: 'draft', label: 'Draft' },
+        { value: 'sent', label: 'Sent' },
+        { value: 'paid', label: 'Paid' },
+        { value: 'overdue', label: 'Overdue' },
+        { value: 'cancelled', label: 'Cancelled' }
+      ];
     return options.find(opt => opt.value === value)?.label || 'All Status';
   };
 
   const getPaymentFilterLabel = (value: string) => {
-    const options = [
-      { value: 'all', label: 'All Payments' },
-      { value: 'pending', label: 'Pending' },
-      { value: 'partial', label: 'Partial' },
-      { value: 'paid', label: 'Paid' },
-      { value: 'failed', label: 'Failed' }
-    ];
+    const options = (invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase' || invoiceType === 'challan') ? 
+      (invoiceType === 'quotation' ? [
+        { value: 'all', label: 'All Payments' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'partial', label: 'Partial' },
+        { value: 'paid', label: 'Paid' },
+        { value: 'advance', label: 'Advance' },
+        { value: 'failed', label: 'Failed' }
+      ] : [
+        { value: 'all', label: 'All Payments' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'partial', label: 'Partial' },
+        { value: 'paid', label: 'Paid' },
+        { value: 'failed', label: 'Failed' }
+      ]) : [
+        { value: 'all', label: 'All Payments' },
+        { value: 'pending', label: 'Pending' },
+        { value: 'partial', label: 'Partial' },
+        { value: 'paid', label: 'Paid' },
+        { value: 'failed', label: 'Failed' }
+      ];
     return options.find(opt => opt.value === value)?.label || 'All Payments';
   };
 
@@ -2497,15 +3082,6 @@ const InvoiceManagement: React.FC = () => {
     return location ? `${location.name} - ${location.type.replace('_', ' ')}` : 'Select location';
   };
 
-  const getInvoiceTypeLabel = (value: string) => {
-    const options = [
-      { value: 'quotation', label: 'Quotation', icon: <FileText /> },
-      { value: 'sale', label: 'Sales Invoice', icon: <TrendingUp /> },
-      { value: 'purchase', label: 'Purchase Invoice', icon: <TrendingDown /> },
-      { value: 'challan', label: 'Delivery Challan', icon: <Package /> },
-    ];
-    return options.find(opt => opt.value === value)?.label || 'Sales Invoices';
-  };
 
   const getProductLabel = (value: string) => {
     if (!value) return 'Select product';
@@ -2594,7 +3170,7 @@ const InvoiceManagement: React.FC = () => {
     doc.text(`Buyer's Order No: ${selectedInvoice.buyersOrderNo || ''}`, 80, y);
     doc.text(`Dispatch Doc No: ${selectedInvoice.dispatchDocNo || ''}`, 150, y);
     y += 5;
-    doc.text(`Delivery Challan Date: ${selectedInvoice.deliveryNoteDate || ''}`, 10, y);
+    doc.text(`Delivery Note Date: ${selectedInvoice.deliveryNoteDate || ''}`, 10, y);
     doc.text(`Dispatched Through: ${selectedInvoice.dispatchedThrough || ''}`, 80, y);
     doc.text(`Destination: ${selectedInvoice.destination || ''}`, 150, y);
     y += 8;
@@ -2609,9 +3185,9 @@ const InvoiceManagement: React.FC = () => {
     y += 5;
     doc.text(selectedInvoice.customer?.phone || '', 30, y);
     y += 5;
-    doc.text(`GSTIN: ${selectedInvoice.customer?.gstNumber || ''}`, 30, y);
+    doc.text(`GSTIN: ${selectedInvoice.billToAddress?.gstNumber || selectedInvoice.buyerGSTIN || ''}`, 30, y);
     y += 5;
-    doc.text(`State Name: ${selectedInvoice.customer?.state || ''}, Code: ${selectedInvoice.customer?.stateCode || ''}`, 30, y);
+    doc.text(`State Name: ${selectedInvoice.billToAddress?.state || selectedInvoice.buyerState || ''}, Code: ${selectedInvoice.buyerStateCode || ''}`, 30, y);
     y += 8;
 
     // Items Table
@@ -2917,7 +3493,7 @@ const InvoiceManagement: React.FC = () => {
             <h3>Ship To:</h3>
             <div>
               <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
-              ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}<br>` : ''}${selectedInvoice.shipToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}
+              ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.state || 'N/A'}<br>${selectedInvoice.shipToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}<br>` : ''}${selectedInvoice.shipToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}
             </div>
           </div>`}
         </div>
@@ -3169,12 +3745,14 @@ const InvoiceManagement: React.FC = () => {
     doc.save(`Payment_Receipt_${invoice.invoiceNumber}_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`);
   };
 
-  // Print Payment Receipt Function
+
+  // Print Payment Receipt function
   const printPaymentReceipt = (invoice: any) => {
-    console.log("invoice:", invoice);
-
     if (!invoice) return;
-
+    
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
     const printContent = `
     <html>
       <head>
@@ -3229,48 +3807,8 @@ const InvoiceManagement: React.FC = () => {
           <div><strong>Name:</strong> ${invoice.customer?.name || 'N/A'}</div>
           <div><strong>Email:</strong> ${invoice.customer?.email || 'N/A'}</div>
           <div><strong>Phone:</strong> ${invoice.customer?.phone || 'N/A'}</div>
-        </div>
-
-        <div class="payment-summary">
-          <h3>Invoice Items</h3>
-          <table class="payment-table">
-            <thead>
-              <tr>
-                <th>Sr. No.</th>
-                <th>Product/Description</th>
-                <th>Part No.</th>
-                <th>HSN Code</th>
-                <th>Quantity</th>
-                <th>Unit Price</th>
-                <th>Discount</th>
-                <th>Tax Rate</th>
-                <th>Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${invoice.items?.map((item: any, index: number) => {
-      const subtotal = item.quantity * item.unitPrice;
-      const discountAmount = subtotal * ((item.discount || 0) / 100);
-      const amountAfterDiscount = subtotal - discountAmount;
-      const taxAmount = amountAfterDiscount * ((item.taxRate || 0) / 100);
-      const totalAmount = amountAfterDiscount + taxAmount;
-
-      return `
-                  <tr>
-                    <td>${index + 1}</td>
-                    <td>${item.description || 'N/A'}</td>
-                    <td>${item.product?.partNo || 'N/A'}</td>
-                    <td>${item.product?.hsnNumber || 'N/A'}</td>
-                    <td>${item.quantity}</td>
-                    <td class="amount">₹${item.unitPrice?.toFixed(2)}</td>
-                    <td class="amount">${item.discount ? `${item.discount}% (₹${discountAmount.toFixed(2)})` : 0}</td>
-                    <td>${item.taxRate || 0}%</td>
-                    <td class="amount">₹${totalAmount.toFixed(2)}</td>
-                  </tr>
-                `;
-    }).join('') || '<tr><td colspan="9" style="text-align: center;">No items found</td></tr>'}
-            </tbody>
-          </table>
+          ${invoice.billToAddress?.gstNumber ? `<div><strong>GST Number:</strong> ${invoice.billToAddress.gstNumber}</div>` : ''}
+          ${invoice.billToAddress?.address ? `<div><strong>Address:</strong> ${invoice.billToAddress.address}, ${invoice.billToAddress.district || ''}, ${invoice.billToAddress.state || ''} - ${invoice.billToAddress.pincode || ''}</div>` : ''}
         </div>
 
         <div class="payment-summary">
@@ -3283,20 +3821,6 @@ const InvoiceManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <td>Subtotal</td>
-                <td class="amount">₹${(invoice.items?.reduce((sum: number, item: any) => sum + (item.quantity * item.unitPrice), 0).toFixed(2) || 0)}</td>
-              </tr>
-              <tr>
-                <td>Total Tax</td>
-                <td class="amount">₹${(invoice.items)?.reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2) || 0}</td>
-              </tr>
-              ${invoice.overallDiscountAmount && invoice.overallDiscountAmount > 0 ? `
-              <tr>
-                <td>Overall Discount</td>
-                <td class="amount">-${invoice.overallDiscount}% -₹${invoice.overallDiscountAmount?.toFixed(2)}</td>
-              </tr>
-              ` : ''}
               <tr>
                 <td>Invoice Total</td>
                 <td class="amount">₹${invoice.totalAmount?.toFixed(2)}</td>
@@ -3327,15 +3851,16 @@ const InvoiceManagement: React.FC = () => {
       </body>
     </html>
     `;
-
-    const printWindow = window.open('', '_blank');
-    if (printWindow) {
-      printWindow.document.write(printContent);
-      printWindow.document.close();
+    
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    
+    // Wait for content to load then print
+    printWindow.onload = () => {
       setTimeout(() => {
         printWindow.print();
       }, 500);
-    }
+    };
   };
 
   // Helper functions for print
@@ -3598,11 +4123,11 @@ const InvoiceManagement: React.FC = () => {
               <div class="info-cell info-left">
                 <strong>Customer Billing Address:</strong><br>
                 ${quotation.customer?.name || 'N/A'}<br>
-                ${quotation.billToAddress ? `${quotation.billToAddress.address || ''}<br>${quotation.billToAddress.district || ''}, ${quotation.billToAddress.pincode || ''}<br>${quotation.billToAddress.state || ''}` : 'Same as billing address'}
+                ${quotation.billToAddress ? `${quotation.billToAddress.address || ''}<br>${quotation.billToAddress.district || ''}, ${quotation.billToAddress.pincode || ''}<br>${quotation.billToAddress.state || ''}${quotation.billToAddress.gstNumber ? `<br><strong>GST:</strong> ${quotation.billToAddress.gstNumber}` : ''}` : 'Same as billing address'}
               </div>
               <div class="info-cell info-right">
                 <strong>Customer Delivery Address:</strong><br>
-                ${quotation.shipToAddress ? `${quotation.shipToAddress.address || ''}<br>${quotation.shipToAddress.district || ''}, ${quotation.shipToAddress.pincode || ''}<br>${quotation.shipToAddress.state || ''}` : 'Same as billing address'}
+                ${quotation.shipToAddress ? `${quotation.shipToAddress.address || ''}<br>${quotation.shipToAddress.district || ''}, ${quotation.shipToAddress.pincode || ''}<br>${quotation.shipToAddress.state || ''}${quotation.shipToAddress.gstNumber ? `<br><strong>GST:</strong> ${quotation.shipToAddress.gstNumber}` : ''}` : 'Same as billing address'}
               </div>
             </div>
           </div>
@@ -3645,7 +4170,7 @@ const InvoiceManagement: React.FC = () => {
                 <th style="width: 6%;">UOM</th>
                 <th style="width: 5%;">Qty</th>
                 <th style="width: 10%;">Basic Amount</th>
-                <th style="width: 8%;">Discount %</th>
+                ${(quotation.items || []).some((item: any) => (item.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
                 <th style="width: 9%;">Total Basic</th>
                 <th style="width: 5%;">GST</th>
                 <th style="width: 9%;">GST Amount</th>
@@ -3660,6 +4185,7 @@ const InvoiceManagement: React.FC = () => {
                 const gstRate = item.taxRate || 0;
                 const gstAmount = totalBasic * (gstRate / 100);
                 const totalAmount = totalBasic + gstAmount;
+                const showDiscount = (quotation.items || []).some((item: any) => (item.discount || 0) > 0);
                 
                 return `
                   <tr>
@@ -3670,7 +4196,7 @@ const InvoiceManagement: React.FC = () => {
                     <td class="center-cell">${item.uom || 'NOS'}</td>
                     <td class="center-cell">${item.quantity || 0}</td>
                     <td class="number-cell">${basicAmount.toFixed(2)}</td>
-                    <td class="center-cell">${discountPercent}%</td>
+                    ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
                     <td class="number-cell">${totalBasic.toFixed(2)}</td>
                     <td class="center-cell">${gstRate}%</td>
                     <td class="number-cell">${gstAmount.toFixed(2)}</td>
@@ -3679,7 +4205,7 @@ const InvoiceManagement: React.FC = () => {
                 `;
               }).join('')}
               <tr class="totals-row">
-                <td colspan="8" style="text-align: left; font-weight: bold;">Total Amount</td>
+                <td colspan="${(quotation.items || []).some((item: any) => (item.discount || 0) > 0) ? '8' : '7'}" style="text-align: left; font-weight: bold;">Total Amount</td>
                 <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
                   const basicAmount = item.unitPrice || 0;
                   const discountPercent = item.discount || 0;
@@ -3703,7 +4229,7 @@ const InvoiceManagement: React.FC = () => {
                 }, 0).toFixed(2)}</td>
               </tr>
               <tr class="grand-total-row">
-                <td colspan="11" style="text-align: right; padding-right: 20px;">Grand Total</td>
+                <td colspan="${(quotation.items || []).some((item: any) => (item.discount || 0) > 0) ? '11' : '10'}" style="text-align: right; padding-right: 20px;">Grand Total</td>
                 <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
                   const basicAmount = item.unitPrice || 0;
                   const discountPercent = item.discount || 0;
@@ -3865,7 +4391,7 @@ const InvoiceManagement: React.FC = () => {
         title="Billing"
         subtitle="Create and manage customer invoices"
       >
-        {invoiceType === 'sale' && (
+        {/* {invoiceType === 'sale' && (
           <Button
             onClick={handleCreateInvoiceClick}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
@@ -3873,7 +4399,7 @@ const InvoiceManagement: React.FC = () => {
             <Plus className="w-4 h-4" />
             <span>Create Invoice</span>
           </Button>
-        )}
+        )} */}
         {invoiceType === 'challan' && (
           <Button
             onClick={() => navigate('/billing/challan/create')}
@@ -3884,22 +4410,59 @@ const InvoiceManagement: React.FC = () => {
           </Button>
         )}
         {invoiceType === 'quotation' && (
+          <>
           <Button
             onClick={handleCreateQuotation}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            className="bg-gradient-to-r mr-3 from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Plus className="w-4 h-4" />
             <span>Create Quotation</span>
           </Button>
+                     <Button
+             onClick={handleExportQuotations}
+             className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+           >
+             <FileText className="w-4 h-4" />
+             <span>Export Excel</span>
+           </Button>
+          </>
+        )}
+        {invoiceType === 'sale' && (
+          <>
+            <Button
+              onClick={() => handleCreateInvoice('sale')}
+              className="bg-gradient-to-r mr-3 from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Sale Invoice</span>
+            </Button>
+            <Button
+              onClick={handleExportSaleInvoices}
+              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Export Excel</span>
+            </Button>
+          </>
         )}
         {invoiceType === 'purchase' && (
+          <>
           <Button
             onClick={handleCreatePurchaseInvoice}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+              className="bg-gradient-to-r mr-3 from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
           >
             <Plus className="w-4 h-4" />
             <span>Create Purchase Invoice</span>
           </Button>
+          
+            <Button
+              onClick={handleExportPurchaseInvoices}
+              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Export Excel</span>
+            </Button>
+          </>
         )}
       </PageHeader>
 
@@ -3953,12 +4516,14 @@ const InvoiceManagement: React.FC = () => {
       </div>
 
 
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-        <div className="flex flex-col justify-between md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
-          <div className="flex gap-4 ">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+      {/* Compact Filters */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-visible">
+        {/* Row 1: Search and Document Type */}
+        <div className="p-4 border-b border-gray-100">
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Search Bar */}
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
                 placeholder={invoiceType === 'quotation' ? "Search quotations..." : invoiceType === 'challan' ? "Search challans, reference numbers..." : "Search invoices, PO numbers..."}
@@ -3971,70 +4536,187 @@ const InvoiceManagement: React.FC = () => {
                   }
                 }}
                 data-field="search"
-                className="w-full pl-8 pr-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
               />
             </div>
 
-            {/* Status Filter Custom Dropdown */}
-            {invoiceType !== 'quotation' && invoiceType !== 'challan' && <div className="relative dropdown-container">
+            {/* Document Type Toggle */}
+            <div className="flex bg-gray-100 rounded-lg p-1 shadow-sm">
+              {INVOICE_TYPES.map(type => (
+                <button
+                  key={type.value}
+                  onClick={() => {
+                    const selectedType = type.value as 'quotation' | 'sale' | 'purchase' | 'challan';
+                    updateInvoiceType(selectedType);
+                    setNewInvoice(prev => ({ ...prev, invoiceType: selectedType }));
+                    setShowInvoiceTypeDropdown(false);
+                  }}
+                  className={`px-4 py-2.5 rounded-md text-sm font-medium flex items-center space-x-2 transition-all duration-200 ${invoiceType === type.value
+                    ? 'bg-white text-blue-700 shadow-sm'
+                    : 'text-gray-600 hover:text-blue-700 hover:bg-gray-50'
+                    }`}
+                >
+                  <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">{type.icon}</span>
+                  <span className="whitespace-nowrap">{type.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* PO From Customer Button */}
+            <Button
+              onClick={handleCreatePOFromCustomer}
+              className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-4 py-2.5 rounded-lg flex items-center space-x-2 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 shadow-md hover:shadow-lg"
+            >
+              <Plus className="w-4 h-4" />
+              <span>PO From Customer</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* Row 2: Date and Status Filters */}
+        <div className="p-4 border-b border-gray-100 relative">
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Date Range Filter */}
+            {(invoiceType === 'quotation' || invoiceType === 'sale' || invoiceType === 'purchase') && (
+              <div className="flex items-center gap-3 bg-gray-50 rounded-lg p-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-gray-500" />
+                  <span className="text-sm font-medium text-gray-700">Date Range:</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    placeholder="From Date"
+                    value={
+                      invoiceType === 'quotation' ? fromDate :
+                      invoiceType === 'sale' ? fromDateSale :
+                      fromDatePurchase
+                    }
+                    onChange={(e) => {
+                      if (invoiceType === 'quotation') setFromDate(e.target.value);
+                      else if (invoiceType === 'sale') setFromDateSale(e.target.value);
+                      else setFromDatePurchase(e.target.value);
+                    }}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                  <span className="text-gray-500 text-sm">to</span>
+                  <input
+                    type="date"
+                    placeholder="To Date"
+                    value={
+                      invoiceType === 'quotation' ? toDate :
+                      invoiceType === 'sale' ? toDateSale :
+                      toDatePurchase
+                    }
+                    onChange={(e) => {
+                      if (invoiceType === 'quotation') setToDate(e.target.value);
+                      else if (invoiceType === 'sale') setToDateSale(e.target.value);
+                      else setToDatePurchase(e.target.value);
+                    }}
+                    className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  />
+                  {(
+                    (invoiceType === 'quotation' && (fromDate || toDate)) ||
+                    (invoiceType === 'sale' && (fromDateSale || toDateSale)) ||
+                    (invoiceType === 'purchase' && (fromDatePurchase || toDatePurchase))
+                  ) && (
+                    <button
+                      onClick={() => {
+                        if (invoiceType === 'quotation') {
+                          setFromDate('');
+                          setToDate('');
+                        } else if (invoiceType === 'sale') {
+                          setFromDateSale('');
+                          setToDateSale('');
+                        } else {
+                          setFromDatePurchase('');
+                          setToDatePurchase('');
+                        }
+                      }}
+                      className="flex items-center gap-1 px-2 py-2 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-md transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                      Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Status Filter */}
+            <div className="relative dropdown-container">
               <button
                 onClick={() => setShowStatusFilterDropdown(!showStatusFilterDropdown)}
-                className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                className="flex items-center justify-between w-full min-w-[140px] px-3 py-2.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
               >
-                <span className="text-gray-700 truncate mr-1">{getStatusFilterLabel(statusFilter)}</span>
+                <span className="text-gray-700 truncate mr-2">{getStatusFilterLabel(statusFilter)}</span>
                 <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showStatusFilterDropdown ? 'rotate-180' : ''}`} />
               </button>
-              {showStatusFilterDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                  {[
-                    { value: 'all', label: 'All Status' },
-                    { value: 'draft', label: 'Draft' },
-                    { value: 'sent', label: 'Sent' },
-                    { value: 'paid', label: 'Paid' },
-                    { value: 'overdue', label: 'Overdue' },
-                    { value: 'cancelled', label: 'Cancelled' }
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      onClick={() => {
-                        setStatusFilter(option.value);
-                        setShowStatusFilterDropdown(false);
-                      }}
-                      className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                        }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>}
+                              {showStatusFilterDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
+                    {(invoiceType === 'quotation' ? [
+                      { value: 'all', label: 'All Status' },
+                      { value: 'draft', label: 'Draft' },
+                      { value: 'sent', label: 'Sent' },
+                      { value: 'accepted', label: 'Accepted' },
+                      { value: 'rejected', label: 'Rejected' },
+                      { value: 'expired', label: 'Expired' }
+                    ] : [
+                      { value: 'all', label: 'All Status' },
+                      { value: 'draft', label: 'Draft' },
+                      { value: 'sent', label: 'Sent' },
+                      { value: 'paid', label: 'Paid' },
+                      { value: 'overdue', label: 'Overdue' },
+                      { value: 'cancelled', label: 'Cancelled' }
+                    ]).map((option) => (
+                      <button
+                        key={option.value}
+                        onClick={() => {
+                          setStatusFilter(option.value);
+                          setShowStatusFilterDropdown(false);
+                        }}
+                        className={`w-full px-4 py-2.5 text-left hover:bg-gray-50 transition-colors text-sm whitespace-nowrap ${statusFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                          }`}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+            </div>
 
-            {/* Payment Filter Custom Dropdown */}
-            {invoiceType !== 'quotation' && invoiceType !== 'challan' && <div className="relative dropdown-container">
+            {/* Payment Filter */}
+            <div className="relative dropdown-container">
               <button
                 onClick={() => setShowPaymentFilterDropdown(!showPaymentFilterDropdown)}
-                className="flex items-center justify-between w-full md:w-40 px-3 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                className="flex items-center justify-between w-full min-w-[140px] px-3 py-2.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
               >
-                <span className="text-gray-700 truncate mr-1">{getPaymentFilterLabel(paymentFilter)}</span>
+                <span className="text-gray-700 truncate mr-2">{getPaymentFilterLabel(paymentFilter)}</span>
                 <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform flex-shrink-0 ${showPaymentFilterDropdown ? 'rotate-180' : ''}`} />
               </button>
               {showPaymentFilterDropdown && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5">
-                  {[
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-1">
+                  {(invoiceType === 'quotation' ? [
+                    { value: 'all', label: 'All Payments' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'partial', label: 'Partial' },
+                    { value: 'paid', label: 'Paid' },
+                    { value: 'advance', label: 'Advance' },
+                    { value: 'failed', label: 'Failed' }
+                  ] : [
                     { value: 'all', label: 'All Payments' },
                     { value: 'pending', label: 'Pending' },
                     { value: 'partial', label: 'Partial' },
                     { value: 'paid', label: 'Paid' },
                     { value: 'failed', label: 'Failed' }
-                  ].map((option) => (
+                  ]).map((option) => (
                     <button
                       key={option.value}
                       onClick={() => {
                         setPaymentFilter(option.value);
                         setShowPaymentFilterDropdown(false);
                       }}
-                      className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${paymentFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                      className={`w-full px-4 py-2.5 text-left hover:bg-gray-50 transition-colors text-sm whitespace-nowrap ${paymentFilter === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
                         }`}
                     >
                       {option.label}
@@ -4042,37 +4724,21 @@ const InvoiceManagement: React.FC = () => {
                   ))}
                 </div>
               )}
-            </div>}
-          </div>
-          {/* Invoice Type Toggle */}
-          <div className="flex bg-gray-100 rounded-lg p-0.5">
-            {INVOICE_TYPES.map(type => (
-              <button
-                key={type.value}
-                onClick={() => {
-                  const selectedType = type.value as 'quotation' | 'sale' | 'purchase' | 'challan';
-                  updateInvoiceType(selectedType);
-                  setNewInvoice(prev => ({ ...prev, invoiceType: selectedType }));
-                  setShowInvoiceTypeDropdown(false); // optional: close dropdown if open
-                }}
-                className={`px-3 py-2.5 rounded text-sm font-medium flex items-center space-x-1.5 transition-all duration-200 ${invoiceType === type.value
-                  ? 'bg-white text-blue-700 shadow-sm'
-                  : 'text-gray-600 hover:text-blue-700 hover:bg-gray-50'
-                  }`}
-              >
-                <span className="w-4 h-4 flex-shrink-0 flex items-center justify-center">{type.icon}</span>
-                <span className="whitespace-nowrap">{type.label}</span>
-              </button>
-            ))}
-
+            </div>
           </div>
         </div>
 
-
-        <div className="mt-4 flex items-center justify-between">
-          <span className="text-xs text-gray-600">
-                            Showing {invoiceType === 'quotation' ? filteredQuotations.length : invoiceType === 'challan' ? filteredDeliveryChallans.length : filteredInvoices.length} of {invoiceType === 'quotation' ? quotations.length : invoiceType === 'challan' ? deliveryChallans.length : invoices.length} {invoiceType === 'quotation' ? 'quotations' : invoiceType === 'challan' ? 'delivery challans' : 'invoices'}
-          </span>
+        {/* Row 3: Results Summary */}
+        <div className="px-4 py-3 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">
+              Showing <span className="font-medium text-gray-900">{invoiceType === 'quotation' ? filteredQuotations.length : filteredInvoices.length}</span> of <span className="font-medium text-gray-900">{invoiceType === 'quotation' ? quotations.length : invoices.length}</span> {invoiceType === 'quotation' ? 'quotations' : 'invoices'}
+            </span>
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+              <Filter className="w-3 h-3" />
+              <span>Filtered Results</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -4130,6 +4796,9 @@ const InvoiceManagement: React.FC = () => {
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {invoiceType === 'quotation' ? 'Valid Until' : invoiceType === 'challan' ? 'Dated' : 'Due Date'}
                 </th>
+                {/* <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  {invoiceType === 'quotation' ? 'Created At' : ''}
+                </th> */}
                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
@@ -4180,18 +4849,91 @@ const InvoiceManagement: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col items-start space-y-1">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          quotation.status === 'draft' 
-                            ? 'bg-yellow-100 text-yellow-800' 
-                            : quotation.status === 'sent'
-                            ? 'bg-blue-100 text-blue-800'
-                            : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {quotation.status?.charAt(0).toUpperCase() + quotation.status?.slice(1) || 'Draft'}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            quotation.status === 'draft' 
+                              ? 'bg-yellow-100 text-yellow-800' 
+                              : quotation.status === 'sent'
+                              ? 'bg-blue-100 text-blue-800'
+                              : quotation.status === 'accepted'
+                              ? 'bg-green-100 text-green-800'
+                              : quotation.status === 'rejected'
+                              ? 'bg-red-100 text-red-800'
+                              : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {quotation.status?.charAt(0).toUpperCase() + quotation.status?.slice(1) || 'Draft'}
+                          </span>
+                          
+                          {/* Custom Dropdown */}
+                          <div className="relative status-dropdown-container" onClick={(e) => e.stopPropagation()}>
+                            <Tooltip content="Update quotation status" position="top">
+                              <button
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  console.log('Change button clicked!');
+                                  console.log('Current open dropdown:', openStatusDropdown);
+                                  console.log('This quotation ID:', quotation._id);
+                                  setOpenStatusDropdown(openStatusDropdown === quotation._id ? null : quotation._id);
+                                }}
+                                disabled={quotation.status === 'accepted' || quotation.status === 'rejected' || updatingQuotationStatus === quotation._id}
+                                className="flex items-center space-x-1 text-xs border border-gray-300 rounded px-2 py-1 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                type="button"
+                              >
+                                <span>Change</span>
+                                <svg className={`w-3 h-3 transition-transform ${openStatusDropdown === quotation._id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                </svg>
+                              </button>
+                            </Tooltip>
+                            
+                            {/* Dropdown Menu */}
+                            {openStatusDropdown === quotation._id && (
+                              <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-[9999] opacity-100 transform transition-all duration-200 ease-in-out">
+                                <div className="py-1">
+                                  {getStatusOptions(quotation.status || 'draft').map((option) => (
+                                    <button
+                                      key={option.value}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        console.log('Dropdown option clicked!');
+                                        console.log('Quotation object:', quotation);
+                                        console.log('Quotation ID:', quotation._id);
+                                        console.log('Selected status:', option.value);
+                                        handleUpdateQuotationStatus(quotation._id, option.value);
+                                      }}
+                                      onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                      }}
+                                      className={`w-full text-left px-3 py-2 text-xs hover:bg-gray-100 flex items-center space-x-2 cursor-pointer transition-colors ${
+                                        updatingQuotationStatus === quotation._id ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-50'
+                                      }`}
+                                      disabled={updatingQuotationStatus === quotation._id}
+                                      type="button"
+                                    >
+                                      <span className={`w-2 h-2 rounded-full ${option.color.split(' ')[0].replace('bg-', 'bg-')}`}></span>
+                                      <span>{option.label}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          
+                          {updatingQuotationStatus === quotation._id && (
+                            <div className="w-3 h-3 border border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                          )}
+                        </div>
                         {quotation.status === 'draft' && (
                           <span className="text-xs text-gray-500">
                             Send email to enable payments
+                          </span>
+                        )}
+                        {(quotation.status === 'accepted' || quotation.status === 'rejected') && (
+                          <span className="text-xs text-gray-500">
+                            Status is final
                           </span>
                         )}
                       </div>
@@ -4209,10 +4951,15 @@ const InvoiceManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-900">
-                      {quotation.validUntil
-                        ? new Date(quotation.validUntil).toLocaleDateString('en-GB') // => 17/07/2025
+                      {quotation.issueDate
+                        ? new Date(quotation.issueDate).toLocaleDateString('en-GB') // => 17/07/2025
                         : 'N/A'}
                     </td>
+                    {/* <td className="px-4 py-3 text-sm font-medium">
+                      {quotation.issueDate
+                        ? new Date(quotation.issueDate).toLocaleDateString('en-GB') // => 17/07/2025
+                        : 'N/A'}
+                    </td> */}
 
                     <td className="px-4 py-3 text-sm font-medium">
                       <div className="flex items-center space-x-1">
@@ -4563,7 +5310,7 @@ const InvoiceManagement: React.FC = () => {
                     <p className="text-sm text-gray-600">
                       Due Date: {selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : ''}
                     </p>
-                    {selectedInvoice.poNumber && <p className="text-sm text-gray-600 mt-1">
+                    { selectedInvoice.invoiceType === 'purchase' && selectedInvoice.poNumber && <p className="text-sm text-gray-600 mt-1">
                       PO Number: {selectedInvoice.poNumber}
                     </p>}
                   </div>
@@ -4579,6 +5326,58 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Quick Reference Summary - Essential Info Only */}
+              {(selectedInvoice.sourceQuotation || selectedInvoice.poFromCustomer) && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 print:bg-white print:border-gray-400">
+                  <h4 className="font-medium text-gray-900 mb-3 print:text-black">Reference Information</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Quotation Info */}
+                    {selectedInvoice.quotationNumber && (
+                      <div className="bg-white border border-blue-200 rounded-lg p-3 print:border-gray-300">
+                        <div className="flex items-center mb-2">
+                          <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center mr-2 print:bg-gray-100">
+                            <FileText className="w-3 h-3 text-blue-600 print:text-gray-600" />
+                          </div>
+                          <span className="text-sm font-medium text-blue-900 print:text-black">Quotation</span>
+                        </div>
+                        <div className="text-sm">
+                          <div className="font-mono text-blue-700 print:text-black">
+                            Quotation Number: {selectedInvoice.sourceQuotation?.quotationNumber}
+                          </div>
+                          {selectedInvoice.sourceQuotation?.issueDate && (
+                            <div className="text-gray-600 print:text-black mt-1">
+                              Issue Date: {new Date(selectedInvoice.sourceQuotation.issueDate).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* PO Info */}
+                    {selectedInvoice.poFromCustomer?.poNumber && (
+                      <div className="bg-white border border-green-200 rounded-lg p-3 print:border-gray-300">
+                        <div className="flex items-center mb-2">
+                          <div className="w-6 h-6 bg-green-100 rounded-full flex items-center justify-center mr-2 print:bg-gray-100">
+                            <FileText className="w-3 h-3 text-green-600 print:text-gray-600" />
+                          </div>
+                          <span className="text-sm font-medium text-green-900 print:text-black">PO From Customer</span>
+                        </div>
+                        <div className="text-sm">
+                          <div className="font-mono text-green-700 print:text-black">
+                            Po Number: {selectedInvoice.poFromCustomer.poNumber}
+                          </div>
+                          {selectedInvoice.poFromCustomer.orderDate && (
+                            <div className="text-gray-600 print:text-black mt-1">
+                              Order Date: {new Date(selectedInvoice.poFromCustomer.orderDate).toLocaleDateString()}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* New Quotation Fields - Display with proper styling */}
               {(selectedInvoice.subject || selectedInvoice.engineSerialNumber || selectedInvoice.kva || selectedInvoice.hourMeterReading || selectedInvoice.serviceRequestDate || selectedInvoice.qrCodeImage) && (
@@ -4643,6 +5442,8 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                 </div>
               )}
+
+
 
               {/* Company Information */}
               <div className={`grid grid-cols-1 gap-6 ${selectedInvoice?.assignedEngineer ? 'md:grid-cols-4' : selectedInvoice?.invoiceType === 'purchase' ? 'md:grid-cols-2' : 'md:grid-cols-3'}`}>
@@ -4850,7 +5651,9 @@ const InvoiceManagement: React.FC = () => {
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">UOM</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
+                        {(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) && (
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
+                        )}
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax Rate</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                         {editMode && hasAmountMismatch(selectedInvoice) && (
@@ -4881,7 +5684,9 @@ const InvoiceManagement: React.FC = () => {
                               `₹${(item.unitPrice ?? 0).toFixed(2)}`
                             )}
                           </td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.discount || 0}%</td>
+                          {(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) && (
+                            <td className="px-4 py-2 text-sm text-gray-900">{item.discount || 0}%</td>
+                          )}
                           <td className="px-4 py-2 text-sm text-gray-900">
                             {editMode && hasAmountMismatch(selectedInvoice) ? (
                               <input
@@ -4940,7 +5745,9 @@ const InvoiceManagement: React.FC = () => {
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Description</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Quantity</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Unit Price</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Discount</th>
+                          {(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
+                            <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Discount</th>
+                          )}
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Tax Rate</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Total</th>
                         </tr>
@@ -4951,7 +5758,9 @@ const InvoiceManagement: React.FC = () => {
                             <td className="px-4 py-2 text-sm text-gray-900">{service.description}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">{service.quantity}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">₹{service.unitPrice?.toFixed(2) || '0.00'}</td>
-                            <td className="px-4 py-2 text-sm text-gray-900">{service.discount || 0}%</td>
+                            {(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
+                              <td className="px-4 py-2 text-sm text-gray-900">{service.discount || 0}%</td>
+                            )}
                             <td className="px-4 py-2 text-sm text-gray-900">{service.taxRate || 0}%</td>
                             <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{service.totalPrice?.toFixed(2) || '0.00'}</td>
                           </tr>
@@ -5933,7 +6742,9 @@ const InvoiceManagement: React.FC = () => {
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">UOM</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Part No</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Unit Price</th>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
+                        {(selectedQuotation.items || []).some((item: any) => (item.discount || 0) > 0) && (
+                          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Discount</th>
+                        )}
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tax Rate</th>
                         <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Total</th>
                       </tr>
@@ -5947,7 +6758,9 @@ const InvoiceManagement: React.FC = () => {
                           <td className="px-4 py-2 text-sm text-gray-900">{item.uom}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{item.partNo || 'N/A'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">₹{item.unitPrice?.toLocaleString()}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{item.discount || 0}%</td>
+                          {(selectedQuotation.items || []).some((item: any) => (item.discount || 0) > 0) && (
+                            <td className="px-4 py-2 text-sm text-gray-900">{item.discount || 0}%</td>
+                          )}
                           <td className="px-4 py-2 text-sm text-gray-900">{item.taxRate || 0}%</td>
                           <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{(item.unitPrice * item.quantity * (1 - item.discount / 100) * (1 + item.taxRate / 100)).toFixed(2)}</td>
                         </tr>
@@ -5971,7 +6784,9 @@ const InvoiceManagement: React.FC = () => {
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Description</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Quantity</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Unit Price</th>
-                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Discount</th>
+                          {(selectedQuotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
+                            <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Discount</th>
+                          )}
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Tax Rate</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Total</th>
                         </tr>
@@ -5982,7 +6797,9 @@ const InvoiceManagement: React.FC = () => {
                             <td className="px-4 py-2 text-sm text-gray-900">{service.description}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">{service.quantity}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">₹{service.unitPrice?.toFixed(2) || '0.00'}</td>
-                            <td className="px-4 py-2 text-sm text-gray-900">{service.discount || 0}%</td>
+                            {(selectedQuotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
+                              <td className="px-4 py-2 text-sm text-gray-900">{service.discount || 0}%</td>
+                            )}
                             <td className="px-4 py-2 text-sm text-gray-900">{service.taxRate || 0}%</td>
                             <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{service.totalPrice?.toFixed(2) || '0.00'}</td>
                           </tr>
@@ -6340,7 +7157,7 @@ const InvoiceManagement: React.FC = () => {
 
     </div>
   );
-}
+};
 
 export default InvoiceManagement;
 

@@ -620,6 +620,20 @@ const CustomerManagement: React.FC = () => {
             if (kva > 0 && startDate) {
               updatedDg.warrantyEndDate = calculateWarrantyEndDate(startDate, kva);
             }
+            
+            // Auto-determine warranty status based on commissioning date (2-year rule)
+            if (value) {
+              const commissioningDate = new Date(value);
+              const today = new Date();
+              const twoYearsAgo = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate());
+              
+              // If commissioning date is more than 2 years old, mark as non-warranty
+              if (commissioningDate < twoYearsAgo) {
+                updatedDg.warrantyStatus = 'non_warranty';
+              } else {
+                updatedDg.warrantyStatus = 'warranty';
+              }
+            }
           }
           
           return updatedDg;
@@ -687,6 +701,18 @@ const CustomerManagement: React.FC = () => {
     endDate.setMonth(endDate.getMonth() + months);
     
     return endDate.toISOString().split('T')[0];
+  };
+
+  // Helper function to determine warranty status based on commissioning date (2-year rule)
+  const determineWarrantyStatus = (commissioningDate: string): 'warranty' | 'non_warranty' => {
+    if (!commissioningDate) return 'warranty';
+    
+    const commissioning = new Date(commissioningDate);
+    const today = new Date();
+    const twoYearsAgo = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate());
+    
+    // If commissioning date is more than 2 years old, mark as non-warranty
+    return commissioning < twoYearsAgo ? 'non_warranty' : 'warranty';
   };
 
   const addressTypes = [
@@ -1305,7 +1331,7 @@ const CustomerManagement: React.FC = () => {
             commissioningDate: dg.commissioningDate 
               ? new Date(dg.commissioningDate).toISOString().split('T')[0]
               : new Date().toISOString().split('T')[0],
-            warrantyStatus: dg.warrantyStatus || 'warranty',
+            warrantyStatus: dg.warrantyStatus || determineWarrantyStatus(dg.commissioningDate),
             installationType: dg.installationType || 'infold',
             amcStatus: dg.amcStatus || 'yes',
             cluster: dg.cluster || '',
@@ -1798,7 +1824,7 @@ const CustomerManagement: React.FC = () => {
               >
                 <div className="flex items-center space-x-2">
                   <Users className="w-4 h-4" />
-                  <span>Customers</span>
+                  <span>Existing Customers</span>
                 </div>
               </button>
               <button
@@ -1811,7 +1837,7 @@ const CustomerManagement: React.FC = () => {
               >
                 <div className="flex items-center space-x-2">
                   <Zap className="w-4 h-4" />
-                  <span>DG Customers</span>
+                  <span>Prospective Customers</span>
                 </div>
               </button>
               <button
@@ -2016,9 +2042,9 @@ const CustomerManagement: React.FC = () => {
                     Status
                   </th>
                 )}
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                {/* <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   {customerTypeTab === 'oem' ? 'Rating' : 'Customer Type'}
-                </th>
+                </th> */}
                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -2177,13 +2203,13 @@ const CustomerManagement: React.FC = () => {
                     )}
                     
                     {/* Customer Type/Rating Column */}
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                    {/* <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
                       {customerTypeTab === 'oem' ? (
                         customer.rating ? `${customer.rating}/5` : 'N/A'
                       ) : (
                         <span className="capitalize">{customer.customerType}</span>
                       )}
-                    </td>
+                    </td> */}
                     
                     {/* Actions Column */}
                     <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
@@ -3100,16 +3126,19 @@ const CustomerManagement: React.FC = () => {
                                 {/* Warranty Status */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Warranty Status *
+                                    Warranty Status * 
                                   </label>
-                                  <select
-                                    value={dgDetail.warrantyStatus}
-                                    onChange={(e) => updateDGDetails(index, 'warrantyStatus', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                  >
-                                    <option value="warranty">Warranty</option>
-                                    <option value="non_warranty">Non-Warranty</option>
-                                  </select>
+                                  <div className="relative">
+                                    <select
+                                      value={dgDetail.warrantyStatus}
+                                      onChange={(e) => updateDGDetails(index, 'warrantyStatus', e.target.value)}
+                                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
+                                      title="Automatically determined: Warranty if commissioned within 2 years, Non-Warranty if older than 2 years"
+                                    >
+                                      <option value="warranty">Warranty</option>
+                                      <option value="non_warranty">Non-Warranty</option>
+                                    </select>
+                                  </div>
                                 </div>
 
                                 {/* Installation Type */}
@@ -3737,16 +3766,23 @@ const CustomerManagement: React.FC = () => {
                                 {/* Warranty Status */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Warranty Status *
+                                    Warranty Status * 
+                                    <span className="text-xs text-gray-500 ml-1">(Auto-calculated)</span>
                                   </label>
-                                  <select
-                                    value={dgDetail.warrantyStatus}
-                                    onChange={(e) => updateDGDetails(index, 'warrantyStatus', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                  >
-                                    <option value="warranty">Warranty</option>
-                                    <option value="non_warranty">Non-Warranty</option>
-                                  </select>
+                                  <div className="relative">
+                                    <select
+                                      value={dgDetail.warrantyStatus}
+                                      onChange={(e) => updateDGDetails(index, 'warrantyStatus', e.target.value)}
+                                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-gray-50"
+                                      title="Automatically determined: Warranty if commissioned within 2 years, Non-Warranty if older than 2 years"
+                                    >
+                                      <option value="warranty">Warranty</option>
+                                      <option value="non_warranty">Non-Warranty</option>
+                                    </select>
+                                    <div className="absolute inset-y-0 right-8 flex items-center pointer-events-none">
+                                      <span className="text-xs text-blue-600">🔄</span>
+                                    </div>
+                                  </div>
                                 </div>
 
                                 {/* Installation Type */}
@@ -3986,7 +4022,7 @@ const CustomerManagement: React.FC = () => {
                         </div>
                       )
                     )}
-                    <div>
+                    {/* <div>
                       <p className="text-xs text-gray-500">{customerTypeTab === 'oem' ? 'Products' : 'Customer Type'}</p>
                       <p className="font-medium">
                         {customerTypeTab === 'oem' ? 
@@ -3995,7 +4031,7 @@ const CustomerManagement: React.FC = () => {
                           (selectedCustomer.customerType || 'N/A')
                         }
                       </p>
-                    </div>
+                    </div> */}
                     {customerTypeTab === 'oem' && selectedCustomer.contactPerson && (
                       <div>
                         <p className="text-xs text-gray-500">Contact Person</p>
@@ -4032,10 +4068,12 @@ const CustomerManagement: React.FC = () => {
                         <p className="font-medium text-sm">{selectedCustomer.email}</p>
                       </div>
                     )}
-                    <div>
-                      <p className="text-xs text-gray-500">Phone</p>
-                      <p className="font-medium">{selectedCustomer.phone}</p>
-                    </div>
+                    {selectedCustomer.phone && (
+                      <div>
+                        <p className="text-xs text-gray-500">Phone</p>
+                        <p className="font-medium">{selectedCustomer.phone}</p>
+                      </div>
+                    )}
                     {selectedCustomer.alice && (
                       <div>
                         <p className="text-xs text-gray-500">Alice (Alias)</p>
@@ -4043,12 +4081,12 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     )}
                     {/* Lead Source - Only show for suppliers */}
-                    {customerTypeTab === 'supplier' && selectedCustomer.leadSource && (
+                    {/* {customerTypeTab === 'supplier' && selectedCustomer.leadSource && (
                       <div>
                         <p className="text-xs text-gray-500">Lead Source</p>
                         <p className="font-medium text-sm">{selectedCustomer.leadSource}</p>
                       </div>
-                    )}
+                    )} */}
                     {selectedCustomer.siteAddress && (
                       <div>
                         <p className="text-xs text-gray-500">Site Address</p>
