@@ -26,7 +26,7 @@ export const inventoryImportSchema = Joi.object<InventoryImportInput>({
   'PART NO': Joi.string().max(100).trim().required(),
   DESCRIPTION: Joi.string().max(500).trim().required(),
   'CPCB Norms': Joi.string().max(100).trim().allow('').optional(),
-  UOM: Joi.string().valid('nos', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll').required(),
+  UOM: Joi.string().valid('nos', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'eu').required(),
   QTY: Joi.number().min(0).required(),
   RACK: Joi.string().max(50).trim().allow('').optional(),
   ROOM: Joi.string().max(50).trim().allow('').optional(),

@@ -140,7 +140,7 @@ const ProductManagement: React.FC = () => {
   // Removed location-related useEffect hooks since location is now optional
 
   const stockUnit = [
-    'nos', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'
+    'nos', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'eu'
   ];
 
   const category = [
@@ -661,7 +661,7 @@ const ProductManagement: React.FC = () => {
     label: cat.replace('_', ' ').toUpperCase()
   }));
 
-  const formUomOptions = ["nos", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll"].sort().map(unit => ({
+  const formUomOptions = ["nos", "kg", "litre", "meter", "sq.ft", "hour", "set", "box", "can", "roll", "eu"].sort().map(unit => ({
     value: unit,
     label: unit
   }));

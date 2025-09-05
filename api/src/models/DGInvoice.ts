@@ -125,7 +125,7 @@ const invoiceItemSchema = new Schema({
   },
   uom: {
     type: String,
-    enum: ['kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos'],
+    enum: ['kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'nos', 'eu'],
     default: 'nos'
   },
   discount: {
@@ -241,7 +241,7 @@ const DGInvoiceSchema = new Schema<IInvoice>({
   terms: {
     type: String,
     trim: true,
-    default: 'Payment due within 30 days'
+    default: ''
   },
   invoiceType: {
     type: String,

@@ -147,6 +147,21 @@ const menuItems = [
 ];
 
 function getActiveKeyFromPath(pathname: string): string {
+  // Special cases for specific routes that should map to billing
+  if (pathname.startsWith('/po-from-customer') || 
+      pathname.startsWith('/billing') ||
+      pathname.startsWith('/invoice') ||
+      pathname.startsWith('/quotation')) {
+    return 'billing';
+  }
+  
+  // Special cases for DG Sales routes
+  if (pathname.startsWith('/dg-quotation') || 
+      pathname.startsWith('/dg-sales') ||
+      pathname.startsWith('/dg-purchase-order')) {
+    return 'dg_sales';
+  }
+  
   // Find the menu item whose path is a prefix of the current pathname
   const activeItem = menuItems.find(item => pathname.startsWith(item.path));
   return activeItem?.key || 'dashboard';

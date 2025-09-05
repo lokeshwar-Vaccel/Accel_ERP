@@ -133,6 +133,16 @@ export interface QuotationData {
     remainingAmount: number;
     paymentStatus: string;
   };
+  // PO From Customer fields
+  poFromCustomer?: {
+    _id: string;
+    poNumber: string;
+    status: string;
+    totalAmount: number;
+    orderDate: string;
+    expectedDeliveryDate: string;
+    pdfFile?: string; // PDF file URL or base64
+  };
 }
 
 export interface ValidationError {
@@ -325,23 +335,23 @@ export const calculateQuotationTotals = (
     const quantity = Number(batteryBuyBack.quantity) || 0;
     const unitPrice = Number(batteryBuyBack.unitPrice) || 0;
     const discountRate = Number(batteryBuyBack.discount) || 0;
-    const taxRate = Number(batteryBuyBack.taxRate) || 0;
+    const taxRate = 0; // No GST for battery buy back
 
     const itemSubtotal = quantity * unitPrice;
     const discountAmount = (discountRate / 100) * itemSubtotal;
     const discountedAmount = itemSubtotal - discountAmount;
-    const taxAmount = (taxRate / 100) * discountedAmount;
-    const totalPrice = discountedAmount + taxAmount;
+    const taxAmount = 0; // No GST for battery buy back
+    const totalPrice = discountedAmount; // No GST added
 
     // For battery buy back, we DON'T add to subtotal since it's a deduction
     // Instead, we'll subtract it from the final grand total
-    // We still need to track the discount and tax for the battery buy back itself
+    // We still need to track the discount for the battery buy back itself
     // But these don't affect the main calculation
 
     calculatedBatteryBuyBack = {
       ...batteryBuyBack,
       discountedAmount: discountAmount,
-      taxAmount: taxAmount,
+      taxAmount: 0, // No GST for battery buy back
       totalPrice: totalPrice
     };
   }
@@ -411,12 +421,17 @@ export const transformQuotationData = (data: any): QuotationData => {
       pan: data.company?.pan || '',
       bankDetails: data.company?.bankDetails
     },
+    // Service Ticket related fields
+    engineSerialNumber: data.engineSerialNumber || '',
+    kva: data.kva || '',
+    hourMeterReading: data.hourMeterReading || '',
+    serviceRequestDate: data.serviceRequestDate ? new Date(data.serviceRequestDate) : undefined,
     items: calculationResult.items,
     // New fields for service charges and battery buy back
     serviceCharges: data.serviceCharges || [],
     batteryBuyBack: data.batteryBuyBack || {
       description: 'Battery Buy Back',
-      quantity: 1,
+      quantity: 0,
       unitPrice: 0,
       discount: 0,
       discountedAmount: 0,
@@ -434,7 +449,8 @@ export const transformQuotationData = (data: any): QuotationData => {
     notes: data.notes || '',
     terms: data.terms || '',
     billToAddress: data.billToAddress,
-    shipToAddress: data.shipToAddress
+    shipToAddress: data.shipToAddress,
+    assignedEngineer: data.assignedEngineer || ''
   };
 };
 
@@ -534,16 +550,23 @@ export const sanitizeQuotationData = (data: any): any => {
     })) : [],
     batteryBuyBack: data.batteryBuyBack ? {
       description: String(data.batteryBuyBack.description || 'Battery Buy Back').trim(),
-      quantity: Number(data.batteryBuyBack.quantity) || 1,
+      quantity: Number(data.batteryBuyBack.quantity) || 0,
       unitPrice: Number(data.batteryBuyBack.unitPrice) || 0,
       discount: Number(data.batteryBuyBack.discount) || 0,
-      taxRate: Number(data.batteryBuyBack.taxRate) || 18
+      taxRate: 0
     } : undefined,
     notes: String(data.notes || '').trim(),
     terms: String(data.terms || '').trim(),
     qrCodeImage: data.qrCodeImage,
     billToAddress: data.billToAddress,
-    shipToAddress: data.shipToAddress
+    shipToAddress: data.shipToAddress,
+    assignedEngineer: String(data.assignedEngineer || '').trim(),
+    // Preserve quotation reference fields for invoices created from quotations
+    sourceQuotation: data.sourceQuotation,
+    quotationNumber: data.quotationNumber,
+    quotationPaymentDetails: data.quotationPaymentDetails,
+    // Preserve PO From Customer data
+    poFromCustomer: data.poFromCustomer
   };
 };
 
@@ -603,7 +626,7 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
   serviceCharges: [
     {
       description: 'Additional Service charges',
-      quantity: 1,
+      quantity: 0,
       unitPrice: 0,
       discount: 0,
       discountedAmount: 0,
@@ -615,7 +638,7 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
   ],
   batteryBuyBack: {
     description: 'Battery Buy Back',
-    quantity: 1,
+    quantity: 0,
     unitPrice: 0,
     discount: 0,
     discountedAmount: 0,

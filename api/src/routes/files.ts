@@ -16,6 +16,29 @@ const router = express.Router();
 // Serve file (public access for viewing) - must come first
 router.get('/:filename', serveFile);
 
+// Serve PDF file (public access for viewing) - must come before other routes
+router.get('/pdf/:filename', (req, res): void => {
+  const filename = req.params.filename;
+  const filePath = path.join(__dirname, '../assets/uploadPdfs', filename);
+  
+  // Check if file exists
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({
+      success: false,
+      message: 'PDF file not found'
+    });
+    return;
+  }
+  
+  // Set appropriate headers for PDF
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+  
+  // Stream the file
+  const fileStream = fs.createReadStream(filePath);
+  fileStream.pipe(res);
+});
+
 
 
 // All other routes require authentication

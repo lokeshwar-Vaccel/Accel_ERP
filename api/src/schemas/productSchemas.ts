@@ -160,7 +160,7 @@ const baseProductFields = {
   createdBy: Joi.string().regex(/^[0-9a-fA-F]{24}$/).required()
 };
 
-const allowedStockUnits = ['nos', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll'];
+const allowedStockUnits = ['nos', 'kg', 'litre', 'meter', 'sq.ft', 'hour', 'set', 'box', 'can', 'roll', 'eu'];
 
 // Create product schema
 export const createProductSchema = Joi.object({
