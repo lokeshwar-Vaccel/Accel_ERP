@@ -263,6 +263,7 @@ const ServiceManagement: React.FC = () => {
   // Engineer Payment Report states
   const [reportMonth, setReportMonth] = useState<string>(new Date().toISOString().slice(0, 7));
   const [reportEngineerId, setReportEngineerId] = useState<string>('');
+  const [showReportEngineerDropdown, setShowReportEngineerDropdown] = useState(false);
   const [engineerReportRows, setEngineerReportRows] = useState<any[]>([]);
   const [engineerReportTotals, setEngineerReportTotals] = useState<{ byEngineer: { engineerId: string; engineerName: string; totalAmount: number }[]; grandTotal: number }>({ byEngineer: [], grandTotal: 0 });
   const [loadingEngineerReport, setLoadingEngineerReport] = useState(false);
@@ -1543,6 +1544,23 @@ const ServiceManagement: React.FC = () => {
     return user ? getUserName(user) : 'All Assignees';
   };
 
+  const getReportEngineerLabel = (value: string) => {
+    if (!value) return 'All Engineers';
+    const user = users.find(u => u._id === value);
+    return user ? getUserName(user) : 'All Engineers';
+  };
+
+  const formatFieldValue = (value: string | undefined | null): string => {
+    if (!value || value === '' || value === '-') return '-';
+    
+    // Replace underscores with spaces and capitalize each word
+    return value
+      .replace(/_/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
@@ -2778,6 +2796,7 @@ const ServiceManagement: React.FC = () => {
       if (!target.closest('.dropdown-container')) {
         setShowStatusDropdown(false);
         setShowAssigneeDropdown(false);
+        setShowReportEngineerDropdown(false);
 
         // Close enhanced dropdowns
         setCustomerDropdown(prev => ({ ...prev, isOpen: false }));
@@ -5859,16 +5878,43 @@ const ServiceManagement: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm text-gray-700 mb-1">Engineer</label>
-                  <select
-                    value={reportEngineerId}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setReportEngineerId(e.target.value)}
-                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-                  >
-                    <option value="">All Engineers</option>
-                    {users.map(u => (
-                      <option key={u._id} value={u._id}>{getUserName(u)}</option>
-                    ))}
-                  </select>
+                  <div className="relative dropdown-container">
+                    <button
+                      onClick={() => setShowReportEngineerDropdown(!showReportEngineerDropdown)}
+                      className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm"
+                    >
+                      <span className="text-gray-700 truncate mr-1">{getReportEngineerLabel(reportEngineerId)}</span>
+                      <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showReportEngineerDropdown ? 'rotate-180' : ''}`} />
+                    </button>
+                    {showReportEngineerDropdown && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-80 overflow-y-auto">
+                        <button
+                          onClick={() => {
+                            setReportEngineerId('');
+                            setShowReportEngineerDropdown(false);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!reportEngineerId ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                        >
+                          All Engineers
+                        </button>
+                        {users
+                          .slice()
+                          .sort((a, b) => getUserName(a).localeCompare(getUserName(b)))
+                          .map(user => (
+                            <button
+                              key={user._id}
+                              onClick={() => {
+                                setReportEngineerId(user._id);
+                                setShowReportEngineerDropdown(false);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${reportEngineerId === user._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                            >
+                              {getUserName(user)}
+                            </button>
+                          ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-end">
                   <button
@@ -5916,13 +5962,13 @@ const ServiceManagement: React.FC = () => {
                 <table className="w-full">
                   <thead className="bg-gray-50">
                     <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ticket Number</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Service Attended Date</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type of Visit</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nature of Work</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sub Nature of Work</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Engineer</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ticket Number</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Convenience Charges</th>
                     </tr>
                   </thead>
@@ -5934,13 +5980,13 @@ const ServiceManagement: React.FC = () => {
                     ) : (
                       engineerReportRows.map((r, idx) => (
                         <tr key={idx}>
+                          <td className="px-4 py-2 text-sm text-blue-600">{r.ticketNumber || '-'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{r.serviceAttendedDate ? formatDateTime(r.serviceAttendedDate) : '-'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{r.customerName || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{r.typeOfVisit || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{r.natureOfWork || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{r.subNatureOfWork || '-'}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{formatFieldValue(r.typeOfVisit)}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{formatFieldValue(r.natureOfWork)}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{formatFieldValue(r.subNatureOfWork)}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{r.serviceEngineerName || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-blue-600">{r.ticketNumber || '-'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900 text-right">₹ {Number(r.convenienceCharges || 0).toFixed(2)}</td>
                         </tr>
                       ))
