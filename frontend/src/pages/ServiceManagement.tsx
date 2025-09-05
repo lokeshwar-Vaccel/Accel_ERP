@@ -5897,18 +5897,21 @@ const ServiceManagement: React.FC = () => {
                         >
                           All Engineers
                         </button>
-                        {users.map(user => (
-                          <button
-                            key={user._id}
-                            onClick={() => {
-                              setReportEngineerId(user._id);
-                              setShowReportEngineerDropdown(false);
-                            }}
-                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${reportEngineerId === user._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                          >
-                            {getUserName(user)}
-                          </button>
-                        ))}
+                        {users
+                          .slice()
+                          .sort((a, b) => getUserName(a).localeCompare(getUserName(b)))
+                          .map(user => (
+                            <button
+                              key={user._id}
+                              onClick={() => {
+                                setReportEngineerId(user._id);
+                                setShowReportEngineerDropdown(false);
+                              }}
+                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${reportEngineerId === user._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                            >
+                              {getUserName(user)}
+                            </button>
+                          ))}
                       </div>
                     )}
                   </div>
