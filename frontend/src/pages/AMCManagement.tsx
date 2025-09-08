@@ -1178,10 +1178,12 @@ const AMCManagement: React.FC = () => {
       resetAMCForm();
     } catch (error: any) {
       console.error('Error creating AMC:', error);
+      const serverMessage = error?.response?.data?.message || error?.message || 'Failed to create AMC contract';
+      toast.error(serverMessage);
       if (error.response?.data?.errors) {
         setFormErrors(error.response.data.errors);
       } else {
-        setFormErrors({ general: 'Failed to create AMC contract' });
+        setFormErrors({ general: serverMessage });
       }
     } finally {
       setSubmitting(false);
@@ -2477,9 +2479,18 @@ const AMCManagement: React.FC = () => {
                   <input
                     type="date"
                     value={visitStartDate}
-                    onChange={(e) => setVisitStartDate(e.target.value)}
+                    onChange={(e) => {
+                      const newStart = e.target.value;
+                      // If end date exists and is before new start, reset end date
+                      if (visitEndDate && new Date(visitEndDate) < new Date(newStart)) {
+                        toast.error('End date cannot be before start date');
+                        setVisitEndDate('');
+                      }
+                      setVisitStartDate(newStart);
+                    }}
                     className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     placeholder="Start date"
+                    max={visitEndDate || undefined}
                   />
                 </div>
                 
@@ -2488,9 +2499,17 @@ const AMCManagement: React.FC = () => {
                   <input
                     type="date"
                     value={visitEndDate}
-                    onChange={(e) => setVisitEndDate(e.target.value)}
+                    onChange={(e) => {
+                      const newEnd = e.target.value;
+                      if (visitStartDate && new Date(newEnd) < new Date(visitStartDate)) {
+                        toast.error('End date cannot be before start date');
+                        return; // Block selecting invalid end date
+                      }
+                      setVisitEndDate(newEnd);
+                    }}
                     className="px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                     placeholder="End date"
+                    min={visitStartDate || undefined}
                   />
                 </div>
                 

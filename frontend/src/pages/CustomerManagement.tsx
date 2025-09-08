@@ -130,6 +130,7 @@ interface Customer {
     cluster: string;
     warrantyStartDate?: string;
     warrantyEndDate?: string;
+    locationAddress?: string;
   }[];
   // OEM specific properties
   oemCode?: string;
@@ -172,6 +173,10 @@ interface Address {
   pincode: string;
   isPrimary: boolean;
   gstNumber?: string; // <-- Add GST number per address, optional
+  contactPersonName?: string;
+  email?: string;
+  phone?: string;
+  registrationStatus: 'registered' | 'non_registered';
 }
 
 interface CustomerFormData {
@@ -191,6 +196,12 @@ interface CustomerFormData {
   notes: string;
   addresses: Address[];
   type: CustomerMainType;
+  bankDetails?: {
+    bankName: string;
+    accountNo: string;
+    ifsc: string;
+    branch: string;
+  };
   dgDetails?: {
     dgSerialNumbers: string;
     alternatorMake: string;
@@ -207,6 +218,7 @@ interface CustomerFormData {
     cluster: string;
     warrantyStartDate?: string;
     warrantyEndDate?: string;
+    locationAddress?: string;
   }[];
 }
 
@@ -224,6 +236,22 @@ interface AddContactHistoryInput {
   followUpDate?: string; // <-- make it optional
   createdBy: string;
 }
+
+// GSTIN validation helper (format only per provided regex)
+const isValidGSTIN = (input: string): boolean => {
+  if (!input) return true; // empty handled separately
+  const value = input.toUpperCase();
+  const re = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+  return re.test(value);
+};
+
+// Format-only validator for live feedback (same as above)
+const isValidGSTINFormat = (input: string): boolean => {
+  if (!input) return true;
+  const value = input.toUpperCase();
+  const re = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+  return re.test(value);
+};
 
 const CustomerManagement: React.FC = () => {
   const location = useLocation();
@@ -308,8 +336,13 @@ const CustomerManagement: React.FC = () => {
       pincode: '',
       isPrimary: true,
       gstNumber: '', // Add default
+      contactPersonName: '',
+      email: '',
+      phone: '',
+      registrationStatus: 'non_registered',
     }],
     type: 'customer',
+    bankDetails: { bankName: '', accountNo: '', ifsc: '', branch: '' },
     dgDetails: [{
       dgSerialNumbers: '',
       alternatorMake: '',
@@ -368,6 +401,10 @@ const CustomerManagement: React.FC = () => {
   const searchParams = new URLSearchParams(location.search);
   // Add at the top, after useState imports
   const [customerTypeTab, setCustomerTypeTab] = useState<'customer' | 'supplier' | 'dg_customer' | 'oem'>(searchParams.get('action') !== 'create-supplier' ? 'customer' : 'supplier');
+  // Dynamic entity labels for shared UI between Customer and Supplier
+  const entityLabel = customerTypeTab === 'supplier' ? 'Supplier' : (customerTypeTab === 'dg_customer' ? 'DG Customer' : 'Customer');
+  const entityLabelLower = entityLabel.toLowerCase();
+
 
   // Add after other useState hooks for filters
   const [sortField, setSortField] = useState('all');
@@ -546,6 +583,10 @@ const CustomerManagement: React.FC = () => {
       pincode: '',
       isPrimary: false,
       gstNumber: '',
+      contactPersonName: '',
+      email: '',
+      phone: '',
+      registrationStatus: 'non_registered',
     };
     setCustomerFormData(prev => ({
       ...prev,
@@ -572,6 +613,31 @@ const CustomerManagement: React.FC = () => {
       }
       return addr;
     });
+
+    // Live-validate GST and clear error once valid
+    if (field === 'gstNumber') {
+      const idx = customerFormData.addresses.findIndex((addr: Address) => addr.id === addressId);
+      const gstValue = typeof value === 'string' ? value : '';
+      setFormErrors(prev => {
+        const next: any = { ...prev };
+        const gstArray: string[] = Array.isArray(prev.gst) ? [...prev.gst] : [];
+
+        if (!gstValue || isValidGSTINFormat(gstValue)) {
+          gstArray[idx] = '';
+        } else {
+          gstArray[idx] = 'Invalid GST Number. It must match 22AAAAA0000A1Z5.';
+        }
+
+        // Remove trailing empty errors
+        if (gstArray.every(msg => !msg)) {
+          delete next.gst;
+        } else {
+          next.gst = gstArray;
+        }
+        return next;
+      });
+    }
+
     setCustomerFormData(prev => ({
       ...prev,
       addresses: updatedAddresses
@@ -1011,16 +1077,16 @@ const CustomerManagement: React.FC = () => {
   
     // Top-level field checks
     if (!customerFormData.name.trim()) {
-      errors.name = 'Customer name is required';
-      missingFields.push('Customer Name');
+      errors.name = `${entityLabel} name is required`;
+      missingFields.push(`${entityLabel} Name`);
     } else {
       const isDuplicateName = allCustomers.some(customer =>
         customer.name.trim().toLowerCase() === customerFormData.name.trim().toLowerCase() &&
         (!editingCustomer || customer._id !== editingCustomer._id)
       );
       if (isDuplicateName) {
-        errors.name = 'Customer name already exists. Please use a unique name.';
-        missingFields.push('Unique Customer Name');
+        errors.name = `${entityLabel} name already exists. Please use a unique name.`;
+        missingFields.push(`Unique ${entityLabel} Name`);
       }
     }
   
@@ -1047,9 +1113,8 @@ const CustomerManagement: React.FC = () => {
         else if (!/^\d{6}$/.test(addr.pincode)) addrMissing.push('valid 6-digit pincode');
   
         if (addr.gstNumber && addr.gstNumber.trim() !== '') {
-          const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-          if (!gstRegex.test(addr.gstNumber)) {
-            gstErrors[index] = 'GST Number must be 15 characters, uppercase, and in valid GSTIN format (e.g., 22AAAAA0000A1Z5)';
+          if (!isValidGSTIN(addr.gstNumber)) {
+            gstErrors[index] = 'Invalid GST Number. It must match 22AAAAA0000A1Z5 and pass checksum.';
           } else {
             // Check if GST number already exists for another customer
             const existingCustomer = allCustomers.find(customer =>
@@ -1111,7 +1176,8 @@ const CustomerManagement: React.FC = () => {
         customerType: customerTypeTab === 'oem' ? 'oem' : customerFormData.customerType,
         alice: customerFormData.alice || undefined,
         siteAddress: customerFormData.siteAddress || undefined,
-        numberOfDG: customerFormData.numberOfDG || undefined
+        numberOfDG: customerFormData.numberOfDG || undefined,
+        bankDetails: customerTypeTab === 'supplier' ? customerFormData.bankDetails : undefined
       };
       if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
         delete (submitData as any).assignedTo;
@@ -1148,7 +1214,8 @@ const CustomerManagement: React.FC = () => {
         customerType: customerTypeTab === 'oem' ? 'oem' : customerFormData.customerType,
         alice: customerFormData.alice || undefined,
         siteAddress: customerFormData.siteAddress || undefined,
-        numberOfDG: customerFormData.numberOfDG || undefined
+        numberOfDG: customerFormData.numberOfDG || undefined,
+        bankDetails: customerTypeTab === 'supplier' ? customerFormData.bankDetails : undefined
       };
       if (!submitData.assignedTo || submitData.assignedTo.trim() === '') {
         delete (submitData as any).assignedTo;
@@ -1250,8 +1317,13 @@ const CustomerManagement: React.FC = () => {
         pincode: '',
         isPrimary: true,
         gstNumber: '',
+        contactPersonName: '',
+        email: '',
+        phone: '',
+        registrationStatus: 'non_registered',
       }],
       type: customerTypeTab === 'oem' ? 'customer' : customerTypeTab,
+      bankDetails: { bankName: '', accountNo: '', ifsc: '', branch: '' },
       dgDetails: [{
         dgSerialNumbers: '',
         alternatorMake: '',
@@ -1307,7 +1379,7 @@ const CustomerManagement: React.FC = () => {
       siteAddress: (customer as any).siteAddress || '',
       numberOfDG: (customer as any).numberOfDG || 0,
       addresses: (customer as any).addresses && Array.isArray((customer as any).addresses)
-        ? (customer as any).addresses.map((addr: any) => ({ ...addr, gstNumber: addr.gstNumber || '' }))
+        ? (customer as any).addresses.map((addr: any) => ({ ...addr, gstNumber: addr.gstNumber || '', contactPersonName: addr.contactPersonName || '', email: addr.email || '', phone: addr.phone || '', registrationStatus: addr.registrationStatus || 'non_registered' }))
         : [{
           id: Date.now(),
           address: '',
@@ -1316,8 +1388,13 @@ const CustomerManagement: React.FC = () => {
           pincode: '',
           isPrimary: true,
           gstNumber: '',
+          contactPersonName: '',
+          email: '',
+          phone: '',
+          registrationStatus: 'non_registered',
         }],
       type: (customer as any).type || (customerTypeTab === 'oem' ? 'customer' : customerTypeTab), // <-- ensure type is set
+      bankDetails: (customer as any).bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' },
       dgDetails: (customer as any).dgDetails && Array.isArray((customer as any).dgDetails) && (customer as any).dgDetails.length > 0
         ? (customer as any).dgDetails.map((dg: any) => ({
             dgSerialNumbers: dg.dgSerialNumbers || '',
@@ -1615,7 +1692,7 @@ const CustomerManagement: React.FC = () => {
     { value: 'createdAt', label: 'Created Date' }
   ] : [
     { value: 'all', label: 'Select Field' },
-    { value: 'name', label: 'Customer Name' },
+    { value: 'name', label: `${entityLabel} Name` },
     { value: 'email', label: 'Email' },
     { value: 'createdAt', label: 'Created Date' }
   ];
@@ -2091,28 +2168,41 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     </td>
                     
-                    {/* Contact Person Name Column */}
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
-                      {customerTypeTab === 'oem' ? 
-                        (customer.contactPerson || '-') :
-                        (customer.contactPersonName || '-')
-                      }
-                    </td>
+                                          {/* Contact Person Name Column */}
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                        {(() => {
+                          if (customerTypeTab === 'oem') return customer.contactPerson || '-';
+                          const primary = customer.addresses && customer.addresses.length > 0
+                            ? (customer.addresses.find(a => a.isPrimary) || customer.addresses[0])
+                            : undefined;
+                          return (primary && (primary as any).contactPersonName) || customer.contactPersonName || '-';
+                        })()}
+                      </td>
                     
                     {/* Designation Column */}
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
                       {customer.designation || '-'}
                     </td>
                     
-                    {/* Mobile Number Column */}
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
-                      {customer.phone || 'N/A'}
-                    </td>
+                                          {/* Mobile Number Column */}
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                        {(() => {
+                          const primary = customer.addresses && customer.addresses.length > 0
+                            ? (customer.addresses.find(a => a.isPrimary) || customer.addresses[0])
+                            : undefined;
+                          return (primary && (primary as any).phone) || customer.phone || 'N/A';
+                        })()}
+                      </td>
                     
-                    {/* Email ID Column */}
-                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
-                      {customer.email || 'N/A'}
-                    </td>
+                                          {/* Email ID Column */}
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                        {(() => {
+                          const primary = customer.addresses && customer.addresses.length > 0
+                            ? (customer.addresses.find(a => a.isPrimary) || customer.addresses[0])
+                            : undefined;
+                          return (primary && (primary as any).email) || customer.email || 'N/A';
+                        })()}
+                      </td>
                     
                     {/* Address Column */}
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
@@ -2222,19 +2312,13 @@ const CustomerManagement: React.FC = () => {
                           <Eye className="w-4 h-4" />
                         </button>
                         {customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' && customerTypeTab !== 'supplier' && (
-                          <button
-                            onClick={() => openContactModal(customer)}
-                            className="text-green-600 hover:text-green-900 p-1 rounded hover:bg-green-50 transition-colors"
-                            title="Add Contact"
-                          >
-                            <MessageSquare className="w-4 h-4" />
-                          </button>
+                          <></>
                         )}
                         {customerTypeTab !== 'oem' && customerTypeTab !== 'dg_customer' && (
                           <button
                             onClick={() => openEditModal(customer)}
                             className="text-indigo-600 hover:text-indigo-900 p-1 rounded hover:bg-indigo-50 transition-colors"
-                            title="Edit Customer"
+                            title={`Edit ${entityLabel}`} 
                           >
                             <Edit className="w-4 h-4" />
                           </button>
@@ -2660,7 +2744,7 @@ const CustomerManagement: React.FC = () => {
                   customerTypeTab === 'dg_customer' ? 'DG Customer' :
                   'OEM Customer'
                 }</h2>
-                <p className="text-sm text-gray-600 mt-1">Fill in the details below to create a new customer</p>
+                <p className="text-sm text-gray-600 mt-1">Fill in the details below to create a new {entityLabelLower}</p>
               </div>
               <button
                 onClick={() => {
@@ -2689,7 +2773,7 @@ const CustomerManagement: React.FC = () => {
                     <div className="flex items-center justify-between mb-6">
                       <div>
                         <h3 className="text-xl font-bold text-gray-800">Basic Information</h3>
-                        <p className="text-sm text-gray-600 mt-1">Customer details and contact information</p>
+                        <p className="text-sm text-gray-600 mt-1">{entityLabel} details and contact information</p>
                       </div>
                     </div>
                     <div>
@@ -2712,7 +2796,7 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 mt-4">
-                      {/* Designation, Contact Person */}
+                      {/* Designation */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Designation
@@ -2723,48 +2807,6 @@ const CustomerManagement: React.FC = () => {
                           onChange={(e) => setCustomerFormData({ ...customerFormData, designation: e.target.value })}
                           className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           placeholder="Enter designation"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Contact Person Name
-                        </label>
-                        <input
-                          type="text"
-                          value={customerFormData.contactPersonName}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, contactPersonName: e.target.value })}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter contact person name"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 mt-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Email
-                        </label>
-                        <input
-                          type="email"
-                          value={customerFormData.email}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, email: e.target.value })}
-                          className={`w-full px-2.5 py-1.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${formErrors.email ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                          placeholder="Enter email address"
-                        />
-                        {/* {formErrors.email && (
-                          <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
-                        )} */}
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Phone Number
-                        </label>
-                        <input
-                          type="tel"
-                          value={customerFormData.phone}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, phone: e.target.value })}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter phone number"
                         />
                       </div>
                     </div>
@@ -2794,10 +2836,58 @@ const CustomerManagement: React.FC = () => {
                         onChange={(e) => setCustomerFormData({ ...customerFormData, notes: e.target.value })}
                         rows={3}
                         className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Additional notes about the customer"
+                        placeholder="Additional notes"
                       />
                     </div>
 
+                    {/* Supplier Bank Details - only for Suppliers */}
+                    {customerTypeTab === 'supplier' && (
+                      <div className="mt-4">
+                        <h4 className="text-md font-semibold text-gray-800 mb-2">Bank Details</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+                            <input
+                              type="text"
+                              value={customerFormData.bankDetails?.bankName || ''}
+                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), bankName: e.target.value } })}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Enter bank name"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+                            <input
+                              type="text"
+                              value={customerFormData.bankDetails?.accountNo || ''}
+                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), accountNo: e.target.value } })}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Enter account number"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code</label>
+                            <input
+                              type="text"
+                              value={customerFormData.bankDetails?.ifsc || ''}
+                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), ifsc: e.target.value.toUpperCase() } })}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Enter IFSC code"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+                            <input
+                              type="text"
+                              value={customerFormData.bankDetails?.branch || ''}
+                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), branch: e.target.value } })}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Enter branch name"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     {/* Alice (Alias) Field */}
                     <div className="mt-4">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2808,7 +2898,7 @@ const CustomerManagement: React.FC = () => {
                         value={customerFormData.alice || ''}
                         onChange={(e) => setCustomerFormData({ ...customerFormData, alice: e.target.value })}
                         className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter customer alias/short name"
+                        placeholder={`Enter ${entityLabelLower} alias/short name`}
                       />
                     </div>
                   </div>
@@ -2856,6 +2946,18 @@ const CustomerManagement: React.FC = () => {
                                 className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
                                 placeholder="Enter full address"
                               />
+                              {/* Registration Status per address */}
+                              <div className="mt-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Registration Status *</label>
+                                <select
+                                  value={address.registrationStatus}
+                                  onChange={(e) => updateAddress(address.id, 'registrationStatus', e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm bg-white"
+                                >
+                                  <option value="registered">Registered</option>
+                                  <option value="non_registered">Non Registered</option>
+                                </select>
+                              </div>
                               {/* GST Number per address */}
                               <div className="mt-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2869,9 +2971,45 @@ const CustomerManagement: React.FC = () => {
                                   placeholder="GST Number"
                                   maxLength={15}
                                 />
+                                {address.registrationStatus === 'registered' && (!address.gstNumber || !address.gstNumber.trim()) && (
+                                  <p className="text-red-500 text-xs mt-1">GST Number is required for Registered status</p>
+                                )}
                                 {Array.isArray(formErrors.gst) && formErrors.gst[index] && (
                                   <p className="text-red-500 text-xs mt-1 pt-2">{formErrors.gst[index]}</p>
                                 )}
+                              </div>
+                              {/* Per-address contact details */}
+                              <div className="grid grid-cols-1 gap-2 mt-2">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                                  <input
+                                    type="text"
+                                    value={address.contactPersonName || ''}
+                                    onChange={(e) => updateAddress(address.id, 'contactPersonName', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Contact person"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                  <input
+                                    type="email"
+                                    value={address.email || ''}
+                                    onChange={(e) => updateAddress(address.id, 'email', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Email"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                  <input
+                                    type="text"
+                                    value={address.phone || ''}
+                                    onChange={(e) => updateAddress(address.id, 'phone', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Phone"
+                                  />
+                                </div>
                               </div>
                               {/* New fields for state, district, pincode */}
                               <div className="grid grid-cols-3 gap-2 mt-2">
@@ -3216,6 +3354,25 @@ const CustomerManagement: React.FC = () => {
                                     Auto-calculated based on start date and KVA ({dgDetail.dgRatingKVA > 0 ? `${calculateWarrantyPeriod(dgDetail.dgRatingKVA)} months` : 'Enter KVA first'})
                                   </p>
                                 </div>
+                                {/* DG Location (Address) */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    DG Location (Address) *
+                                  </label>
+                                  <select
+                                    value={(dgDetail as any).locationAddress || ''}
+                                    onChange={(e) => {
+                                      const selectedText = e.target.value;
+                                      updateDGDetails(index, 'locationAddress' as any, selectedText);
+                                    }}
+                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                  >
+                                    <option value="" disabled>Select address</option>
+                                    {customerFormData.addresses.map(a => (
+                                      <option key={a.id} value={a.address}>{a.address ? a.address.slice(0, 80) : `Address #${a.id}`}</option>
+                                    ))}
+                                  </select>
+                                </div>
                               </div>
                             </div>
                           ))}
@@ -3318,7 +3475,7 @@ const CustomerManagement: React.FC = () => {
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 mt-4">
-                      {/* Designation, Contact Person */}
+                      {/* Designation */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                           Designation
@@ -3329,18 +3486,6 @@ const CustomerManagement: React.FC = () => {
                           onChange={(e) => setCustomerFormData({ ...customerFormData, designation: e.target.value })}
                           className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                           placeholder="Enter designation"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Contact Person Name
-                        </label>
-                        <input
-                          type="text"
-                          value={customerFormData.contactPersonName}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, contactPersonName: e.target.value })}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter contact person name"
                         />
                       </div>
                     </div>
@@ -3400,9 +3545,58 @@ const CustomerManagement: React.FC = () => {
                         onChange={(e) => setCustomerFormData({ ...customerFormData, notes: e.target.value })}
                         rows={3}
                         className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Additional notes about the customer"
+                        placeholder="Additional notes"
                       />
                     </div>
+
+                    {/* Supplier Bank Details - only for Suppliers */}
+                    {customerTypeTab === 'supplier' && (
+                      <div className="mt-4">
+                        <h4 className="text-md font-semibold text-gray-800 mb-2">Bank Details</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Bank Name</label>
+                            <input
+                              type="text"
+                              value={customerFormData.bankDetails?.bankName || ''}
+                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), bankName: e.target.value } })}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Enter bank name"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+                            <input
+                              type="text"
+                              value={customerFormData.bankDetails?.accountNo || ''}
+                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), accountNo: e.target.value } })}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Enter account number"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">IFSC Code</label>
+                            <input
+                              type="text"
+                              value={customerFormData.bankDetails?.ifsc || ''}
+                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), ifsc: e.target.value.toUpperCase() } })}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Enter IFSC code"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Branch</label>
+                            <input
+                              type="text"
+                              value={customerFormData.bankDetails?.branch || ''}
+                              onChange={(e) => setCustomerFormData({ ...customerFormData, bankDetails: { ...(customerFormData.bankDetails || { bankName: '', accountNo: '', ifsc: '', branch: '' }), branch: e.target.value } })}
+                              className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              placeholder="Enter branch name"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Alice (Alias) Field */}
                     <div className="mt-4">
@@ -3414,43 +3608,11 @@ const CustomerManagement: React.FC = () => {
                         value={customerFormData.alice || ''}
                         onChange={(e) => setCustomerFormData({ ...customerFormData, alice: e.target.value })}
                         className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter customer alias/short name"
+                        placeholder={`Enter ${entityLabelLower} alias/short name`}
                       />
                     </div>
 
-                    {customerTypeTab === 'customer' && (
-                      <div className="grid grid-cols-2 gap-4 my-6">
-                        {/* Number of DG */}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Number of DG
-                          </label>
-                          <input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={customerFormData.numberOfDG || 0}
-                            onChange={(e) => setCustomerFormData({ ...customerFormData, numberOfDG: parseInt(e.target.value) || 0 })}
-                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="e.g., 2"
-                          />
-                        </div>
-                        
-                        {/* Site Address */}
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Site Address
-                          </label>
-                          <input
-                            type="text"
-                            value={customerFormData.siteAddress || ''}
-                            onChange={(e) => setCustomerFormData({ ...customerFormData, siteAddress: e.target.value })}
-                            className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            placeholder="Enter site/installation address"
-                          />
-                        </div>
-                      </div>
-                    )}
+
                   </div>
 
                   {/* Right: Addresses */}
@@ -3512,6 +3674,39 @@ const CustomerManagement: React.FC = () => {
                                 {Array.isArray(formErrors.gst) && formErrors.gst[index] && (
                                   <p className="text-red-500 text-xs mt-1 pt-2">{formErrors.gst[index]}</p>
                                 )}
+                              </div>
+                              {/* Per-address contact details */}
+                              <div className="grid grid-cols-1 gap-2 mt-2">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                                  <input
+                                    type="text"
+                                    value={address.contactPersonName || ''}
+                                    onChange={(e) => updateAddress(address.id, 'contactPersonName', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Contact person"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                  <input
+                                    type="email"
+                                    value={address.email || ''}
+                                    onChange={(e) => updateAddress(address.id, 'email', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Email"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                  <input
+                                    type="text"
+                                    value={address.phone || ''}
+                                    onChange={(e) => updateAddress(address.id, 'phone', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Phone"
+                                  />
+                                </div>
                               </div>
                               {/* New fields for state, district, pincode */}
                               <div className="grid grid-cols-3 gap-2 mt-2">
@@ -3966,7 +4161,7 @@ const CustomerManagement: React.FC = () => {
                     )}
                     {selectedCustomer.type === 'customer' && selectedCustomer.customerId && (
                       <div>
-                        <p className="text-xs text-gray-500">Customer ID</p>
+                        <p className="text-xs text-gray-500">{customerTypeTab === 'supplier' ? 'Supplier ID' : (customerTypeTab === 'dg_customer' ? 'DG Customer ID' : 'Customer ID')}</p>
                         <p className="font-medium">{selectedCustomer.customerId}</p>
                       </div>
                     )}
@@ -4022,16 +4217,6 @@ const CustomerManagement: React.FC = () => {
                         </div>
                       )
                     )}
-                    {/* <div>
-                      <p className="text-xs text-gray-500">{customerTypeTab === 'oem' ? 'Products' : 'Customer Type'}</p>
-                      <p className="font-medium">
-                        {customerTypeTab === 'oem' ? 
-                          (selectedCustomer.products && Array.isArray(selectedCustomer.products) && selectedCustomer.products.length > 0 ? 
-                            `${selectedCustomer.products.length} products` : 'No products') :
-                          (selectedCustomer.customerType || 'N/A')
-                        }
-                      </p>
-                    </div> */}
                     {customerTypeTab === 'oem' && selectedCustomer.contactPerson && (
                       <div>
                         <p className="text-xs text-gray-500">Contact Person</p>
@@ -4080,13 +4265,6 @@ const CustomerManagement: React.FC = () => {
                         <p className="font-medium text-sm">{selectedCustomer.alice}</p>
                       </div>
                     )}
-                    {/* Lead Source - Only show for suppliers */}
-                    {/* {customerTypeTab === 'supplier' && selectedCustomer.leadSource && (
-                      <div>
-                        <p className="text-xs text-gray-500">Lead Source</p>
-                        <p className="font-medium text-sm">{selectedCustomer.leadSource}</p>
-                      </div>
-                    )} */}
                     {selectedCustomer.siteAddress && (
                       <div>
                         <p className="text-xs text-gray-500">Site Address</p>
@@ -4175,7 +4353,7 @@ const CustomerManagement: React.FC = () => {
                   {selectedCustomer.addresses && selectedCustomer.addresses.length > 0 ? (
                     <div className="space-y-3">
                       {selectedCustomer.addresses.map((address, index) => (
-                        <div key={address.id || index} className={`border rounded-lg p-3 ${address.isPrimary ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
+                        <div key={index} className={`border rounded-lg p-3 ${address.isPrimary ? 'border-blue-300 bg-blue-50' : 'border-gray-200 bg-gray-50'}`}>
                           <div className="flex items-center justify-between mb-2">
                             <span className="text-xs font-medium text-gray-700">
                               Address {index + 1}
@@ -4192,6 +4370,18 @@ const CustomerManagement: React.FC = () => {
                               <span><strong>State:</strong> {address.state}</span>
                               <span><strong>District:</strong> {address.district}</span>
                               <span><strong>Pincode:</strong> {address.pincode}</span>
+                            </div>
+                            <div className="text-xs text-gray-700 mt-1">
+                              <strong>Registration Status:</strong> {address.registrationStatus === 'registered' ? 'Registered' : 'Non Registered'}
+                            </div>
+                            <div className="text-xs text-gray-700 mt-1">
+                              <strong>Contact Person Name:</strong> {address.contactPersonName || '-'}
+                            </div>
+                            <div className="text-xs text-gray-700 mt-1">
+                              <strong>Contact Number:</strong> {address.phone || '-'}
+                            </div>
+                            <div className="text-xs text-gray-700 mt-1">
+                              <strong>Email:</strong> {address.email || '-'}
                             </div>
                             {address.gstNumber && (
                               <div className="text-xs text-gray-700 mt-1">
@@ -4221,6 +4411,33 @@ const CustomerManagement: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* Supplier Bank Details */}
+              {selectedCustomer.type === 'supplier' && (selectedCustomer as any).bankDetails && (
+                <div className="space-y-6 mb-6">
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Bank Details</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-gray-500">Bank Name</p>
+                        <p className="font-medium text-sm">{(selectedCustomer as any).bankDetails.bankName}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Account Number</p>
+                        <p className="font-medium text-sm">{(selectedCustomer as any).bankDetails.accountNo}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">IFSC Code</p>
+                        <p className="font-medium text-sm">{(selectedCustomer as any).bankDetails.ifsc}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500">Branch</p>
+                        <p className="font-medium text-sm">{(selectedCustomer as any).bankDetails.branch}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* OEM Bank Details */}
               {customerTypeTab === 'oem' && selectedCustomer.bankDetails && (
@@ -4378,6 +4595,10 @@ const CustomerManagement: React.FC = () => {
                              <p className="text-xs text-gray-500">Warranty End Date</p>
                              <p className="font-medium text-sm">{dgDetail.warrantyEndDate ? new Date(dgDetail.warrantyEndDate).toLocaleDateString() : 'N/A'}</p>
                            </div>
+                           <div>
+                             <p className="text-xs text-gray-500">DG Location (Address)</p>
+                             <p className="font-medium text-sm">{(dgDetail as any).locationAddress || 'N/A'}</p>
+                           </div>
                         </div>
                       </div>
                     ))}
@@ -4385,69 +4606,7 @@ const CustomerManagement: React.FC = () => {
                 </div>
               )}
 
-              {/* Contact History - Hide for suppliers */}
-              {customerTypeTab !== 'supplier' && (
-                <div>
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium text-gray-900">
-                      {customerTypeTab === 'oem' ? 'OEM Details' : 'Contact History'}
-                    </h3>
-                    {customerTypeTab !== 'oem' && (
-                      <button
-                        onClick={() => {
-                          openContactModal(selectedCustomer);
-                          setShowDetailsModal(false);
-                        }}
-                        className="bg-blue-600 text-white px-3 py-1 rounded-lg text-sm hover:bg-blue-700 transition-colors"
-                      >
-                        Add Contact
-                      </button>
-                    )}
-                  </div>
-                {customerTypeTab === 'oem' ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                    <p>OEM customers don't have contact history</p>
-                    <p className="text-sm">Contact management is not applicable for OEM customers</p>
-                  </div>
-                ) : selectedCustomer.contactHistory && selectedCustomer.contactHistory.length === 0 ? (
-                  <div className="text-center py-8 text-gray-500">
-                    <MessageSquare className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                    <p>No contact history yet</p>
-                    <p className="text-sm">Add the first contact interaction</p>
-                  </div>
-                ) : selectedCustomer.contactHistory && selectedCustomer.contactHistory.length > 0 ? (
-                  <div className="space-y-3">
-                    {selectedCustomer.contactHistory.map((contact, index) => (
-                      <div key={index} className="bg-gray-50 rounded-lg p-4 flex items-start space-x-3">
-                        <div className="flex-shrink-0">
-                          {getContactIcon(contact.type)}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <p className="text-xs font-medium text-gray-900 capitalize">
-                              {contact.type} - {new Date(contact.date).toLocaleDateString()}
-                            </p>
-                            {contact.followUpDate && (
-                              <span className="text-xs text-orange-600 bg-orange-100 px-2 py-1 rounded">
-                                Follow-up: {new Date(contact.followUpDate).toLocaleDateString()}
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-gray-600 mt-1">{contact.notes}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 text-gray-500">
-                    <MessageSquare className="w-12 h-12 mx-auto mb-3 text-gray-300" />
-                    <p>No contact history available</p>
-                    <p className="text-sm">Contact history data is not accessible</p>
-                  </div>
-                )}
-              </div>
-            )}
+              {/* Contact History removed as per requirement */}
             </div>
           </div>
         </div>
@@ -4696,106 +4855,6 @@ const CustomerManagement: React.FC = () => {
         </div>
       )}
 
-      {/* Sales Pipeline Modal */}
-      {/* {showPipelineModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-6xl m-4 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-900">Sales Pipeline Overview</h2>
-              <button
-                onClick={() => setShowPipelineModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="p-6">
-              <div className="grid grid-cols-5 gap-4">
-                {(['new', 'qualified', 'contacted', 'converted', 'lost'] as LeadStatus[]).map((status) => {
-                  const statusCustomers = customers.filter(c => c.status === status);
-                  const getColumnColor = (s: LeadStatus) => {
-                    switch (s) {
-                      case 'new': return 'bg-blue-50 border-blue-200';
-                      case 'qualified': return 'bg-yellow-50 border-yellow-200';
-                      case 'contacted': return 'bg-purple-50 border-purple-200';
-                      case 'converted': return 'bg-green-50 border-green-200';
-                      case 'lost': return 'bg-red-50 border-red-200';
-                    }
-                  };
-
-                  return (
-                    <div key={status} className={`rounded-lg border-2 ${getColumnColor(status)} p-4`}>
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="font-medium text-gray-900 capitalize flex items-center">
-                          {getStatusIcon(status)}
-                          <span className="ml-2">{status}</span>
-                        </h3>
-                        <span className="text-sm font-medium text-gray-600">
-                          {statusCustomers.length}
-                        </span>
-                      </div>
-                      <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {statusCustomers.map((customer) => (
-                          <div
-                            key={customer._id}
-                            className="bg-white rounded p-3 shadow-sm border cursor-pointer hover:shadow-md transition-shadow"
-                            onClick={() => openDetailsModal(customer)}
-                          >
-                            <div className="font-medium text-xs text-gray-900 truncate">
-                              {customer.name}
-                            </div>
-                            <div className="text-xs text-gray-500 mt-1">
-                              {customer.customerType} • {customer.leadSource || 'Direct'}
-                            </div>
-                            {customer.contactHistory.length > 0 && (
-                              <div className="text-xs text-blue-600 mt-1">
-                                Last: {customer.contactHistory[customer.contactHistory.length - 1].type}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                        {statusCustomers.length === 0 && (
-                          <div className="text-center text-gray-400 py-8">
-                            <Users className="w-6 h-6 mx-auto mb-2" />
-                            <p className="text-sm">No customers</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              <div className="mt-8 bg-gray-50 rounded-lg p-4">
-                <h3 className="font-medium text-gray-900 mb-3">Pipeline Metrics</h3>
-                <div className="grid grid-cols-5 gap-4 text-center">
-                  <div>
-                    <p className="text-xl font-bold text-blue-600">{counts.newLeads}</p>
-                    <p className="text-xs text-gray-600">New Leads</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-yellow-600">{counts.qualified}</p>
-                    <p className="text-xs text-gray-600">Qualified</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-purple-600">{counts.contacted}</p>
-                    <p className="text-xs text-gray-600">Contacted</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-green-600">{counts.converted}</p>
-                    <p className="text-xs text-gray-600">Converted</p>
-                  </div>
-                  <div>
-                    <p className="text-xl font-bold text-red-600">{counts.lost}</p>
-                    <p className="text-xs text-gray-600">Lost</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )} */}
       {importing && (
         <div className="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 flex items-center space-x-4 shadow-lg">

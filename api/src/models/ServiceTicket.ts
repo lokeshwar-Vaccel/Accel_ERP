@@ -224,17 +224,17 @@ const serviceTicketSchema = new Schema({
   // Visit Details fields
   typeOfVisit: {
     type: String,
-    enum: Object.values(TypeOfVisit),
+    enum: [...Object.values(TypeOfVisit), ''],
     trim: true
   },
   natureOfWork: {
     type: String,
-    enum: Object.values(NatureOfWork),
+    enum: [...Object.values(NatureOfWork), ''],
     trim: true
   },
   subNatureOfWork: {
     type: String,
-    enum: Object.values(SubNatureOfWork),
+    enum: [...Object.values(SubNatureOfWork), ''],
     trim: true
   },
   

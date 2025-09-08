@@ -1030,7 +1030,7 @@ export const exportCustomers = async (
 
     // Fetch all customers matching the query
     const customers = await Customer.find(query)
-      .select('customerId name alice designation contactPersonName email phone panNumber address customerType type status leadSource assignedTo notes addresses siteAddress numberOfDG createdAt updatedAt')
+      .select('customerId name alice designation contactPersonName email phone panNumber address customerType type status leadSource assignedTo notes addresses siteAddress numberOfDG bankDetails createdAt updatedAt')
       .populate('assignedTo', 'firstName lastName email')
       .populate('createdBy', 'firstName lastName email')
       .populate('dgDetails')
@@ -1061,10 +1061,21 @@ export const exportCustomers = async (
       return primaryAddress.address || '';
     };
 
+    // Helper function to get primary address fields
+    const getPrimaryAddressField = (addresses: any[], field: string) => {
+      if (!addresses || addresses.length === 0) return '';
+      const primaryAddress = addresses.find(addr => addr.isPrimary) || addresses[0];
+      const value = (primaryAddress && primaryAddress[field]) || '';
+      return value || '';
+    };
+
     // Transform data for Excel export
     const excelData = customers.map((customer: any, index) => {
       const assignedUser = getAssignedUserName(customer.assignedTo);
       const primaryAddress = getPrimaryAddress(customer.addresses);
+      const primaryContactPerson = getPrimaryAddressField(customer.addresses, 'contactPersonName') || customer.contactPersonName || '';
+      const primaryEmail = getPrimaryAddressField(customer.addresses, 'email') || customer.email || '';
+      const primaryPhone = getPrimaryAddressField(customer.addresses, 'phone') || customer.phone || '';
       
       return {
         'S.No': index + 1,
@@ -1072,9 +1083,9 @@ export const exportCustomers = async (
         'Name': customer.name || '',
         'Alice (Alias)': customer.alice || '',
         'Designation': customer.designation || '',
-        'Contact Person': customer.contactPersonName || '',
-        'Email': customer.email || '',
-        'Phone': customer.phone || '',
+        'Contact Person': primaryContactPerson,
+        'Email': primaryEmail,
+        'Phone': primaryPhone,
         'PAN Number': customer.panNumber || '',
         'Primary Address': primaryAddress,
         'Customer Type': customer.customerType || '',
@@ -1085,6 +1096,10 @@ export const exportCustomers = async (
         'Notes': customer.notes || '',
         'Site Address': customer.siteAddress || '',
         'Number of DG': customer.numberOfDG || 0,
+        'Bank Name': (customer as any).bankDetails?.bankName || '',
+        'Account No': (customer as any).bankDetails?.accountNo || '',
+        'IFSC': (customer as any).bankDetails?.ifsc || '',
+        'Branch': (customer as any).bankDetails?.branch || '',
         'Created Date': formatDateForExcel(customer.createdAt),
         'Last Updated': formatDateForExcel(customer.updatedAt)
       };
@@ -1137,6 +1152,10 @@ export const exportCustomers = async (
       { wch: 30 },  // Notes
       { wch: 40 },  // Site Address
       { wch: 15 },  // Number of DG
+      { wch: 20 },  // Bank Name
+      { wch: 20 },  // Account No
+      { wch: 15 },  // IFSC
+      { wch: 20 },  // Branch
       { wch: 15 },  // Created Date
       { wch: 15 }   // Last Updated
     ];
