@@ -116,6 +116,7 @@ interface PurchaseOrder {
   remainingAmount?: number;
   paymentStatus?: 'pending' | 'partial' | 'paid' | 'failed';
   paymentMethod?: string;
+  paymentMethodDetails?: PaymentMethodDetails;
   paymentDate?: string;
   createdBy: string | {
     _id: string;
@@ -237,6 +238,8 @@ const PurchaseOrderManagement: React.FC = () => {
     paymentMethodDetails: {} as PaymentMethodDetails
   });
   const [showPaymentMethodDropdown, setShowPaymentMethodDropdown] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
 
   const [totalPurchaseOrdersCount, setTotalPurchaseOrdersCount] = useState(0);
   const [pendingPurchaseOrdersCount, setPendingPurchaseOrdersCount] = useState(0);
@@ -637,6 +640,8 @@ const PurchaseOrderManagement: React.FC = () => {
     setSelectedPO(po);
     setDetailsSearchTerm(''); // Clear search when opening modal
     setShowDetailsModal(true);
+    // Fetch payment history when opening details modal
+    fetchPaymentHistory(po._id);
   };
 
   const openReceiveModal = (po: PurchaseOrder) => {
@@ -724,6 +729,24 @@ const PurchaseOrderManagement: React.FC = () => {
     setShowPaymentModal(true);
   };
 
+  // Fetch payment history for a purchase order
+  const fetchPaymentHistory = async (poId: string) => {
+    try {
+      setLoadingPayments(true);
+      const response = await apiClient.purchaseOrderPayments.getByPurchaseOrder(poId);
+      if (response.success) {
+        console.log("response.data:",response.data);
+        
+        setPaymentHistory(response.data.payments || []);
+      }
+    } catch (error) {
+      console.error('Error fetching payment history:', error);
+      setPaymentHistory([]);
+    } finally {
+      setLoadingPayments(false);
+    }
+  };
+
   const validatePaymentForm = (): boolean => {
     const errors: Record<string, string> = {};
 
@@ -744,12 +767,94 @@ const PurchaseOrderManagement: React.FC = () => {
       errors.paymentDate = 'Payment date is required';
     }
 
+    // Validate payment method details based on selected payment method
+    if (paymentUpdate.paymentMethod) {
+      const methodErrors = validatePaymentMethodDetails(paymentUpdate.paymentMethod, paymentUpdate.paymentMethodDetails);
+      Object.assign(errors, methodErrors);
+    }
+
     if (Object.keys(errors).length > 0) {
       setFormErrors(errors);
       return false;
     }
 
     return true;
+  };
+
+  // Helper function to validate payment method details
+  const validatePaymentMethodDetails = (paymentMethod: string, details: PaymentMethodDetails): Record<string, string> => {
+    const errors: Record<string, string> = {};
+
+    switch (paymentMethod) {
+      case 'cash':
+        // Cash is simple, no required validation
+        break;
+
+      case 'cheque':
+        if (!details.cheque?.chequeNumber) {
+          errors.chequeNumber = 'Cheque number is required';
+        }
+        if (!details.cheque?.bankName) {
+          errors.bankName = 'Bank name is required';
+        }
+        if (!details.cheque?.issueDate) {
+          errors.issueDate = 'Issue date is required';
+        }
+        break;
+
+      case 'bank_transfer':
+        if (!details.bankTransfer?.bankName) {
+          errors.bankName = 'Bank name is required';
+        }
+        if (!details.bankTransfer?.accountNumber) {
+          errors.accountNumber = 'Account number is required';
+        }
+        if (!details.bankTransfer?.ifscCode) {
+          errors.ifscCode = 'IFSC code is required';
+        }
+        if (!details.bankTransfer?.transactionId) {
+          errors.transactionId = 'Transaction ID is required';
+        }
+        if (!details.bankTransfer?.transferDate) {
+          errors.transferDate = 'Transfer date is required';
+        }
+        break;
+
+      case 'upi':
+        if (!details.upi?.upiId) {
+          errors.upiId = 'UPI ID is required';
+        }
+        if (!details.upi?.transactionId) {
+          errors.transactionId = 'Transaction ID is required';
+        }
+        break;
+
+      case 'card':
+        if (!details.card?.cardType) {
+          errors.cardType = 'Card type is required';
+        }
+        if (!details.card?.cardNetwork) {
+          errors.cardNetwork = 'Card network is required';
+        }
+        if (!details.card?.lastFourDigits) {
+          errors.lastFourDigits = 'Last 4 digits are required';
+        }
+        if (!details.card?.transactionId) {
+          errors.transactionId = 'Transaction ID is required';
+        }
+        break;
+
+      case 'other':
+        if (!details.other?.methodName) {
+          errors.methodName = 'Method name is required';
+        }
+        break;
+
+      default:
+        errors.paymentMethod = 'Invalid payment method';
+    }
+
+    return errors;
   };
 
   const submitPaymentUpdate = async () => {
@@ -763,29 +868,41 @@ const PurchaseOrderManagement: React.FC = () => {
 
     setSubmitting(true);
     try {
-      // Calculate new paid amount (current + new payment)
-      const currentPaidAmount = selectedPO.paidAmount || 0;
-      const newTotalPaidAmount = currentPaidAmount + paymentUpdate.paidAmount;
-
-      // Use the payment update method
-      await apiClient.purchaseOrders.updatePayment(selectedPO._id, {
-        paidAmount: paymentUpdate.paidAmount,
+      // Create a new payment record
+      const paymentData = {
+        purchaseOrderId: selectedPO._id,
+        poNumber: selectedPO.poNumber,
+        supplierId: typeof selectedPO.supplier === 'string' ? selectedPO.supplier : selectedPO.supplier._id,
+        amount: paymentUpdate.paidAmount,
+        currency: 'INR',
         paymentMethod: paymentUpdate.paymentMethod,
+        paymentMethodDetails: paymentUpdate.paymentMethodDetails,
         paymentDate: paymentUpdate.paymentDate,
-        notes: paymentUpdate.notes
-      });
+        notes: paymentUpdate.notes,
+        paymentStatus: 'completed'
+      };
+
+      // Debug logging
+      console.log('=== Frontend Payment Data Debug ===');
+      console.log('Payment Method:', paymentUpdate.paymentMethod);
+      console.log('Payment Method Details:', JSON.stringify(paymentUpdate.paymentMethodDetails, null, 2));
+      console.log('===================================');
+
+      await apiClient.purchaseOrderPayments.create(paymentData);
       
+      // Refresh purchase orders and payment history
       await fetchPurchaseOrders();
+      await fetchPaymentHistory(selectedPO._id);
       setShowPaymentModal(false);
       
       // Clear form errors
       setFormErrors({});
       
-      toast.success('Payment status updated successfully!');
+      toast.success('Payment recorded successfully!');
     } catch (error) {
-      console.error('Error updating payment status:', error);
-      setFormErrors({ general: 'Failed to update payment status. Please try again.' });
-      toast.error('Failed to update payment status');
+      console.error('Error recording payment:', error);
+      setFormErrors({ general: 'Failed to record payment. Please try again.' });
+      toast.error('Failed to record payment');
     } finally {
       setSubmitting(false);
     }
@@ -1346,6 +1463,859 @@ const PurchaseOrderManagement: React.FC = () => {
     return options.find(opt => opt.value === value)?.label || 'Select payment method';
   };
 
+  // Helper function to handle PDF generation
+  const handleGeneratePDF = async (paymentId: string) => {
+    try {
+      const response = await apiClient.purchaseOrderPayments.generatePDF(paymentId);
+      
+      // Create blob URL and trigger download
+      const blob = new Blob([response], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `payment-receipt-${paymentId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Payment receipt PDF generated successfully!');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF');
+    }
+  };
+
+  const handlePrintPO = async () => {
+    if (!selectedPO) return;
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+
+    // Fetch company information
+    let companyInfo = {
+      name: 'SUN POWER SOLUTIONS',
+      address: 'Company Address',
+      phone: '',
+      email: '',
+      pan: ''
+    };
+
+    try {
+      const response = await apiClient.generalSettings.getAll();
+      if (response.success && response.data && response.data.companies && response.data.companies.length > 0) {
+        const companySettings = response.data.companies[0];
+        companyInfo = {
+          name: companySettings.companyName || 'SUN POWER SOLUTIONS',
+          address: companySettings.companyAddress || 'Company Address',
+          phone: companySettings.contactPhone || '',
+          email: companySettings.contactEmail || '',
+          pan: companySettings.companyPan || ''
+        };
+      }
+    } catch (error) {
+      console.error('Error fetching company settings:', error);
+    }
+
+    const supplierName = typeof selectedPO.supplier === 'string' 
+      ? selectedPO.supplier 
+      : (selectedPO.supplier as Supplier)?.name || 'Unknown Supplier';
+
+    const supplierEmail = typeof selectedPO.supplierEmail === 'string' 
+      ? selectedPO.supplierEmail 
+      : (selectedPO.supplierEmail as any)?.email || 'No Email';
+
+    // Extract supplier address
+    let supplierAddress: SupplierAddress | null = null;
+    if ((selectedPO as any).supplierAddress && (selectedPO as any).supplierAddress.address) {
+      supplierAddress = (selectedPO as any).supplierAddress;
+    } else if (selectedPO.supplier && typeof selectedPO.supplier !== 'string') {
+      const supplier = selectedPO.supplier as Supplier;
+      if (supplier?.addresses && Array.isArray(supplier.addresses) && supplier.addresses.length > 0) {
+        supplierAddress = supplier.addresses[0];
+      }
+    }
+
+    const createdByName = getCreatedByName(selectedPO.createdBy);
+
+    // Calculate totals
+    const totalOrdered = selectedPO.items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalReceived = selectedPO.items.reduce((sum, item) => sum + (item.receivedQuantity || 0), 0);
+    const totalRemaining = selectedPO.items.reduce((sum, item) => sum + (item.quantity - (item.receivedQuantity || 0)), 0);
+
+    const printContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Purchase Order - ${selectedPO.poNumber}</title>
+        <style>
+          @media print {
+            @page {
+              margin: 0.5in;
+              size: A4;
+            }
+            body { margin: 0; }
+            .no-print { display: none !important; }
+          }
+          
+          body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.4;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            background: white;
+          }
+          
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 20px;
+          }
+          
+          .company-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 5px;
+          }
+          
+          .company-tagline {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+          }
+          
+          .company-address {
+            font-size: 12px;
+            color: #555;
+            margin-bottom: 15px;
+            line-height: 1.4;
+            font-style: italic;
+          }
+          
+          .po-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1f2937;
+            margin-top: 20px;
+          }
+          
+          .po-number {
+            font-size: 18px;
+            color: #374151;
+            margin-bottom: 20px;
+          }
+          
+          .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+          }
+          
+          .info-section {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #2563eb;
+          }
+          
+          .info-section h3 {
+            margin: 0 0 15px 0;
+            font-size: 16px;
+            font-weight: bold;
+            color: #374151;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          
+          .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 4px 0;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          
+          .info-row:last-child {
+            border-bottom: none;
+          }
+          
+          .info-label {
+            font-weight: 600;
+            color: #6b7280;
+            font-size: 13px;
+          }
+          
+          .info-value {
+            font-weight: 500;
+            color: #111827;
+            font-size: 13px;
+            text-align: right;
+          }
+          
+          .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          
+          .status-approved { background: #dbeafe; color: #1e40af; }
+          .status-pending { background: #fef3c7; color: #92400e; }
+          .status-rejected { background: #fee2e2; color: #dc2626; }
+          .status-partial { background: #fed7aa; color: #ea580c; }
+          .status-paid { background: #d1fae5; color: #059669; }
+          
+          .items-section {
+            margin: 30px 0;
+          }
+          
+          .items-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #1f2937;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e5e7eb;
+          }
+          
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          }
+          
+          .items-table th {
+            background: #f3f4f6;
+            color: #374151;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 12px 8px;
+            text-align: left;
+            border: 1px solid #d1d5db;
+          }
+          
+          .items-table td {
+            padding: 10px 8px;
+            border: 1px solid #e5e7eb;
+            font-size: 13px;
+            vertical-align: top;
+          }
+          
+          .items-table tbody tr:nth-child(even) {
+            background: #f9fafb;
+          }
+          
+          .items-table tbody tr:hover {
+            background: #f3f4f6;
+          }
+          
+          .product-name {
+            font-weight: 600;
+            color: #111827;
+          }
+          
+          .product-part {
+            font-family: 'Courier New', monospace;
+            color: #2563eb;
+            font-size: 11px;
+            background: #eff6ff;
+            padding: 2px 6px;
+            border-radius: 4px;
+          }
+          
+          .quantity {
+            text-align: center;
+            font-weight: 600;
+          }
+          
+          .price {
+            text-align: right;
+            font-weight: 600;
+          }
+          
+          .total-row {
+            background: #f3f4f6 !important;
+            font-weight: bold;
+          }
+          
+          .total-row td {
+            border-top: 2px solid #374151;
+            padding: 15px 8px;
+          }
+          
+          .grand-total {
+            background: #1f2937 !important;
+            color: white;
+          }
+          
+          .grand-total td {
+            border-top: 3px solid #1f2937;
+            font-size: 14px;
+            font-weight: bold;
+          }
+          
+          .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e5e7eb;
+            text-align: center;
+            color: #6b7280;
+            font-size: 12px;
+          }
+          
+          .print-button {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 1000;
+          }
+          
+          .print-button:hover {
+            background: #1d4ed8;
+          }
+        </style>
+      </head>
+      <body>
+        <button class="print-button no-print" onclick="window.print()">🖨️ Print PO</button>
+        
+        <div class="header">
+          <div class="company-name">${companyInfo.name}</div>
+          <div class="company-tagline">Solar Energy Solutions & Equipment</div>
+          <div class="company-address">
+            ${companyInfo.address}<br/>
+            ${companyInfo.phone ? `Phone: ${companyInfo.phone}` : ''}${companyInfo.phone && companyInfo.email ? ' | ' : ''}${companyInfo.email ? `Email: ${companyInfo.email}` : ''}<br/>
+            ${companyInfo.pan ? `PAN: ${companyInfo.pan}` : ''}
+          </div>
+          <div class="po-title">PURCHASE ORDER</div>
+          <div class="po-number">PO #${selectedPO.poNumber}</div>
+        </div>
+        
+        <div class="info-grid">
+          <div class="info-section">
+            <h3>Order Information</h3>
+            <div class="info-row">
+              <span class="info-label">PO Number:</span>
+              <span class="info-value">${selectedPO.poNumber}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Order Type:</span>
+              <span class="info-value">${getPurchaseOrderTypeLabel(selectedPO.purchaseOrderType)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Department:</span>
+              <span class="info-value">${selectedPO.department ? getDepartmentLabel(selectedPO.department) : 'Not specified'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Priority:</span>
+              <span class="info-value">${selectedPO.priority ? selectedPO.priority.charAt(0).toUpperCase() + selectedPO.priority.slice(1) : 'Medium'}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Status:</span>
+              <span class="info-value">
+                <span class="status-badge status-${selectedPO.status === 'approved_order_sent_sap' ? 'approved' : 
+                  selectedPO.status === 'rejected' ? 'rejected' : 
+                  selectedPO.status === 'partially_invoiced' ? 'partial' : 
+                  selectedPO.status === 'fully_invoiced' ? 'paid' : 'pending'}">
+                  ${getStatusLabel(selectedPO.status)}
+                </span>
+              </span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Order Date:</span>
+              <span class="info-value">${formatDate(selectedPO.orderDate)}</span>
+            </div>
+            ${selectedPO.expectedDeliveryDate ? `
+            <div class="info-row">
+              <span class="info-label">Expected Delivery:</span>
+              <span class="info-value">${formatDate(selectedPO.expectedDeliveryDate)}</span>
+            </div>
+            ` : ''}
+            ${selectedPO.actualDeliveryDate ? `
+            <div class="info-row">
+              <span class="info-label">Actual Delivery:</span>
+              <span class="info-value">${formatDate(selectedPO.actualDeliveryDate)}</span>
+            </div>
+            ` : ''}
+          </div>
+          
+          <div class="info-section">
+            <h3>Supplier Information</h3>
+            <div class="info-row">
+              <span class="info-label">Supplier Name:</span>
+              <span class="info-value">${supplierName}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Email:</span>
+              <span class="info-value">${supplierEmail}</span>
+            </div>
+            ${selectedPO.supplier && typeof selectedPO.supplier !== 'string' && (selectedPO.supplier as Supplier)?.phone ? `
+            <div class="info-row">
+              <span class="info-label">Phone:</span>
+              <span class="info-value">${(selectedPO.supplier as Supplier).phone}</span>
+            </div>
+            ` : ''}
+            ${selectedPO.supplier && typeof selectedPO.supplier !== 'string' && (selectedPO.supplier as Supplier)?.contactPerson ? `
+            <div class="info-row">
+              <span class="info-label">Contact Person:</span>
+              <span class="info-value">${(selectedPO.supplier as Supplier).contactPerson}</span>
+            </div>
+            ` : ''}
+            ${supplierAddress && supplierAddress.address ? `
+            <div class="info-row">
+              <span class="info-label">Address:</span>
+              <span class="info-value" style="text-align: left; max-width: 200px;">
+                ${supplierAddress.address}<br/>
+                ${supplierAddress.district ? supplierAddress.district + ', ' : ''}${supplierAddress.state ? supplierAddress.state : ''}<br/>
+                ${supplierAddress.pincode ? 'PIN: ' + supplierAddress.pincode : ''}
+              </span>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+        
+        <div class="info-grid">
+          <div class="info-section">
+            <h3>Payment Information</h3>
+            <div class="info-row">
+              <span class="info-label">Total Amount:</span>
+              <span class="info-value">${formatCurrency(selectedPO.totalAmount)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Paid Amount:</span>
+              <span class="info-value">${formatCurrency(selectedPO.paidAmount || 0)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Remaining Amount:</span>
+              <span class="info-value">${formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Payment Status:</span>
+              <span class="info-value">
+                <span class="status-badge status-${selectedPO.paymentStatus === 'paid' ? 'paid' : 
+                  selectedPO.paymentStatus === 'partial' ? 'partial' : 'pending'}">
+                  ${selectedPO.paymentStatus ? selectedPO.paymentStatus.charAt(0).toUpperCase() + selectedPO.paymentStatus.slice(1) : 'Pending'}
+                </span>
+              </span>
+            </div>
+          </div>
+          
+          <div class="info-section">
+            <h3>Created By</h3>
+            <div class="info-row">
+              <span class="info-label">Name:</span>
+              <span class="info-value">${createdByName}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Created:</span>
+              <span class="info-value">${formatDateTime(selectedPO.createdAt)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Last Updated:</span>
+              <span class="info-value">${formatDateTime(selectedPO.updatedAt)}</span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="items-section">
+          <div class="items-title">Items Ordered</div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 25%;">Product</th>
+                <th style="width: 15%;">Part Number</th>
+                <th style="width: 12%;">Category</th>
+                <th style="width: 8%;">Ordered</th>
+                <th style="width: 8%;">Received</th>
+                <th style="width: 8%;">Remaining</th>
+                <th style="width: 12%;">Unit Price</th>
+                <th style="width: 12%;">Total Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${selectedPO.items.map(item => {
+                const receivedQty = item.receivedQuantity || 0;
+                const remainingQty = item.quantity - receivedQty;
+                const productName = getProductName(item.product);
+                const partNo = getProductPartNo(item.product);
+                const category = typeof item.product === 'object' ? item.product?.category : '-';
+                const brand = typeof item.product === 'object' ? item.product?.brand : '';
+                
+                return `
+                  <tr>
+                    <td>
+                      <div class="product-name">${productName}</div>
+                      ${brand ? `<div style="font-size: 11px; color: #6b7280;">Brand: ${brand}</div>` : ''}
+                    </td>
+                    <td>
+                      <span class="product-part">${partNo}</span>
+                    </td>
+                    <td>${category}</td>
+                    <td class="quantity">${item.quantity}</td>
+                    <td class="quantity">${receivedQty}</td>
+                    <td class="quantity">${remainingQty}</td>
+                    <td class="price">${formatCurrency(item.unitPrice)}</td>
+                    <td class="price">${formatCurrency(item.totalPrice)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+            <tfoot>
+              <tr class="total-row">
+                <td colspan="3" style="text-align: right; font-weight: bold;">TOTALS:</td>
+                <td class="quantity">${totalOrdered}</td>
+                <td class="quantity">${totalReceived}</td>
+                <td class="quantity">${totalRemaining}</td>
+                <td style="text-align: right; font-weight: bold;">Total Amount:</td>
+                <td class="price">${formatCurrency(selectedPO.totalAmount)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        
+        ${selectedPO.notes ? `
+        <div class="info-section" style="margin-top: 30px;">
+          <h3>Notes</h3>
+          <p style="margin: 0; padding: 10px; background: #f9fafb; border-radius: 4px; font-style: italic;">
+            ${selectedPO.notes}
+          </p>
+        </div>
+        ` : ''}
+        
+        <div class="footer">
+          <p>This is a computer-generated purchase order. No signature required.</p>
+          <p>Generated on ${new Date().toLocaleString('en-IN', { 
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+          })}</p>
+        </div>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(printContent);
+    printWindow.document.close();
+    
+    // Auto-print after a short delay to ensure content is loaded
+    setTimeout(() => {
+      printWindow.print();
+      printWindow.close();
+    }, 500);
+  };
+
+  // Helper function to render payment history
+  const renderPaymentHistory = () => {
+    if (loadingPayments) {
+      return (
+        <div className="flex items-center justify-center py-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-sm text-gray-600">Loading payment history...</span>
+        </div>
+      );
+    }
+
+    if (paymentHistory.length === 0) {
+      return (
+        <div className="text-center py-4 text-gray-500">
+          <p className="text-sm">No payment records found</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {paymentHistory.map((payment, index) => (
+          <div key={payment._id || index} className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-3">
+                <div className={`w-3 h-3 rounded-full ${
+                  payment.paymentStatus === 'completed' ? 'bg-green-500' :
+                  payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
+                  payment.paymentStatus === 'failed' ? 'bg-red-500' :
+                  'bg-gray-500'
+                }`}></div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900">
+                    {getPaymentMethodLabel(payment.paymentMethod)} Payment
+                  </h4>
+                  <p className="text-xs text-gray-500">
+                    {formatDate(payment.paymentDate)} • {payment.paymentStatus}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-green-600">
+                    {formatCurrency(payment.amount)}
+                  </p>
+                  {payment.receiptNumber && (
+                    <p className="text-xs text-gray-500">Receipt: {payment.receiptNumber}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleGeneratePDF(payment._id)}
+                  className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
+                  title="Generate PDF Receipt"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>PDF</span>
+                </button>
+              </div>
+            </div>
+            
+            {/* Payment Method Details */}
+            {payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {renderPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails)}
+                </div>
+              </div>
+            )}
+            
+            {/* Payment Notes */}
+            {payment.notes && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-gray-600">
+                  <span className="font-medium">Notes:</span> {payment.notes}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Helper function to render payment method details
+  const renderPaymentMethodDetails = (paymentMethod: string, details: any) => {
+    switch (paymentMethod) {
+      case 'cash':
+        return (
+          <>
+            {details.cash?.receivedBy && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Received By:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cash.receivedBy}</span>
+              </div>
+            )}
+            {details.cash?.receiptNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Receipt Number:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cash.receiptNumber}</span>
+              </div>
+            )}
+          </>
+        );
+
+      case 'cheque':
+        return (
+          <>
+            {details.cheque?.chequeNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Cheque Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.cheque.chequeNumber}</span>
+              </div>
+            )}
+            {details.cheque?.bankName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Bank Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cheque.bankName}</span>
+              </div>
+            )}
+            {details.cheque?.branchName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Branch Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cheque.branchName}</span>
+              </div>
+            )}
+            {details.cheque?.issueDate && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Issue Date:</span>
+                <span className="ml-2 text-sm text-gray-900">{formatDate(details.cheque.issueDate)}</span>
+              </div>
+            )}
+            {details.cheque?.accountHolderName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Account Holder:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cheque.accountHolderName}</span>
+              </div>
+            )}
+            {details.cheque?.accountNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Account Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.cheque.accountNumber}</span>
+              </div>
+            )}
+            {details.cheque?.ifscCode && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">IFSC Code:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.cheque.ifscCode}</span>
+              </div>
+            )}
+          </>
+        );
+
+      case 'bank_transfer':
+        return (
+          <>
+            {details.bankTransfer?.bankName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Bank Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.bankTransfer.bankName}</span>
+              </div>
+            )}
+            {details.bankTransfer?.accountNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Account Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.bankTransfer.accountNumber}</span>
+              </div>
+            )}
+            {details.bankTransfer?.ifscCode && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">IFSC Code:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.bankTransfer.ifscCode}</span>
+              </div>
+            )}
+            {details.bankTransfer?.transactionId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transaction ID:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.bankTransfer.transactionId}</span>
+              </div>
+            )}
+            {details.bankTransfer?.transferDate && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transfer Date:</span>
+                <span className="ml-2 text-sm text-gray-900">{formatDate(details.bankTransfer.transferDate)}</span>
+              </div>
+            )}
+            {details.bankTransfer?.referenceNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Reference Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.bankTransfer.referenceNumber}</span>
+              </div>
+            )}
+          </>
+        );
+
+      case 'upi':
+        return (
+          <>
+            {details.upi?.upiId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">UPI ID:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.upi.upiId}</span>
+              </div>
+            )}
+            {details.upi?.transactionId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transaction ID:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.upi.transactionId}</span>
+              </div>
+            )}
+            {details.upi?.payerName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Payer Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.upi.payerName}</span>
+              </div>
+            )}
+            {details.upi?.payerPhone && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Payer Phone:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.upi.payerPhone}</span>
+              </div>
+            )}
+          </>
+        );
+
+      case 'card':
+        return (
+          <>
+            {details.card?.cardType && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Card Type:</span>
+                <span className="ml-2 text-sm text-gray-900 capitalize">{details.card.cardType}</span>
+              </div>
+            )}
+            {details.card?.cardNetwork && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Card Network:</span>
+                <span className="ml-2 text-sm text-gray-900 capitalize">{details.card.cardNetwork}</span>
+              </div>
+            )}
+            {details.card?.lastFourDigits && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Last 4 Digits:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">****{details.card.lastFourDigits}</span>
+              </div>
+            )}
+            {details.card?.transactionId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transaction ID:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.card.transactionId}</span>
+              </div>
+            )}
+            {details.card?.cardHolderName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Card Holder:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.card.cardHolderName}</span>
+              </div>
+            )}
+            {details.card?.authorizationCode && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Authorization Code:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.card.authorizationCode}</span>
+              </div>
+            )}
+          </>
+        );
+
+      case 'other':
+        return (
+          <>
+            {details.other?.methodName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Method Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.other.methodName}</span>
+              </div>
+            )}
+            {details.other?.referenceNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Reference Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.other.referenceNumber}</span>
+              </div>
+            )}
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   const getDepartmentLabel = (value: string) => {
     const options = [
       { value: 'retail', label: 'Retail' },
@@ -1874,6 +2844,18 @@ const PurchaseOrderManagement: React.FC = () => {
                         >
                           <Eye className="w-4 h-4" />
                         </button>
+                        <button
+                          onClick={() => {
+                            setSelectedPO(po);
+                            handlePrintPO();
+                          }}
+                          className="text-gray-600 hover:text-gray-900 p-1 rounded hover:bg-gray-50 transition-colors"
+                          title="Print PO"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                          </svg>
+                        </button>
                         {po.status === 'order_under_process' && (
                           <button
                             onClick={() => handleEditPO(po)}
@@ -2033,8 +3015,9 @@ const PurchaseOrderManagement: React.FC = () => {
                 </div>
 
                 <div className="bg-gray-50 p-4 rounded-lg">
-                  <h3 className="text-sm font-medium text-gray-500 mb-2">Payment Information</h3>
+                  <h3 className="text-sm font-medium text-gray-500 mb-2">Payment Summary</h3>
                   <div className="space-y-2">
+                    <p><span className="text-xs text-gray-600">Total Amount:</span> <span className="font-medium">{formatCurrency(selectedPO.totalAmount)}</span></p>
                     <p><span className="text-xs text-gray-600">Paid Amount:</span> <span className="font-medium text-green-600">{formatCurrency(selectedPO.paidAmount || 0)}</span></p>
                     <p><span className="text-xs text-gray-600">Remaining Amount:</span> <span className="font-medium text-orange-600">{formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}</span></p>
                     <p><span className="text-xs text-gray-600">Payment Status:</span>
@@ -2048,13 +3031,28 @@ const PurchaseOrderManagement: React.FC = () => {
                           : 'Pending')}
                       </span>
                     </p>
-                    {selectedPO.paymentMethod && (
-                      <p><span className="text-xs text-gray-600">Payment Method:</span> <span className="font-medium">{selectedPO.paymentMethod}</span></p>
-                    )}
-                    {selectedPO.paymentDate && (
-                      <p><span className="text-xs text-gray-600">Payment Date:</span> <span className="font-medium">{formatDate(selectedPO.paymentDate)}</span></p>
+                    {paymentHistory.length > 0 && (
+                      <p><span className="text-xs text-gray-600">Payment Records:</span> <span className="font-medium">{paymentHistory.length} transaction{paymentHistory.length !== 1 ? 's' : ''}</span></p>
                     )}
                   </div>
+                </div>
+              </div>
+
+              {/* Payment History */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Payment History</h3>
+                  <button
+                    onClick={() => fetchPaymentHistory(selectedPO._id)}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                    disabled={loadingPayments}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingPayments ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  {renderPaymentHistory()}
                 </div>
               </div>
 
@@ -2280,6 +3278,16 @@ const PurchaseOrderManagement: React.FC = () => {
                   >
                     <IndianRupee className="w-4 h-4" />
                     <span>Update Payment</span>
+                  </button>
+                  {/* Print Button */}
+                  <button
+                    onClick={handlePrintPO}
+                    className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    <span>Print PO</span>
                   </button>
                   {/* Sync Payment Status Button */}
                   <button
@@ -3449,7 +4457,7 @@ const PurchaseOrderManagement: React.FC = () => {
                               type="button"
                                                           onClick={() => {
                               const halfAmount = Math.ceil((selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))) / 2);
-                              setPaymentUpdate({ ...paymentUpdate, paidAmount: halfAmount, paymentMethodDetails: {} });
+                              setPaymentUpdate({ ...paymentUpdate, paidAmount: halfAmount });
                               if (formErrors.paidAmount) {
                                 setFormErrors(prev => ({ ...prev, paidAmount: '' }));
                               }
@@ -3464,7 +4472,7 @@ const PurchaseOrderManagement: React.FC = () => {
                               type="button"
                                                           onClick={() => {
                               const fullAmount = selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0));
-                              setPaymentUpdate({ ...paymentUpdate, paidAmount: fullAmount, paymentMethodDetails: {} });
+                              setPaymentUpdate({ ...paymentUpdate, paidAmount: fullAmount });
                               if (formErrors.paidAmount) {
                                 setFormErrors(prev => ({ ...prev, paidAmount: '' }));
                               }
@@ -3488,7 +4496,7 @@ const PurchaseOrderManagement: React.FC = () => {
                             value={paymentUpdate.paidAmount}
                             onChange={(e) => {
                               const amount = parseFloat(e.target.value) || 0;
-                              setPaymentUpdate({ ...paymentUpdate, paidAmount: amount, paymentMethodDetails: {} });
+                              setPaymentUpdate({ ...paymentUpdate, paidAmount: amount });
                               
                               if (formErrors.paidAmount && amount > 0 && amount <= (selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))) {
                                 setFormErrors(prev => ({ ...prev, paidAmount: '' }));
@@ -3564,7 +4572,7 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <button
                                   key={option.value}
                                   onClick={() => {
-                                    setPaymentUpdate({ ...paymentUpdate, paymentMethod: option.value, paymentMethodDetails: {} });
+                                    setPaymentUpdate({ ...paymentUpdate, paymentMethod: option.value });
                                     setShowPaymentMethodDropdown(false);
 
                                     if (formErrors.paymentMethod && option.value) {
@@ -3642,22 +4650,21 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="text"
                                   value={paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      cheque: {
-                                        chequeNumber: e.target.value,
-                                        bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
-                                        issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || '',
-                                        ...paymentUpdate.paymentMethodDetails?.cheque
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('cheque', 'chequeNumber', e.target.value);
+                                    if (formErrors.chequeNumber) {
+                                      setFormErrors(prev => ({ ...prev, chequeNumber: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.chequeNumber ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Enter cheque number"
                                   required
                                 />
+                                {formErrors.chequeNumber && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.chequeNumber}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3666,20 +4673,21 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="text"
                                   value={paymentUpdate.paymentMethodDetails?.cheque?.bankName || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      cheque: {
-                                        ...paymentUpdate.paymentMethodDetails?.cheque,
-                                        bankName: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('cheque', 'bankName', e.target.value);
+                                    if (formErrors.bankName) {
+                                      setFormErrors(prev => ({ ...prev, bankName: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.bankName ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Enter bank name"
                                   required
                                 />
+                                {formErrors.bankName && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.bankName}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3709,19 +4717,20 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="date"
                                   value={paymentUpdate.paymentMethodDetails?.cheque?.issueDate || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      cheque: {
-                                        ...paymentUpdate.paymentMethodDetails?.cheque,
-                                        issueDate: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('cheque', 'issueDate', e.target.value);
+                                    if (formErrors.issueDate) {
+                                      setFormErrors(prev => ({ ...prev, issueDate: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.issueDate ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   required
                                 />
+                                {formErrors.issueDate && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.issueDate}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3778,20 +4787,21 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="text"
                                   value={paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      bankTransfer: {
-                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
-                                        bankName: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('bankTransfer', 'bankName', e.target.value);
+                                    if (formErrors.bankName) {
+                                      setFormErrors(prev => ({ ...prev, bankName: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.bankName ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Enter bank name"
                                   required
                                 />
+                                {formErrors.bankName && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.bankName}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3800,20 +4810,21 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="text"
                                   value={paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      bankTransfer: {
-                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
-                                        accountNumber: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('bankTransfer', 'accountNumber', e.target.value);
+                                    if (formErrors.accountNumber) {
+                                      setFormErrors(prev => ({ ...prev, accountNumber: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.accountNumber ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Enter account number"
                                   required
                                 />
+                                {formErrors.accountNumber && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.accountNumber}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3821,21 +4832,22 @@ const PurchaseOrderManagement: React.FC = () => {
                                 </label>
                                 <input
                                   type="text"
-                                  value={paymentUpdate.paymentMethodDetails?.cheque?.ifscCode || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      bankTransfer: {
-                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
-                                        ifscCode: e.target.value
-                                      }
+                                  value={paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || ''}
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('bankTransfer', 'ifscCode', e.target.value);
+                                    if (formErrors.ifscCode) {
+                                      setFormErrors(prev => ({ ...prev, ifscCode: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.ifscCode ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Enter IFSC code"
                                   required
                                 />
+                                {formErrors.ifscCode && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.ifscCode}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3844,20 +4856,21 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="text"
                                   value={paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      bankTransfer: {
-                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
-                                        transactionId: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('bankTransfer', 'transactionId', e.target.value);
+                                    if (formErrors.transactionId) {
+                                      setFormErrors(prev => ({ ...prev, transactionId: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.transactionId ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Enter transaction ID"
                                   required
                                 />
+                                {formErrors.transactionId && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3866,19 +4879,20 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="date"
                                   value={paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      bankTransfer: {
-                                        ...paymentUpdate.paymentMethodDetails?.bankTransfer,
-                                        transferDate: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('bankTransfer', 'transferDate', e.target.value);
+                                    if (formErrors.transferDate) {
+                                      setFormErrors(prev => ({ ...prev, transferDate: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.transferDate ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   required
                                 />
+                                {formErrors.transferDate && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.transferDate}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3914,20 +4928,21 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="text"
                                   value={paymentUpdate.paymentMethodDetails?.upi?.upiId || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      upi: {
-                                        ...paymentUpdate.paymentMethodDetails?.upi,
-                                        upiId: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('upi', 'upiId', e.target.value);
+                                    if (formErrors.upiId) {
+                                      setFormErrors(prev => ({ ...prev, upiId: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.upiId ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Enter UPI ID"
                                   required
                                 />
+                                {formErrors.upiId && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.upiId}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -3936,20 +4951,21 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="text"
                                   value={paymentUpdate.paymentMethodDetails?.upi?.transactionId || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      upi: {
-                                        ...paymentUpdate.paymentMethodDetails?.upi,
-                                        transactionId: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('upi', 'transactionId', e.target.value);
+                                    if (formErrors.transactionId) {
+                                      setFormErrors(prev => ({ ...prev, transactionId: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.transactionId ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Enter transaction ID"
                                   required
                                 />
+                                {formErrors.transactionId && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -4005,17 +5021,15 @@ const PurchaseOrderManagement: React.FC = () => {
                                 </label>
                                 <select
                                   value={paymentUpdate.paymentMethodDetails?.card?.cardType || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      card: {
-                                        ...paymentUpdate.paymentMethodDetails?.card,
-                                        cardType: e.target.value as 'credit' | 'debit' | 'prepaid'
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('card', 'cardType', e.target.value);
+                                    if (formErrors.cardType) {
+                                      setFormErrors(prev => ({ ...prev, cardType: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.cardType ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   required
                                 >
                                   <option value="">Select card type</option>
@@ -4023,6 +5037,9 @@ const PurchaseOrderManagement: React.FC = () => {
                                   <option value="debit">Debit Card</option>
                                   <option value="prepaid">Prepaid Card</option>
                                 </select>
+                                {formErrors.cardType && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.cardType}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -4030,17 +5047,15 @@ const PurchaseOrderManagement: React.FC = () => {
                                 </label>
                                 <select
                                   value={paymentUpdate.paymentMethodDetails?.card?.cardNetwork || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      card: {
-                                        ...paymentUpdate.paymentMethodDetails?.card,
-                                        cardNetwork: e.target.value as 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other'
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('card', 'cardNetwork', e.target.value);
+                                    if (formErrors.cardNetwork) {
+                                      setFormErrors(prev => ({ ...prev, cardNetwork: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.cardNetwork ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   required
                                 >
                                   <option value="">Select card network</option>
@@ -4050,6 +5065,9 @@ const PurchaseOrderManagement: React.FC = () => {
                                   <option value="rupay">RuPay</option>
                                   <option value="other">Other</option>
                                 </select>
+                                {formErrors.cardNetwork && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.cardNetwork}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -4059,20 +5077,21 @@ const PurchaseOrderManagement: React.FC = () => {
                                   type="text"
                                   maxLength={4}
                                   value={paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      card: {
-                                        ...paymentUpdate.paymentMethodDetails?.card,
-                                        lastFourDigits: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('card', 'lastFourDigits', e.target.value);
+                                    if (formErrors.lastFourDigits) {
+                                      setFormErrors(prev => ({ ...prev, lastFourDigits: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.lastFourDigits ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Last 4 digits"
                                   required
                                 />
+                                {formErrors.lastFourDigits && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.lastFourDigits}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -4081,20 +5100,21 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="text"
                                   value={paymentUpdate.paymentMethodDetails?.card?.transactionId || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      card: {
-                                        ...paymentUpdate.paymentMethodDetails?.card,
-                                        transactionId: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('card', 'transactionId', e.target.value);
+                                    if (formErrors.transactionId) {
+                                      setFormErrors(prev => ({ ...prev, transactionId: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.transactionId ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Enter transaction ID"
                                   required
                                 />
+                                {formErrors.transactionId && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -4142,20 +5162,21 @@ const PurchaseOrderManagement: React.FC = () => {
                                 <input
                                   type="text"
                                   value={paymentUpdate.paymentMethodDetails?.other?.methodName || ''}
-                                  onChange={(e) => setPaymentUpdate({
-                                    ...paymentUpdate,
-                                    paymentMethodDetails: {
-                                      ...paymentUpdate.paymentMethodDetails,
-                                      other: {
-                                        ...paymentUpdate.paymentMethodDetails?.other,
-                                        methodName: e.target.value
-                                      }
+                                  onChange={(e) => {
+                                    updatePaymentMethodDetails('other', 'methodName', e.target.value);
+                                    if (formErrors.methodName) {
+                                      setFormErrors(prev => ({ ...prev, methodName: '' }));
                                     }
-                                  })}
-                                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                  }}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                                    formErrors.methodName ? 'border-red-500' : 'border-gray-300'
+                                  }`}
                                   placeholder="Enter payment method name"
                                   required
                                 />
+                                {formErrors.methodName && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.methodName}</p>
+                                )}
                               </div>
                               <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -4191,7 +5212,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         <input
                           type="date"
                           value={paymentUpdate.paymentDate}
-                          onChange={(e) => setPaymentUpdate({ ...paymentUpdate, paymentDate: e.target.value, paymentMethodDetails: {} })}
+                          onChange={(e) => setPaymentUpdate({ ...paymentUpdate, paymentDate: e.target.value })}
                           className={`w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                             formErrors.paymentDate ? 'border-red-500' : 'border-gray-300'
                           }`}
@@ -4208,7 +5229,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         </label>
                         <textarea
                           value={paymentUpdate.notes}
-                          onChange={(e) => setPaymentUpdate({ ...paymentUpdate, notes: e.target.value, paymentMethodDetails: {} })}
+                          onChange={(e) => setPaymentUpdate({ ...paymentUpdate, notes: e.target.value })}
                           rows={3}
                           placeholder="Any additional notes about the payment..."
                           className="w-full px-3 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-colors"

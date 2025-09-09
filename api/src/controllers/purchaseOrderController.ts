@@ -8,6 +8,7 @@ import { generateReferenceId } from '../utils/generateReferenceId';
 import { Product } from '../models/Product';
 import { Invoice } from '../models/Invoice';
 import { Customer } from '../models/Customer';
+import { IPaymentMethodDetails } from '../models/PurchaseOrderPayment';
 import mongoose, { Types } from 'mongoose';
 import { sendEmail } from '../utils/email';
 
@@ -1028,6 +1029,7 @@ export const updatePurchaseOrderPayment = async (
     const { 
       paidAmount, 
       paymentMethod, 
+      paymentMethodDetails,
       paymentDate, 
       notes 
     } = req.body;
@@ -1035,6 +1037,18 @@ export const updatePurchaseOrderPayment = async (
     // Validate required fields
     if (paidAmount === undefined || paidAmount < 0) {
       return next(new AppError('Valid payment amount is required', 400));
+    }
+
+    if (!paymentMethod) {
+      return next(new AppError('Payment method is required', 400));
+    }
+
+    // Validate payment method details if provided
+    if (paymentMethodDetails) {
+      const validationError = validatePaymentMethodDetails(paymentMethod, paymentMethodDetails);
+      if (validationError) {
+        return next(new AppError(validationError, 400));
+      }
     }
 
     // Find the purchase order
@@ -1061,18 +1075,26 @@ export const updatePurchaseOrderPayment = async (
       newPaymentStatus = 'partial';
     }
 
+    // Prepare update data
+    const updateData: any = {
+      paidAmount: newTotalPaidAmount,
+      remainingAmount: newRemainingAmount,
+      paymentStatus: newPaymentStatus,
+      paymentDate: paymentDate ? new Date(paymentDate) : undefined,
+      paymentMethod,
+      notes: notes || purchaseOrder.notes,
+      ...(purchaseOrder.status === 'order_under_process' && newTotalPaidAmount > 0 && { status: 'approved_order_sent_sap' })
+    };
+
+    // Add payment method details if provided
+    if (paymentMethodDetails) {
+      updateData.paymentMethodDetails = paymentMethodDetails;
+    }
+
     // Update the purchase order
     const updatedPurchaseOrder = await PurchaseOrder.findByIdAndUpdate(
       id,
-      {
-        paidAmount: newTotalPaidAmount,
-        remainingAmount: newRemainingAmount,
-        paymentStatus: newPaymentStatus,
-        paymentDate: paymentDate ? new Date(paymentDate) : undefined,
-        paymentMethod,
-        notes: notes || purchaseOrder.notes,
-        ...(purchaseOrder.status === 'order_under_process' && newTotalPaidAmount > 0 && { status: 'approved_order_sent_sap' })
-      },
+      updateData,
       { new: true, runValidators: true }
     )
       .populate('items.product', 'name category brand partNo hsnNumber')
@@ -1391,4 +1413,49 @@ const createInvoiceFromPO = async ({
   }
 
   return savedInvoice;
+};
+
+// Helper function to validate payment method details
+const validatePaymentMethodDetails = (paymentMethod: string, details: IPaymentMethodDetails): string | null => {
+  switch (paymentMethod) {
+    case 'cash':
+      // Cash is simple, no required validation
+      return null;
+
+    case 'cheque':
+      if (!details.cheque?.chequeNumber || !details.cheque?.bankName || !details.cheque?.issueDate) {
+        return 'Cheque payment requires cheque number, bank name, and issue date';
+      }
+      return null;
+
+    case 'bank_transfer':
+      if (!details.bankTransfer?.bankName || !details.bankTransfer?.accountNumber || 
+          !details.bankTransfer?.ifscCode || !details.bankTransfer?.transactionId || 
+          !details.bankTransfer?.transferDate) {
+        return 'Bank transfer requires bank name, account number, IFSC code, transaction ID, and transfer date';
+      }
+      return null;
+
+    case 'upi':
+      if (!details.upi?.upiId || !details.upi?.transactionId) {
+        return 'UPI payment requires UPI ID and transaction ID';
+      }
+      return null;
+
+    case 'card':
+      if (!details.card?.cardType || !details.card?.cardNetwork || 
+          !details.card?.lastFourDigits || !details.card?.transactionId) {
+        return 'Card payment requires card type, network, last 4 digits, and transaction ID';
+      }
+      return null;
+
+    case 'other':
+      if (!details.other?.methodName) {
+        return 'Other payment method requires method name';
+      }
+      return null;
+
+    default:
+      return 'Invalid payment method';
+  }
 };

@@ -574,7 +574,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
       items: [
         ...prev.items,
         {
-          product: `DG Set - ${dgProduct.kva} KVA ${dgProduct.phase === 'single' ? '1P' : '3P'}`,
+          product: dgProduct._id,
           description: description,
           quantity: 1,
           unitPrice: 0,
@@ -667,7 +667,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
     const description = dgProduct.description || `Supply of ${dgProduct.kva} kVA ${dgProduct.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${dgProduct.numberOfCylinders} cylinder engine, model ${dgProduct.dgModel}, coupled with ${dgProduct.kva} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`;
 
     updateItem(itemIndex, 'description', description);
-    updateItem(itemIndex, 'product', `DG Set - ${dgProduct.kva} KVA ${dgProduct.phase === 'single' ? '1P' : '3P'}`);
+    updateItem(itemIndex, 'product', dgProduct._id);
     updateItem(itemIndex, 'partNo', dgProduct.dgModel || '');
 
     setShowProductDescriptionDropdown(prev => ({ ...prev, [itemIndex]: false }));

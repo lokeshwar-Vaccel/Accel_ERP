@@ -8,7 +8,8 @@ import {
   updateInvoiceProductPriceAndGST,
   sendInvoiceEmail,
   sendPaymentReminder,
-  createInvoiceFromQuotation
+  createInvoiceFromQuotation,
+  exportInvoices
 } from '../controllers/invoiceController';
 
 const router = Router();
@@ -27,6 +28,9 @@ router.route('/create-from-quotation')
 
 router.route('/stats')
   .get(checkPermission('read'), getInvoiceStats);
+
+router.route('/export')
+  .get(checkPermission('read'), exportInvoices);
 
 router.route('/:id')
   .put(checkPermission('write'), updateInvoice);

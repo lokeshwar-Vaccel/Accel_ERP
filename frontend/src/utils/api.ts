@@ -12,7 +12,7 @@ class ApiClient {
 
   private async makeRequest<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit & { responseType?: 'json' | 'blob' } = {}
   ): Promise<T> {
     const token = localStorage.getItem('authToken');
 
@@ -25,9 +25,10 @@ class ApiClient {
       ...(options.headers as Record<string, string>),
     };
 
+    const { responseType, ...fetchOptions } = options;
     const config: RequestInit = {
       headers,
-      ...options,
+      ...fetchOptions,
     };
 
     // Debug logging for API requests
@@ -47,6 +48,11 @@ class ApiClient {
       throw new Error(error.message || 'API request failed');
     }
 
+    // Handle different response types
+    if (responseType === 'blob') {
+      return response.blob() as T;
+    }
+    
     return response.json();
   }
 
@@ -998,6 +1004,27 @@ class ApiClient {
     },
   };
 
+  // Purchase Order Payments APIs
+  purchaseOrderPayments = {
+    getByPurchaseOrder: (poId: string) =>
+      this.makeRequest<{ success: boolean; data: { payments: any[] } }>(`/purchase-order-payments/po/${poId}`),
+
+    create: (paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any }>('/purchase-order-payments', {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      }),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/purchase-order-payments/${id}`),
+
+    generatePDF: (id: string) =>
+      this.makeRequest<Blob>(`/purchase-order-payments/${id}/pdf`, {
+        method: 'GET',
+        responseType: 'blob',
+      }),
+  };
+
   // Reports APIs
   reports = {
     dashboardAnalytics: (params: any) =>
@@ -1767,32 +1794,41 @@ class ApiClient {
           body: JSON.stringify({ status }),
         }),
 
-      updateRating: (id: string, rating: number) =>
-        this.makeRequest<{ success: boolean; data: any }>(`/oems/${id}/rating`, {
-          method: 'PATCH',
-          body: JSON.stringify({ rating }),
-        }),
-
-      // Product management
-      addProduct: (id: string, productData: any) =>
-        this.makeRequest<{ success: boolean; data: any }>(`/oems/${id}/products`, {
+      // Address management
+      addAddress: (id: string, addressData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/oems/${id}/addresses`, {
           method: 'POST',
-          body: JSON.stringify(productData),
+          body: JSON.stringify(addressData),
         }),
 
-      updateProduct: (id: string, productId: string, productData: any) =>
-        this.makeRequest<{ success: boolean; data: any }>(`/oems/${id}/products/${productId}`, {
+      updateAddress: (id: string, addressId: string, addressData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/oems/${id}/addresses/${addressId}`, {
           method: 'PUT',
-          body: JSON.stringify(productData),
+          body: JSON.stringify(addressData),
         }),
 
-      removeProduct: (id: string, productId: string) =>
-        this.makeRequest<{ success: boolean; data: any }>(`/oems/${id}/products/${productId}`, {
+      removeAddress: (id: string, addressId: string) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/oems/${id}/addresses/${addressId}`, {
           method: 'DELETE',
         }),
 
-      searchProducts: (params?: any) =>
-        this.makeRequest<{ success: boolean; data: any[]; total: number }>(`/oems/products/search${params ? `?${new URLSearchParams(params)}` : ''}`),
+      // Bank details management
+      addBankDetail: (id: string, bankData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/oems/${id}/bank-details`, {
+          method: 'POST',
+          body: JSON.stringify(bankData),
+        }),
+
+      updateBankDetail: (id: string, bankDetailId: string, bankData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/oems/${id}/bank-details/${bankDetailId}`, {
+          method: 'PUT',
+          body: JSON.stringify(bankData),
+        }),
+
+      removeBankDetail: (id: string, bankDetailId: string) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/oems/${id}/bank-details/${bankDetailId}`, {
+          method: 'DELETE',
+        }),
 
       delete: (id: string) =>
         this.makeRequest<{ success: boolean; message: string }>(`/oems/${id}`, {
@@ -1902,6 +1938,86 @@ class ApiClient {
 
       getByEnquiry: (enquiryId: string) =>
         this.makeRequest<{ success: boolean; data: any[] }>(`/dg-quotations/by-enquiry/${enquiryId}`),
+    },
+
+    // DG PO From Customers
+    dgPoFromCustomers: {
+      getAll: (params?: any) =>
+        this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/dg-po-from-customers${params ? `?${new URLSearchParams(params)}` : ''}`),
+  
+      getById: (id: string) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/dg-po-from-customers/${id}`),
+  
+      create: (poData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>('/dg-po-from-customers', {
+          method: 'POST',
+          body: JSON.stringify(poData),
+        }),
+  
+      update: (id: string, poData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>(`/dg-po-from-customers/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(poData),
+        }),
+  
+      delete: (id: string) =>
+        this.makeRequest<{ success: boolean; message: string }>(`/dg-po-from-customers/${id}`, {
+          method: 'DELETE',
+        }),
+  
+      updateStatus: (id: string, statusData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>(`/dg-po-from-customers/${id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify(statusData),
+        }),
+  
+      export: (params?: any) => {
+        const queryString = params ? `?${new URLSearchParams(params)}` : '';
+        return this.makeRequest<{ success: boolean; data: any[]; message: string }>(`/dg-po-from-customers/export${queryString}`);
+      },
+  
+      getStats: () =>
+        this.makeRequest<{ success: boolean; data: any }>('/dg-po-from-customers/stats'),
+    },
+
+    // DG Proformas
+    dgProformas: {
+      getAll: (params?: any) =>
+        this.makeRequest<{ success: boolean; data: any[]; pagination: any }>(`/dg-proformas${params ? `?${new URLSearchParams(params)}` : ''}`),
+  
+      getById: (id: string) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/dg-proformas/${id}`),
+  
+      create: (proformaData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>('/dg-proformas', {
+          method: 'POST',
+          body: JSON.stringify(proformaData),
+        }),
+  
+      update: (id: string, proformaData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>(`/dg-proformas/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(proformaData),
+        }),
+  
+      delete: (id: string) =>
+        this.makeRequest<{ success: boolean; message: string }>(`/dg-proformas/${id}`, {
+          method: 'DELETE',
+        }),
+  
+      updateStatus: (id: string, statusData: any) =>
+        this.makeRequest<{ success: boolean; data: any; message: string }>(`/dg-proformas/${id}/status`, {
+          method: 'PATCH',
+          body: JSON.stringify(statusData),
+        }),
+  
+      export: (params?: any) => {
+        const queryString = params ? `?${new URLSearchParams(params)}` : '';
+        return this.makeRequest<{ success: boolean; data: any[]; message: string }>(`/dg-proformas/export${queryString}`);
+      },
+  
+      getStats: () =>
+        this.makeRequest<{ success: boolean; data: any }>('/dg-proformas/stats'),
     },
 
 

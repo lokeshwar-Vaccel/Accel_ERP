@@ -7,11 +7,12 @@ import {
   getOEM,
   updateOEM,
   updateOEMStatus,
-  updateOEMRating,
-  addOEMProduct,
-  updateOEMProduct,
-  removeOEMProduct,
-  searchOEMProducts,
+  addOEMAddress,
+  updateOEMAddress,
+  removeOEMAddress,
+  addOEMBankDetail,
+  updateOEMBankDetail,
+  removeOEMBankDetail,
   deleteOEM
 } from '../controllers/oemController';
 
@@ -19,9 +20,6 @@ const router = Router();
 
 // All routes are protected
 router.use(protect);
-
-// @route   GET /api/v1/oems/products/search
-router.get('/products/search', searchOEMProducts);
 
 // @route   GET /api/v1/oems
 router.get('/', getOEMs);
@@ -50,32 +48,48 @@ router.patch('/:id/status',
   updateOEMStatus
 );
 
-// @route   PATCH /api/v1/oems/:id/rating
-router.patch('/:id/rating',
+// Address management routes
+// @route   POST /api/v1/oems/:id/addresses
+router.post('/:id/addresses',
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
   checkPermission('write'),
-  updateOEMRating
+  addOEMAddress
 );
 
-// @route   POST /api/v1/oems/:id/products
-router.post('/:id/products',
+// @route   PUT /api/v1/oems/:id/addresses/:addressId
+router.put('/:id/addresses/:addressId',
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
   checkPermission('write'),
-  addOEMProduct
+  updateOEMAddress
 );
 
-// @route   PUT /api/v1/oems/:id/products/:productId
-router.put('/:id/products/:productId',
+// @route   DELETE /api/v1/oems/:id/addresses/:addressId
+router.delete('/:id/addresses/:addressId',
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
   checkPermission('write'),
-  updateOEMProduct
+  removeOEMAddress
 );
 
-// @route   DELETE /api/v1/oems/:id/products/:productId
-router.delete('/:id/products/:productId',
+// Bank details management routes
+// @route   POST /api/v1/oems/:id/bank-details
+router.post('/:id/bank-details',
   restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
   checkPermission('write'),
-  removeOEMProduct
+  addOEMBankDetail
+);
+
+// @route   PUT /api/v1/oems/:id/bank-details/:bankDetailId
+router.put('/:id/bank-details/:bankDetailId',
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  checkPermission('write'),
+  updateOEMBankDetail
+);
+
+// @route   DELETE /api/v1/oems/:id/bank-details/:bankDetailId
+router.delete('/:id/bank-details/:bankDetailId',
+  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
+  checkPermission('write'),
+  removeOEMBankDetail
 );
 
 // @route   DELETE /api/v1/oems/:id
