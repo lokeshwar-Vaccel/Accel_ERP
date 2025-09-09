@@ -61,6 +61,24 @@ const addressSchema = new Schema({
     trim: true,
     maxlength: [50, 'GST number cannot exceed 50 characters'],
     required: false
+  },
+  contactPersonName: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Contact person name cannot exceed 100 characters']
+  },
+  email: {
+    type: String,
+    lowercase: true
+  },
+  phone: {
+    type: String
+  },
+  registrationStatus: {
+    type: String,
+    enum: ['registered', 'non_registered'],
+    required: true,
+    default: 'non_registered'
   }
 }, { _id: false });
 
@@ -166,6 +184,12 @@ const customerSchema = new Schema({
     type: Schema.Types.ObjectId,
     ref: 'User',
     required: [true, 'Customer creator is required']
+  },
+  bankDetails: {
+    bankName: { type: String, trim: true },
+    accountNo: { type: String, trim: true },
+    ifsc: { type: String, trim: true },
+    branch: { type: String, trim: true }
   }
 }, {
   timestamps: true,

@@ -7,7 +7,8 @@ import {
   deleteDeliveryChallan,
   getDeliveryChallanStats,
   updateDeliveryChallanStatus,
-  generateDeliveryChallanPDFEndpoint
+  generateDeliveryChallanPDFEndpoint,
+  exportDeliveryChallans
 } from '../controllers/deliveryChallanController';
 import { protect } from '../middleware/auth';
 
@@ -25,6 +26,9 @@ router.route('/')
 
 router.route('/stats')
   .get(getDeliveryChallanStats);
+
+router.route('/export')
+  .get(exportDeliveryChallans);
 
 router.route('/:id')
   .get(getDeliveryChallan)

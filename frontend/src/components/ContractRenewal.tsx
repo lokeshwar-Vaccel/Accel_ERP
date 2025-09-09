@@ -13,6 +13,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
+import { toast } from 'react-hot-toast';
 
 interface ContractRenewalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ interface ContractRenewalProps {
   amcData?: any;
   isBulkRenewal?: boolean;
   selectedContracts?: any[];
+  onSuccess?: () => void;
 }
 
 interface RenewalData {
@@ -44,7 +46,8 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
   onClose, 
   amcData, 
   isBulkRenewal = false, 
-  selectedContracts = [] 
+  selectedContracts = [],
+  onSuccess
 }) => {
   const [renewalData, setRenewalData] = useState<RenewalData>({
     newStartDate: '',
@@ -66,8 +69,9 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
       fetchProducts();
       if (amcData && !isBulkRenewal) {
         // Calculate new dates based on original contract
-        const originalStart = new Date(amcData.startDate);
-        const originalEnd = new Date(amcData.endDate);
+        // Use new field names: amcStartDate, amcEndDate, numberOfVisits
+        const originalStart = new Date(amcData.amcStartDate || amcData.startDate);
+        const originalEnd = new Date(amcData.amcEndDate || amcData.endDate);
         const duration = originalEnd.getTime() - originalStart.getTime();
         
         const newStartDate = new Date(originalEnd);
@@ -76,8 +80,8 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
         setRenewalData({
           newStartDate: newStartDate.toISOString().split('T')[0],
           newEndDate: newEndDate.toISOString().split('T')[0],
-          newContractValue: amcData.contractValue,
-          newScheduledVisits: amcData.scheduledVisits,
+          newContractValue: amcData.contractValue || 0,
+          newScheduledVisits: amcData.numberOfVisits || amcData.scheduledVisits || 4,
           autoRenewal: false,
           renewalTerms: amcData.terms || ''
         });
@@ -103,13 +107,23 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
       if (isBulkRenewal) {
         const contractIds = selectedContracts.map(c => c._id);
         await apiClient.amc.bulkRenew(contractIds, renewalData);
+        toast.success(`${selectedContracts.length} contracts renewed successfully!`);
       } else {
         await apiClient.amc.renew(amcData._id, renewalData);
+        toast.success('Contract renewed successfully!');
       }
+      
+      // Call onSuccess callback to refresh data
+      if (onSuccess) {
+        onSuccess();
+      }
+      
       onClose();
-      // You might want to trigger a refresh of the AMC data here
     } catch (error: any) {
-      setError(error.message || 'Failed to renew contract');
+      console.error('Error renewing contract:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to renew contract';
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setSubmitting(false);
     }
@@ -120,7 +134,7 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
       return renewalData.newContractValue;
     }
 
-    const baseValue = amcData.contractValue;
+    const baseValue = amcData.contractValue || 0;
     if (renewalData.priceAdjustment.type === 'percentage') {
       return baseValue * (1 + renewalData.priceAdjustment.value / 100);
     } else {
@@ -150,13 +164,13 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
           <div>
             <span className="text-blue-700">Total Current Value:</span>
             <span className="ml-2 font-medium text-blue-900">
-              ₹{selectedContracts.reduce((sum, c) => sum + c.contractValue, 0).toLocaleString()}
+              ₹{selectedContracts.reduce((sum, c) => sum + (c.contractValue || 0), 0).toLocaleString()}
             </span>
           </div>
           <div>
             <span className="text-blue-700">Average Contract Value:</span>
             <span className="ml-2 font-medium text-blue-900">
-              ₹{(selectedContracts.reduce((sum, c) => sum + c.contractValue, 0) / selectedContracts.length).toLocaleString()}
+              ₹{Math.round(selectedContracts.reduce((sum, c) => sum + (c.contractValue || 0), 0) / selectedContracts.length).toLocaleString()}
             </span>
           </div>
         </div>
@@ -182,20 +196,32 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
             </span>
           </div>
           <div>
+            <span className="text-gray-600">Engine Serial:</span>
+            <span className="ml-2 font-medium text-gray-900">{amcData.engineSerialNumber || 'N/A'}</span>
+          </div>
+          <div>
+            <span className="text-gray-600">Engine Model:</span>
+            <span className="ml-2 font-medium text-gray-900">{amcData.engineModel || 'N/A'}</span>
+          </div>
+          <div>
             <span className="text-gray-600">Current Value:</span>
-            <span className="ml-2 font-medium text-gray-900">₹{amcData.contractValue.toLocaleString()}</span>
+            <span className="ml-2 font-medium text-gray-900">₹{(amcData.contractValue || 0).toLocaleString()}</span>
           </div>
           <div>
             <span className="text-gray-600">Scheduled Visits:</span>
-            <span className="ml-2 font-medium text-gray-900">{amcData.scheduledVisits}</span>
+            <span className="ml-2 font-medium text-gray-900">{amcData.numberOfVisits || amcData.scheduledVisits || 0}</span>
           </div>
           <div>
             <span className="text-gray-600">Start Date:</span>
-            <span className="ml-2 font-medium text-gray-900">{new Date(amcData.startDate).toLocaleDateString()}</span>
+            <span className="ml-2 font-medium text-gray-900">
+              {new Date(amcData.amcStartDate || amcData.startDate).toLocaleDateString()}
+            </span>
           </div>
           <div>
             <span className="text-gray-600">End Date:</span>
-            <span className="ml-2 font-medium text-gray-900">{new Date(amcData.endDate).toLocaleDateString()}</span>
+            <span className="ml-2 font-medium text-gray-900">
+              {new Date(amcData.amcEndDate || amcData.endDate).toLocaleDateString()}
+            </span>
           </div>
         </div>
       </div>
@@ -376,11 +402,11 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
                   {amcData && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                       <div className="text-sm text-blue-900">
-                        <span className="font-medium">Original Value:</span> ₹{amcData.contractValue.toLocaleString()}
+                        <span className="font-medium">Original Value:</span> ₹{(amcData.contractValue || 0).toLocaleString()}
                         <br />
                         <span className="font-medium">New Value:</span> ₹{calculateNewValue().toLocaleString()}
                         <br />
-                        <span className="font-medium">Difference:</span> ₹{(calculateNewValue() - amcData.contractValue).toLocaleString()}
+                        <span className="font-medium">Difference:</span> ₹{(calculateNewValue() - (amcData.contractValue || 0)).toLocaleString()}
                       </div>
                     </div>
                   )}
@@ -478,4 +504,4 @@ const ContractRenewal: React.FC<ContractRenewalProps> = ({
   );
 };
 
-export default ContractRenewal; 
+export default ContractRenewal;

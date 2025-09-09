@@ -1406,29 +1406,10 @@ const createInvoiceFromPO = async ({
 
   console.log("Invoice created successfully:", savedInvoice._id);
 
+  // Note: Inventory reduction functionality has been removed from invoice creation
+  // The reduceStock parameter is kept for backward compatibility but no longer affects inventory
   if (reduceStock) {
-    for (const item of calculatedItems) {
-      const stock = await Stock.findOne({ product: item.product, location });
-
-      if (stock) {
-        // stock.quantity -= item.quantity;
-        // stock.availableQuantity = stock.quantity - stock.reservedQuantity;
-        // await stock.save();
-
-        // await StockLedger.create({
-        //   product: item.product,
-        //   location,
-        //   transactionType: 'outward',
-        //   quantity: -item.quantity,
-        //   reason: `Invoice sale - ${invoiceNumber}`,
-        //   notes: `Invoice created`,
-        //   transactionDate: new Date(),
-        //   resultingQuantity: stock.quantity,
-        //   referenceId: invoiceNumber,
-        //   referenceType: 'sale'
-        // });
-      }
-    }
+    console.log('📝 Invoice created from PO without inventory reduction (functionality disabled)');
   }
 
   return savedInvoice;

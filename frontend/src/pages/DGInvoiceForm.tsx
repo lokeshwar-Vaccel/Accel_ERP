@@ -385,9 +385,17 @@ const DGInvoiceFormPage: React.FC = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll({ limit: 100, page: 1 });
-      const responseData = response.data as any;
-      const customersData = responseData.customers || responseData || [];
+      // Use non-paginated API to fetch all customers for dropdown
+      const response = await apiClient.customers.getAllForDropdown({ type: 'customer' });
+
+      let customersData: any[] = [];
+      if (response.success && response.data && Array.isArray(response.data)) {
+        customersData = response.data;
+      } else {
+        // Fallback to previous shape if needed
+        const responseData = response.data as any;
+        customersData = (responseData?.customers || responseData || []);
+      }
       setCustomers(customersData);
     } catch (error) {
       console.error('Error fetching customers:', error);
@@ -513,8 +521,12 @@ const DGInvoiceFormPage: React.FC = () => {
       const response = await apiClient.users.getFieldEngineers();
       if (response.success && response.data.fieldEngineers) {
         const fieldEngineers = response.data.fieldEngineers.map((engineer: any) => ({
+          _id: engineer._id || engineer.id,
           value: engineer._id || engineer.id,
           label: engineer.name || `${engineer.firstName} ${engineer.lastName}`,
+          name: engineer.name || `${engineer.firstName} ${engineer.lastName}`,
+          firstName: engineer.firstName,
+          lastName: engineer.lastName,
           email: engineer.email,
           phone: engineer.phone
         }));

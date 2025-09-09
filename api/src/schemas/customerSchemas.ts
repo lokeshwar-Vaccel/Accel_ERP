@@ -1,6 +1,17 @@
 import Joi from 'joi';
 import { CustomerType, LeadStatus, CustomerMainType } from '../types';
 
+// GSTIN validation: exact 15-char format using provided regex
+const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+const gstinJoi = Joi.string().trim().custom((value, helpers) => {
+  if (!value) return value; // allow empty handled by allow() where used
+  const upper = value.toUpperCase();
+  if (!GSTIN_REGEX.test(upper)) {
+    return helpers.error('any.invalid');
+  }
+  return upper;
+}, 'GSTIN format validation');
+
 // TypeScript interfaces for validation results
 export interface CreateCustomerInput {
   name: string;
@@ -36,7 +47,14 @@ export interface CreateCustomerInput {
     cluster: string;
     warrantyStartDate?: Date;
     warrantyEndDate?: Date;
+    locationAddress?: string;
   }[];
+  bankDetails?: {
+    bankName?: string;
+    accountNo?: string;
+    ifsc?: string;
+    branch?: string;
+  };
 }
 
 export interface UpdateCustomerInput {
@@ -73,7 +91,14 @@ export interface UpdateCustomerInput {
     cluster: string;
     warrantyStartDate?: Date;
     warrantyEndDate?: Date;
+    locationAddress?: string;
   }[];
+  bankDetails?: {
+    bankName?: string;
+    accountNo?: string;
+    ifsc?: string;
+    branch?: string;
+  };
 }
 
 export interface AddContactHistoryInput {
@@ -148,10 +173,27 @@ const addressJoiSchema = Joi.object({
   state: Joi.string().max(100).required(),
   district: Joi.string().max(100).required(),
   pincode: Joi.string().max(100).trim().allow('', null), // Allow any text for pincode field
-  gstNumber: Joi.string().max(200).trim().allow('', null), // Allow longer text for GST field
+  gstNumber: gstinJoi.allow('', null).messages({ 'any.invalid': 'Invalid GST Number format. Expected like 22AAAAA0000A1Z5' }),
   isPrimary: Joi.boolean().default(false),
-  notes: Joi.string().max(500).trim().allow('', null) // Allow notes field
-});
+  notes: Joi.string().max(500).trim().allow('', null), // Allow notes field
+  contactPersonName: Joi.string().max(100).trim().allow('', null),
+  email: Joi.string().email().lowercase().allow('', null),
+  phone: Joi.string().max(200).trim().allow('', null),
+  registrationStatus: Joi.string().valid('registered', 'non_registered').required()
+}).custom((value, helpers) => {
+  // Conditional: if registrationStatus is 'registered', gstNumber must be present and valid
+  if (value.registrationStatus === 'registered') {
+    const gst = (value.gstNumber || '').toString().trim();
+    if (!gst) {
+      return helpers.error('any.custom', { message: 'GST Number is required when Registration Status is Registered' });
+    }
+    const upper = gst.toUpperCase();
+    if (!/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(upper)) {
+      return helpers.error('any.custom', { message: 'Invalid GST Number format. Expected like 22AAAAA0000A1Z5' });
+    }
+  }
+  return value;
+}, 'Registration/GST conditional validation');
 
 // DGDetails Joi schema - Made fields optional for imports
 const dgDetailsJoiSchema = Joi.object({
@@ -169,7 +211,16 @@ const dgDetailsJoiSchema = Joi.object({
   amcStatus: Joi.string().valid('yes', 'no').allow('', null),
   cluster: Joi.string().trim().max(100).allow('', null),
   warrantyStartDate: Joi.date().allow('', null),
-  warrantyEndDate: Joi.date().allow('', null)
+  warrantyEndDate: Joi.date().allow('', null),
+  locationAddress: Joi.string().trim().max(500).allow('', null)
+});
+
+// Bank details Joi schema
+const bankDetailsJoiSchema = Joi.object({
+  bankName: Joi.string().max(100).trim().allow('', null),
+  accountNo: Joi.string().max(50).trim().allow('', null),
+  ifsc: Joi.string().max(20).trim().allow('', null),
+  branch: Joi.string().max(100).trim().allow('', null)
 });
 
 // Base customer fields
@@ -178,7 +229,7 @@ const baseCustomerFields = {
   alice: Joi.string().max(100).trim().allow(''),
   designation: Joi.string().max(100).trim().allow(''),
   contactPersonName: Joi.string().max(100).trim().allow(''),
-  gstNumber: Joi.string().max(50).trim().allow(''),
+  gstNumber: gstinJoi.allow('').messages({ 'any.invalid': 'Invalid GST Number format. Expected like 22AAAAA0000A1Z5' }),
   email: Joi.string().email().lowercase().allow('', null),
   phone: Joi.string().max(200).trim().allow('', null), // Allow any text for phone field
   panNumber: Joi.string().max(10).trim().allow(''),
@@ -192,7 +243,8 @@ const baseCustomerFields = {
   status: Joi.string().valid(...Object.values(LeadStatus)),
   notes: Joi.string().max(2000).allow(''),
   isDGSalesCustomer: Joi.boolean().optional(),
-  dgDetails: Joi.array().items(dgDetailsJoiSchema).optional()
+  dgDetails: Joi.array().items(dgDetailsJoiSchema).optional(),
+  bankDetails: bankDetailsJoiSchema.optional()
 };
 
 // Create customer schema
@@ -214,7 +266,8 @@ export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   status: baseCustomerFields.status,
   notes: baseCustomerFields.notes,
   isDGSalesCustomer: baseCustomerFields.isDGSalesCustomer,
-  dgDetails: baseCustomerFields.dgDetails
+  dgDetails: baseCustomerFields.dgDetails,
+  bankDetails: baseCustomerFields.bankDetails
 });
 
 // Update customer schema
@@ -236,7 +289,8 @@ export const updateCustomerSchema = Joi.object<UpdateCustomerInput>({
   status: baseCustomerFields.status,
   notes: baseCustomerFields.notes,
   isDGSalesCustomer: baseCustomerFields.isDGSalesCustomer,
-  dgDetails: baseCustomerFields.dgDetails
+  dgDetails: baseCustomerFields.dgDetails,
+  bankDetails: baseCustomerFields.bankDetails
 });
 
 // Contact history schema

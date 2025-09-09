@@ -148,7 +148,8 @@ const InvoiceFormPage: React.FC = () => {
 
   // Custom dropdown states
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [customerSearchTerm, setCustomerSearchTerm] = useState<string | undefined>(undefined);
+  const [isCustomerSearchMode, setIsCustomerSearchMode] = useState(false);
   const [showAddressDropdown, setShowAddressDropdown] = useState(false);
   const [showBillToAddressDropdown, setShowBillToAddressDropdown] = useState(false);
   const [showShipToAddressDropdown, setShowShipToAddressDropdown] = useState(false);
@@ -585,9 +586,18 @@ const InvoiceFormPage: React.FC = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll({ limit: 100, page: 1 });
-      const responseData = response.data as any;
-      const customersData = responseData.customers || responseData || [];
+      // Use non-paginated API to fetch all customers for dropdown
+      const response = await apiClient.customers.getAllForDropdown({ type: 'customer' });
+
+      let customersData: Customer[] = [];
+      if (response.success && response.data && Array.isArray(response.data)) {
+        customersData = response.data as any;
+      } else {
+        // Fallback to previous shape if needed
+        const responseData = response.data as any;
+        customersData = (responseData?.customers || responseData || []) as any;
+      }
+
       setCustomers(customersData);
     } catch (error) {
       console.error('Error fetching customers:', error);
@@ -719,8 +729,12 @@ const InvoiceFormPage: React.FC = () => {
       const response = await apiClient.users.getFieldEngineers();
       if (response.success && response.data.fieldEngineers) {
         const fieldEngineers = response.data.fieldEngineers.map((engineer: any) => ({
+          _id: engineer._id || engineer.id,
           value: engineer._id || engineer.id,
           label: engineer.name || `${engineer.firstName} ${engineer.lastName}`,
+          name: engineer.name || `${engineer.firstName} ${engineer.lastName}`,
+          firstName: engineer.firstName,
+          lastName: engineer.lastName,
           email: engineer.email,
           phone: engineer.phone
         }));
@@ -1364,6 +1378,37 @@ const InvoiceFormPage: React.FC = () => {
     });
   };
 
+  // Handle customer selection
+  const handleCustomerSelect = (customerId: string) => {
+    const customer = customers.find(c => c._id === customerId);
+    if (customer) {
+      // Check if this is a different customer than currently selected
+      const isDifferentCustomer = formData.customer?._id !== customer._id;
+
+      setFormData(prev => ({
+        ...prev,
+        customer: {
+          _id: customer._id,
+          name: customer.name,
+          email: customer.email,
+          phone: customer.phone,
+          pan: ''
+        }
+      }));
+
+      // Load customer addresses if different customer
+      if (isDifferentCustomer) {
+        loadCustomerAddresses(customer._id);
+      }
+
+      setShowCustomerDropdown(false);
+
+      // Exit search mode and clear search term
+      setIsCustomerSearchMode(false);
+      setCustomerSearchTerm(undefined);
+    }
+  };
+
   const validateForm = (): boolean => {
     const validation = validateQuotationData(formData);
 
@@ -1670,13 +1715,27 @@ const InvoiceFormPage: React.FC = () => {
 
   // Customer dropdown keyboard navigation
   const handleCustomerKeyDown = (e: React.KeyboardEvent) => {
-    const filteredCustomers = customers.filter(customer =>
-      customer.type === 'customer' && (
-        customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-        customer.email?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-        customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase())
-      )
-    );
+    const filteredCustomers = customers.filter(customer => {
+      if (customer.type !== 'customer') return false;
+
+      // If in search mode and no search term, show all customers
+      if (isCustomerSearchMode && (!customerSearchTerm || customerSearchTerm.trim() === '')) {
+        return true;
+      }
+
+      // If not in search mode, show all customers (for arrow key navigation)
+      if (!isCustomerSearchMode) {
+        return true;
+      }
+
+      if (!customerSearchTerm) return false;
+      const searchTerm = customerSearchTerm?.toLowerCase();
+      return (
+        (customer.name && customer.name.toLowerCase().includes(searchTerm)) ||
+        (customer.email && customer.email.toLowerCase().includes(searchTerm)) ||
+        (customer.phone && customer.phone.toLowerCase().includes(searchTerm))
+      );
+    });
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -1696,62 +1755,33 @@ const InvoiceFormPage: React.FC = () => {
         const newIndex = highlightedCustomerIndex > 0 ? highlightedCustomerIndex - 1 : filteredCustomers.length - 1;
         setHighlightedCustomerIndex(newIndex);
       }
-    } else if (e.key === 'Enter') {
+    } else if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) {
       e.preventDefault();
       if (showCustomerDropdown && highlightedCustomerIndex >= 0 && filteredCustomers[highlightedCustomerIndex]) {
         const selectedCustomer = filteredCustomers[highlightedCustomerIndex];
-        setFormData({
-          ...formData,
-          customer: {
-            _id: selectedCustomer._id,
-            name: selectedCustomer.name,
-            email: selectedCustomer.email,
-            phone: selectedCustomer.phone,
-            pan: ''
-          }
-        });
-        setShowCustomerDropdown(false);
-        setHighlightedCustomerIndex(-1);
-        setCustomerSearchTerm('');
-        setAddresses(selectedCustomer.addresses || []);
 
+        // Use the handleCustomerSelect function to maintain consistency
+        handleCustomerSelect(selectedCustomer._id);
+        setHighlightedCustomerIndex(-1);
+
+        // Move to next field (Bill To Address) and open dropdown
         setTimeout(() => {
           const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
-          if (billToAddressInput) billToAddressInput.focus();
+          if (billToAddressInput) {
+            billToAddressInput.focus();
+            setShowBillToAddressDropdown(true);
+          }
+        }, 50);
+      } else if (!showCustomerDropdown) {
+        // If no dropdown open, just move to next field (Bill To Address) and open dropdown
+        setTimeout(() => {
+          const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
+          if (billToAddressInput) {
+            billToAddressInput.focus();
+            setShowBillToAddressDropdown(true);
+          }
         }, 50);
       }
-    } else if (e.key === 'Tab' && !e.shiftKey) {
-      e.preventDefault();
-      
-      // Always close dropdown on Tab
-      if (showCustomerDropdown) {
-        if (highlightedCustomerIndex >= 0 && filteredCustomers[highlightedCustomerIndex]) {
-          // If dropdown is open and an item is highlighted, select it first
-          const selectedCustomer = filteredCustomers[highlightedCustomerIndex];
-          setFormData({
-            ...formData,
-            customer: {
-              _id: selectedCustomer._id,
-              name: selectedCustomer.name,
-              email: selectedCustomer.email,
-              phone: selectedCustomer.phone,
-              pan: ''
-            }
-          });
-          setAddresses(selectedCustomer.addresses || []);
-        }
-        setShowCustomerDropdown(false);
-        setHighlightedCustomerIndex(-1);
-        setCustomerSearchTerm('');
-      }
-      
-      // Move to next field
-      setTimeout(() => {
-        const billToAddressInput = document.querySelector('[data-field="bill-to-address"]') as HTMLInputElement;
-        if (billToAddressInput && !billToAddressInput.disabled) {
-          billToAddressInput.focus();
-        }
-      }, 50);
     } else if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault();
       setTimeout(() => {
@@ -1761,6 +1791,8 @@ const InvoiceFormPage: React.FC = () => {
     } else if (e.key === 'Escape') {
       setShowCustomerDropdown(false);
       setHighlightedCustomerIndex(-1);
+      setIsCustomerSearchMode(false);
+      setCustomerSearchTerm(undefined);
     }
   };
 
@@ -2497,19 +2529,48 @@ const InvoiceFormPage: React.FC = () => {
               <div className="relative dropdown-container">
                 <input
                   type="text"
-                  value={customerSearchTerm || getCustomerLabel((formData.customer?._id || formData?.customer || '') as string)}
+                  value={customerSearchTerm !== undefined ? customerSearchTerm : getCustomerLabel((formData.customer?._id || formData?.customer || '') as string)}
                   onChange={(e) => {
                     if (isFromQuotation) return; // Disable editing when from quotation
                     setCustomerSearchTerm(e.target.value);
                     if (!showCustomerDropdown) setShowCustomerDropdown(true);
                     setHighlightedCustomerIndex(-1);
+
+                    // Clear the selected customer when user starts typing
+                    if (formData.customer?._id) {
+                      setFormData(prev => ({
+                        ...prev,
+                        customer: { _id: '', name: '', email: '', phone: '', pan: '' },
+                        billToAddress: { address: '', state: '', district: '', pincode: '' },
+                        shipToAddress: { address: '', state: '', district: '', pincode: '' }
+                      }));
+                      setAddresses([]);
+                    }
                   }}
                   onFocus={() => {
                     if (isFromQuotation) return; // Disable dropdown when from quotation
                     setShowCustomerDropdown(true);
                     setHighlightedCustomerIndex(-1);
+                    // Initialize search term for editing
+                    if (customerSearchTerm === undefined && formData.customer?._id) {
+                      setCustomerSearchTerm(getCustomerLabel(formData.customer._id));
+                    } else if (!customerSearchTerm && !formData.customer?._id) {
+                      setCustomerSearchTerm(undefined);
+                    }
                   }}
                   onKeyDown={isFromQuotation ? undefined : handleCustomerKeyDown}
+                  onBlur={() => {
+                    // Delay to allow click events to fire
+                    setTimeout(() => {
+                      setShowCustomerDropdown(false);
+                      setHighlightedCustomerIndex(-1);
+                      // If no customer selected and search term exists, clear it
+                      if (!formData.customer?._id && customerSearchTerm) {
+                        setCustomerSearchTerm(undefined);
+                      }
+                    }, 150);
+                  }}
+                  autoComplete="off"
                   placeholder={isPurchaseInvoice ? "Search supplier or press ↓ to open" : "Search customer or press ↓ to open"}
                   data-field="customer"
                   disabled={isFromQuotation}
@@ -2522,6 +2583,34 @@ const InvoiceFormPage: React.FC = () => {
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerDropdown ? 'rotate-180' : ''}`} />
                 </div>
+
+                {/* Clear button - only show when there's a search term or selected customer */}
+                {(customerSearchTerm || formData.customer?._id) && !isFromQuotation && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setFormData(prev => ({
+                        ...prev,
+                        customer: { _id: '', name: '', email: '', phone: '', pan: '' },
+                        billToAddress: { address: '', state: '', district: '', pincode: '' },
+                        shipToAddress: { address: '', state: '', district: '', pincode: '' }
+                      }));
+                      setAddresses([]);
+                      setCustomerSearchTerm(undefined);
+                      setShowCustomerDropdown(false);
+                      setHighlightedCustomerIndex(-1);
+                      // Refocus the input
+                      setTimeout(() => {
+                        const input = document.querySelector('[data-field="customer"]') as HTMLInputElement;
+                        if (input) input.focus();
+                      }, 50);
+                    }}
+                    className="absolute inset-y-0 right-8 flex items-center pr-2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
                 {showCustomerDropdown && !isFromQuotation && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
                     <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
@@ -2530,63 +2619,42 @@ const InvoiceFormPage: React.FC = () => {
                       <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
                     </div>
 
-                    <button
-                      onClick={() => {
-                        setFormData({
-                          ...formData,
-                          customer: { _id: '', name: '', email: '', phone: '', pan: '' },
-                          billToAddress: { address: '', state: '', district: '', pincode: '' },
-                          shipToAddress: { address: '', state: '', district: '', pincode: '' }
-                        });
-                        setShowCustomerDropdown(false);
-                        setCustomerSearchTerm('');
-                        setAddresses([]);
-                      }}
-                      className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.customer?._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                    >
-                      {isPurchaseInvoice ? 'Select supplier' : 'Select customer'}
-                    </button>
+                    {(() => {
+                      const filteredCustomers = customers.filter(customer => {
+                        if (isPurchaseInvoice ? customer.type !== 'supplier' : customer.type !== 'customer') return false;
+                        const searchTerm = (customerSearchTerm || '').toLowerCase();
+                        return (
+                          (customer.name && customer.name.toLowerCase().includes(searchTerm)) ||
+                          (customer.email && customer.email.toLowerCase().includes(searchTerm)) ||
+                          (customer.phone && customer.phone.toLowerCase().includes(searchTerm))
+                        );
+                      });
 
-                    {customers.filter(customer =>
-                      (isPurchaseInvoice ? customer.type === 'supplier' : customer.type === 'customer') && (
-                        customer.name.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                        customer.email?.toLowerCase().includes(customerSearchTerm.toLowerCase()) ||
-                        customer.phone?.toLowerCase().includes(customerSearchTerm.toLowerCase())
-                      )
-                    ).map((customer, index) => (
-                      <button
-                        key={customer._id}
-                        data-customer-index={index}
-                        onClick={() => {
-                          setFormData({
-                            ...formData,
-                            customer: {
-                              _id: customer._id,
-                              name: customer.name,
-                              email: customer.email,
-                              phone: customer.phone,
-                              pan: ''
-                            }
-                          });
-                          setShowCustomerDropdown(false);
-                          setCustomerSearchTerm('');
-                          setHighlightedCustomerIndex(-1);
-                          setAddresses(customer.addresses || []);
-                          
-                          // Fetch DG details for the selected customer
-                          fetchDgDetailsForCustomer(customer._id);
-                        }}
-                        className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.customer?._id === customer._id ? 'bg-blue-100 text-blue-800' :
-                          highlightedCustomerIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
-                            'text-gray-700 hover:bg-gray-50'
-                          }`}
-                      >
-                        <div>
-                          <div className="font-medium">{customer.name}</div>
-                          <div className="text-xs text-gray-500">{customer.email}</div>
-                        </div>
-                      </button>
-                    ))}
+                      return filteredCustomers.map((customer, index) => (
+                        <button
+                          key={customer._id}
+                          data-customer-index={index}
+                          onClick={() => {
+                            handleCustomerSelect(customer._id);
+                            setShowCustomerDropdown(false);
+                            setCustomerSearchTerm(undefined); // Reset to show selected customer name
+                            setHighlightedCustomerIndex(-1);
+                            
+                            // Fetch DG details for the selected customer
+                            fetchDgDetailsForCustomer(customer._id);
+                          }}
+                          className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.customer?._id === customer._id ? 'bg-blue-100 text-blue-800' :
+                            highlightedCustomerIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                              'text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                          <div>
+                            <div className="font-medium">{customer.name}</div>
+                            <div className="text-xs text-gray-500">{customer.email}</div>
+                          </div>
+                        </button>
+                      ));
+                    })()}
                   </div>
                 )}
               </div>
@@ -2876,6 +2944,14 @@ const InvoiceFormPage: React.FC = () => {
                       setEngineerSearchTerm(e.target.value);
                       if (!showEngineerDropdown) setShowEngineerDropdown(true);
                       setHighlightedEngineerIndex(-1);
+
+                      // Clear the selected engineer when user starts typing
+                      if (formData.assignedEngineer) {
+                        setFormData(prev => ({
+                          ...prev,
+                          assignedEngineer: ''
+                        }));
+                      }
                     }}
                     onFocus={() => {
                       setShowEngineerDropdown(true);
@@ -2883,6 +2959,17 @@ const InvoiceFormPage: React.FC = () => {
                       if (!engineerSearchTerm && formData.assignedEngineer) {
                         setEngineerSearchTerm('');
                       }
+                    }}
+                    onBlur={() => {
+                      // Delay to allow click events to fire
+                      setTimeout(() => {
+                        setShowEngineerDropdown(false);
+                        setHighlightedEngineerIndex(-1);
+                        // If no engineer selected and search term exists, clear it
+                        if (!formData.assignedEngineer && engineerSearchTerm) {
+                          setEngineerSearchTerm('');
+                        }
+                      }, 150);
                     }}
                     onKeyDown={(e) => {
                       if (e.key === 'ArrowDown') {
@@ -2899,14 +2986,24 @@ const InvoiceFormPage: React.FC = () => {
                         );
                       } else if (e.key === 'Enter') {
                         e.preventDefault();
-                        if (showEngineerDropdown && highlightedEngineerIndex >= 0) {
-                          const selectedEngineer = fieldOperators[highlightedEngineerIndex];
+                        const filteredEngineers = fieldOperators.filter(engineer => {
+                          const searchTerm = (engineerSearchTerm || '').toLowerCase();
+                          const fullName = engineer.name || `${engineer.firstName} ${engineer.lastName}`;
+                          return (
+                            fullName.toLowerCase().includes(searchTerm) ||
+                            (engineer.email && engineer.email.toLowerCase().includes(searchTerm)) ||
+                            (engineer.phone && engineer.phone.toLowerCase().includes(searchTerm))
+                          );
+                        });
+                        
+                        if (showEngineerDropdown && highlightedEngineerIndex >= 0 && filteredEngineers[highlightedEngineerIndex]) {
+                          const selectedEngineer = filteredEngineers[highlightedEngineerIndex];
                           setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
                           setShowEngineerDropdown(false);
                           setEngineerSearchTerm('');
                           setHighlightedEngineerIndex(-1);
-                        } else if (showEngineerDropdown && fieldOperators.length === 1) {
-                          const selectedEngineer = fieldOperators[0];
+                        } else if (showEngineerDropdown && filteredEngineers.length === 1) {
+                          const selectedEngineer = filteredEngineers[0];
                           setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
                           setShowEngineerDropdown(false);
                           setEngineerSearchTerm('');
@@ -2920,11 +3017,21 @@ const InvoiceFormPage: React.FC = () => {
                         
                         // Always close dropdown on Tab
                         if (showEngineerDropdown) {
-                          if (highlightedEngineerIndex >= 0) {
-                            const selectedEngineer = fieldOperators[highlightedEngineerIndex];
+                          const filteredEngineers = fieldOperators.filter(engineer => {
+                            const searchTerm = (engineerSearchTerm || '').toLowerCase();
+                            const fullName = engineer.name || `${engineer.firstName} ${engineer.lastName}`;
+                            return (
+                              fullName.toLowerCase().includes(searchTerm) ||
+                              (engineer.email && engineer.email.toLowerCase().includes(searchTerm)) ||
+                              (engineer.phone && engineer.phone.toLowerCase().includes(searchTerm))
+                            );
+                          });
+                          
+                          if (highlightedEngineerIndex >= 0 && filteredEngineers[highlightedEngineerIndex]) {
+                            const selectedEngineer = filteredEngineers[highlightedEngineerIndex];
                             setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
-                          } else if (fieldOperators.length === 1) {
-                            const selectedEngineer = fieldOperators[0];
+                          } else if (filteredEngineers.length === 1) {
+                            const selectedEngineer = filteredEngineers[0];
                             setFormData({ ...formData, assignedEngineer: selectedEngineer._id });
                           }
                           setShowEngineerDropdown(false);
@@ -2954,13 +3061,43 @@ const InvoiceFormPage: React.FC = () => {
                   <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEngineerDropdown ? 'rotate-180' : ''}`} />
                   </div>
+
+                  {/* Clear button - only show when there's a search term or selected engineer */}
+                  {(engineerSearchTerm || formData.assignedEngineer) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setFormData(prev => ({
+                          ...prev,
+                          assignedEngineer: ''
+                        }));
+                        setEngineerSearchTerm('');
+                        setShowEngineerDropdown(false);
+                        setHighlightedEngineerIndex(-1);
+                        // Refocus the input
+                        setTimeout(() => {
+                          const input = document.querySelector('[data-field="engineer"]') as HTMLInputElement;
+                          if (input) input.focus();
+                        }, 50);
+                      }}
+                      className="absolute inset-y-0 right-8 flex items-center pr-2 text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                   {showEngineerDropdown && (
                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
                       {(() => {
-                        const filteredEngineers = fieldOperators.filter(engineer =>
-                          `${engineer.firstName} ${engineer.lastName}`.toLowerCase().includes(engineerSearchTerm.toLowerCase()) ||
-                          engineer.email.toLowerCase().includes(engineerSearchTerm.toLowerCase())
-                        );
+                        const filteredEngineers = fieldOperators.filter(engineer => {
+                          const searchTerm = (engineerSearchTerm || '').toLowerCase();
+                          const fullName = engineer.name || `${engineer.firstName} ${engineer.lastName}`;
+                          return (
+                            fullName.toLowerCase().includes(searchTerm) ||
+                            (engineer.email && engineer.email.toLowerCase().includes(searchTerm)) ||
+                            (engineer.phone && engineer.phone.toLowerCase().includes(searchTerm))
+                          );
+                        });
 
                         return (
                           <>
@@ -2996,7 +3133,7 @@ const InvoiceFormPage: React.FC = () => {
                                   }`}
                               >
                                 <div>
-                                  <div className="font-medium">{engineer.firstName} {engineer.lastName}</div>
+                                  <div className="font-medium">{engineer.name || `${engineer.firstName} ${engineer.lastName}`}</div>
                                   <div className="text-xs text-gray-500">{engineer.email}</div>
                                   <div className="text-xs text-gray-500">{engineer.phone}</div>
                                 </div>

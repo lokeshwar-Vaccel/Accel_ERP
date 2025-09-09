@@ -685,6 +685,112 @@ export const generateDeliveryChallanPDFEndpoint = async (
   }
 };
 
+// @desc    Export delivery challans to Excel
+// @route   GET /api/v1/delivery-challans/export
+// @access  Private
+export const exportDeliveryChallans = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const {
+      search,
+      status,
+      customer,
+      dateFrom,
+      dateTo,
+      department
+    } = req.query as QueryParams & {
+      status?: string;
+      customer?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      department?: string;
+    };
+
+    // Build filter object (same as getDeliveryChallans)
+    const filter: any = {};
+
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+
+    if (customer && customer !== 'all') {
+      filter.customer = customer;
+    }
+
+    if (department && department !== 'all') {
+      filter.department = department;
+    }
+
+    if (dateFrom || dateTo) {
+      filter.dated = {};
+      if (dateFrom && dateFrom !== 'undefined' && dateFrom !== 'null') {
+        filter.dated.$gte = new Date(dateFrom);
+      }
+      if (dateTo && dateTo !== 'undefined' && dateTo !== 'null') {
+        filter.dated.$lte = new Date(dateTo);
+      }
+    }
+
+    // Search functionality
+    if (search) {
+      filter.$or = [
+        { challanNumber: { $regex: search, $options: 'i' } },
+        { referenceNo: { $regex: search, $options: 'i' } },
+        { buyersOrderNo: { $regex: search, $options: 'i' } },
+        { dispatchDocNo: { $regex: search, $options: 'i' } },
+        { destination: { $regex: search, $options: 'i' } },
+        { notes: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Get all delivery challans matching the filter
+    const deliveryChallans = await DeliveryChallan.find(filter)
+      .populate('customer', 'name email phone address')
+      .populate('createdBy', 'firstName lastName email')
+      .sort({ dated: -1 });
+
+    // Prepare data for Excel export with proper formatting
+    const exportData = deliveryChallans.map((challan, index) => ({
+      'S.No': index + 1,
+      'Challan Number': challan.challanNumber || '',
+      'Date': challan.dated ? new Date(challan.dated).toLocaleDateString('en-GB') : '',
+      'Customer Name': (challan.customer as any)?.name || '',
+      'Customer Email': (challan.customer as any)?.email || '',
+      'Customer Phone': (challan.customer as any)?.phone || '',
+      'Department': challan.department || '',
+      'Status': challan.status?.charAt(0).toUpperCase() + challan.status?.slice(1) || 'Draft',
+      'Reference No': challan.referenceNo || '',
+      'Other Reference No': challan.otherReferenceNo || '',
+      'Buyers Order No': challan.buyersOrderNo || '',
+      'Buyers Order Date': challan.buyersOrderDate ? new Date(challan.buyersOrderDate).toLocaleDateString('en-GB') : '',
+      'Dispatch Doc No': challan.dispatchDocNo || '',
+      'Destination': challan.destination || '',
+      'Dispatched Through': challan.dispatchedThrough || '',
+      'Terms of Delivery': challan.termsOfDelivery || '',
+      'Consignee': challan.consignee || '',
+      'Mode of Payment': challan.modeOfPayment || '',
+      'Total Spares': challan.spares?.length || 0,
+      'Total Services': challan.services?.length || 0,
+      'Notes': challan.notes || '',
+      'Created By': (challan.createdBy as any) ? `${(challan.createdBy as any).firstName} ${(challan.createdBy as any).lastName}` : '',
+      'Created At': challan.createdAt ? new Date(challan.createdAt).toLocaleDateString('en-GB') : '',
+    }));
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Delivery challans data prepared for export',
+      data: exportData
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
 // @desc    Get delivery challan statistics
 // @route   GET /api/v1/delivery-challans/stats
 // @access  Private

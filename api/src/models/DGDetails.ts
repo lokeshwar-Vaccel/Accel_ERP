@@ -78,6 +78,17 @@ const dgDetailsSchema = new Schema({
     trim: true,
     maxlength: [100, 'Cluster cannot exceed 100 characters']
   },
+  // Optional reference to the customer's address where this DG is located
+  locationAddressId: {
+    type: Number,
+    required: false
+  },
+  locationAddress: {
+    type: String,
+    trim: true,
+    required: false,
+    maxlength: [500, 'Location address cannot exceed 500 characters']
+  },
   warrantyStartDate: {
     type: Date,
     required: false

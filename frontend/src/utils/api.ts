@@ -1492,6 +1492,9 @@ class ApiClient {
     getNextNumber: () =>
       this.makeRequest<{ success: boolean; data: { nextChallanNumber: string } }>('/delivery-challans/next-number'),
 
+    export: (params?: any) =>
+      this.makeRequest<{ success: boolean; data: any[]; message: string }>(`/delivery-challans/export${params ? `?${new URLSearchParams(params)}` : ''}`),
+
     exportPDF: async (id: string) => {
       const token = localStorage.getItem('authToken');
       const response = await fetch(`${API_BASE_URL}/delivery-challans/${id}/pdf`, {

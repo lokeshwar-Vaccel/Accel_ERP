@@ -203,6 +203,25 @@ export const createAMCContract = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    console.log('[AMC] createAMCContract start');
+    console.log('[AMC] engineSerialNumber:', req.body?.engineSerialNumber || 'N/A');
+
+    // Simple uniqueness check for engineSerialNumber
+    if (!req.body.engineSerialNumber || String(req.body.engineSerialNumber).trim() === '') {
+      return next(new AppError('Engine serial number is required', 400));
+    }
+
+    // Block if ANY AMC exists for this engineSerialNumber (regardless of status)
+    const duplicateQuery = { engineSerialNumber: req.body.engineSerialNumber } as const;
+    console.log('[AMC] duplicate check query:', JSON.stringify(duplicateQuery));
+
+    const existingForEngine = await AMC.findOne(duplicateQuery).select('_id contractNumber status');
+    console.log('[AMC] duplicate found:', !!existingForEngine);
+
+    if (existingForEngine) {
+      return next(new AppError('An AMC already exists for this engine serial number', 400));
+    }
+
     // Generate unique contract number
     let contractNumber: string;
     try {
