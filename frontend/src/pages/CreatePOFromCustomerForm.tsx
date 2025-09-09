@@ -225,10 +225,7 @@ const CreatePOFromCustomerForm: React.FC = () => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll({
-        type: 'customer',
-        limit: 100
-      });
+      const response = await apiClient.customers.getAllForDropdown();
 
       let customersData: Customer[] = [];
       if (response && response.data) {
