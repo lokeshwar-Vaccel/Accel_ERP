@@ -72,6 +72,7 @@ export interface StockAdjustmentInput {
 }
 
 export interface StockTransferInput {
+  stockId: string;
   product: string;
   fromLocation: string;
   fromRoom?: string;
@@ -286,13 +287,14 @@ export const stockAdjustmentSchema = Joi.object<StockAdjustmentInput>({
 
 // Stock transfer schema
 export const stockTransferSchema = Joi.object<StockTransferInput>({
+  stockId: Joi.string().hex().length(24).required(),
   product: Joi.string().hex().length(24).required(),
   fromLocation: Joi.string().hex().length(24).required(),
-  fromRoom: Joi.string().hex().length(24).allow('', null),
-  fromRack: Joi.string().hex().length(24).allow('', null),
+  fromRoom: Joi.string().hex().length(24).allow('', null).optional(),
+  fromRack: Joi.string().hex().length(24).allow('', null).optional(),
   toLocation: Joi.string().hex().length(24).required(),
-  toRoom: Joi.string().hex().length(24).allow('', null),
-  toRack: Joi.string().hex().length(24).allow('', null),
+  toRoom: Joi.string().hex().length(24).allow('', null).optional(),
+  toRack: Joi.string().hex().length(24).allow('', null).optional(),
   quantity: Joi.number().min(1).required(),
   transferReason: Joi.string().valid(
     'restock',

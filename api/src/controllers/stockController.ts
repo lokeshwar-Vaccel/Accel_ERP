@@ -892,33 +892,47 @@ export const transferStock = async (
       notes
     } = req.body;
 
-    // console.log('Transfer request:', {
-    //   product, fromLocation, fromRoom, fromRack,
-    //   toLocation, toRoom, toRack, quantity
-    // });
-
     // Validate quantity
     if (!quantity || quantity <= 0) {
       return next(new AppError('Quantity must be greater than 0', 400));
     }
 
-    // Build source stock query with proper null handling for unique constraint
-    const sourceQuery: any = {
-      stockId,
-      product,
-      location: fromLocation,
-      room: fromRoom || null,
-      rack: fromRack || null
-    };
-
-    // console.log('Source query:', sourceQuery);
-
-    const sourceStock = await Stock.findOne(sourceQuery);
-    // const sourceStock = await Stock.findById(stockId);
+    // Find source stock by ID first, then validate the details
+    const sourceStock = await Stock.findById(stockId);
 
     if (!sourceStock) {
-      return next(new AppError(`Source stock not found for product at location: ${fromLocation}, room: ${fromRoom || 'none'}, rack: ${fromRack || 'none'}`, 404));
+      return next(new AppError(`Source stock not found with ID: ${stockId}`, 404));
     }
+
+    // Validate that the source stock matches the provided details
+    if (sourceStock.product.toString() !== product) {
+      return next(new AppError('Source stock product does not match the provided product', 400));
+    }
+
+    if (sourceStock.location.toString() !== fromLocation) {
+      return next(new AppError('Source stock location does not match the provided from location', 400));
+    }
+
+    // Check room and rack match (handle null values properly)
+    const sourceRoom = sourceStock.room ? sourceStock.room.toString() : null;
+    const sourceRack = sourceStock.rack ? sourceStock.rack.toString() : null;
+    
+    // For room/rack assignments, we allow updating from any current state
+    // Only validate if this is a location transfer (different locations)
+    const isLocationTransfer = fromLocation !== toLocation;
+    
+    if (isLocationTransfer) {
+      // For location transfers, validate that source room/rack matches
+      if (sourceRoom !== (fromRoom || null)) {
+        return next(new AppError('Source stock room does not match the provided from room', 400));
+      }
+
+      if (sourceRack !== (fromRack || null)) {
+        return next(new AppError('Source stock rack does not match the provided from rack', 400));
+      }
+    }
+    // For room/rack assignments (same location), we don't validate source room/rack
+    // as we're allowing updates from any current state
 
     if (sourceStock.availableQuantity < quantity) {
       return next(new AppError(`Insufficient stock at source location. Available: ${sourceStock.availableQuantity}, Requested: ${quantity}`, 400));
@@ -926,8 +940,9 @@ export const transferStock = async (
 
     // Check if this is a location change or just room/rack reorganization
     const isLocationChange = fromLocation !== toLocation;
-    const isRoomChange = fromRoom !== toRoom;
-    const isRackChange = fromRack !== toRack;
+    const isRoomChange = (fromRoom || null) !== (toRoom || null);
+    const isRackChange = (fromRack || null) !== (toRack || null);
+
 
     // Check if source and destination are the same
     if (!isLocationChange && !isRoomChange && !isRackChange) {
@@ -985,7 +1000,6 @@ export const transferStock = async (
 
       // Check if destination stock already exists with proper null handling
       const destQuery: any = {
-        stockId,
         product,
         location: toLocation,
         room: toRoom || null,
@@ -1059,80 +1073,36 @@ export const transferStock = async (
       ]);
     } else {
       // ROOM/RACK TRANSFER: Same location, different room or rack
+      // Update the existing stock record with new room/rack assignment
+      
+      // Update the source stock record with the new room/rack assignment
+      sourceStock.room = toRoom || null;
+      sourceStock.rack = toRack || null;
+      sourceStock.lastUpdated = new Date();
 
-      // Check if a stock record already exists for the new room/rack
-      const destQuery: any = {
+      // Save the updated stock record
+      await sourceStock.save();
+      
+      // Set destStock to the same record for response consistency
+      destStock = sourceStock;
+
+      // Create ledger entry for room/rack assignment
+      await StockLedger.create({
         product,
         location: fromLocation,
         room: toRoom || null,
-        rack: toRack || null
-      };
-
-      destStock = await Stock.findOne(destQuery);
-
-      if (destStock) {
-        originalDestQuantity = destStock.quantity;
-        // Add quantity to existing destination
-        destStock.quantity += quantity;
-        destStock.availableQuantity = destStock.quantity - destStock.reservedQuantity;
-        destStock.lastUpdated = new Date();
-      } else {
-        // Create new destination stock record
-        destStock = new Stock({
-          product,
-          location: fromLocation,
-          room: toRoom || null,
-          rack: toRack || null,
-          quantity,
-          reservedQuantity: 0,
-          availableQuantity: quantity,
-          lastUpdated: new Date()
-        });
-      }
-
-      // Subtract from source stock
-      sourceStock.quantity -= quantity;
-      sourceStock.availableQuantity = sourceStock.quantity - sourceStock.reservedQuantity;
-      sourceStock.lastUpdated = new Date();
-
-      // Save both stocks
-      await Promise.all([sourceStock.save(), destStock.save()]);
-
-      // Create ledger entries for room/rack relocation
-      await StockLedger.create([
-        {
-          product,
-          location: fromLocation,
-          room: fromRoom || null,
-          rack: fromRack || null,
-          transactionType: 'transfer',
-          quantity: -quantity,
-          reason: `Stock relocated from ${fromDesc} to ${toDesc}`,
-          notes,
-          performedBy: req.user!.id,
-          transactionDate: new Date(),
-          resultingQuantity: sourceStock.quantity,
-          previousQuantity: originalSourceQuantity,
-          referenceId,
-          referenceType: 'transfer'
-        },
-        {
-          product,
-          location: fromLocation,
-          room: toRoom || null,
-          rack: toRack || null,
-          transactionType: 'transfer',
-          quantity: quantity,
-          reason: `Stock relocated from ${fromDesc} to ${toDesc}`,
-          notes,
-          performedBy: req.user!.id,
-          transactionDate: new Date(),
-          resultingQuantity: destStock.quantity,
-          previousQuantity: originalDestQuantity,
-          referenceId,
-          referenceType: 'transfer'
-        }
-      ]);
+        rack: toRack || null,
+        transactionType: 'adjustment',
+        quantity: 0, // No quantity change, just room/rack assignment
+        reason: `Room/Rack assignment updated from ${fromDesc} to ${toDesc}`,
+        notes,
+        performedBy: req.user!.id,
+        transactionDate: new Date(),
+        resultingQuantity: sourceStock.quantity,
+        previousQuantity: originalSourceQuantity,
+        referenceId,
+        referenceType: 'adjustment'
+      });
     }
 
     // Clean up empty stock records (optional)
@@ -1142,7 +1112,7 @@ export const transferStock = async (
 
     const response: APIResponse = {
       success: true,
-      message: isLocationChange ? 'Stock transferred successfully' : 'Stock relocated successfully',
+      message: isLocationChange ? 'Stock transferred successfully' : 'Room/Rack assignment updated successfully',
       data: {
         transfer: {
           product,
@@ -1165,16 +1135,25 @@ export const transferStock = async (
           sourceStock: {
             id: sourceStock._id,
             remainingQuantity: sourceStock.quantity,
-            availableQuantity: sourceStock.availableQuantity
+            availableQuantity: sourceStock.availableQuantity,
+            room: sourceStock.room,
+            rack: sourceStock.rack
           },
-          destStock: {
+          destStock: isLocationChange ? {
             id: destStock._id,
             newQuantity: destStock.quantity,
             availableQuantity: destStock.availableQuantity
+          } : {
+            id: sourceStock._id,
+            updatedQuantity: sourceStock.quantity,
+            availableQuantity: sourceStock.availableQuantity,
+            room: sourceStock.room,
+            rack: sourceStock.rack
           }
         }
       }
     };
+
 
     res.status(200).json(response);
   } catch (error) {
