@@ -36,6 +36,8 @@ import purchaseOrderPaymentRoutes from './purchaseOrderPayments';
 import qrCodeRoutes from './qrCode';
 import poFilesRoutes from './poFiles';
 import poFromCustomersRoutes from './poFromCustomers';
+import dgPoFromCustomersRoutes from './dgPoFromCustomers';
+import dgProformasRoutes from './dgProformas';
 import deliveryChallanRoutes from './deliveryChallans';
 
 const router = Router();
@@ -67,6 +69,8 @@ router.get('/', (req, res) => {
       inventory: '/inventory',
       purchaseOrderPayments: '/purchase-order-payments',
       poFromCustomers: '/po-from-customers',
+      dgPoFromCustomers: '/dg-po-from-customers',
+      dgProformas: '/dg-proformas',
       deliveryChallans: '/delivery-challans',
     }
   });
@@ -110,6 +114,8 @@ router.use('/purchase-order-payments', purchaseOrderPaymentRoutes);
 router.use('/qr-code', qrCodeRoutes);
 router.use('/po-files', poFilesRoutes);
 router.use('/po-from-customers', poFromCustomersRoutes);
+router.use('/dg-po-from-customers', dgPoFromCustomersRoutes);
+router.use('/dg-proformas', dgProformasRoutes);
 router.use('/delivery-challans', deliveryChallanRoutes);
 
 export default router;

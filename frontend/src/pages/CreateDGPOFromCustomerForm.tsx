@@ -20,16 +20,27 @@ import {
 import { apiClient } from '../utils/api';
 import toast from 'react-hot-toast';
 import PageHeader from '../components/ui/PageHeader';
+import { Button } from '../components/ui/Botton';
 
 // Types
 interface POFromCustomerItem {
   product: string;
+  description: string;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
-  taxRate: number;
-  description?: string;
+  // Optional fields for compatibility
   uom?: string;
+  discount?: number;
+  discountedAmount?: number;
+  // DG Product specific fields
+  kva: string;
+  phase: string;
+  annexureRating: string;
+  dgModel: string;
+  numberOfCylinders: number;
+  subject: string;
+  isActive: boolean;
   hsnNumber?: string;
 }
 
@@ -90,19 +101,38 @@ interface POFromCustomerFormData {
   notes?: string;
   items: POFromCustomerItem[];
   poPdf?: File | string | null;
+  // GST fields at PO level
+  subtotal: number;
+  totalDiscount: number;
+  taxRate: number;
+  taxAmount: number;
+  totalAmount: number;
 }
 
-const CreatePOFromCustomerForm: React.FC = () => {
+interface CreateDGPOFromCustomerFormProps {
+  // Props for modal-based editing
+  selectedPO?: any;
+  formMode?: 'create' | 'edit' | 'view';
+  onSuccess?: () => void;
+  onClose?: () => void;
+}
+
+const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({ 
+  selectedPO, 
+  formMode, 
+  onSuccess, 
+  onClose 
+}) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Get ID from location state or URL params
-  const poId = location.state?.poId || location.pathname.split('/').pop();
+  // Get ID from location state, URL params, or props
+  const poId = selectedPO?._id || location.state?.poId || location.pathname.split('/').pop();
 
-  // Check if we're in edit mode or view mode
-  const isEditMode = Boolean(poId) && location.pathname.includes('/edit/');
-  const isViewMode = Boolean(poId) && location.pathname.includes('/po-from-customer/') && !location.pathname.includes('/edit/') && !location.pathname.includes('/create');
-  const isCreateMode = location.pathname.includes('/create');
+  // Check if we're in edit mode or view mode - prioritize props over URL detection
+  const isEditMode = formMode === 'edit' || (Boolean(poId) && location.pathname.includes('/edit/'));
+  const isViewMode = formMode === 'view' || (Boolean(poId) && location.pathname.includes('/po-from-customer/') && !location.pathname.includes('/edit/') && !location.pathname.includes('/create'));
+  const isCreateMode = formMode === 'create' || location.pathname.includes('/create');
 
   // State management
   const [formData, setFormData] = useState<POFromCustomerFormData>({
@@ -125,15 +155,29 @@ const CreatePOFromCustomerForm: React.FC = () => {
     notes: '',
     items: [{
       product: '',
+      description: '',
       quantity: 1,
       unitPrice: 0,
       totalPrice: 0,
-      taxRate: 0,
-      description: '',
       uom: 'nos',
+      discount: 0,
+      discountedAmount: 0,
+      kva: '',
+      phase: '',
+      annexureRating: '',
+      dgModel: '',
+      numberOfCylinders: 0,
+      subject: '',
+      isActive: true,
       hsnNumber: ''
     }],
-    poPdf: null
+    poPdf: null,
+    // GST fields at PO level
+    subtotal: 0,
+    totalDiscount: 0,
+    taxRate: 18,
+    taxAmount: 0,
+    totalAmount: 0
   });
 
   const [errors, setErrors] = useState<string[]>([]);
@@ -144,6 +188,11 @@ const CreatePOFromCustomerForm: React.FC = () => {
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingPO, setEditingPO] = useState<any>(null);
+  const [dgProducts, setDgProducts] = useState<any[]>([]);
+  const [showDgProductSelector, setShowDgProductSelector] = useState(false);
+  const [dgProductSearchTerm, setDgProductSearchTerm] = useState('');
+  const [showProductDescriptionDropdown, setShowProductDescriptionDropdown] = useState<Record<number, boolean>>({});
+  const [productDescriptionSearchTerm, setProductDescriptionSearchTerm] = useState<Record<number, string>>({});
 
   // Dropdown states
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
@@ -199,12 +248,20 @@ const CreatePOFromCustomerForm: React.FC = () => {
     fetchAllData();
   }, []);
 
-  // Fetch PO data if in edit or view mode
+  // Fetch PO data if in edit or view mode (only if not using props)
   useEffect(() => {
-    if ((isEditMode || isViewMode) && poId && !isCreateMode) {
+    if ((isEditMode || isViewMode) && poId && !isCreateMode && !selectedPO) {
       fetchPOData();
     }
-  }, [isEditMode, isViewMode, poId, isCreateMode]);
+  }, [isEditMode, isViewMode, poId, isCreateMode, selectedPO]);
+
+  // Load data from props if provided (for modal-based editing)
+  useEffect(() => {
+    if (selectedPO && (isEditMode || isViewMode)) {
+      setLoading(false); // Set loading to false since we have the data
+      loadPOFromProps(selectedPO);
+    }
+  }, [selectedPO, isEditMode, isViewMode]);
 
   // API functions
   const fetchAllData = async () => {
@@ -213,7 +270,8 @@ const CreatePOFromCustomerForm: React.FC = () => {
       await Promise.all([
         fetchCustomers(),
         fetchProducts(),
-        fetchQuotations()
+        fetchQuotations(),
+        fetchDGProducts()
       ]);
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -252,53 +310,45 @@ const CreatePOFromCustomerForm: React.FC = () => {
 
   const fetchProducts = async () => {
     try {
-      const response = await apiClient.stock.getStock({ limit: 10000, page: 1 });
+      const response = await apiClient.dgProducts.getAll({ limit: 100, page: 1 });
       const responseData = response.data as any;
 
       // Use Map to deduplicate products by ID
       const uniqueProducts = new Map();
 
-      if (responseData.stockLevels && Array.isArray(responseData.stockLevels)) {
-        responseData.stockLevels.forEach((stock: any) => {
-          const productId = stock.product?._id || stock.productId;
-          if (productId && !uniqueProducts.has(productId)) {
-            uniqueProducts.set(productId, {
-              _id: productId,
-              name: stock.product?.name || stock.productName || 'Unknown Product',
-              price: stock.product?.price || 0,
-              gst: stock.product?.gst || 0,
-              hsnNumber: stock.product?.hsnNumber || '',
-              partNo: stock.product?.partNo || '',
-              uom: stock.product?.uom || 'nos',
-              category: stock.product?.category || 'N/A',
-              brand: stock.product?.brand || 'N/A',
-              availableQuantity: stock.availableQuantity || 0,
-              stockData: stock
-            });
-          }
-        });
-      } else if (Array.isArray(responseData)) {
-        responseData.forEach(product => {
+      if (Array.isArray(responseData)) {
+        responseData.forEach((product: any) => {
           if (product._id && !uniqueProducts.has(product._id)) {
-            uniqueProducts.set(product._id, product);
+            uniqueProducts.set(product._id, {
+              _id: product._id,
+              name: product.name || 'Unknown Product',
+              price: product.price || 0,
+              gst: product.gst || 0,
+              hsnNumber: product.hsnNumber || '',
+              partNo: product.partNo || '',
+              uom: product.uom || 'nos',
+              category: product.category || 'N/A',
+              brand: product.brand || 'N/A',
+              availableQuantity: product.availableQuantity || 0
+            });
           }
         });
       }
 
       const productsData = Array.from(uniqueProducts.values());
-      console.log(`Loaded ${productsData.length} unique products`); // Debug log
+      console.log(`Loaded ${productsData.length} unique DG products`); // Debug log
       setProducts(productsData);
     } catch (error) {
-      console.error('Error fetching inventory:', error);
-      toast.error('Failed to load products');
+      console.error('Error fetching DG products:', error);
+      toast.error('Failed to load DG products');
       setProducts([]);
     }
   };
 
   const fetchQuotations = async () => {
     try {
-      const response = await apiClient.quotations.getAll({
-        limit: 1000,
+      const response = await apiClient.dgSales.quotations.getAll({
+        limit: 100,
         page: 1
       });
 
@@ -312,9 +362,24 @@ const CreatePOFromCustomerForm: React.FC = () => {
       }
       setQuotations(quotationsData);
     } catch (error) {
-      console.error('Error fetching quotations:', error);
-      toast.error('Failed to load quotations');
+      console.error('Error fetching DG quotations:', error);
+      toast.error('Failed to load DG quotations');
       setQuotations([]);
+    }
+  };
+
+  const fetchDGProducts = async () => {
+    try {
+      const response = await apiClient.dgProducts.getAll({ limit: 100 });
+      if (response.success && response.data) {
+        const responseData = response.data as any;
+        const products = responseData.products || responseData;
+        setDgProducts(Array.isArray(products) ? products : []);
+      }
+    } catch (error) {
+      console.error('Error fetching DG products:', error);
+      toast.error('Failed to load DG products');
+      setDgProducts([]);
     }
   };
 
@@ -323,19 +388,39 @@ const CreatePOFromCustomerForm: React.FC = () => {
 
     try {
       setLoading(true);
-      const response = await apiClient.poFromCustomers.getById(poId);
+      const response = await apiClient.dgSales.dgPoFromCustomers.getById(poId);
 
       if (response.success && response.data) {
         const po = response.data;
         setEditingPO(po);
+        loadPOData(po);
+      }
+    } catch (error) {
+      console.error('Error fetching DG PO data:', error);
+      toast.error('Failed to load DG PO from customer data');
+      if (!onClose) { // Only navigate if not in modal mode
+        navigate('/dg-sales');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const loadPOFromProps = (po: any) => {
+    setEditingPO(po);
+    loadPOData(po);
+  };
+
+  const loadPOData = (po: any) => {
         // Map PO data to form data
         const mappedFormData: POFromCustomerFormData = {
           poNumber: po.poNumber || '',
-          customer: typeof po.customer === 'string' ? po.customer : po.customer._id,
+          customer: typeof po.customer === 'string' ? po.customer : (po.customer?._id || po.customer || ''),
           customerEmail: po.customerEmail,
           customerAddress: po.customerAddress,
-          quotationNumber: po.quotationNumber || '',
+      quotationNumber: typeof (po.dgQuotationNumber || po.quotationNumber) === 'string' 
+        ? (po.dgQuotationNumber || po.quotationNumber) 
+        : ((po.dgQuotationNumber || po.quotationNumber)?._id || ''),
           poDate: po.orderDate ? po.orderDate.split('T')[0] : new Date().toISOString().split('T')[0],
           status: po.status || 'draft',
           expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -343,16 +428,30 @@ const CreatePOFromCustomerForm: React.FC = () => {
           priority: po.priority || 'medium',
           notes: po.notes || '',
           items: po.items.map((item: any) => ({
-            product: typeof item.product === 'string' ? item.product : item.product._id,
+        product: typeof item.product === 'string' ? item.product : (item.product?._id || item.product || ''),
+        description: item.description || '',
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,
-            taxRate: item.taxRate,
-            description: item.description || '',
             uom: item.uom || 'nos',
+        discount: item.discount || 0,
+        discountedAmount: item.discountedAmount || 0,
+        kva: item.kva || '',
+        phase: item.phase || '',
+        annexureRating: item.annexureRating || '',
+        dgModel: item.dgModel || '',
+        numberOfCylinders: item.numberOfCylinders || 0,
+        subject: item.subject || '',
+        isActive: item.isActive !== undefined ? item.isActive : true,
             hsnNumber: item.hsnNumber || ''
           })),
-          poPdf: po.poPdf || null
+          poPdf: po.poPdf || null,
+          // GST fields at PO level
+          subtotal: po.subtotal || 0,
+          totalDiscount: po.totalDiscount || 0,
+          taxRate: po.taxRate || 18,
+          taxAmount: po.taxAmount || 0,
+          totalAmount: po.totalAmount || 0
         };
 
         setFormData(mappedFormData);
@@ -373,18 +472,17 @@ const CreatePOFromCustomerForm: React.FC = () => {
         }
 
         // Set quotation search term if we have quotationNumber
-        if (po.quotationNumber) {
-          if (typeof po.quotationNumber === 'object') {
-            setQuotationSearchTerm(po.quotationNumber.quotationNumber);
-          }
+    if (po.dgQuotationNumber || po.quotationNumber) {
+      const quotation = po.dgQuotationNumber || po.quotationNumber;
+      if (typeof quotation === 'object') {
+        setQuotationSearchTerm(quotation.quotationNumber);
+      } else if (typeof quotation === 'string') {
+        // If quotation is a string ID, we need to find the quotation object
+        const quotationObj = quotations.find(q => q._id === quotation);
+        if (quotationObj) {
+          setQuotationSearchTerm(quotationObj.quotationNumber);
         }
       }
-    } catch (error) {
-      console.error('Error fetching PO data:', error);
-      toast.error('Failed to load PO from customer data');
-      navigate('/po-from-customer-management');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -399,14 +497,27 @@ const CreatePOFromCustomerForm: React.FC = () => {
       quotationNumber: '', // Clear quotation selection when customer changes
       items: [{
         product: '',
+        description: '',
         quantity: 1,
         unitPrice: 0,
         totalPrice: 0,
-        taxRate: 0,
-        description: '',
         uom: 'nos',
+        discount: 0,
+        discountedAmount: 0,
+        kva: '',
+        phase: '',
+        annexureRating: '',
+        dgModel: '',
+        numberOfCylinders: 0,
+        subject: '',
+        isActive: true,
         hsnNumber: ''
-      }]
+      }],
+      // Reset GST calculations
+      subtotal: 0,
+      totalDiscount: 0,
+      taxAmount: 0,
+      totalAmount: 0
     }));
     setShowCustomerDropdown(false);
     setCustomerSearchTerm(customer?.name || ''); // Set the customer name as search term
@@ -456,58 +567,62 @@ const CreatePOFromCustomerForm: React.FC = () => {
 
     // Fetch full quotation details to get items
     try {
-      const response = await apiClient.quotations.getById(quotationId) as any;
-      console.log('Quotation response:', response.items); // Debug log
-      if (response) {
-        const quotationData = response || response?.data;
-        console.log('Quotation data:', quotationData); // Debug log
-        console.log('Quotation items:', quotationData.items); // Debug log
+      const response = await apiClient.dgSales.quotations.getById(quotationId) as any;
+      console.log('DG Quotation response:', response); // Debug log
+      if (response && response.success) {
+        const quotationData = response.data;
+        console.log('DG Quotation data:', quotationData); // Debug log
+        console.log('DG Quotation dgItems:', quotationData.dgItems); // Debug log
+        console.log('DG Quotation items:', quotationData.items); // Debug log
         
-        // Auto-fill items from quotation
-        if (quotationData.items && Array.isArray(quotationData.items) && quotationData.items.length > 0) {
-          const mappedItems = quotationData.items.map((item: any) => {
-            console.log('Mapping item:', item); // Debug log
-            
-            // Find the product in our products array to get additional details
-            const productDetails = products.find(p => p._id === item.product);
-            console.log('Found product details:', productDetails); // Debug log
+        // Auto-fill items from quotation - check both 'items' and 'dgItems'
+        const quotationItems = quotationData.dgItems || quotationData.items;
+        if (quotationItems && Array.isArray(quotationItems) && quotationItems.length > 0) {
+          const mappedItems = quotationItems.map((item: any) => {
+            console.log('Mapping DG quotation item:', item); // Debug log
             
             const mappedItem = {
-              product: typeof item.product === 'string' ? item.product : item.product?._id || '',
+              product: typeof item.product === 'string' ? item.product : item.product?._id || '',              description: item.description || `Supply of ${item.kva || ''} kVA ${item.phase === 'single' || item.phase === 'Single Phase' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${item.numberOfCylinders || item.cylinder || 0} cylinder engine, model ${item.dgModel || ''}, coupled with ${item.kva || ''} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`,
               quantity: item.quantity || 1,
               unitPrice: item.unitPrice || 0,
               totalPrice: item.totalPrice || 0,
-              taxRate: item.taxRate || 0,
-              description: item.description || productDetails?.name || '',
-              uom: item.uom || productDetails?.uom || 'nos',
-              hsnNumber: item.hsnNumber || item.hsnCode || productDetails?.hsnNumber || ''
+              uom: item.uom || 'nos',
+              discount: item.discount || 0,
+              discountedAmount: item.discountedAmount || 0,
+              kva: item.kva || '',
+              phase: item.phase || '',
+              annexureRating: item.annexureRating || '',
+              dgModel: item.dgModel || '',
+              numberOfCylinders: item.numberOfCylinders || item.cylinder || 0,
+              subject: item.subject || '',
+              isActive: item.isActive !== undefined ? item.isActive : true,
+              hsnNumber: item.hsnNumber || ''
             };
-            console.log('Mapped item:', mappedItem); // Debug log
+            console.log('Mapped DG item:', mappedItem); // Debug log
             return mappedItem;
           });
 
-          setFormData(prev => ({
-            ...prev,
-            items: mappedItems
-          }));
-
-          // Set product search terms for display
-          const productSearchTerms: Record<number, string> = {};
-          console.log('Available products:', products); // Debug log
-          mappedItems.forEach((item: any, index: number) => {
-            if (item.product) {
-              const product = products.find(p => p._id === item.product);
-              console.log(`Finding product for item ${index}:`, item.product, 'Found:', product); // Debug log
-              productSearchTerms[index] = product?.partNo || product?.name || item.description || '';
-            }
+          setFormData(prev => {
+            // Calculate GST for the auto-filled items
+            const { subtotal, totalDiscount, taxAmount, totalAmount } = calculateGST(mappedItems, prev.taxRate);
+            
+            return {
+              ...prev,
+              items: mappedItems,
+              subtotal,
+              totalDiscount,
+              taxAmount,
+              totalAmount
+            };
           });
-          console.log('Product search terms:', productSearchTerms); // Debug log
-          setProductSearchTerms(productSearchTerms);
 
-          toast.success(`Auto-filled ${mappedItems.length} items from quotation`);
+          toast.success(`Auto-filled ${mappedItems.length} DG items from quotation`);
         } else {
           toast('No items found in the selected quotation', { icon: 'ℹ️' });
         }
+      } else {
+        console.error('Failed to fetch quotation details:', response);
+        toast.error('Failed to load quotation details');
       }
     } catch (error) {
       console.error('Error fetching quotation details:', error);
@@ -516,34 +631,99 @@ const CreatePOFromCustomerForm: React.FC = () => {
   };
 
   const addItem = () => {
-    setFormData(prev => ({
-      ...prev,
-      items: [...prev.items, {
+    setFormData(prev => {
+      const newItems = [...prev.items, {
         product: '',
+        description: '',
         quantity: 1,
         unitPrice: 0,
         totalPrice: 0,
-        taxRate: 0,
-        description: '',
         uom: 'nos',
+        discount: 0,
+        discountedAmount: 0,
+        kva: '',
+        phase: '',
+        annexureRating: '',
+        dgModel: '',
+        numberOfCylinders: 0,
+        subject: '',
+        isActive: true,
         hsnNumber: ''
-      }]
-    }));
+      }];
+      
+      // Calculate GST at PO level
+      const { subtotal, totalDiscount, taxAmount, totalAmount } = calculateGST(newItems, prev.taxRate);
+      
+      return {
+        ...prev,
+        items: newItems,
+        subtotal,
+        totalDiscount,
+        taxAmount,
+        totalAmount
+      };
+    });
   };
 
   const removeItem = (index: number) => {
     if (formData.items.length > 1) {
-      setFormData(prev => ({
-        ...prev,
-        items: prev.items.filter((_, i) => i !== index)
-      }));
+      setFormData(prev => {
+        const newItems = prev.items.filter((_, i) => i !== index);
+        
+        // Calculate GST at PO level
+        const { subtotal, totalDiscount, taxAmount, totalAmount } = calculateGST(newItems, prev.taxRate);
+        
+        return {
+          ...prev,
+          items: newItems,
+          subtotal,
+          totalDiscount,
+          taxAmount,
+          totalAmount
+        };
+      });
     }
   };
 
+  // Calculate GST at PO level
+  const calculateGST = (items: POFromCustomerItem[], taxRate: number) => {
+    let subtotal = 0;
+    let totalDiscount = 0;
+    
+    items.forEach(item => {
+      const itemSubtotal = item.quantity * item.unitPrice;
+      const itemDiscountedAmount = item.discountedAmount || 0;
+      const itemTotalPrice = itemSubtotal - itemDiscountedAmount;
+      
+      subtotal += itemTotalPrice;
+      totalDiscount += itemDiscountedAmount;
+    });
+    
+    const taxAmount = (subtotal * taxRate) / 100;
+    const totalAmount = subtotal + taxAmount;
+    
+    return { subtotal, totalDiscount, taxAmount, totalAmount };
+  };
+
+  // Handle tax rate change
+  const handleTaxRateChange = (newTaxRate: number) => {
+    setFormData(prev => {
+      const { subtotal, totalDiscount, taxAmount, totalAmount } = calculateGST(prev.items, newTaxRate);
+      
+      return {
+        ...prev,
+        taxRate: newTaxRate,
+        subtotal,
+        totalDiscount,
+        taxAmount,
+        totalAmount
+      };
+    });
+  };
+
   const updateItem = (index: number, field: keyof POFromCustomerItem, value: any) => {
-    setFormData(prev => ({
-      ...prev,
-      items: prev.items.map((item, i) => {
+    setFormData(prev => {
+      const updatedItems = prev.items.map((item, i) => {
         if (i === index) {
           const updatedItem = { ...item, [field]: value };
 
@@ -552,7 +732,6 @@ const CreatePOFromCustomerForm: React.FC = () => {
             const productObj = products.find(p => p._id === value);
             if (productObj) {
               updatedItem.unitPrice = productObj.gndp || productObj.price || 0;
-              updatedItem.taxRate = productObj.gst || 0;
               updatedItem.hsnNumber = productObj.hsnNumber || '';
               updatedItem.uom = productObj.uom || 'nos';
               updatedItem.description = productObj.name || ''; // Use product name as description
@@ -566,19 +745,58 @@ const CreatePOFromCustomerForm: React.FC = () => {
           }
 
           // Auto-calculate total price
-          if (field === 'quantity' || field === 'unitPrice' || field === 'taxRate' || field === 'product') {
+          if (field === 'quantity' || field === 'unitPrice' || field === 'product') {
             const quantity = Number(field === 'quantity' ? value : (updatedItem.quantity || item.quantity)) || 0;
             const unitPrice = Number(field === 'unitPrice' ? value : (updatedItem.unitPrice || item.unitPrice)) || 0;
-            const taxRate = Number(field === 'taxRate' ? value : (updatedItem.taxRate || item.taxRate)) || 0;
-            const subtotal = quantity * unitPrice;
-            updatedItem.totalPrice = subtotal * (1 + taxRate / 100);
+            updatedItem.totalPrice = quantity * unitPrice;
           }
 
           return updatedItem;
         }
         return item;
-      })
-    }));
+      });
+
+      // Calculate GST at PO level
+      const { subtotal, totalDiscount, taxAmount, totalAmount } = calculateGST(updatedItems, prev.taxRate);
+
+      return {
+        ...prev,
+        items: updatedItems,
+        subtotal,
+        totalDiscount,
+        taxAmount,
+        totalAmount
+      };
+    });
+  };
+
+  // DG Product handling functions
+  const handleProductDescriptionSelect = (itemIndex: number, dgProduct: any) => {
+    const description = dgProduct.description || `Supply of ${dgProduct.kva} kVA ${dgProduct.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant, Prime Rated, radiator cooled, powered by Mahindra engine, electronic ${dgProduct.numberOfCylinders} cylinder engine, model ${dgProduct.dgModel}, coupled with ${dgProduct.kva} KVA alternator, Standard control panel with ASAS Controller with battery charger, Silencer, Anti-Vibration mountings, exhaust flexible connector, Batteries with cables, fuel tank.`;
+
+    updateItem(itemIndex, 'description', description);
+    updateItem(itemIndex, 'product', dgProduct._id || '');
+    updateItem(itemIndex, 'kva', dgProduct.kva || '');
+    updateItem(itemIndex, 'phase', dgProduct.phase || '');
+    updateItem(itemIndex, 'annexureRating', dgProduct.annexureRating || '');
+    updateItem(itemIndex, 'dgModel', dgProduct.dgModel || '');
+    updateItem(itemIndex, 'numberOfCylinders', dgProduct.numberOfCylinders || 0);
+    updateItem(itemIndex, 'subject', dgProduct.subject || '');
+    updateItem(itemIndex, 'unitPrice', dgProduct.price || 0);
+
+    setShowProductDescriptionDropdown(prev => ({ ...prev, [itemIndex]: false }));
+    setProductDescriptionSearchTerm(prev => ({ ...prev, [itemIndex]: '' }));
+  };
+
+  // Function to get filtered DG products for description dropdown
+  const getFilteredDGProductsForDescription = (searchTerm: string) => {
+    return dgProducts.filter(product =>
+      !searchTerm ||
+      product.description?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.subject?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.kva?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      product.dgModel?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
   };
 
   const getFilteredProducts = (searchTerm: string = '') => {
@@ -673,14 +891,16 @@ const CreatePOFromCustomerForm: React.FC = () => {
         item.product && item.quantity > 0 && item.unitPrice > 0
       );
 
+      console.log('cleanedItems:', cleanedItems);
+
       if (cleanedItems.length === 0) {
-        toast.error('Please add at least one item to the PO from customer');
+        toast.error('Please add at least one item to the DG PO from customer');
         setSubmitting(false);
         return;
       }
 
-      // Calculate total amount
-      const totalAmount = cleanedItems.reduce((sum, item) => sum + item.totalPrice, 0);
+      // Recalculate GST for cleaned items
+      const { subtotal, totalDiscount, taxAmount, totalAmount } = calculateGST(cleanedItems, formData.taxRate);
 
       // Handle PDF file - use existing URL or upload new file
       let fileUrl = formData.poPdf;
@@ -721,11 +941,15 @@ const CreatePOFromCustomerForm: React.FC = () => {
         customer: formData.customer,
         customerEmail: formData.customerEmail,
         customerAddress: formData.customerAddress,
-        quotationNumber: formData.quotationNumber || undefined, // Only include if provided
+        dgQuotationNumber: formData.quotationNumber || undefined, // Only include if provided
         items: cleanedItems,
+        subtotal,
+        totalDiscount,
+        taxRate: formData.taxRate,
+        taxAmount,
         totalAmount,
         remainingAmount: totalAmount,
-        poDate: formData.poDate,
+        orderDate: formData.poDate,
         status: formData.status,
         expectedDeliveryDate: formData.expectedDeliveryDate,
         department: formData.department,
@@ -737,26 +961,31 @@ const CreatePOFromCustomerForm: React.FC = () => {
 
       let response;
       if (isEditMode && editingPO) {
-        // Update existing PO from customer
-        response = await apiClient.poFromCustomers.update(editingPO._id, poData);
-        toast.success('PO from customer updated successfully!');
+        // Update existing DG PO from customer
+        response = await apiClient.dgSales.dgPoFromCustomers.update(editingPO._id, poData);
+        toast.success('DG PO from customer updated successfully!');
       } else {
-        // Create new PO from customer
-        response = await apiClient.poFromCustomers.create(poData);
-        toast.success('PO from customer created successfully!');
+        // Create new DG PO from customer
+        response = await apiClient.dgSales.dgPoFromCustomers.create(poData);
+        toast.success('DG PO from customer created successfully!');
       }
 
-      navigate('/po-from-customer-management');
+      // Handle success - either navigate or call callback
+      if (onSuccess) {
+        onSuccess();
+      } else {
+        navigate('/dg-sales');
+      }
     } catch (error: any) {
-      console.error('Error saving PO from customer:', error);
-      toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} PO from customer`);
+      console.error('Error saving DG PO from customer:', error);
+      toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} DG PO from customer`);
     } finally {
       setSubmitting(false);
     }
   };
 
   const calculateTotal = () => {
-    return formData.items.reduce((sum, item) => sum + item.totalPrice, 0);
+    return formData.totalAmount;
   };
 
   if (loading) {
@@ -774,33 +1003,39 @@ const CreatePOFromCustomerForm: React.FC = () => {
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader
         title={
-          isViewMode ? `View PO From Customer - ${editingPO?.poNumber || ''}` :
-          isEditMode ? `Edit PO From Customer - ${editingPO?.poNumber || ''}` :
-          isCreateMode ? "Create PO From Customer" :
-          "Create PO From Customer"
+          isViewMode ? `View DG PO From Customer - ${editingPO?.poNumber || ''}` :
+          isEditMode ? `Edit DG PO From Customer - ${editingPO?.poNumber || ''}` :
+          isCreateMode ? "Create DG PO From Customer" :
+          "Create DG PO From Customer"
         }
         subtitle={
-          isViewMode ? "View PO from customer details" :
-          isEditMode ? "Edit existing PO from customer" :
-          isCreateMode ? "Create a new PO from customer" :
-          "Create a new PO from customer"
+          isViewMode ? "View DG PO from customer details" :
+          isEditMode ? "Edit existing DG PO from customer" :
+          isCreateMode ? "Create a new DG PO from customer" :
+          "Create a new DG PO from customer"
         }
       >
         <div className="flex space-x-3">
           <button
-            onClick={() => navigate('/po-from-customer-management')}
+            onClick={() => {
+              if (onClose) {
+                onClose();
+              } else {
+                navigate('/dg-sales');
+              }
+            }}
             className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Back to Management</span>
+            <span>Back to DG Sales</span>
           </button>
           {isViewMode && (
             <button
-              onClick={() => navigate(`/po-from-customer/edit/${poId}`)}
+              onClick={() => navigate(`/dg-po-from-customer/edit/${poId}`)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
             >
               <Edit className="w-4 h-4" />
-              <span>Edit PO</span>
+              <span>Edit DG PO</span>
             </button>
           )}
         </div>
@@ -897,14 +1132,27 @@ const CreatePOFromCustomerForm: React.FC = () => {
                         quotationNumber: '', // Clear quotation selection when customer is cleared
                         items: [{
                           product: '',
+                          description: '',
                           quantity: 1,
                           unitPrice: 0,
                           totalPrice: 0,
-                          taxRate: 0,
-                          description: '',
                           uom: 'nos',
+                          discount: 0,
+                          discountedAmount: 0,
+                          kva: '',
+                          phase: '',
+                          annexureRating: '',
+                          dgModel: '',
+                          numberOfCylinders: 0,
+                          subject: '',
+                          isActive: true,
                           hsnNumber: ''
-                        }]
+                        }],
+                        // Reset GST calculations
+                        subtotal: 0,
+                        totalDiscount: 0,
+                        taxAmount: 0,
+                        totalAmount: 0
                       }));
                       setAddresses([]);
                       
@@ -935,12 +1183,22 @@ const CreatePOFromCustomerForm: React.FC = () => {
                           quotationNumber: '', // Clear quotation selection when customer is cleared
                           items: [{
                             product: '',
+                            description: '',
                             quantity: 1,
                             unitPrice: 0,
                             totalPrice: 0,
-                            taxRate: 0,
-                            description: '',
                             uom: 'nos',
+                            discount: 0,
+                            discountedAmount: 0,
+                            taxRate: 0,
+                            taxAmount: 0,
+                            kva: '',
+                            phase: '',
+                            annexureRating: '',
+                            dgModel: '',
+                            numberOfCylinders: 0,
+                            subject: '',
+                            isActive: true,
                             hsnNumber: ''
                           }]
                         }));
@@ -1110,14 +1368,27 @@ const CreatePOFromCustomerForm: React.FC = () => {
                         quotationNumber: '',
                         items: [{
                           product: '',
+                          description: '',
                           quantity: 1,
                           unitPrice: 0,
                           totalPrice: 0,
-                          taxRate: 0,
-                          description: '',
                           uom: 'nos',
+                          discount: 0,
+                          discountedAmount: 0,
+                          kva: '',
+                          phase: '',
+                          annexureRating: '',
+                          dgModel: '',
+                          numberOfCylinders: 0,
+                          subject: '',
+                          isActive: true,
                           hsnNumber: ''
-                        }]
+                        }],
+                        // Reset GST calculations
+                        subtotal: 0,
+                        totalDiscount: 0,
+                        taxAmount: 0,
+                        totalAmount: 0
                       }));
                       setProductSearchTerms({});
                     }
@@ -1144,14 +1415,27 @@ const CreatePOFromCustomerForm: React.FC = () => {
                           quotationNumber: '',
                           items: [{
                             product: '',
+                            description: '',
                             quantity: 1,
                             unitPrice: 0,
                             totalPrice: 0,
-                            taxRate: 0,
-                            description: '',
                             uom: 'nos',
+                            discount: 0,
+                            discountedAmount: 0,
+                            kva: '',
+                            phase: '',
+                            annexureRating: '',
+                            dgModel: '',
+                            numberOfCylinders: 0,
+                            subject: '',
+                            isActive: true,
                             hsnNumber: ''
-                          }]
+                          }],
+                          // Reset GST calculations
+                          subtotal: 0,
+                          totalDiscount: 0,
+                          taxAmount: 0,
+                          totalAmount: 0
                         }));
                         setQuotationSearchTerm('');
                         setShowQuotationDropdown(false);
@@ -1267,200 +1551,210 @@ const CreatePOFromCustomerForm: React.FC = () => {
             </div>
           </div>
 
-          {/* Items Table */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-medium text-gray-900">PO Items</h3>
-              <button
-                onClick={addItem}
-                type="button"
-                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add Item</span>
-              </button>
+          {/* Items */}
+          <div className="mb-8">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-semibold">Items</h2>
+              <div className="flex space-x-2">
+                <Button variant="outline" onClick={() => setShowDgProductSelector(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add DG Product
+                </Button>
+                <Button variant="outline" onClick={addItem}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Item
+                </Button>
+              </div>
             </div>
 
-            <div className=" relative">
-              <table className="min-w-full border border-gray-300 rounded-lg bg-white shadow-sm">
-                <thead className="bg-gray-100 border-b border-gray-300">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">S.No</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Product</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Description</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">HSN/SAC</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">UOM</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Quantity</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Unit Price</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">GST %</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Total</th>
-                    <th className="px-3 py-2 text-left text-xs font-bold text-gray-800 uppercase tracking-wide">Action</th>
+            {/* Items Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full border border-gray-300">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border border-gray-300 p-3 text-left font-semibold">Sr. No.</th>
+                    <th className="border border-gray-300 p-3 text-left font-semibold">Product Description</th>
+                    <th className="border border-gray-300 p-3 text-center font-semibold">Quantity</th>
+                    <th className="border border-gray-300 p-3 text-center font-semibold">Basic Unit Price (INR)</th>
+                    <th className="border border-gray-300 p-3 text-center font-semibold">Net Taxable Amt (INR)</th>
+                    <th className="border border-gray-300 p-3 text-center font-semibold">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody>
                   {formData.items.map((item, index) => (
-                    <tr key={index} className="hover:bg-gray-50 relative">
-                      <td className="px-3 py-2 text-center text-sm font-medium text-gray-600">
-                        {index + 1}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="relative dropdown-container">
-                          <div className="relative">
-                            <input
-                              type="text"
-                              value={productSearchTerms[index] || ''}
+                    <tr key={index}>
+                      <td className="border border-gray-300 p-3 text-center">{index + 1}</td>
+                      <td className="border border-gray-300 p-3">
+                        <div className="relative product-description-dropdown">
+                          <textarea
+                            value={item.description}
                               onChange={(e) => {
-                                setProductSearchTerms(prev => ({ ...prev, [index]: e.target.value }));
-                                setShowProductDropdowns(prev => ({ ...prev, [index]: true }));
-                                setHighlightedProductIndex(prev => ({ ...prev, [index]: -1 }));
-                                
-                                // If user clears the input, clear the selected product
-                                if (e.target.value === '') {
-                                  updateItem(index, 'product', '');
+                              updateItem(index, 'description', e.target.value);
+                              setProductDescriptionSearchTerm(prev => ({ ...prev, [index]: e.target.value }));
+                              if (!showProductDescriptionDropdown[index]) {
+                                setShowProductDescriptionDropdown(prev => ({ ...prev, [index]: true }));
                                 }
                               }}
                               onFocus={() => {
-                                setShowProductDropdowns(prev => ({ ...prev, [index]: true }));
-                                setHighlightedProductIndex(prev => ({ ...prev, [index]: -1 }));
-                              }}
-                              className="w-full px-2 py-1 pr-8 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                              placeholder="Search product..."
-                              autoComplete="off"
-                            />
-                            {item.product && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  updateItem(index, 'product', '');
-                                  setProductSearchTerms(prev => ({ ...prev, [index]: '' }));
-                                  setShowProductDropdowns(prev => ({ ...prev, [index]: false }));
-                                }}
-                                className="absolute right-1 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
-                                title="Clear product selection"
-                              >
-                                <X className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
-                          {showProductDropdowns[index] && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-xl z-[9999] max-h-60 overflow-y-auto"
-                                 style={{ 
-                                   position: 'absolute',
-                                   zIndex: 9999,
-                                   minWidth: '300px',
-                                   maxHeight: '240px',
-                                   boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
-                                 }}>
-                              {(() => {
-                                const filteredProducts = getFilteredProducts(productSearchTerms[index] || '');
-                                console.log(`Product dropdown ${index} - showing ${filteredProducts} products`);
-                                
-                                if (filteredProducts.length === 0) {
-                                  return (
-                                    <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                                      {products.length === 0 ? 'No products available' : 'No products found matching search'}
+                              setShowProductDescriptionDropdown(prev => ({ ...prev, [index]: true }));
+                            }}
+                            className="w-full border-none resize-none focus:outline-none bg-transparent"
+                            rows={3}
+                            placeholder="Product description"
+                          />
+
+                          {showProductDescriptionDropdown[index] && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                              <div className="p-2 border-b border-gray-200">
+                                <input
+                                  type="text"
+                                  placeholder="Search DG products..."
+                                  value={productDescriptionSearchTerm[index] || ''}
+                                  onChange={(e) => setProductDescriptionSearchTerm(prev => ({ ...prev, [index]: e.target.value }))}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                  autoFocus
+                                />
                                     </div>
-                                  );
-                                }
-                                
-                                return filteredProducts.map((product, productIndex) => (
+                              <div className="py-1">
+                                {getFilteredDGProductsForDescription(productDescriptionSearchTerm[index] || '').length === 0 ? (
+                                  <div className="px-3 py-2 text-sm text-gray-500">No DG products found</div>
+                                ) : (
+                                  getFilteredDGProductsForDescription(productDescriptionSearchTerm[index] || '').map(product => (
                                   <button
                                     key={product._id}
-                                    onClick={() => {
-                                      updateItem(index, 'product', product._id);
-                                      setShowProductDropdowns(prev => ({ ...prev, [index]: false }));
-                                      setProductSearchTerms(prev => ({ ...prev, [index]: '' }));
-                                      setHighlightedProductIndex(prev => ({ ...prev, [index]: -1 }));
-                                    }}
-                                    className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors text-sm border-b border-gray-100 last:border-b-0 ${item.product === product._id ? 'bg-blue-100 text-blue-800' : 'text-gray-700'}`}
-                                  >
-                                    <div className="font-medium">{product.name}</div>
-                                    <div className="text-xs text-gray-500">
-                                      {product.partNo} • ₹{product?.price?.toLocaleString()}
+                                      onClick={() => handleProductDescriptionSelect(index, product)}
+                                      className="w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm border-b border-gray-100 last:border-b-0"
+                                    >
+                                      <div className="font-medium text-gray-900">
+                                        {product.kva} KVA {product.phase === 'single' ? '1P' : '3P'} - {product.dgModel}
+                                      </div>
+                                      <div className="text-xs text-gray-600 truncate">
+                                        {product.description || `Supply of ${product.kva} kVA ${product.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant...`}
                                     </div>
                                   </button>
-                                ));
-                              })()}
+                                  ))
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          value={item.description || ''}
-                          onChange={(e) => updateItem(index, 'description', e.target.value)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="Description"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          value={item.hsnNumber || ''}
-                          onChange={(e) => updateItem(index, 'hsnNumber', e.target.value)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="HSN/SAC"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          value={item.uom || 'nos'}
-                          onChange={(e) => updateItem(index, 'uom', e.target.value)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="UOM"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
+                      <td className="border border-gray-300 p-3 text-center">
                         <input
                           type="number"
-                          min="0"
-                          step="1"
                           value={item.quantity}
                           onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
-                          placeholder="1"
+                          className="w-full text-center border-none focus:outline-none bg-transparent"
+                          min="0"
+                          step="1"
                         />
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="border border-gray-300 p-3 text-center">
                         <input
                           type="number"
+                          value={item.unitPrice || ''}
+                          onChange={(e) => {
+                            const value = parseFloat(e.target.value) || 0;
+                            updateItem(index, 'unitPrice', value);
+                          }}
+                          className="w-full text-center border-none focus:outline-none bg-transparent"
+                          placeholder="0"
                           min="0"
                           step="0.01"
-                          value={item.unitPrice}
-                          onChange={(e) => updateItem(index, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
-                          placeholder="0.00"
                         />
                       </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          min="0"
-                          max="100"
-                          step="0.01"
-                          value={item.taxRate}
-                          onChange={(e) => updateItem(index, 'taxRate', parseFloat(e.target.value) || 0)}
-                          className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
-                          placeholder="0.00"
-                        />
+                      <td className="border border-gray-300 p-3 text-center font-medium">
+                        ₹{item.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td className="px-3 py-2 text-right text-sm font-bold text-blue-600">
-                        ₹{item.totalPrice?.toFixed(2) || '0.00'}
-                      </td>
-                      <td className="px-3 py-2">
-                        <button
+                      <td className="border border-gray-300 p-3 text-center">
+                        {formData.items.length > 1 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
                           onClick={() => removeItem(index)}
+                            className="text-red-600 hover:text-red-800 hover:bg-red-50 border-red-200"
                           disabled={formData.items.length === 1}
-                          className="text-red-500 hover:text-red-700 disabled:text-gray-300 disabled:cursor-not-allowed"
-                          title={formData.items.length === 1 ? "Cannot remove the only item" : "Remove item"}
                         >
                           <X className="w-4 h-4" />
-                        </button>
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   ))}
+
+                  {/* Tax Row */}
+                  <tr>
+                    <td className="border border-gray-300 p-3"></td>
+                    <td className="border border-gray-300 p-3"></td>
+                    <td className="border border-gray-300 p-3"></td>
+                    <td className="border border-gray-300 p-3 text-center font-semibold" colSpan={2}>
+                      CGST/SGST/IGST ({formData.taxRate}%)
+                    </td>
+                    <td className="border border-gray-300 p-3 text-center font-medium">
+                      ₹{formData.taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+
+                  {/* Sub Total Row */}
+                  <tr>
+                    <td className="border border-gray-300 p-3"></td>
+                    <td className="border border-gray-300 p-3"></td>
+                    <td className="border border-gray-300 p-3"></td>
+                    <td className="border border-gray-300 p-3 text-center font-semibold" colSpan={2}>
+                      Sub Total (In Rupees)
+                    </td>
+                    <td className="border border-gray-300 p-3 text-center font-bold">
+                      ₹{formData.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* GST and Total Section */}
+            <div className="mt-4">
+              <table className="w-full border border-gray-300">
+                <tbody>
+                  <tr>
+                    <td className="border border-gray-300 p-3 font-semibold" colSpan={3}>
+                      Sub Total
+                    </td>
+                    <td className="border border-gray-300 p-3 text-center font-bold" colSpan={2}>
+                      ₹{formData.subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="border border-gray-300 p-3 font-semibold" colSpan={3}>
+                      Tax Rate (%)
+                    </td>
+                    <td className="border border-gray-300 p-3 text-center" colSpan={2}>
+                      <input
+                        type="number"
+                        value={formData.taxRate}
+                        onChange={(e) => handleTaxRateChange(Number(e.target.value))}
+                        className="w-20 text-center border border-gray-300 rounded px-2 py-1"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                      />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="border border-gray-300 p-3 font-semibold" colSpan={3}>
+                      Tax Amount (₹)
+                    </td>
+                    <td className="border border-gray-300 p-3 text-center font-bold" colSpan={2}>
+                      ₹{formData.taxAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="border border-gray-300 p-3 font-semibold" colSpan={3}>
+                      Grand Total (In Rupees)
+                    </td>
+                    <td className="border border-gray-300 p-3 text-center font-bold" colSpan={2}>
+                      ₹{formData.totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -1620,7 +1914,13 @@ const CreatePOFromCustomerForm: React.FC = () => {
           {!isViewMode && (
             <div className="flex justify-end gap-5">
               <button
-                onClick={() => navigate('/po-from-customer-management')}
+                onClick={() => {
+                  if (onClose) {
+                    onClose();
+                  } else {
+                    navigate('/dg-sales');
+                  }
+                }}
                 disabled={submitting}
                 className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
               >
@@ -1638,8 +1938,102 @@ const CreatePOFromCustomerForm: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* DG Product Selector Modal */}
+      {showDgProductSelector && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[80vh] overflow-y-auto m-4">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-900">Select DG Product</h2>
+              <button
+                onClick={() => setShowDgProductSelector(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder="Search DG products..."
+                  value={dgProductSearchTerm}
+                  onChange={(e) => setDgProductSearchTerm(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border border-gray-300">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border border-gray-300 p-3 text-left font-semibold">KVA</th>
+                      <th className="border border-gray-300 p-3 text-left font-semibold">Phase</th>
+                      <th className="border border-gray-300 p-3 text-left font-semibold">Model</th>
+                      <th className="border border-gray-300 p-3 text-left font-semibold">Price</th>
+                      <th className="border border-gray-300 p-3 text-left font-semibold">Description</th>
+                      <th className="border border-gray-300 p-3 text-center font-semibold">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dgProducts
+                      .filter(product =>
+                        !dgProductSearchTerm ||
+                        product.kva?.toLowerCase().includes(dgProductSearchTerm.toLowerCase()) ||
+                        product.dgModel?.toLowerCase().includes(dgProductSearchTerm.toLowerCase()) ||
+                        product.description?.toLowerCase().includes(dgProductSearchTerm.toLowerCase())
+                      )
+                      .map((product, index) => (
+                        <tr key={product._id} className="hover:bg-gray-50">
+                          <td className="border border-gray-300 p-3">{product.kva}</td>
+                          <td className="border border-gray-300 p-3">{product.phase === 'single' ? '1P' : '3P'}</td>
+                          <td className="border border-gray-300 p-3">{product.dgModel}</td>
+                          <td className="border border-gray-300 p-3">₹{product.price?.toLocaleString() || '0'}</td>
+                          <td className="border border-gray-300 p-3 text-sm text-gray-600 max-w-xs truncate">
+                            {product.description || `Supply of ${product.kva} kVA ${product.phase === 'single' ? '1 phase' : '3 phase'}, Mahindra CPCB IV+ compliant...`}
+                          </td>
+                          <td className="border border-gray-300 p-3 text-center">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                addItem();
+                                const newIndex = formData.items.length;
+                                handleProductDescriptionSelect(newIndex, product);
+                                setShowDgProductSelector(false);
+                              }}
+                            >
+                              <Plus className="w-4 h-4 mr-1" />
+                              Add
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="mt-4 flex justify-end space-x-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDgProductSelector(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    addItem();
+                    setShowDgProductSelector(false);
+                  }}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Manual Item
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default CreatePOFromCustomerForm;
+export default CreateDGPOFromCustomerForm;

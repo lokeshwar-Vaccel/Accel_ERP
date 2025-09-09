@@ -47,7 +47,103 @@ import UpdatePaymentModal from '../components/UpdatePaymentModal';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 import * as XLSX from 'xlsx';
 
-// Helper function to convert data to Excel with proper formatting
+// Helper function to convert invoice data to Excel with proper formatting
+const convertInvoiceToExcel = (data: any[]) => {
+  if (!data || data.length === 0) return new Blob([], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  
+  // Create a new workbook
+  const wb = XLSX.utils.book_new();
+  
+  // Convert data to worksheet
+  const ws = XLSX.utils.json_to_sheet(data);
+  
+  // Check if quotation number column exists in the data
+  const hasQuotationNumber = data.length > 0 && 'Quotation Number' in data[0];
+  
+  // Set column widths for invoice export (dynamic based on whether quotation number is included)
+  let columnWidths;
+  if (hasQuotationNumber) {
+    // Column widths with quotation number
+    columnWidths = [
+      { wch: 8 },   // S.No
+      { wch: 20 },  // Invoice Number
+      { wch: 20 },  // Quotation Number
+      { wch: 25 },  // Customer/Supplier Name
+      { wch: 30 },  // Customer/Supplier Email
+      { wch: 15 },  // Customer/Supplier Phone
+      { wch: 12 },  // Issue Date
+      { wch: 12 },  // Due Date
+      { wch: 12 },  // Status
+      { wch: 15 },  // Payment Status
+      { wch: 18 },  // Total Amount
+      { wch: 15 },  // Paid Amount
+      { wch: 18 },  // Remaining Amount
+      { wch: 20 },  // External Invoice Number
+      { wch: 15 },  // PO Number
+      { wch: 12 },  // Invoice Type
+      { wch: 20 },  // Created By
+      { wch: 12 },  // Created At
+    ];
+  } else {
+    // Column widths without quotation number
+    columnWidths = [
+      { wch: 8 },   // S.No
+      { wch: 20 },  // Invoice Number
+      { wch: 25 },  // Customer/Supplier Name
+      { wch: 30 },  // Customer/Supplier Email
+      { wch: 15 },  // Customer/Supplier Phone
+      { wch: 12 },  // Issue Date
+      { wch: 12 },  // Due Date
+      { wch: 12 },  // Status
+      { wch: 15 },  // Payment Status
+      { wch: 18 },  // Total Amount
+      { wch: 15 },  // Paid Amount
+      { wch: 18 },  // Remaining Amount
+      { wch: 20 },  // External Invoice Number
+      { wch: 15 },  // PO Number
+      { wch: 12 },  // Invoice Type
+      { wch: 20 },  // Created By
+      { wch: 12 },  // Created At
+    ];
+  }
+  
+  ws['!cols'] = columnWidths;
+  
+  // Set row heights for better readability
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let row = range.s.r; row <= range.e.r; row++) {
+    ws[`!rows`] = ws[`!rows`] || [];
+    ws[`!rows`][row] = { hpt: 20 }; // Set row height to 20 points
+  }
+  
+  // Add header styling (bold headers)
+  const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+    if (!ws[cellAddress]) continue;
+    
+    ws[cellAddress].s = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "366092" } },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+  }
+  
+  // Add the worksheet to the workbook
+  XLSX.utils.book_append_sheet(wb, ws, 'Invoices');
+  
+  // Convert to Excel file
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
+
+// Helper function to convert quotation data to Excel with proper formatting
 const convertToExcel = (data: any[]) => {
   if (!data || data.length === 0) return new Blob([], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   
@@ -609,6 +705,9 @@ const InvoiceManagement: React.FC = () => {
   const [toDatePurchase, setToDatePurchase] = useState('');
   const [deliveryChallans, setDeliveryChallans] = useState<any[]>([]);
   const [deliveryChallanLoading, setDeliveryChallanLoading] = useState(false);
+  
+  // Date validation states
+  const [dateRangeError, setDateRangeError] = useState<string>('');
   const [viewDeliveryChallan, setViewDeliveryChallan] = useState<any>(null);
   const [showDeliveryChallanViewModal, setShowDeliveryChallanViewModal] = useState(false);
 
@@ -648,11 +747,27 @@ const InvoiceManagement: React.FC = () => {
 
   console.log("selectedInvoice123:",selectedInvoice);
   
+  // Date range validation function
+  const validateDateRange = (fromDate: string, toDate: string): boolean => {
+    if (!fromDate || !toDate) return true; // Allow empty dates
+    
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    
+    if (from > to) {
+      setDateRangeError('From date must be before or equal to To date');
+      return false;
+    }
+    
+    setDateRangeError('');
+    return true;
+  };
 
   // Custom setter function that updates both state and localStorage
   const updateInvoiceType = (newType: 'quotation' | 'sale' | 'purchase' | 'challan') => {
     setInvoiceType(newType);
     localStorage.setItem('selectedInvoiceType', newType);
+    setDateRangeError(''); // Clear date range error when switching types
   };
 
   // Status update states
@@ -1148,6 +1263,14 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const fetchInvoices = async () => {
+    // Check for date range validation before making API call
+    if (invoiceType === 'sale' && fromDateSale && toDateSale && !validateDateRange(fromDateSale, toDateSale)) {
+      return; // Don't fetch if date range is invalid
+    }
+    if (invoiceType === 'purchase' && fromDatePurchase && toDatePurchase && !validateDateRange(fromDatePurchase, toDatePurchase)) {
+      return; // Don't fetch if date range is invalid
+    }
+
     const params: any = {
       page: currentPage,
       limit,
@@ -1221,6 +1344,12 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const fetchQuotations = async () => {
+    // Check for date range validation before making API call
+    if (fromDate && toDate && !validateDateRange(fromDate, toDate)) {
+      setQuotationLoading(false);
+      return; // Don't fetch if date range is invalid
+    }
+
     setQuotationLoading(true);
     try {
       const params: any = {
@@ -1603,8 +1732,12 @@ const InvoiceManagement: React.FC = () => {
       // Call the export API
       const response = await apiClient.invoices.export(exportParams);
       
+      // Debug: Log the response data to check quotation numbers
+      console.log('Export response data (first 3 items):', response.data.slice(0, 3));
+      console.log('Available columns:', response.data.length > 0 ? Object.keys(response.data[0]) : 'No data');
+      
       // Convert JSON data to Excel format with proper column widths
-      const blob = convertToExcel(response.data);
+      const blob = convertInvoiceToExcel(response.data);
       
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -1649,7 +1782,7 @@ const InvoiceManagement: React.FC = () => {
       const response = await apiClient.invoices.export(exportParams);
       
       // Convert JSON data to Excel format with proper column widths
-      const blob = convertToExcel(response.data);
+      const blob = convertInvoiceToExcel(response.data);
       
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -4593,9 +4726,29 @@ const InvoiceManagement: React.FC = () => {
                       fromDatePurchase
                     }
                     onChange={(e) => {
-                      if (invoiceType === 'quotation') setFromDate(e.target.value);
-                      else if (invoiceType === 'sale') setFromDateSale(e.target.value);
-                      else setFromDatePurchase(e.target.value);
+                      const newFromDate = e.target.value;
+                      if (invoiceType === 'quotation') {
+                        setFromDate(newFromDate);
+                        // Clear toDate if it's earlier than the new fromDate
+                        if (toDate && newFromDate && new Date(newFromDate) > new Date(toDate)) {
+                          setToDate('');
+                        }
+                        validateDateRange(newFromDate, toDate);
+                      } else if (invoiceType === 'sale') {
+                        setFromDateSale(newFromDate);
+                        // Clear toDateSale if it's earlier than the new fromDateSale
+                        if (toDateSale && newFromDate && new Date(newFromDate) > new Date(toDateSale)) {
+                          setToDateSale('');
+                        }
+                        validateDateRange(newFromDate, toDateSale);
+                      } else {
+                        setFromDatePurchase(newFromDate);
+                        // Clear toDatePurchase if it's earlier than the new fromDatePurchase
+                        if (toDatePurchase && newFromDate && new Date(newFromDate) > new Date(toDatePurchase)) {
+                          setToDatePurchase('');
+                        }
+                        validateDateRange(newFromDate, toDatePurchase);
+                      }
                     }}
                     className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   />
@@ -4603,18 +4756,37 @@ const InvoiceManagement: React.FC = () => {
                   <input
                     type="date"
                     placeholder="To Date"
+                    min={
+                      invoiceType === 'quotation' ? fromDate :
+                      invoiceType === 'sale' ? fromDateSale :
+                      fromDatePurchase
+                    }
                     value={
                       invoiceType === 'quotation' ? toDate :
                       invoiceType === 'sale' ? toDateSale :
                       toDatePurchase
                     }
                     onChange={(e) => {
-                      if (invoiceType === 'quotation') setToDate(e.target.value);
-                      else if (invoiceType === 'sale') setToDateSale(e.target.value);
-                      else setToDatePurchase(e.target.value);
+                      const newToDate = e.target.value;
+                      if (invoiceType === 'quotation') {
+                        setToDate(newToDate);
+                        validateDateRange(fromDate, newToDate);
+                      } else if (invoiceType === 'sale') {
+                        setToDateSale(newToDate);
+                        validateDateRange(fromDateSale, newToDate);
+                      } else {
+                        setToDatePurchase(newToDate);
+                        validateDateRange(fromDatePurchase, newToDate);
+                      }
                     }}
                     className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   />
+                  {dateRangeError && (
+                    <div className="text-red-500 text-xs mt-1 flex items-center gap-1">
+                      <span>⚠️</span>
+                      {dateRangeError}
+                    </div>
+                  )}
                   {(
                     (invoiceType === 'quotation' && (fromDate || toDate)) ||
                     (invoiceType === 'sale' && (fromDateSale || toDateSale)) ||
@@ -4632,6 +4804,7 @@ const InvoiceManagement: React.FC = () => {
                           setFromDatePurchase('');
                           setToDatePurchase('');
                         }
+                        setDateRangeError(''); // Clear date range error
                       }}
                       className="flex items-center gap-1 px-2 py-2 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-md transition-colors"
                     >

@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import { OEMOrder } from '../models/OEMOrder';
-import { OEM } from '../models/OEM';
+import OEM from '../models/OEM';
 import { DGPurchaseOrder } from '../models/DGPurchaseOrder';
 import { Customer } from '../models/Customer';
 import { AuthenticatedRequest, APIResponse } from '../types';
@@ -56,9 +56,9 @@ export const createOEMOrder = async (
       oem: oemId,
       dgPurchaseOrder: dgPurchaseOrderId,
       customer: customerId,
-      paymentTerms: oem.paymentTerms,
-      deliveryTerms: oem.deliveryTerms,
-      warrantyTerms: oem.warrantyTerms,
+      // paymentTerms: oem.paymentTerms,
+      // deliveryTerms: oem.deliveryTerms,
+      // warrantyTerms: oem.warrantyTerms,
       createdBy: req.user?.id
     });
 
@@ -309,9 +309,9 @@ export const createOEMOrderFromPO = async (
         contactPerson: dgPurchaseOrder.customer.name,
         phone: dgPurchaseOrder.customer.phone || ''
       },
-      paymentTerms: oem.paymentTerms,
-      deliveryTerms: oem.deliveryTerms,
-      warrantyTerms: oem.warrantyTerms,
+      // paymentTerms: oem.paymentTerms,
+      // deliveryTerms: oem.deliveryTerms,
+      // warrantyTerms: oem.warrantyTerms,
       status: 'draft',
       deliveryStatus: 'pending',
       paymentStatus: 'pending',

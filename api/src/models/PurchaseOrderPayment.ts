@@ -115,42 +115,42 @@ const purchaseOrderPaymentSchema = new Schema<IPurchaseOrderPayment>({
       receiptNumber: String
     },
     cheque: {
-      chequeNumber: { type: String, required: true },
-      bankName: { type: String, required: true },
+      chequeNumber: String,
+      bankName: String,
       branchName: String,
-      issueDate: { type: Date, required: true },
+      issueDate: Date,
       clearanceDate: Date,
       accountHolderName: String,
       accountNumber: String,
       ifscCode: String
     },
     bankTransfer: {
-      bankName: { type: String, required: true },
+      bankName: String,
       branchName: String,
-      accountNumber: { type: String, required: true },
-      ifscCode: { type: String, required: true },
-      transactionId: { type: String, required: true },
-      transferDate: { type: Date, required: true },
+      accountNumber: String,
+      ifscCode: String,
+      transactionId: String,
+      transferDate: Date,
       accountHolderName: String,
       referenceNumber: String
     },
     upi: {
-      upiId: { type: String, required: true },
-      transactionId: { type: String, required: true },
+      upiId: String,
+      transactionId: String,
       transactionReference: String,
       payerName: String,
       payerPhone: String
     },
     card: {
-      cardType: { type: String, required: true, enum: ['credit', 'debit', 'prepaid'] },
-      cardNetwork: { type: String, required: true, enum: ['visa', 'mastercard', 'amex', 'rupay', 'other'] },
-      lastFourDigits: { type: String, required: true },
-      transactionId: { type: String, required: true },
+      cardType: { type: String, enum: ['credit', 'debit', 'prepaid'] },
+      cardNetwork: { type: String, enum: ['visa', 'mastercard', 'amex', 'rupay', 'other'] },
+      lastFourDigits: String,
+      transactionId: String,
       authorizationCode: String,
       cardHolderName: String
     },
     other: {
-      methodName: { type: String, required: true },
+      methodName: String,
       referenceNumber: String,
       additionalDetails: Schema.Types.Mixed
     }

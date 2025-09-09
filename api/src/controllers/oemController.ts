@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import { OEM } from '../models/OEM';
+import OEM from '../models/OEM';
 import { AuthenticatedRequest, APIResponse } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import { TransactionCounter } from '../models/TransactionCounter';
@@ -40,7 +40,21 @@ export const createOEM = async (
       message: 'OEM created successfully',
       data: oem
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ValidationError') {
+      const validationErrors: any = {};
+      Object.keys(error.errors).forEach(key => {
+        validationErrors[key] = error.errors[key].message;
+      });
+      
+      res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: validationErrors,
+        error: 'ValidationError'
+      });
+      return;
+    }
     next(error);
   }
 };
@@ -61,11 +75,13 @@ export const getOEMs = async (
       filter.$or = [
         { oemCode: { $regex: search, $options: 'i' } },
         { companyName: { $regex: search, $options: 'i' } },
-        { contactPerson: { $regex: search, $options: 'i' } }
+        { alias: { $regex: search, $options: 'i' } },
+        { contactPersonName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { mobileNo: { $regex: search, $options: 'i' } }
       ];
     }
     if (status) filter.status = status;
-    if (rating) filter.rating = { $gte: Number(rating) };
 
     const total = await OEM.countDocuments(filter);
     const oems = await OEM.find(filter)
@@ -136,7 +152,21 @@ export const updateOEM = async (
       message: 'OEM updated successfully',
       data: oem
     });
-  } catch (error) {
+  } catch (error: any) {
+    if (error.name === 'ValidationError') {
+      const validationErrors: any = {};
+      Object.keys(error.errors).forEach(key => {
+        validationErrors[key] = error.errors[key].message;
+      });
+      
+      res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: validationErrors,
+        error: 'ValidationError'
+      });
+      return;
+    }
     next(error);
   }
 };
@@ -172,45 +202,10 @@ export const updateOEMStatus = async (
   }
 };
 
-// @desc    Update OEM rating
-// @route   PATCH /api/v1/oems/:id/rating
+// @desc    Add address to OEM
+// @route   POST /api/v1/oems/:id/addresses
 // @access  Private
-export const updateOEMRating = async (
-  req: AuthenticatedRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { rating } = req.body;
-    
-    if (rating < 1 || rating > 5) {
-      return next(new AppError('Rating must be between 1 and 5', 400));
-    }
-
-    const oem = await OEM.findByIdAndUpdate(
-      req.params.id,
-      { rating },
-      { new: true, runValidators: true }
-    );
-
-    if (!oem) {
-      return next(new AppError('OEM not found', 404));
-    }
-
-    res.json({
-      success: true,
-      message: 'OEM rating updated successfully',
-      data: oem
-    });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// @desc    Add product to OEM
-// @route   POST /api/v1/oems/:id/products
-// @access  Private
-export const addOEMProduct = async (
+export const addOEMAddress = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -222,12 +217,12 @@ export const addOEMProduct = async (
       return next(new AppError('OEM not found', 404));
     }
 
-    oem.products.push(req.body);
+    oem.addresses.push(req.body);
     await oem.save();
 
     res.json({
       success: true,
-      message: 'Product added to OEM successfully',
+      message: 'Address added to OEM successfully',
       data: oem
     });
   } catch (error) {
@@ -235,10 +230,10 @@ export const addOEMProduct = async (
   }
 };
 
-// @desc    Update OEM product
-// @route   PUT /api/v1/oems/:id/products/:productId
+// @desc    Update OEM address
+// @route   PUT /api/v1/oems/:id/addresses/:addressId
 // @access  Private
-export const updateOEMProduct = async (
+export const updateOEMAddress = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -250,20 +245,20 @@ export const updateOEMProduct = async (
       return next(new AppError('OEM not found', 404));
     }
 
-    const productIndex = oem.products.findIndex(
-      (product: any) => product._id?.toString() === req.params.productId
+    const addressIndex = oem.addresses.findIndex(
+      (address: any) => address._id?.toString() === req.params.addressId
     );
 
-    if (productIndex === -1) {
-      return next(new AppError('Product not found', 404));
+    if (addressIndex === -1) {
+      return next(new AppError('Address not found', 404));
     }
 
-    oem.products[productIndex] = { ...oem.products[productIndex], ...req.body };
+    oem.addresses[addressIndex] = { ...oem.addresses[addressIndex], ...req.body };
     await oem.save();
 
     res.json({
       success: true,
-      message: 'OEM product updated successfully',
+      message: 'OEM address updated successfully',
       data: oem
     });
   } catch (error) {
@@ -271,10 +266,10 @@ export const updateOEMProduct = async (
   }
 };
 
-// @desc    Remove product from OEM
-// @route   DELETE /api/v1/oems/:id/products/:productId
+// @desc    Remove address from OEM
+// @route   DELETE /api/v1/oems/:id/addresses/:addressId
 // @access  Private
-export const removeOEMProduct = async (
+export const removeOEMAddress = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
@@ -286,14 +281,18 @@ export const removeOEMProduct = async (
       return next(new AppError('OEM not found', 404));
     }
 
-    oem.products = oem.products.filter(
-      (product: any) => product._id?.toString() !== req.params.productId
+    if (oem.addresses.length <= 1) {
+      return next(new AppError('Cannot remove the last address', 400));
+    }
+
+    oem.addresses = oem.addresses.filter(
+      (address: any) => address._id?.toString() !== req.params.addressId
     );
     await oem.save();
 
     res.json({
       success: true,
-      message: 'Product removed from OEM successfully',
+      message: 'Address removed from OEM successfully',
       data: oem
     });
   } catch (error) {
@@ -301,53 +300,131 @@ export const removeOEMProduct = async (
   }
 };
 
-// @desc    Get OEM products by KVA
-// @route   GET /api/v1/oems/products/search
+// @desc    Add bank detail to OEM
+// @route   POST /api/v1/oems/:id/bank-details
 // @access  Private
-export const searchOEMProducts = async (
+export const addOEMBankDetail = async (
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { kva, phase, fuelType, availability } = req.query;
+    const oem = await OEM.findById(req.params.id);
     
-    const matchConditions: any = { status: 'active' };
-    const productMatch: any = {};
-    
-    if (kva) productMatch['products.kva'] = kva;
-    if (phase) productMatch['products.phase'] = phase;
-    if (fuelType) productMatch['products.fuelType'] = fuelType;
-    if (availability) productMatch['products.availability'] = availability;
+    if (!oem) {
+      return next(new AppError('OEM not found', 404));
+    }
 
-    const oems = await OEM.find(matchConditions);
-    
-    const results = oems.map(oem => ({
-      oem: {
-        _id: oem._id,
-        oemCode: oem.oemCode,
-        companyName: oem.companyName,
-        contactPerson: oem.contactPerson,
-        phone: oem.phone,
-        email: oem.email,
-        rating: oem.rating,
-        paymentTerms: oem.paymentTerms,
-        deliveryTerms: oem.deliveryTerms
-      },
-      products: oem.products.filter(product => {
-        let matches = true;
-        if (kva && product.kva !== kva) matches = false;
-        if (phase && product.phase !== phase) matches = false;
-        if (fuelType && product.fuelType !== fuelType) matches = false;
-        if (availability && product.availability !== availability) matches = false;
-        return matches;
-      })
-    })).filter(result => result.products.length > 0);
+    // If this is the first bank detail, set it as default
+    if (oem.bankDetails.length === 0) {
+      req.body.isDefault = true;
+    }
+
+    // If setting as default, unset other defaults
+    if (req.body.isDefault) {
+      oem.bankDetails.forEach((bank: any) => {
+        bank.isDefault = false;
+      });
+    }
+
+    oem.bankDetails.push(req.body);
+    await oem.save();
 
     res.json({
       success: true,
-      data: results,
-      total: results.length
+      message: 'Bank detail added to OEM successfully',
+      data: oem
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Update OEM bank detail
+// @route   PUT /api/v1/oems/:id/bank-details/:bankDetailId
+// @access  Private
+export const updateOEMBankDetail = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const oem = await OEM.findById(req.params.id);
+    
+    if (!oem) {
+      return next(new AppError('OEM not found', 404));
+    }
+
+    const bankDetailIndex = oem.bankDetails.findIndex(
+      (bank: any) => bank._id?.toString() === req.params.bankDetailId
+    );
+
+    if (bankDetailIndex === -1) {
+      return next(new AppError('Bank detail not found', 404));
+    }
+
+    // If setting as default, unset other defaults
+    if (req.body.isDefault) {
+      oem.bankDetails.forEach((bank: any, index: number) => {
+        if (index !== bankDetailIndex) {
+          bank.isDefault = false;
+        }
+      });
+    }
+
+    oem.bankDetails[bankDetailIndex] = { ...oem.bankDetails[bankDetailIndex], ...req.body };
+    await oem.save();
+
+    res.json({
+      success: true,
+      message: 'OEM bank detail updated successfully',
+      data: oem
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Remove bank detail from OEM
+// @route   DELETE /api/v1/oems/:id/bank-details/:bankDetailId
+// @access  Private
+export const removeOEMBankDetail = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const oem = await OEM.findById(req.params.id);
+    
+    if (!oem) {
+      return next(new AppError('OEM not found', 404));
+    }
+
+    const bankDetailIndex = oem.bankDetails.findIndex(
+      (bank: any) => bank._id?.toString() === req.params.bankDetailId
+    );
+
+    if (bankDetailIndex === -1) {
+      return next(new AppError('Bank detail not found', 404));
+    }
+
+    const bankToRemove = oem.bankDetails[bankDetailIndex];
+    
+    // If removing the default bank detail, set another one as default
+    if (bankToRemove.isDefault && oem.bankDetails.length > 1) {
+      const nextBankIndex = bankDetailIndex === 0 ? 1 : 0;
+      oem.bankDetails[nextBankIndex].isDefault = true;
+    }
+
+    oem.bankDetails = oem.bankDetails.filter(
+      (bank: any) => bank._id?.toString() !== req.params.bankDetailId
+    );
+    await oem.save();
+
+    res.json({
+      success: true,
+      message: 'Bank detail removed from OEM successfully',
+      data: oem
     });
   } catch (error) {
     next(error);
