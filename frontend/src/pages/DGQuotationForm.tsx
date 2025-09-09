@@ -443,10 +443,13 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
 
   const fetchCustomers = async () => {
     try {
-      const response = await apiClient.customers.getAll({ limit: 100 });
+      // Use non-paginated API to fetch all customers for dropdown
+      const response = await apiClient.customers.getAllForDropdown({ type: 'customer' });
       let customersData: any[] = [];
 
-      if (response.success && response.data) {
+      if (response.success && response.data && Array.isArray(response.data)) {
+        customersData = response.data;
+      } else if (response.success && response.data) {
         if (Array.isArray(response.data)) {
           customersData = response.data;
         } else if ((response.data as any).customers && Array.isArray((response.data as any).customers)) {

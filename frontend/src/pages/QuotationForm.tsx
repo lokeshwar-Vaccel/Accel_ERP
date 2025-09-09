@@ -540,11 +540,18 @@ const QuotationFormPage: React.FC = () => {
 
     const fetchCustomers = async () => {
         try {
-            const response = await apiClient.customers.getAll({ limit: 100, page: 1 });
-            const responseData = response.data as any;
-            console.log("responseData13:", responseData);
+            // Use non-paginated API to fetch all customers for dropdown
+            const response = await apiClient.customers.getAllForDropdown({ type: 'customer' });
 
-            const customersData = responseData.customers || responseData || [];
+            let customersData: Customer[] = [];
+            if (response.success && response.data && Array.isArray(response.data)) {
+                customersData = response.data as any;
+            } else {
+                // Fallback to previous shape if needed
+                const responseData = response.data as any;
+                customersData = (responseData?.customers || responseData || []) as any;
+            }
+
             setCustomers(customersData);
         } catch (error) {
             console.error('Error fetching customers:', error);
