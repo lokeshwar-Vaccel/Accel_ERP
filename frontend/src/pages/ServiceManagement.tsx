@@ -1655,6 +1655,9 @@ const ServiceManagement: React.FC = () => {
         fetchServiceStats();
         
         toast.success('Visit details updated successfully!');
+        
+        // Close the modal after successful update
+        setShowDetailsModal(false);
       }
     } catch (error) {
       console.error('Error updating visit details:', error);
