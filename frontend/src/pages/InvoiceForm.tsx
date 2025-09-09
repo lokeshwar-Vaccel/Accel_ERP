@@ -168,7 +168,7 @@ const InvoiceFormPage: React.FC = () => {
     notes: '',
     terms: '',
     // New fields from quotation
-    subject: 'SPARES INVOICE FOR DG SET',
+    subject: '',
     engineSerialNumber: '',
     kva: '',
     hourMeterReading: '',
@@ -929,20 +929,26 @@ const InvoiceFormPage: React.FC = () => {
     return product ? `${product?.name} - ₹${product?.price?.toLocaleString()}` : 'Select product';
   };
 
-  const getAddressLabel = (value: string | undefined) => {
-    console.log("getAddressLabel called with value:", value);
-    console.log("Current addresses:", addresses);
-    console.log("Current formData.billToAddress:", formData.billToAddress);
-    console.log("Current formData.shipToAddress:", formData.shipToAddress);
-    
+  const getAddressLabel = (value: string | undefined, addressType?: 'billTo' | 'shipTo') => {
     if (!value) {
-      // Check if we have direct address objects from quotation data
-      if (formData.billToAddress && formData.billToAddress.address) {
+      // If addressType is specified, only return that specific address type
+      if (addressType === 'billTo' && formData.billToAddress && formData.billToAddress.address) {
         return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
       }
-      if (formData.shipToAddress && formData.shipToAddress.address) {
+      if (addressType === 'shipTo' && formData.shipToAddress && formData.shipToAddress.address) {
         return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
       }
+      
+      // Legacy behavior for backwards compatibility when no addressType is specified
+      if (!addressType) {
+        if (formData.billToAddress && formData.billToAddress.address) {
+          return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
+        }
+        if (formData.shipToAddress && formData.shipToAddress.address) {
+          return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
+        }
+      }
+      
       return 'Select address';
     }
     
@@ -951,12 +957,22 @@ const InvoiceFormPage: React.FC = () => {
       return `${address.address} (${address.district}, ${address.pincode})`;
     }
     
-    // Fallback to direct address objects
-    if (formData.billToAddress && formData.billToAddress.address) {
+    // Fallback to direct address objects only if addressType matches
+    if (addressType === 'billTo' && formData.billToAddress && formData.billToAddress.address) {
       return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
     }
-    if (formData.shipToAddress && formData.shipToAddress.address) {
+    if (addressType === 'shipTo' && formData.shipToAddress && formData.shipToAddress.address) {
       return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
+    }
+    
+    // Legacy fallback when no addressType is specified
+    if (!addressType) {
+      if (formData.billToAddress && formData.billToAddress.address) {
+        return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
+      }
+      if (formData.shipToAddress && formData.shipToAddress.address) {
+        return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
+      }
     }
     
     return 'Unknown address';
@@ -2659,7 +2675,7 @@ const InvoiceFormPage: React.FC = () => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={getAddressLabel((formData.billToAddress as any)?.addressId?.toString())}
+                    value={getAddressLabel((formData.billToAddress as any)?.addressId?.toString(), 'billTo')}
                     readOnly
                     disabled={!formData.customer?._id || !formData?.customer}
                     onFocus={() => {
@@ -2751,7 +2767,7 @@ const InvoiceFormPage: React.FC = () => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={getAddressLabel((formData.shipToAddress as any)?.addressId?.toString())}
+                    value={getAddressLabel((formData.shipToAddress as any)?.addressId?.toString(), 'shipTo')}
                     readOnly
                     disabled={!formData.customer?._id}
                     onFocus={() => {

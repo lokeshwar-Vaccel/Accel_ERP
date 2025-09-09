@@ -927,15 +927,26 @@ const QuotationFormPage: React.FC = () => {
         return product ? `${product?.name} - ₹${product?.price?.toLocaleString()}` : 'Select product';
     };
 
-    const getAddressLabel = (value: string | undefined) => {
+    const getAddressLabel = (value: string | undefined, addressType?: 'billTo' | 'shipTo') => {
         if (!value) {
-            // Check if we have direct address objects from quotation data
-            if (formData.billToAddress && formData.billToAddress.address) {
+            // If addressType is specified, only return that specific address type
+            if (addressType === 'billTo' && formData.billToAddress && formData.billToAddress.address) {
                 return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
             }
-            if (formData.shipToAddress && formData.shipToAddress.address) {
+            if (addressType === 'shipTo' && formData.shipToAddress && formData.shipToAddress.address) {
                 return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
             }
+            
+            // Legacy behavior for backwards compatibility when no addressType is specified
+            if (!addressType) {
+                if (formData.billToAddress && formData.billToAddress.address) {
+                    return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
+                }
+                if (formData.shipToAddress && formData.shipToAddress.address) {
+                    return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
+                }
+            }
+            
             return 'Select address';
         }
 
@@ -943,15 +954,25 @@ const QuotationFormPage: React.FC = () => {
         if (address) {
             return `${address.address} (${address.district}, ${address.pincode})`;
         }
-
-        // Fallback to direct address objects
-        if (formData.billToAddress && formData.billToAddress.address) {
+        
+        // Fallback to direct address objects only if addressType matches
+        if (addressType === 'billTo' && formData.billToAddress && formData.billToAddress.address) {
             return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
         }
-        if (formData.shipToAddress && formData.shipToAddress.address) {
+        if (addressType === 'shipTo' && formData.shipToAddress && formData.shipToAddress.address) {
             return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
         }
-
+        
+        // Legacy fallback when no addressType is specified
+        if (!addressType) {
+            if (formData.billToAddress && formData.billToAddress.address) {
+                return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
+            }
+            if (formData.shipToAddress && formData.shipToAddress.address) {
+                return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
+            }
+        }
+        
         return 'Select address';
     };
 
@@ -1709,23 +1730,9 @@ const QuotationFormPage: React.FC = () => {
                 setShowBillToAddressDropdown(false);
                 setHighlightedBillToAddressIndex(-1);
 
-                // Move to next field (ship to address) and open dropdown
-                setTimeout(() => {
-                    const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
-                    if (shipToAddressInput) {
-                        shipToAddressInput.focus();
-                        setShowShipToAddressDropdown(true);
-                    }
-                }, 50);
+                // Note: Removed automatic focus to Ship To Address to allow independent selection
             } else if (!showBillToAddressDropdown) {
-                // If no dropdown open, just move to next field (ship to address) and open dropdown
-                setTimeout(() => {
-                    const shipToAddressInput = document.querySelector('[data-field="ship-to-address"]') as HTMLInputElement;
-                    if (shipToAddressInput) {
-                        shipToAddressInput.focus();
-                        setShowShipToAddressDropdown(true);
-                    }
-                }, 50);
+                // Note: Removed automatic focus to Ship To Address to allow independent selection
             }
         } else if (e.key === 'Tab' && e.shiftKey) {
             e.preventDefault();
@@ -2725,8 +2732,8 @@ const QuotationFormPage: React.FC = () => {
                                         if (formData.billToAddress && formData.billToAddress.address) {
                                             return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
                                         }
-                                        // Otherwise, try to find by addressId
-                                        return getAddressLabel((formData.billToAddress as any)?.addressId?.toString());
+                                        // Otherwise, try to find by addressId with specific address type
+                                        return getAddressLabel((formData.billToAddress as any)?.addressId?.toString(), 'billTo');
                                     })()}
                                     onChange={(e) => {
                                         setBillToAddressSearchTerm(e.target.value);
@@ -2746,7 +2753,7 @@ const QuotationFormPage: React.FC = () => {
                                             setHighlightedBillToAddressIndex(-1);
                                             // Initialize search term for editing
                                             if (billToAddressSearchTerm === undefined && (formData.billToAddress as any)?.addressId) {
-                                                setBillToAddressSearchTerm(getAddressLabel((formData.billToAddress as any).addressId.toString()));
+                                                setBillToAddressSearchTerm(getAddressLabel((formData.billToAddress as any).addressId.toString(), 'billTo'));
                                             } else if (!billToAddressSearchTerm && !(formData.billToAddress as any)?.addressId) {
                                                 setBillToAddressSearchTerm(undefined);
                                             }
@@ -2965,8 +2972,8 @@ const QuotationFormPage: React.FC = () => {
                                         if (formData.shipToAddress && formData.shipToAddress.address) {
                                             return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
                                         }
-                                        // Otherwise, try to find by addressId
-                                        return getAddressLabel((formData.shipToAddress as any)?.addressId?.toString());
+                                        // Otherwise, try to find by addressId with specific address type
+                                        return getAddressLabel((formData.shipToAddress as any)?.addressId?.toString(), 'shipTo');
                                     })()}
                                     onChange={(e) => {
                                         setShipToAddressSearchTerm(e.target.value);
@@ -2986,7 +2993,7 @@ const QuotationFormPage: React.FC = () => {
                                             setHighlightedShipToAddressIndex(-1);
                                             // Initialize search term for editing
                                             if (shipToAddressSearchTerm === undefined && (formData.shipToAddress as any)?.addressId) {
-                                                setShipToAddressSearchTerm(getAddressLabel((formData.shipToAddress as any).addressId.toString()));
+                                                setShipToAddressSearchTerm(getAddressLabel((formData.shipToAddress as any).addressId.toString(), 'shipTo'));
                                             } else if (!shipToAddressSearchTerm && !(formData.shipToAddress as any)?.addressId) {
                                                 setShipToAddressSearchTerm(undefined);
                                             }

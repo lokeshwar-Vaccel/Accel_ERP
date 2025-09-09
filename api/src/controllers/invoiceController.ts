@@ -1108,6 +1108,8 @@ export const exportInvoices = async (req: Request, res: Response, next: NextFunc
     const startDate = req.query.startDate as string;
     const endDate = req.query.endDate as string;
     const invoiceType = req.query.invoiceType as string;
+    const status = req.query.status as string;
+    const paymentStatus = req.query.paymentStatus as string;
 
     // Build filter object (same pattern as quotation export)
     const filter: any = {};
@@ -1130,8 +1132,16 @@ export const exportInvoices = async (req: Request, res: Response, next: NextFunc
       filter.issueDate.$lte = new Date(endDate);
     }
 
-    if (invoiceType) {
+    if (invoiceType && invoiceType !== 'undefined' && invoiceType !== 'null') {
       filter.invoiceType = invoiceType;
+    }
+
+    if (status && status !== 'undefined' && status !== 'null') {
+      filter.status = status;
+    }
+
+    if (paymentStatus && paymentStatus !== 'undefined' && paymentStatus !== 'null') {
+      filter.paymentStatus = paymentStatus;
     }
 
     // Get all invoices matching the filter
@@ -1140,29 +1150,69 @@ export const exportInvoices = async (req: Request, res: Response, next: NextFunc
       .populate('supplier', 'name email phone addresses')
       .populate('user', 'firstName lastName email')
       .populate('items.product', 'name partNo hsnNumber')
+      .populate('sourceQuotation', 'quotationNumber')
       .sort({ issueDate: -1 });
 
-    // Prepare data for Excel export with proper formatting
-    const exportData = invoices.map((invoice: any, index: number) => ({
-      'S.No': index + 1,
-      'Invoice Number': invoice.invoiceNumber || '',
-      'Customer/Supplier Name': invoice.customer?.name || invoice.supplier?.name || '',
-      'Customer/Supplier Email': invoice.customer?.email || invoice.supplier?.email || '',
-      'Customer/Supplier Phone': invoice.customer?.phone || invoice.supplier?.phone || '',
-      'Issue Date': invoice.issueDate ? new Date(invoice.issueDate).toLocaleDateString('en-GB') : '',
-      'Due Date': invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-GB') : '',
-      'Status': invoice.status || 'Draft',
-      'Payment Status': invoice.paymentStatus || 'Pending',
-      'Total Amount': `₹${(invoice.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-      'Paid Amount': `₹${(invoice.paidAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-      'Remaining Amount': `₹${(invoice.remainingAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
-      'External Invoice Number': invoice.externalInvoiceNumber || '',
-      'PO Number': invoice.poNumber || '',
-      'Invoice Type': invoice.invoiceType || '',
-      'Created By': invoice.user ? `${invoice.user.firstName} ${invoice.user.lastName}` : '',
-      'Created At': invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString('en-GB') : '',
-    }));
+    // Debug: Log first few invoices to check quotation number data
+    console.log('Total invoices found:', invoices.length);
+    console.log('First 3 invoices for export:');
+    invoices.slice(0, 3).forEach((invoice: any, index: number) => {
+      console.log(`Invoice ${index + 1}:`, {
+        invoiceNumber: invoice.invoiceNumber,
+        quotationNumber: invoice.quotationNumber,
+        sourceQuotation: invoice.sourceQuotation,
+        hasSourceQuotation: !!invoice.sourceQuotation,
+        sourceQuotationQuotationNumber: (invoice.sourceQuotation && typeof invoice.sourceQuotation === 'object' && 'quotationNumber' in invoice.sourceQuotation ? (invoice.sourceQuotation as any).quotationNumber : null),
+        allKeys: Object.keys(invoice)
+      });
+    });
+    
+    // Check if any invoices have quotation numbers
+    const invoicesWithQuotationNumbers = invoices.filter(inv => 
+      inv.quotationNumber || (inv.sourceQuotation && typeof inv.sourceQuotation === 'object' && 'quotationNumber' in inv.sourceQuotation)
+    );
+    console.log(`Invoices with quotation numbers: ${invoicesWithQuotationNumbers.length} out of ${invoices.length}`);
 
+    // Check if we have any sale invoices (to determine if we should include quotation number column)
+    const hasSaleInvoices = invoices.some(invoice => invoice.invoiceType === 'sale');
+    
+    // Prepare data for Excel export with proper formatting
+    const exportData = invoices.map((invoice: any, index: number) => {
+      const baseData = {
+        'S.No': index + 1,
+        'Invoice Number': invoice.invoiceNumber || '',
+        'Customer/Supplier Name': invoice.customer?.name || invoice.supplier?.name || '',
+        'Customer/Supplier Email': invoice.customer?.email || invoice.supplier?.email || '',
+        'Customer/Supplier Phone': invoice.customer?.phone || invoice.supplier?.phone || '',
+        'Issue Date': invoice.issueDate ? new Date(invoice.issueDate).toLocaleDateString('en-GB') : '',
+        'Due Date': invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString('en-GB') : '',
+        'Status': invoice.status || 'Draft',
+        'Payment Status': invoice.paymentStatus || 'Pending',
+        'Total Amount': `₹${(invoice.totalAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+        'Paid Amount': `₹${(invoice.paidAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+        'Remaining Amount': `₹${(invoice.remainingAmount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+        'External Invoice Number': invoice.externalInvoiceNumber || '',
+        'PO Number': invoice.poNumber || '',
+        'Invoice Type': invoice.invoiceType || '',
+        'Created By': invoice.user ? `${invoice.user.firstName} ${invoice.user.lastName}` : '',
+        'Created At': invoice.createdAt ? new Date(invoice.createdAt).toLocaleDateString('en-GB') : '',
+      };
+      
+      // Only include quotation number for sale invoices
+      if (hasSaleInvoices) {
+        return {
+          ...baseData,
+          'Quotation Number': invoice.quotationNumber || (invoice.sourceQuotation && typeof invoice.sourceQuotation === 'object' && 'quotationNumber' in invoice.sourceQuotation ? (invoice.sourceQuotation as any).quotationNumber : '') || '',
+        };
+      }
+      
+      return baseData;
+    });
+
+    // Debug: Log the first export data item to verify quotation number column
+    console.log('First export data item:', exportData[0]);
+    console.log('Export data columns:', exportData.length > 0 ? Object.keys(exportData[0]) : 'No data');
+    
     res.json({ success: true, data: exportData, message: 'Invoices data prepared for export' });
   } catch (error) {
     console.error('Error exporting invoices:', error);

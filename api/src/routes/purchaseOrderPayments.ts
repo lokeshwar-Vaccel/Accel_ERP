@@ -4,23 +4,28 @@ import {
   getPaymentsByPurchaseOrder,
   getPaymentById,
   updatePayment,
-  deletePayment
+  deletePayment,
+  generatePaymentReceiptPDFEndpoint
 } from '../controllers/purchaseOrderPaymentController';
-import { checkPermission } from '../middleware/auth';
+import { protect, checkPermission } from '../middleware/auth';
 
 const router = express.Router();
 
 // All routes require authentication and appropriate permissions
+router.use(protect);
 router.use(checkPermission('read'));
 
 // Create a new payment
 router.post('/', checkPermission('write'), createPurchaseOrderPayment);
 
-// Get all payments for a specific purchase order
-router.get('/po/:poId', getPaymentsByPurchaseOrder);
+// Get all payments for a specific purchase order (must come before /:id route)
+router.get('/po/:poId', checkPermission('read'), getPaymentsByPurchaseOrder);
 
 // Get payment by ID
-router.get('/:id', getPaymentById);
+router.get('/:id', checkPermission('read'), getPaymentById);
+
+// Generate PDF receipt for payment
+router.get('/:id/pdf', checkPermission('read'), generatePaymentReceiptPDFEndpoint);
 
 // Update payment
 router.put('/:id', checkPermission('write'), updatePayment);

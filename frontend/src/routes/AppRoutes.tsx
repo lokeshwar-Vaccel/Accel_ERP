@@ -30,6 +30,7 @@ import DGQuotationForm from "pages/DGQuotationForm";
 import DeliveryChallanForm from "../components/DeliveryChallanForm";
 import CreatePOFromCustomerForm from "pages/CreatePOFromCustomerForm";
 import POFromCustomerManagement from "pages/POFromCustomerManagement";
+import CreateDGProformaForm from "pages/CreateDGProformaForm";
 
 const AppRoutes: React.FC = () => {
     return (
@@ -111,6 +112,11 @@ const AppRoutes: React.FC = () => {
             {/* DG Invoice Management */}
             <Route path="/dg-sales/invoice/create" element={<DGInvoiceForm />} />
             <Route path="/dg-sales/invoice/edit/:id" element={<DGInvoiceForm />} />
+
+            {/* DG Proforma Forms */}
+            <Route path="/dg-proforma/create" element={<CreateDGProformaForm />} />
+            <Route path="/dg-proforma/edit/:id" element={<CreateDGProformaForm />} />
+            <Route path="/dg-proforma/:id" element={<CreateDGProformaForm />} />
 
             {/* 404 - Page not found */}
             <Route path="*" element={<NotFound />} />

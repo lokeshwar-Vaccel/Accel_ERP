@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { Customer } from '../models/Customer';
-import { OEM } from '../models/OEM';
+import OEM from '../models/OEM';
 import { DGDetails } from '../models/DGDetails';
 
 import { AuthenticatedRequest, APIResponse, LeadStatus, CustomerType, QueryParams } from '../types';

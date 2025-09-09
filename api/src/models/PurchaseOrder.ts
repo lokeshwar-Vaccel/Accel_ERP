@@ -47,6 +47,7 @@ interface IPurchaseOrderSchema extends Document {
   remainingAmount: number;
   paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
   paymentMethod?: string;
+  paymentMethodDetails?: any; // Will store payment method specific details
   paymentDate?: Date;
   createdBy: mongoose.Types.ObjectId;
   createdAt: Date;
@@ -211,6 +212,10 @@ const purchaseOrderSchema = new Schema({
     type: String,
     trim: true,
     maxlength: [100, 'Payment method cannot exceed 100 characters']
+  },
+  paymentMethodDetails: {
+    type: Schema.Types.Mixed,
+    default: {}
   },
   paymentDate: {
     type: Date

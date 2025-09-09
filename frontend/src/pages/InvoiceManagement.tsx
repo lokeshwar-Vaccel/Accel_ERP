@@ -47,7 +47,103 @@ import UpdatePaymentModal from '../components/UpdatePaymentModal';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 import * as XLSX from 'xlsx';
 
-// Helper function to convert data to Excel with proper formatting
+// Helper function to convert invoice data to Excel with proper formatting
+const convertInvoiceToExcel = (data: any[]) => {
+  if (!data || data.length === 0) return new Blob([], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  
+  // Create a new workbook
+  const wb = XLSX.utils.book_new();
+  
+  // Convert data to worksheet
+  const ws = XLSX.utils.json_to_sheet(data);
+  
+  // Check if quotation number column exists in the data
+  const hasQuotationNumber = data.length > 0 && 'Quotation Number' in data[0];
+  
+  // Set column widths for invoice export (dynamic based on whether quotation number is included)
+  let columnWidths;
+  if (hasQuotationNumber) {
+    // Column widths with quotation number
+    columnWidths = [
+      { wch: 8 },   // S.No
+      { wch: 20 },  // Invoice Number
+      { wch: 20 },  // Quotation Number
+      { wch: 25 },  // Customer/Supplier Name
+      { wch: 30 },  // Customer/Supplier Email
+      { wch: 15 },  // Customer/Supplier Phone
+      { wch: 12 },  // Issue Date
+      { wch: 12 },  // Due Date
+      { wch: 12 },  // Status
+      { wch: 15 },  // Payment Status
+      { wch: 18 },  // Total Amount
+      { wch: 15 },  // Paid Amount
+      { wch: 18 },  // Remaining Amount
+      { wch: 20 },  // External Invoice Number
+      { wch: 15 },  // PO Number
+      { wch: 12 },  // Invoice Type
+      { wch: 20 },  // Created By
+      { wch: 12 },  // Created At
+    ];
+  } else {
+    // Column widths without quotation number
+    columnWidths = [
+      { wch: 8 },   // S.No
+      { wch: 20 },  // Invoice Number
+      { wch: 25 },  // Customer/Supplier Name
+      { wch: 30 },  // Customer/Supplier Email
+      { wch: 15 },  // Customer/Supplier Phone
+      { wch: 12 },  // Issue Date
+      { wch: 12 },  // Due Date
+      { wch: 12 },  // Status
+      { wch: 15 },  // Payment Status
+      { wch: 18 },  // Total Amount
+      { wch: 15 },  // Paid Amount
+      { wch: 18 },  // Remaining Amount
+      { wch: 20 },  // External Invoice Number
+      { wch: 15 },  // PO Number
+      { wch: 12 },  // Invoice Type
+      { wch: 20 },  // Created By
+      { wch: 12 },  // Created At
+    ];
+  }
+  
+  ws['!cols'] = columnWidths;
+  
+  // Set row heights for better readability
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let row = range.s.r; row <= range.e.r; row++) {
+    ws[`!rows`] = ws[`!rows`] || [];
+    ws[`!rows`][row] = { hpt: 20 }; // Set row height to 20 points
+  }
+  
+  // Add header styling (bold headers)
+  const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+    if (!ws[cellAddress]) continue;
+    
+    ws[cellAddress].s = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "366092" } },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+  }
+  
+  // Add the worksheet to the workbook
+  XLSX.utils.book_append_sheet(wb, ws, 'Invoices');
+  
+  // Convert to Excel file
+  const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
+
+// Helper function to convert quotation data to Excel with proper formatting
 const convertToExcel = (data: any[]) => {
   if (!data || data.length === 0) return new Blob([], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   
@@ -688,6 +784,9 @@ const InvoiceManagement: React.FC = () => {
   const [toDatePurchase, setToDatePurchase] = useState('');
   const [deliveryChallans, setDeliveryChallans] = useState<any[]>([]);
   const [deliveryChallanLoading, setDeliveryChallanLoading] = useState(false);
+  
+  // Date validation states
+  const [dateRangeError, setDateRangeError] = useState<string>('');
   const [viewDeliveryChallan, setViewDeliveryChallan] = useState<any>(null);
   const [showDeliveryChallanViewModal, setShowDeliveryChallanViewModal] = useState(false);
 
@@ -727,11 +826,27 @@ const InvoiceManagement: React.FC = () => {
 
   console.log("selectedInvoice123:",selectedInvoice);
   
+  // Date range validation function
+  const validateDateRange = (fromDate: string, toDate: string): boolean => {
+    if (!fromDate || !toDate) return true; // Allow empty dates
+    
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+    
+    if (from > to) {
+      setDateRangeError('From date must be before or equal to To date');
+      return false;
+    }
+    
+    setDateRangeError('');
+    return true;
+  };
 
   // Custom setter function that updates both state and localStorage
   const updateInvoiceType = (newType: 'quotation' | 'sale' | 'purchase' | 'challan') => {
     setInvoiceType(newType);
     localStorage.setItem('selectedInvoiceType', newType);
+    setDateRangeError(''); // Clear date range error when switching types
   };
 
   // Status update states
@@ -1227,6 +1342,14 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const fetchInvoices = async () => {
+    // Check for date range validation before making API call
+    if (invoiceType === 'sale' && fromDateSale && toDateSale && !validateDateRange(fromDateSale, toDateSale)) {
+      return; // Don't fetch if date range is invalid
+    }
+    if (invoiceType === 'purchase' && fromDatePurchase && toDatePurchase && !validateDateRange(fromDatePurchase, toDatePurchase)) {
+      return; // Don't fetch if date range is invalid
+    }
+
     const params: any = {
       page: currentPage,
       limit,
@@ -1300,6 +1423,12 @@ const InvoiceManagement: React.FC = () => {
   };
 
   const fetchQuotations = async () => {
+    // Check for date range validation before making API call
+    if (fromDate && toDate && !validateDateRange(fromDate, toDate)) {
+      setQuotationLoading(false);
+      return; // Don't fetch if date range is invalid
+    }
+
     setQuotationLoading(true);
     try {
       const params: any = {
@@ -1682,8 +1811,12 @@ const InvoiceManagement: React.FC = () => {
       // Call the export API
       const response = await apiClient.invoices.export(exportParams);
       
+      // Debug: Log the response data to check quotation numbers
+      console.log('Export response data (first 3 items):', response.data.slice(0, 3));
+      console.log('Available columns:', response.data.length > 0 ? Object.keys(response.data[0]) : 'No data');
+      
       // Convert JSON data to Excel format with proper column widths
-      const blob = convertToExcel(response.data);
+      const blob = convertInvoiceToExcel(response.data);
       
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -1728,7 +1861,7 @@ const InvoiceManagement: React.FC = () => {
       const response = await apiClient.invoices.export(exportParams);
       
       // Convert JSON data to Excel format with proper column widths
-      const blob = convertToExcel(response.data);
+      const blob = convertInvoiceToExcel(response.data);
       
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -3996,6 +4129,8 @@ const InvoiceManagement: React.FC = () => {
 
   // Print quotation function
   const printQuotation = (quotation: any) => {
+    console.log("quotation00000:");
+    
     // Create a new window for printing
     const printWindow = window.open('', '_blank');
     
@@ -4210,6 +4345,30 @@ const InvoiceManagement: React.FC = () => {
             font-size: 10px;
             line-height: 1.3;
           }
+          
+          .section-title {
+            font-weight: bold;
+            margin: 20px 0 10px 0;
+            font-size: 13px;
+            color: #374151;
+            border-bottom: 1px solid #d1d5db;
+            padding-bottom: 5px;
+          }
+          
+          .qr-code-container {
+            border: 1px solid #333;
+            padding: 10px;
+            margin: 10px;
+            text-align: center;
+            background: white;
+          }
+          
+          .qr-code-image {
+            max-width: 100px;
+            max-height: 100px;
+            display: block;
+            margin: 0 auto;
+          }
         </style>
       </head>
       <body>
@@ -4252,18 +4411,18 @@ const InvoiceManagement: React.FC = () => {
           <div class="info-section">
             <div class="info-row">
               <div class="info-cell info-left">
-                <strong>ESN:</strong> ${quotation.esn || 'N/A'}
+                <strong>Engine Seriel Number:</strong> ${quotation?.engineSerialNumber || 'N/A'}
               </div>
               <div class="info-cell info-right">
-                <strong>Last Service Done Date:</strong> ${quotation.lastServiceDate || 'N/A'}
+                <strong>Last Service Done Date:</strong> ${quotation?.serviceRequestDate || 'N/A'}
               </div>
             </div>
             <div class="info-row">
               <div class="info-cell info-left">
-                <strong>DG Rating:</strong> ${quotation.dgRating || 'N/A'}
+                <strong>DG Rating:</strong> ${quotation?.kva || 'N/A'}
               </div>
               <div class="info-cell info-right">
-                <strong>Last Service Done HMR:</strong> ${quotation.lastServiceHMR || 'N/A'}
+                <strong>Last Service Done HMR:</strong> ${quotation?.hourMeterReading || 'N/A'}
               </div>
             </div>
           </div>
@@ -4345,63 +4504,123 @@ const InvoiceManagement: React.FC = () => {
                   return sum + (totalBasic + gstAmount);
                 }, 0).toFixed(2)}</td>
               </tr>
+            </tbody>
+          </table>
+          
+          ${quotation.serviceCharges && quotation.serviceCharges.length > 0 ? `
+          <div style="margin: 20px 0 10px 0; font-weight: bold; color: #059669;">SERVICE CHARGES</div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">Sr.No</th>
+                <th style="width: 35%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 10%;">Basic Amount</th>
+                ${(quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
+                <th style="width: 9%;">Total Basic</th>
+                <th style="width: 5%;">GST</th>
+                <th style="width: 9%;">GST Amount</th>
+                <th style="width: 10%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${quotation.serviceCharges.map((service: any, idx: number) => {
+                const basicAmount = service.unitPrice || 0;
+                const discountPercent = service.discount || 0;
+                const totalBasic = basicAmount * (1 - discountPercent / 100);
+                const gstRate = service.taxRate || 0;
+                const gstAmount = totalBasic * (gstRate / 100);
+                const totalAmount = totalBasic + gstAmount;
+                const showDiscount = (quotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
+                
+                return `
+                  <tr>
+                    <td class="center-cell">${idx + 1}</td>
+                    <td>${service.description || ''}</td>
+                    <td class="center-cell">-</td>
+                    <td class="center-cell">NOS</td>
+                    <td class="center-cell">${service.quantity || 0}</td>
+                    <td class="number-cell">${basicAmount.toFixed(2)}</td>
+                    ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
+                    <td class="number-cell">${totalBasic.toFixed(2)}</td>
+                    <td class="center-cell">${gstRate}%</td>
+                    <td class="number-cell">${gstAmount.toFixed(2)}</td>
+                    <td class="number-cell">${totalAmount.toFixed(2)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          ` : ''}
+          
+          ${quotation.batteryBuyBack && quotation.batteryBuyBack.quantity > 0 ? `
+          <div style="margin: 20px 0 10px 0; font-weight: bold; color: #ea580c;">BATTERY BUYBACK CHARGES</div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">Sr.No</th>
+                <th style="width: 35%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 10%;">Basic Amount</th>
+                ${(quotation.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th>' : ''}
+                <th style="width: 9%;">Total Basic</th>
+                ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 5%;">GST</th>' : ''}
+                ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 9%;">GST Amount</th>' : ''}
+                <th style="width: 10%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="center-cell">1</td>
+                <td>${quotation.batteryBuyBack.description || ''}</td>
+                <td class="center-cell">-</td>
+                <td class="center-cell">NOS</td>
+                <td class="center-cell">${quotation.batteryBuyBack.quantity || 0}</td>
+                <td class="number-cell">${(quotation.batteryBuyBack.unitPrice || 0).toFixed(2)}</td>
+                ${(quotation.batteryBuyBack?.discount || 0) > 0 ? `<td class="center-cell">${quotation.batteryBuyBack.discount}%</td>` : ''}
+                <td class="number-cell">${(quotation.batteryBuyBack.discountedAmount || 0).toFixed(2)}</td>
+                ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="center-cell">${quotation.batteryBuyBack.taxRate || 0}%</td>` : ''}
+                ${(quotation.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="number-cell">${(quotation.batteryBuyBack.taxAmount || 0).toFixed(2)}</td>` : ''}
+                <td class="number-cell">${(quotation.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+          ` : ''}
+          
+          <table class="items-table">
+            <tbody>
               <tr class="grand-total-row">
                 <td colspan="${(quotation.items || []).some((item: any) => (item.discount || 0) > 0) ? '11' : '10'}" style="text-align: right; padding-right: 20px;">Grand Total</td>
-                <td class="number-cell">${(quotation.items || []).reduce((sum: number, item: any) => {
-                  const basicAmount = item.unitPrice || 0;
-                  const discountPercent = item.discount || 0;
-                  const totalBasic = basicAmount * (1 - discountPercent / 100);
-                  const gstRate = item.taxRate || 0;
-                  const gstAmount = totalBasic * (gstRate / 100);
-                  return sum + (totalBasic + gstAmount);
-                }, 0).toFixed(2)}</td>
+                <td class="number-cell">${quotation.grandTotal?.toFixed(2) || '0.00'}</td>
               </tr>
             </tbody>
           </table>
           
+          ${quotation.terms ? `
           <div class="terms-section">
             <div class="terms-title">TERMS & CONDITIONS:-</div>
             <table class="terms-table">
-              <tr>
-                <td class="terms-number">1</td>
-                <td class="terms-label">Payment Terms</td>
-                <td class="terms-colon">:</td>
-                <td class="terms-value">100% advance payment alongwith PO.</td>
-              </tr>
-              <tr>
-                <td class="terms-number">2</td>
-                <td class="terms-label">Ordering and Payment</td>
-                <td class="terms-colon">:</td>
-                <td class="terms-value">In Favour of Sun Power Services.</td>
-              </tr>
-              <tr>
-                <td class="terms-number">3</td>
-                <td class="terms-label">Delivery</td>
-                <td class="terms-colon">:</td>
-                <td class="terms-value">With in One Month after your P.O.</td>
-              </tr>
-              <tr>
-                <td class="terms-number">4</td>
-                <td class="terms-label">Note</td>
-                <td class="terms-colon">:</td>
-                <td class="terms-value">Quality assured spares only</td>
-              </tr>
-              <tr>
-                <td class="terms-number">5</td>
-                <td class="terms-label">Quote Validity</td>
-                <td class="terms-colon">:</td>
-                <td class="terms-value">30 days from quote date</td>
-              </tr>
+              ${quotation.terms.split('\n').map((term: string, idx: number) => {
+                const parts = term.split(':');
+                const label = parts[0]?.trim() || '';
+                const value = parts.slice(1).join(':').trim() || '';
+                return `
+                  <tr>
+                    <td class="terms-number">${idx + 1}</td>
+                    <td class="terms-label">${label}</td>
+                    <td class="terms-colon">:</td>
+                    <td class="terms-value">${value}</td>
+                  </tr>
+                `;
+              }).join('')}
             </table>
           </div>
+          ` : ''}
           
-          <div class="closing-text">
-            Hope the above offer will meet your requirement and we will be expecting your valuable order at the earliest.
-          </div>
-          
-          <div class="closing-text">
-            Thanking you and assuring you our best and prompt services at all time.
-          </div>
           
           <div class="footer-section">
             <div class="footer-left">
@@ -4414,10 +4633,17 @@ const InvoiceManagement: React.FC = () => {
               </div>
             </div>
             <div class="footer-center">
-              <div style="border: 1px solid #333; padding: 20px; margin: 10px;">
-                QR Code<br>
-                Scanner
-              </div>
+              ${quotation.qrCodeImage ? `
+                <div class="qr-code-container">
+                  <img src="${quotation.qrCodeImage}" alt="QR Code" class="qr-code-image" />
+                  <div style="font-size: 10px; margin-top: 5px;">QR Code Scanner</div>
+                </div>
+              ` : `
+                <div style="border: 1px solid #333; padding: 20px; margin: 10px;">
+                  QR Code<br>
+                  Scanner
+                </div>
+              `}
             </div>
             <div class="footer-right">
               <div style="margin-bottom: 10px; font-weight: bold;">For Sun Power Services</div>
@@ -4688,9 +4914,29 @@ const InvoiceManagement: React.FC = () => {
                       fromDatePurchase
                     }
                     onChange={(e) => {
-                      if (invoiceType === 'quotation') setFromDate(e.target.value);
-                      else if (invoiceType === 'sale') setFromDateSale(e.target.value);
-                      else setFromDatePurchase(e.target.value);
+                      const newFromDate = e.target.value;
+                      if (invoiceType === 'quotation') {
+                        setFromDate(newFromDate);
+                        // Clear toDate if it's earlier than the new fromDate
+                        if (toDate && newFromDate && new Date(newFromDate) > new Date(toDate)) {
+                          setToDate('');
+                        }
+                        validateDateRange(newFromDate, toDate);
+                      } else if (invoiceType === 'sale') {
+                        setFromDateSale(newFromDate);
+                        // Clear toDateSale if it's earlier than the new fromDateSale
+                        if (toDateSale && newFromDate && new Date(newFromDate) > new Date(toDateSale)) {
+                          setToDateSale('');
+                        }
+                        validateDateRange(newFromDate, toDateSale);
+                      } else {
+                        setFromDatePurchase(newFromDate);
+                        // Clear toDatePurchase if it's earlier than the new fromDatePurchase
+                        if (toDatePurchase && newFromDate && new Date(newFromDate) > new Date(toDatePurchase)) {
+                          setToDatePurchase('');
+                        }
+                        validateDateRange(newFromDate, toDatePurchase);
+                      }
                     }}
                     className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   />
@@ -4698,18 +4944,37 @@ const InvoiceManagement: React.FC = () => {
                   <input
                     type="date"
                     placeholder="To Date"
+                    min={
+                      invoiceType === 'quotation' ? fromDate :
+                      invoiceType === 'sale' ? fromDateSale :
+                      fromDatePurchase
+                    }
                     value={
                       invoiceType === 'quotation' ? toDate :
                       invoiceType === 'sale' ? toDateSale :
                       toDatePurchase
                     }
                     onChange={(e) => {
-                      if (invoiceType === 'quotation') setToDate(e.target.value);
-                      else if (invoiceType === 'sale') setToDateSale(e.target.value);
-                      else setToDatePurchase(e.target.value);
+                      const newToDate = e.target.value;
+                      if (invoiceType === 'quotation') {
+                        setToDate(newToDate);
+                        validateDateRange(fromDate, newToDate);
+                      } else if (invoiceType === 'sale') {
+                        setToDateSale(newToDate);
+                        validateDateRange(fromDateSale, newToDate);
+                      } else {
+                        setToDatePurchase(newToDate);
+                        validateDateRange(fromDatePurchase, newToDate);
+                      }
                     }}
                     className="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
                   />
+                  {dateRangeError && (
+                    <div className="text-red-500 text-xs mt-1 flex items-center gap-1">
+                      <span>⚠️</span>
+                      {dateRangeError}
+                    </div>
+                  )}
                   {(
                     (invoiceType === 'quotation' && (fromDate || toDate)) ||
                     (invoiceType === 'sale' && (fromDateSale || toDateSale)) ||
@@ -4727,6 +4992,7 @@ const InvoiceManagement: React.FC = () => {
                           setFromDatePurchase('');
                           setToDatePurchase('');
                         }
+                        setDateRangeError(''); // Clear date range error
                       }}
                       className="flex items-center gap-1 px-2 py-2 text-xs text-gray-600 hover:text-gray-800 hover:bg-gray-200 rounded-md transition-colors"
                     >
@@ -5066,14 +5332,14 @@ const InvoiceManagement: React.FC = () => {
                             <Eye className="w-4 h-4" />
                           </button>
                         </Tooltip>
-                        <Tooltip content="Print" position="top">
+                        {/* <Tooltip content="Print" position="top">
                           <button
                             onClick={() => handleOpenPrintModal(quotation)}
                             className="text-gray-600 hover:text-gray-900 p-1.5 hover:bg-gray-50 rounded transition-colors duration-200"
                           >
                             <Printer className="w-4 h-4" />
                           </button>
-                        </Tooltip>
+                        </Tooltip> */}
                         <Tooltip content="Edit" position="top">
                           <button
                             onClick={() => handleEditQuotation(quotation)}
@@ -5340,7 +5606,7 @@ const InvoiceManagement: React.FC = () => {
               <h2 className="text-xl font-semibold text-gray-900">Invoice - {selectedInvoice.invoiceNumber ?? ''}</h2>
               <div className="flex items-center space-x-2">
                 {/* Print Options */}
-                <button
+                {/* <button
                   onClick={generatePDF}
                   className="flex items-center px-3 py-1 text-sm bg-blue-600 text-white rounded-md hover:bg-blue-700"
                 >
@@ -5348,7 +5614,7 @@ const InvoiceManagement: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   Download PDF
-                </button>
+                </button> */}
                 <button
                   onClick={printInvoice}
                   className="flex items-center px-3 py-1 text-sm bg-green-600 text-white rounded-md hover:bg-green-700"
@@ -5868,6 +6134,56 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
+              {/* Battery Buyback Charges Section */}
+              {selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h4 className="font-medium text-orange-900 mb-3 flex items-center">
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Battery Buyback Charges
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border border-orange-200 rounded-lg">
+                      <thead className="bg-orange-100">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Description</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Quantity</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Unit Price</th>
+                          {(selectedInvoice.batteryBuyBack?.discount || 0) > 0 && (
+                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Discount</th>
+                          )}
+                          {(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 && (
+                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Tax Rate</th>
+                          )}
+                          {(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 && (
+                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Tax Amount</th>
+                          )}
+                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-orange-200">
+                        <tr className="bg-white">
+                          <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.description}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.quantity}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">₹{selectedInvoice.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}</td>
+                          {(selectedInvoice.batteryBuyBack?.discount || 0) > 0 && (
+                            <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.discount || 0}%</td>
+                          )}
+                          {(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 && (
+                            <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.taxRate || 0}%</td>
+                          )}
+                          {(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 && (
+                            <td className="px-4 py-2 text-sm text-gray-900">₹{selectedInvoice.batteryBuyBack.taxAmount?.toFixed(2) || '0.00'}</td>
+                          )}
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{selectedInvoice.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Edit Mode Actions */}
               {editMode && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -5945,6 +6261,14 @@ const InvoiceManagement: React.FC = () => {
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Service Charges:</span>
                         <span className="font-medium text-green-600">+₹{(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {/* Battery Buyback Charges Total */}
+                    {selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Battery Buyback Charges:</span>
+                        <span className="font-medium text-orange-600">+₹{(selectedInvoice.batteryBuyBack?.totalPrice || 0).toFixed(2)}</span>
                       </div>
                     )}
                     
@@ -6907,6 +7231,56 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
+              {/* Battery Buyback Charges Section */}
+              {selectedQuotation.batteryBuyBack && selectedQuotation.batteryBuyBack.quantity > 0 && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <h4 className="font-medium text-orange-900 mb-3 flex items-center">
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Battery Buyback Charges
+                  </h4>
+                  <div className="overflow-x-auto">
+                    <table className="w-full border border-orange-200 rounded-lg">
+                      <thead className="bg-orange-100">
+                        <tr>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Description</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Quantity</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Unit Price</th>
+                          {(selectedQuotation.batteryBuyBack?.discount || 0) > 0 && (
+                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Discount</th>
+                          )}
+                          {(selectedQuotation.batteryBuyBack?.taxRate || 0) > 0 && (
+                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Tax Rate</th>
+                          )}
+                          {(selectedQuotation.batteryBuyBack?.taxRate || 0) > 0 && (
+                            <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Tax Amount</th>
+                          )}
+                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-orange-200">
+                        <tr className="bg-white">
+                          <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.description}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.quantity}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">₹{selectedQuotation.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}</td>
+                          {(selectedQuotation.batteryBuyBack?.discount || 0) > 0 && (
+                            <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.discount || 0}%</td>
+                          )}
+                          {(selectedQuotation.batteryBuyBack?.taxRate || 0) > 0 && (
+                            <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.taxRate || 0}%</td>
+                          )}
+                          {(selectedQuotation.batteryBuyBack?.taxRate || 0) > 0 && (
+                            <td className="px-4 py-2 text-sm text-gray-900">₹{selectedQuotation.batteryBuyBack.taxAmount?.toFixed(2) || '0.00'}</td>
+                          )}
+                          <td className="px-4 py-2 text-sm font-medium text-gray-900">₹{selectedQuotation.batteryBuyBack.totalPrice?.toFixed(2) || '0.00'}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Quotation Summary */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-end">
@@ -6933,6 +7307,14 @@ const InvoiceManagement: React.FC = () => {
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Service Charges:</span>
                         <span className="font-medium text-green-600">+₹{(selectedQuotation.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {/* Battery Buyback Charges Total */}
+                    {selectedQuotation.batteryBuyBack && selectedQuotation.batteryBuyBack.quantity > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Battery Buyback:</span>
+                        <span className="font-medium text-orange-600">-₹{(selectedQuotation.batteryBuyBack?.totalPrice || 0).toFixed(2)}</span>
                       </div>
                     )}
                     
