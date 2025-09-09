@@ -1334,16 +1334,14 @@ const InventoryManagement: React.FC = () => {
         stockId,
         product,
         fromLocation,
+        fromRoom: fromRoom || null,
+        fromRack: fromRack || null,
         toLocation,
+        toRoom: toRoom || null,
+        toRack: toRack || null,
         quantity,
         notes
       };
-
-      // Add room and rack data if provided
-      if (fromRoom) transferData.fromRoom = fromRoom;
-      if (fromRack) transferData.fromRack = fromRack;
-      if (toRoom) transferData.toRoom = toRoom;
-      if (toRack) transferData.toRack = toRack;
 
       // Send transfer request
       await apiClient.stock.transferStock(transferData);
