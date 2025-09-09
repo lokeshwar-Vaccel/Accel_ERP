@@ -246,9 +246,9 @@ const baseServiceTicketFields = {
   siteLocation: Joi.string().max(500).trim().allow(''),
   
   // Visit Details fields
-  typeOfVisit: Joi.string().valid(...Object.values(TypeOfVisit)),
-  natureOfWork: Joi.string().valid(...Object.values(NatureOfWork)),
-  subNatureOfWork: Joi.string().valid(...Object.values(SubNatureOfWork)),
+  typeOfVisit: Joi.string().valid(...Object.values(TypeOfVisit)).allow(''),
+  natureOfWork: Joi.string().valid(...Object.values(NatureOfWork)).allow(''),
+  subNatureOfWork: Joi.string().valid(...Object.values(SubNatureOfWork)).allow(''),
 
   // Legacy fields
   customer: Joi.string().hex().length(24),

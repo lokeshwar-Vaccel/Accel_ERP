@@ -278,38 +278,10 @@ export const createDGInvoice = async (
 
     await invoice.save();
 
-    // Reduce stock if requested
+    // Note: Inventory reduction functionality has been removed from DG invoice creation
+    // The reduceStock parameter is kept for backward compatibility but no longer affects inventory
     if (reduceStock) {
-      for (const item of calculatedItems) {
-        const stock = await Stock.findOne({
-          product: item.product,
-          location: location
-        });
-
-        const originalQuantity = stock?.quantity ?? 0;
-
-        if (stock) {
-          stock.quantity -= item.quantity;
-          stock.availableQuantity = stock.quantity - stock.reservedQuantity;
-          await stock.save();
-
-          // Create stock ledger entry
-          await StockLedger.create({
-            product: item.product,
-            location: location,
-            transactionType: 'outward',
-            quantity: -item.quantity,
-            reason: `DG Invoice sale - ${invoiceNumber}`,
-            notes: `DG Invoice created`,
-            performedBy: req.user!.id,
-            transactionDate: new Date(),
-            resultingQuantity: stock.quantity,
-            previousQuantity: originalQuantity,
-            referenceId: invoiceNumber,
-            referenceType: 'sale'
-          });
-        }
-      }
+      console.log('📝 DG Invoice created without inventory reduction (functionality disabled)');
     }
 
     const response: APIResponse = {

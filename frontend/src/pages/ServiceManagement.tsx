@@ -533,7 +533,8 @@ const ServiceManagement: React.FC = () => {
     { value: 'site_visit', label: 'Site Visit' },
     { value: 'breakdown', label: 'Breakdown' },
     { value: 'installation', label: 'Installation' },
-    { value: 'dms_call', label: 'DMS Call' }
+    { value: 'dms_call', label: 'DMS Call' },
+    { value: 'pm_visit', label: 'PM Visit' }
   ];
 
   const subNatureOfWorkOptions = [

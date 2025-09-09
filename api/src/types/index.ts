@@ -77,7 +77,8 @@ export enum NatureOfWork {
   SITE_VISIT = 'site_visit',
   BREAKDOWN = 'breakdown',
   INSTALLATION = 'installation',
-  DMS_CALL = 'dms_call'
+  DMS_CALL = 'dms_call',
+  PM_VISIT = 'pm_visit'
 }
 
 export enum SubNatureOfWork {
@@ -195,6 +196,10 @@ export interface Address {
   isPrimary: boolean;
   gstNumber?: string;
   notes?: string; // Added for storing notes from misused fields
+  contactPersonName?: string;
+  email?: string;
+  phone?: string;
+  registrationStatus: 'registered' | 'non_registered';
 }
 // DG Requirements Interface
 export interface DGRequirements {
@@ -232,6 +237,12 @@ export interface ICustomer extends Document {
   isDGSalesCustomer?: boolean;
   dgRequirements?: DGRequirements;
   dgDetails?: Types.ObjectId[]; // Array of DGDetails ObjectIds
+  bankDetails?: {
+    bankName: string;
+    accountNo: string;
+    ifsc: string;
+    branch: string;
+  };
 }
 
 // Contact History Interface
@@ -437,6 +448,8 @@ export interface IDGDetails extends Document {
   installationType: 'infold' | 'outfold';
   amcStatus: 'yes' | 'no';
   cluster: string;
+  locationAddressId?: number;
+  locationAddress?: string;
   warrantyStartDate?: Date;
   warrantyEndDate?: Date;
   createdBy: Types.ObjectId;

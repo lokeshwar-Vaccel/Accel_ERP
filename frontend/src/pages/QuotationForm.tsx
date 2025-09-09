@@ -357,7 +357,7 @@ const QuotationFormPage: React.FC = () => {
         try {
             console.log('Quotation data received:', quotation);
             console.log('assignedEngineer from backend:', quotation.assignedEngineer, typeof quotation.assignedEngineer);
-            
+
             // Find the customer in the customers list to get full customer data
             const fullCustomer = customers.find(c => c._id === quotation.customer?._id) || quotation.customer;
 
@@ -436,8 +436,8 @@ const QuotationFormPage: React.FC = () => {
                 hourMeterReading: quotation.hourMeterReading || '',
                 serviceRequestDate: quotation.serviceRequestDate ? new Date(quotation.serviceRequestDate) : undefined,
                 // Engineer assignment - ensure we only store the ID, not the full object
-                assignedEngineer: quotation.assignedEngineer ? 
-                    (typeof quotation.assignedEngineer === 'string' ? quotation.assignedEngineer : quotation.assignedEngineer._id || quotation.assignedEngineer.id || '') 
+                assignedEngineer: quotation.assignedEngineer ?
+                    (typeof quotation.assignedEngineer === 'string' ? quotation.assignedEngineer : quotation.assignedEngineer._id || quotation.assignedEngineer.id || '')
                     : '',
                 // QR Code image
                 qrCodeImage: quotation.qrCodeImage || undefined,
@@ -540,11 +540,18 @@ const QuotationFormPage: React.FC = () => {
 
     const fetchCustomers = async () => {
         try {
-            const response = await apiClient.customers.getAll({ limit: 100, page: 1 });
-            const responseData = response.data as any;
-            console.log("responseData13:", responseData);
+            // Use non-paginated API to fetch all customers for dropdown
+            const response = await apiClient.customers.getAllForDropdown({ type: 'customer' });
 
-            const customersData = responseData.customers || responseData || [];
+            let customersData: Customer[] = [];
+            if (response.success && response.data && Array.isArray(response.data)) {
+                customersData = response.data as any;
+            } else {
+                // Fallback to previous shape if needed
+                const responseData = response.data as any;
+                customersData = (responseData?.customers || responseData || []) as any;
+            }
+
             setCustomers(customersData);
         } catch (error) {
             console.error('Error fetching customers:', error);
@@ -931,12 +938,12 @@ const QuotationFormPage: React.FC = () => {
             }
             return 'Select address';
         }
-        
+
         const address = addresses.find(a => a.id === parseInt(value));
         if (address) {
             return `${address.address} (${address.district}, ${address.pincode})`;
         }
-        
+
         // Fallback to direct address objects
         if (formData.billToAddress && formData.billToAddress.address) {
             return `${formData.billToAddress.address} (${formData.billToAddress.district}, ${formData.billToAddress.pincode})`;
@@ -944,7 +951,7 @@ const QuotationFormPage: React.FC = () => {
         if (formData.shipToAddress && formData.shipToAddress.address) {
             return `${formData.shipToAddress.address} (${formData.shipToAddress.district}, ${formData.shipToAddress.pincode})`;
         }
-        
+
         return 'Select address';
     };
 
@@ -968,17 +975,17 @@ const QuotationFormPage: React.FC = () => {
 
     type EngineerValue = string | { id: string };
 
-const getEngineerLabel = (value: EngineerValue) => {
+    const getEngineerLabel = (value: EngineerValue) => {
 
-    // if (!value) return "Select engineer";
+        // if (!value) return "Select engineer";
 
-    // Extract ID whether it's a string or object
-    const id = typeof value === "string" ? value : value?.id;
+        // Extract ID whether it's a string or object
+        const id = typeof value === "string" ? value : value?.id;
 
-    const engineer = fieldOperators.find(e => e._id === id);
+        const engineer = fieldOperators.find(e => e._id === id);
 
-    return engineer ? (engineer.name || engineer.label || "Unknown Engineer") : "";
-};
+        return engineer ? (engineer.name || engineer.label || "Unknown Engineer") : "";
+    };
 
 
     // 🚀 STOCK VALIDATION FUNCTIONS
@@ -2230,242 +2237,242 @@ const getEngineerLabel = (value: EngineerValue) => {
 
                     {/* Customer and Basic Info */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-    <label className="block text-sm font-medium text-gray-700 mb-1">
-        From Location *
-    </label>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                From Location *
+                            </label>
 
-    {/* 🚀 Stock Loading Indicator */}
-    {/* {formData.location && Object.keys(productStockCache).length === 0 && (
+                            {/* 🚀 Stock Loading Indicator */}
+                            {/* {formData.location && Object.keys(productStockCache).length === 0 && (
         <div className="mb-2 flex items-center text-xs text-blue-600">
             <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-2"></div>
             <span>Loading stock data for this location...</span>
         </div>
     )} */}
 
-    <div className="relative dropdown-container">
-        <input
-            type="text"
-            value={locationSearchTerm !== undefined ? locationSearchTerm : getLocationLabel(formData.location || '')}
-            onChange={(e) => {
-                setLocationSearchTerm(e.target.value);
-                if (!showLocationDropdown) setShowLocationDropdown(true);
-                setHighlightedLocationIndex(-1);
-                // Clear the selected location when user starts typing
-                if (e.target.value === '') {
-                    setFormData({ ...formData, location: '' });
-                    // Clear stock cache when location changes
-                    setProductStockCache({});
-                    setStockValidation({});
-                }
-            }}
-            onFocus={() => {
-                setShowLocationDropdown(true);
-                
-                // Auto-select Main Office if no location is selected
-                if (!formData.location) {
-                    const mainOffice = locations.find(loc => 
-                        loc.name.toLowerCase().includes('main office') || 
-                        loc.name.toLowerCase() === 'main office'
-                    );
-                    if (mainOffice) {
-                        setFormData({ ...formData, location: mainOffice._id });
-                        // Clear stock cache when location changes
-                        setProductStockCache({});
-                        setStockValidation({});
-                    }
-                }
-                
-                setHighlightedLocationIndex(-1);
-                // Initialize search term for editing
-                if (locationSearchTerm === undefined && formData.location) {
-                    setLocationSearchTerm(getLocationLabel(formData.location));
-                } else if (!locationSearchTerm && !formData.location) {
-                    setLocationSearchTerm('');
-                }
-            }}
-            onKeyDown={(e) => {
-                const filteredLocations = locations.filter(location => {
-                    const searchTerm = (locationSearchTerm || '').toLowerCase();
-                    return (
-                        location.name.toLowerCase().includes(searchTerm) ||
-                        location.type.toLowerCase().includes(searchTerm)
-                    );
-                });
-
-                if (e.key === 'ArrowDown') {
-                    e.preventDefault();
-                    setShowLocationDropdown(true);
-                    setHighlightedLocationIndex(prev =>
-                        prev < filteredLocations.length - 1 ? prev + 1 : 0
-                    );
-                } else if (e.key === 'ArrowUp') {
-                    e.preventDefault();
-                    setShowLocationDropdown(true);
-                    setHighlightedLocationIndex(prev =>
-                        prev > 0 ? prev - 1 : filteredLocations.length - 1
-                    );
-                } else if (e.key === 'Enter') {
-                    e.preventDefault();
-                    if (showLocationDropdown && highlightedLocationIndex >= 0 && filteredLocations.length > 0) {
-                        const selectedLocation = filteredLocations[highlightedLocationIndex];
-                        setFormData({ ...formData, location: selectedLocation._id });
-                        setShowLocationDropdown(false);
-                        setLocationSearchTerm(undefined); // Reset to show selected location name
-                        setHighlightedLocationIndex(-1);
-                        // Clear stock cache when location changes
-                        setProductStockCache({});
-                        setStockValidation({});
-                    } else if (showLocationDropdown && filteredLocations.length === 1) {
-                        const selectedLocation = filteredLocations[0];
-                        setFormData({ ...formData, location: selectedLocation._id });
-                        setShowLocationDropdown(false);
-                        setLocationSearchTerm(undefined); // Reset to show selected location name
-                        setHighlightedLocationIndex(-1);
-                        // Clear stock cache when location changes
-                        setProductStockCache({});
-                        setStockValidation({});
-                    }
-                } else if (e.key === 'Escape') {
-                    setShowLocationDropdown(false);
-                    setHighlightedLocationIndex(-1);
-                    setLocationSearchTerm(undefined); // Reset search term
-                } else if ((e.key === 'Tab' && !e.shiftKey)) {
-                    e.preventDefault();
-                    setShowLocationDropdown(false);
-                    // Move to next field (customize as needed)
-                    setTimeout(() => {
-                        const nextInput = document.querySelector('[data-field="next-field"]') as HTMLInputElement;
-                        if (nextInput) nextInput.focus();
-                    }, 50);
-                } else if (e.key === 'Tab' && e.shiftKey) {
-                    e.preventDefault();
-                    setShowLocationDropdown(false);
-                    // Move back to previous field (customize as needed)
-                    setTimeout(() => {
-                        const prevInput = document.querySelector('[data-field="prev-field"]') as HTMLInputElement;
-                        if (prevInput) prevInput.focus();
-                    }, 50);
-                }
-            }}
-            onBlur={(e) => {
-                // Delay hiding dropdown to allow for clicks
-                setTimeout(() => {
-                    setShowLocationDropdown(false);
-                    setHighlightedLocationIndex(-1);
-                    // If no location selected and search term exists, clear it
-                    if (!formData.location && locationSearchTerm) {
-                        setLocationSearchTerm(undefined);
-                    }
-                }, 150);
-            }}
-            autoComplete="off"
-            placeholder="Search location or press ↓ to open"
-            data-field="location"
-            className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-        />
-        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-            <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
-        </div>
-        
-        {/* Clear button - only show when there's a search term or selected location */}
-        {(locationSearchTerm || formData.location) && (
-            <button
-                type="button"
-                onClick={(e) => {
-                    e.stopPropagation();
-                    setFormData({ ...formData, location: '' });
-                    setLocationSearchTerm('');
-                    setShowLocationDropdown(false);
-                    setHighlightedLocationIndex(-1);
-                    // Clear stock cache when location changes
-                    setProductStockCache({});
-                    setStockValidation({});
-                    // Refocus the input
-                    setTimeout(() => {
-                        const input = document.querySelector('[data-field="location"]') as HTMLInputElement;
-                        if (input) input.focus();
-                    }, 10);
-                }}
-                className="absolute inset-y-0 right-8 flex items-center pr-1 text-gray-400 hover:text-gray-600 transition-colors"
-            >
-                <X className="w-4 h-4" />
-            </button>
-        )}
-
-        {showLocationDropdown && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                {(() => {
-                    const filteredLocations = locations.filter(location => {
-                        const searchTerm = (locationSearchTerm || '').toLowerCase();
-                        return (
-                            location.name.toLowerCase().includes(searchTerm) ||
-                            location.type.toLowerCase().includes(searchTerm)
-                        );
-                    });
-
-                    return (
-                        <>
-                            <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
-                                <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
-                                <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
-                                <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
-                            </div>
-
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setFormData({ ...formData, location: '' });
-                                    setShowLocationDropdown(false);
-                                    setLocationSearchTerm(undefined);
-                                    setHighlightedLocationIndex(-1);
-                                    // Clear stock cache when location changes
-                                    setProductStockCache({});
-                                    setStockValidation({});
-                                }}
-                                className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                            >
-                                Select location
-                            </button>
-
-                            {filteredLocations.map((location, index) => (
-                                <button
-                                    key={location._id}
-                                    type="button"
-                                    data-location-index={index}
-                                    onClick={() => {
-                                        setFormData({ ...formData, location: location._id });
-                                        setShowLocationDropdown(false);
-                                        setLocationSearchTerm(undefined); // Reset to show selected name
+                            <div className="relative dropdown-container">
+                                <input
+                                    type="text"
+                                    value={locationSearchTerm !== undefined ? locationSearchTerm : getLocationLabel(formData.location || '')}
+                                    onChange={(e) => {
+                                        setLocationSearchTerm(e.target.value);
+                                        if (!showLocationDropdown) setShowLocationDropdown(true);
                                         setHighlightedLocationIndex(-1);
-                                        // Clear stock cache when location changes
-                                        setProductStockCache({});
-                                        setStockValidation({});
+                                        // Clear the selected location when user starts typing
+                                        if (e.target.value === '') {
+                                            setFormData({ ...formData, location: '' });
+                                            // Clear stock cache when location changes
+                                            setProductStockCache({});
+                                            setStockValidation({});
+                                        }
                                     }}
-                                    className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.location === location._id ? 'bg-blue-100 text-blue-800' :
-                                        highlightedLocationIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
-                                            'text-gray-700 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    <div>
-                                        <div className="font-medium">{location.name}</div>
-                                        <div className="text-xs text-gray-500 capitalize">{location.type.replace('_', ' ')}</div>
-                                    </div>
-                                </button>
-                            ))}
+                                    onFocus={() => {
+                                        setShowLocationDropdown(true);
 
-                            {filteredLocations.length === 0 && (
-                                <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                                    No locations found
+                                        // Auto-select Main Office if no location is selected
+                                        if (!formData.location) {
+                                            const mainOffice = locations.find(loc =>
+                                                loc.name.toLowerCase().includes('main office') ||
+                                                loc.name.toLowerCase() === 'main office'
+                                            );
+                                            if (mainOffice) {
+                                                setFormData({ ...formData, location: mainOffice._id });
+                                                // Clear stock cache when location changes
+                                                setProductStockCache({});
+                                                setStockValidation({});
+                                            }
+                                        }
+
+                                        setHighlightedLocationIndex(-1);
+                                        // Initialize search term for editing
+                                        if (locationSearchTerm === undefined && formData.location) {
+                                            setLocationSearchTerm(getLocationLabel(formData.location));
+                                        } else if (!locationSearchTerm && !formData.location) {
+                                            setLocationSearchTerm('');
+                                        }
+                                    }}
+                                    onKeyDown={(e) => {
+                                        const filteredLocations = locations.filter(location => {
+                                            const searchTerm = (locationSearchTerm || '').toLowerCase();
+                                            return (
+                                                location.name.toLowerCase().includes(searchTerm) ||
+                                                location.type.toLowerCase().includes(searchTerm)
+                                            );
+                                        });
+
+                                        if (e.key === 'ArrowDown') {
+                                            e.preventDefault();
+                                            setShowLocationDropdown(true);
+                                            setHighlightedLocationIndex(prev =>
+                                                prev < filteredLocations.length - 1 ? prev + 1 : 0
+                                            );
+                                        } else if (e.key === 'ArrowUp') {
+                                            e.preventDefault();
+                                            setShowLocationDropdown(true);
+                                            setHighlightedLocationIndex(prev =>
+                                                prev > 0 ? prev - 1 : filteredLocations.length - 1
+                                            );
+                                        } else if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            if (showLocationDropdown && highlightedLocationIndex >= 0 && filteredLocations.length > 0) {
+                                                const selectedLocation = filteredLocations[highlightedLocationIndex];
+                                                setFormData({ ...formData, location: selectedLocation._id });
+                                                setShowLocationDropdown(false);
+                                                setLocationSearchTerm(undefined); // Reset to show selected location name
+                                                setHighlightedLocationIndex(-1);
+                                                // Clear stock cache when location changes
+                                                setProductStockCache({});
+                                                setStockValidation({});
+                                            } else if (showLocationDropdown && filteredLocations.length === 1) {
+                                                const selectedLocation = filteredLocations[0];
+                                                setFormData({ ...formData, location: selectedLocation._id });
+                                                setShowLocationDropdown(false);
+                                                setLocationSearchTerm(undefined); // Reset to show selected location name
+                                                setHighlightedLocationIndex(-1);
+                                                // Clear stock cache when location changes
+                                                setProductStockCache({});
+                                                setStockValidation({});
+                                            }
+                                        } else if (e.key === 'Escape') {
+                                            setShowLocationDropdown(false);
+                                            setHighlightedLocationIndex(-1);
+                                            setLocationSearchTerm(undefined); // Reset search term
+                                        } else if ((e.key === 'Tab' && !e.shiftKey)) {
+                                            e.preventDefault();
+                                            setShowLocationDropdown(false);
+                                            // Move to next field (customize as needed)
+                                            setTimeout(() => {
+                                                const nextInput = document.querySelector('[data-field="next-field"]') as HTMLInputElement;
+                                                if (nextInput) nextInput.focus();
+                                            }, 50);
+                                        } else if (e.key === 'Tab' && e.shiftKey) {
+                                            e.preventDefault();
+                                            setShowLocationDropdown(false);
+                                            // Move back to previous field (customize as needed)
+                                            setTimeout(() => {
+                                                const prevInput = document.querySelector('[data-field="prev-field"]') as HTMLInputElement;
+                                                if (prevInput) prevInput.focus();
+                                            }, 50);
+                                        }
+                                    }}
+                                    onBlur={(e) => {
+                                        // Delay hiding dropdown to allow for clicks
+                                        setTimeout(() => {
+                                            setShowLocationDropdown(false);
+                                            setHighlightedLocationIndex(-1);
+                                            // If no location selected and search term exists, clear it
+                                            if (!formData.location && locationSearchTerm) {
+                                                setLocationSearchTerm(undefined);
+                                            }
+                                        }, 150);
+                                    }}
+                                    autoComplete="off"
+                                    placeholder="Search location or press ↓ to open"
+                                    data-field="location"
+                                    className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                                />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
                                 </div>
-                            )}
-                        </>
-                    );
-                })()}
-            </div>
-        )}
-    </div>
-</div>
+
+                                {/* Clear button - only show when there's a search term or selected location */}
+                                {(locationSearchTerm || formData.location) && (
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setFormData({ ...formData, location: '' });
+                                            setLocationSearchTerm('');
+                                            setShowLocationDropdown(false);
+                                            setHighlightedLocationIndex(-1);
+                                            // Clear stock cache when location changes
+                                            setProductStockCache({});
+                                            setStockValidation({});
+                                            // Refocus the input
+                                            setTimeout(() => {
+                                                const input = document.querySelector('[data-field="location"]') as HTMLInputElement;
+                                                if (input) input.focus();
+                                            }, 10);
+                                        }}
+                                        className="absolute inset-y-0 right-8 flex items-center pr-1 text-gray-400 hover:text-gray-600 transition-colors"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
+
+                                {showLocationDropdown && (
+                                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                                        {(() => {
+                                            const filteredLocations = locations.filter(location => {
+                                                const searchTerm = (locationSearchTerm || '').toLowerCase();
+                                                return (
+                                                    location.name.toLowerCase().includes(searchTerm) ||
+                                                    location.type.toLowerCase().includes(searchTerm)
+                                                );
+                                            });
+
+                                            return (
+                                                <>
+                                                    <div className="px-3 py-2 text-center text-xs text-gray-500 bg-gray-50 border-b border-gray-200">
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs">↑↓</kbd> Navigate •
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Enter/Tab</kbd> Select •
+                                                        <kbd className="px-1 py-0.5 bg-gray-200 rounded text-xs ml-1">Esc</kbd> Close
+                                                    </div>
+
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setFormData({ ...formData, location: '' });
+                                                            setShowLocationDropdown(false);
+                                                            setLocationSearchTerm(undefined);
+                                                            setHighlightedLocationIndex(-1);
+                                                            // Clear stock cache when location changes
+                                                            setProductStockCache({});
+                                                            setStockValidation({});
+                                                        }}
+                                                        className={`w-full px-3 py-2 text-left hover:bg-gray-50 transition-colors text-sm ${!formData.location ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                                                    >
+                                                        Select location
+                                                    </button>
+
+                                                    {filteredLocations.map((location, index) => (
+                                                        <button
+                                                            key={location._id}
+                                                            type="button"
+                                                            data-location-index={index}
+                                                            onClick={() => {
+                                                                setFormData({ ...formData, location: location._id });
+                                                                setShowLocationDropdown(false);
+                                                                setLocationSearchTerm(undefined); // Reset to show selected name
+                                                                setHighlightedLocationIndex(-1);
+                                                                // Clear stock cache when location changes
+                                                                setProductStockCache({});
+                                                                setStockValidation({});
+                                                            }}
+                                                            className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.location === location._id ? 'bg-blue-100 text-blue-800' :
+                                                                highlightedLocationIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                                                    'text-gray-700 hover:bg-gray-50'
+                                                                }`}
+                                                        >
+                                                            <div>
+                                                                <div className="font-medium">{location.name}</div>
+                                                                <div className="text-xs text-gray-500 capitalize">{location.type.replace('_', ' ')}</div>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+
+                                                    {filteredLocations.length === 0 && (
+                                                        <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                                                            No locations found
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
