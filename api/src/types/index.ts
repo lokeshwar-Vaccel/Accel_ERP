@@ -77,7 +77,8 @@ export enum NatureOfWork {
   SITE_VISIT = 'site_visit',
   BREAKDOWN = 'breakdown',
   INSTALLATION = 'installation',
-  DMS_CALL = 'dms_call'
+  DMS_CALL = 'dms_call',
+  PM_VISIT = 'pm_visit'
 }
 
 export enum SubNatureOfWork {

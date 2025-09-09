@@ -168,6 +168,85 @@ const convertToExcel = (data: any[]) => {
   
   return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 };
+// Helper function to convert delivery challan data to Excel without summary row
+const convertToExcelForDeliveryChallans = (data: any) => {
+  if (!data || data.length === 0) return;
+  
+  // Create a new workbook
+  const wb = XLSX.utils.book_new();
+  
+  // Convert data to worksheet
+  const ws = XLSX.utils.json_to_sheet(data);
+  
+  // Set column widths for better display
+  const columnWidths = [
+    { wch: 8 },   // S.No
+    { wch: 20 },  // Challan Number
+    { wch: 12 },  // Date
+    { wch: 25 },  // Customer Name
+    { wch: 30 },  // Customer Email
+    { wch: 15 },  // Customer Phone
+    { wch: 15 },  // Department
+    { wch: 12 },  // Status
+    { wch: 15 },  // Reference No
+    { wch: 15 },  // Other Reference No
+    { wch: 15 },  // Buyers Order No
+    { wch: 15 },  // Buyers Order Date
+    { wch: 15 },  // Dispatch Doc No
+    { wch: 20 },  // Destination
+    { wch: 15 },  // Dispatched Through
+    { wch: 20 },  // Terms of Delivery
+    { wch: 15 },  // Consignee
+    { wch: 15 },  // Mode of Payment
+    { wch: 12 },  // Total Spares
+    { wch: 12 },  // Total Services
+    { wch: 30 },  // Notes
+    { wch: 20 },  // Created By
+    { wch: 12 },  // Created At
+  ];
+  
+  ws['!cols'] = columnWidths;
+  
+  // Set row heights for better readability
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let row = range.s.r; row <= range.e.r; row++) {
+    ws['!rows'] = ws['!rows'] || [];
+    ws['!rows'][row] = { hpt: 20 }; // Set row height to 20 points
+  }
+  
+  // Style headers
+  const headerRange = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  for (let col = headerRange.s.c; col <= headerRange.e.c; col++) {
+    const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+    if (!ws[cellAddress]) continue;
+    
+    ws[cellAddress].s = {
+      font: { bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "366092" } },
+      alignment: { horizontal: "center", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } }
+      }
+    };
+  }
+  
+  // Add the worksheet to workbook
+  XLSX.utils.book_append_sheet(wb, ws, 'Delivery Challans');
+  
+  // Generate Excel file buffer
+  const excelBuffer = XLSX.write(wb, { 
+    bookType: 'xlsx', 
+    type: 'array',
+    cellStyles: true,
+    compression: true
+  });
+  
+  return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+};
+
 
 // Types
 interface Invoice {
@@ -1670,6 +1749,44 @@ const InvoiceManagement: React.FC = () => {
     } catch (error) {
       console.error('Error exporting purchase invoices:', error);
       toast.error('Failed to export purchase invoices. Please try again.');
+    }
+  };
+
+  const handleExportDeliveryChallans = async () => {
+    try {
+      const loadingToast = toast.loading('Exporting delivery challans to Excel...');
+      
+      // Prepare export parameters with current filters
+      const exportParams: any = {
+        search: searchTerm,
+      };
+
+      console.log('Exporting delivery challans with params:', exportParams);
+
+      // Call the export API
+      const response = await apiClient.deliveryChallans.export(exportParams);
+      
+      // Convert JSON data to Excel format with proper column widths
+      const blob = convertToExcelForDeliveryChallans(response.data);
+      
+      const url = window.URL.createObjectURL(blob || new Blob());
+      const link = document.createElement('a');
+      link.href = url;
+      
+      // Generate filename with current date
+      const currentDate = new Date().toISOString().split('T')[0];
+      link.download = `delivery_challans_${currentDate}.xlsx`;
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.dismiss(loadingToast);
+      toast.success('Delivery challans exported successfully!');
+    } catch (error) {
+      console.error('Error exporting delivery challans:', error);
+      toast.error('Failed to export delivery challans. Please try again.');
     }
   };
 
@@ -4400,15 +4517,6 @@ const InvoiceManagement: React.FC = () => {
             <span>Create Invoice</span>
           </Button>
         )} */}
-        {invoiceType === 'challan' && (
-          <Button
-            onClick={() => navigate('/billing/challan/create')}
-            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create Challan</span>
-          </Button>
-        )}
         {invoiceType === 'quotation' && (
           <>
           <Button
@@ -4464,39 +4572,26 @@ const InvoiceManagement: React.FC = () => {
             </Button>
           </>
         )}
+        {invoiceType === 'challan' && (
+          <>
+            <Button
+              onClick={() => navigate('/billing/challan/create')}
+              className="bg-gradient-to-r mr-3 from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-blue-700 hover:to-blue-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Create Delivery Challan</span>
+            </Button>
+            <Button
+              onClick={handleExportDeliveryChallans}
+              className="bg-gradient-to-r from-green-600 to-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:from-green-700 hover:to-green-800 transition-all duration-300 shadow-md hover:shadow-lg transform hover:scale-105"
+            >
+              <FileText className="w-4 h-4" />
+              <span>Export Excel</span>
+            </Button>
+          </>
+        )}
       </PageHeader>
 
-
-
-      {/* 🚀 KEYBOARD SHORTCUTS GUIDE */}
-      {/* <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-4 mb-4">
-        <div className="flex items-center mb-2">
-          <span className="text-lg">⚡</span>
-          <h3 className="text-sm font-semibold text-purple-900 ml-2">Keyboard Shortcuts Available!</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs text-purple-800">
-          <div>
-            <p className="font-medium mb-1">🎯 Quick Create:</p>
-            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+1</kbd> Create Quotation</p>
-            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+2</kbd> Create Sales Invoice</p>
-            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+3</kbd> Create Delivery Challan</p>
-
-            <p className="text-gray-500 italic">Purchase Invoice: View/Edit only (no create)</p>
-          </div>
-          <div>
-            <p className="font-medium mb-1">🔧 General Actions:</p>
-            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+N</kbd> Create Current Type</p>
-            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+R</kbd> Refresh Data</p>
-            <p><kbd className="px-1 py-0.5 bg-purple-200 rounded text-xs">Ctrl+F</kbd> Focus Search</p>
-          </div>
-          <div>
-            <p className="font-medium mb-1">💡 Pro Tips:</p>
-            <p>• Shortcuts work when not typing in input fields</p>
-            <p>• Works on both Windows (Ctrl) and Mac (Cmd)</p>
-            <p>• Current type: <span className="font-bold text-purple-900">{getInvoiceTypeLabel(invoiceType)}</span></p>
-          </div>
-        </div>
-      </div> */}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -5263,26 +5358,28 @@ const InvoiceManagement: React.FC = () => {
                   </svg>
                   Print
                 </button>
-
-                {/* Payment Receipt Buttons - Show only if there are payments */}
-                {/* {selectedInvoice.paidAmount > 0 && (
-                  <>
-                    <button
-                      onClick={() => generatePaymentReceipt(selectedInvoice)}
-                      className="flex items-center px-3 py-1 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
-                    >
-                      <Receipt className="w-4 h-4 mr-1" />
-                      Receipt PDF
-                    </button>
-                    <button
-                      onClick={() => printPaymentReceipt(selectedInvoice)}
-                      className="flex items-center px-3 py-1 text-sm bg-purple-600 text-white rounded-md hover:bg-purple-700"
-                    >
-                      <Printer className="w-4 h-4 mr-1" />
-                      Print Receipt
-                    </button>
-                  </>
-                )} */}
+                {/* Create Challan Button - Only for sales invoices */}
+                {selectedInvoice.invoiceType === 'sale' && (
+                  <button
+                    onClick={() => {
+                      setShowViewModal(false);
+                      navigate('/billing/challan/create', {
+                        state: {
+                          invoiceId: selectedInvoice._id,
+                          customer: selectedInvoice.customer,
+                          items: selectedInvoice.items,
+                          billToAddress: selectedInvoice.billToAddress,
+                          shipToAddress: selectedInvoice.shipToAddress,
+                        },
+                      });
+                    }}
+                    className="flex items-center px-3 py-1 text-sm bg-orange-600 text-white rounded-md hover:bg-orange-700"
+                    title="Create Delivery Challan from this Invoice"
+                  >
+                    <Package className="w-4 h-4 mr-1" />
+                    Create Challan
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setShowViewModal(false);

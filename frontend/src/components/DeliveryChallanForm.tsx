@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Package, Truck, User, MapPin, Calendar, FileText, Save, Printer, Send, ArrowLeft, Trash2, Download } from 'lucide-react';
 import PageHeader from './ui/PageHeader';
@@ -78,6 +78,7 @@ interface StockLocationData {
 
 const DeliveryChallanForm: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id: string }>();
   
   const isEditMode = Boolean(id);
@@ -195,6 +196,30 @@ const DeliveryChallanForm: React.FC = () => {
     }
   }, [isEditMode, id, customers, formData.customer]);
 
+  // After customers are loaded, if coming from invoice, set customerSearchTerm and address selection
+  useEffect(() => {
+    if (!isEditMode && customers.length > 0 && location.state?.customer) {
+      const customer = location.state.customer;
+      setCustomerSearchTerm(customer.name || '');
+      // Find the customer in the loaded list and set address selections
+      const foundCustomer = customers.find(c => c._id === customer._id);
+      if (foundCustomer && foundCustomer.addresses && foundCustomer.addresses.length > 0) {
+        // Set bill-to address
+        if (location.state.billToAddress && location.state.billToAddress.id !== undefined) {
+          setSelectedAddressId(String(location.state.billToAddress.id));
+        } else {
+          setSelectedAddressId(String(foundCustomer.addresses[0].id));
+        }
+        // Set ship-to address
+        if (location.state.shipToAddress && location.state.shipToAddress.id !== undefined) {
+          setSelectedShipToAddressId(String(location.state.shipToAddress.id));
+        } else {
+          setSelectedShipToAddressId('');
+        }
+      }
+    }
+  }, [isEditMode, customers, location.state]);
+
   // Monitor customers state changes
   useEffect(() => {
     console.log('Customers state changed:', customers.length);
@@ -268,6 +293,43 @@ const DeliveryChallanForm: React.FC = () => {
       window.removeEventListener('resize', handleResize);
     };
   }, []);
+
+  // Prepopulate spares from invoice items if present in navigation state
+  useEffect(() => {
+    if (!isEditMode && formData.spares.length === 0 && location.state?.items) {
+      const invoiceItems = location.state.items;
+      const mappedSpares = invoiceItems.map((item: any, idx: number) => ({
+        slNo: idx + 1,
+        product: item.product._id || item.product, // Always use the product id string
+        description: item.description,
+        partNo: item.product.partNo || '',
+        hsnSac: item.product.hsnNumber || '',
+        quantity: item.quantity,
+      }));
+      // Prepopulate address IDs if available
+      const billToAddress = location.state.billToAddress;
+      const shipToAddress = location.state.shipToAddress;
+      const customer = location.state.customer;
+      console.log('billToAddress==>', billToAddress);
+      console.log('shipToAddress==>', shipToAddress);
+      console.log('customer==>', customer);
+      if (billToAddress && billToAddress.id !== undefined) {
+        setSelectedAddressId(String(billToAddress.id));
+      }
+      if (shipToAddress && shipToAddress.id !== undefined) {
+        setSelectedShipToAddressId(String(shipToAddress.id));
+      }
+      
+      setFormData(prev => ({
+        ...prev,
+        spares: mappedSpares,
+        customer: customer?._id || '',
+        billToCustomer: customer || undefined,
+        shipToCustomer: customer || undefined,
+        consignee: shipToAddress?.address || '',
+      }));
+    }
+  }, [isEditMode, formData.spares.length, location.state]);
 
   const fetchAllData = async () => {
     try {
@@ -863,12 +925,15 @@ const DeliveryChallanForm: React.FC = () => {
         if (response.success) {
           const challanNumber = response.data?.deliveryChallan?.challanNumber;
           toast.success(`Delivery Challan created successfully! Challan number: ${challanNumber}`);
+          localStorage.setItem('selectedInvoiceType', 'challan');
           navigate('/billing');
         }
       }
     } catch (error: any) {
       console.error('Error saving delivery challan:', error);
-      toast.error(error.response?.data?.message || 'Failed to save delivery challan');
+      // Prefer backend error message if present
+      const backendMsg = error?.response?.data?.message || error?.message || error?.error;
+      toast.error(backendMsg || 'Failed to save delivery challan');
     } finally {
       setSubmitting(false);
     }
@@ -1239,7 +1304,7 @@ const DeliveryChallanForm: React.FC = () => {
                       onChange={(e) => handleShipToAddressSelect(e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     >
-                      <option value="">Use saved consignee: {formData.consignee || '—'}</option>
+                      <option value="">{formData.consignee || '—'}</option>
                       {getSelectedCustomer()?.addresses?.map((address: any) => (
                         <option key={address.id} value={address.id}>
                           {address.address} - {address.district}, {address.pincode}
