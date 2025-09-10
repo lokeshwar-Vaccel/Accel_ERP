@@ -16,12 +16,11 @@ const gstinJoi = Joi.string().trim().custom((value, helpers) => {
 export interface CreateCustomerInput {
   name: string;
   alice?: string;
-  designation?: string;
   contactPersonName?: string;
   email?: string;
   phone?: string;
   panNumber?: string;
-  addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean; gstNumber?: string; notes?: string }[];
+  addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean; gstNumber?: string; notes?: string; contactPersonName?: string; designation?: string; email?: string; phone?: string; registrationStatus: string }[];
   siteAddress?: string;
   numberOfDG?: number;
   customerType: CustomerType;
@@ -60,12 +59,11 @@ export interface CreateCustomerInput {
 export interface UpdateCustomerInput {
   name?: string;
   alice?: string;
-  designation?: string;
   contactPersonName?: string;
   email?: string;
   phone?: string;
   panNumber?: string;
-  addresses?: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean; gstNumber?: string; notes?: string }[];
+  addresses?: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean; gstNumber?: string; notes?: string; contactPersonName?: string; designation?: string; email?: string; phone?: string; registrationStatus: string }[];
   siteAddress?: string;
   numberOfDG?: number;
   customerType?: CustomerType;
@@ -151,12 +149,11 @@ export interface ScheduleFollowUpInput {
 export interface CustomerImportInput {
   name: string;
   alice?: string;
-  designation?: string;
   contactPersonName?: string;
   gstNumber?: string;
   email?: string;
   phone?: string;
-  addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean; gstNumber?: string; notes?: string }[];
+  addresses: { id: number; address: string; state: string; district: string; pincode: string; isPrimary: boolean; gstNumber?: string; notes?: string; contactPersonName?: string; designation?: string; email?: string; phone?: string; registrationStatus: string }[];
   siteAddress?: string;
   numberOfDG?: number;
   customerType: CustomerType;
@@ -177,6 +174,7 @@ const addressJoiSchema = Joi.object({
   isPrimary: Joi.boolean().default(false),
   notes: Joi.string().max(500).trim().allow('', null), // Allow notes field
   contactPersonName: Joi.string().max(100).trim().allow('', null),
+  designation: Joi.string().max(100).trim().allow('', null),
   email: Joi.string().email().lowercase().allow('', null),
   phone: Joi.string().max(200).trim().allow('', null),
   registrationStatus: Joi.string().valid('registered', 'non_registered').required()
@@ -227,7 +225,6 @@ const bankDetailsJoiSchema = Joi.object({
 const baseCustomerFields = {
   name: Joi.string().min(2).max(100).trim(),
   alice: Joi.string().max(100).trim().allow(''),
-  designation: Joi.string().max(100).trim().allow(''),
   contactPersonName: Joi.string().max(100).trim().allow(''),
   gstNumber: gstinJoi.allow('').messages({ 'any.invalid': 'Invalid GST Number format. Expected like 22AAAAA0000A1Z5' }),
   email: Joi.string().email().lowercase().allow('', null),
@@ -251,7 +248,6 @@ const baseCustomerFields = {
 export const createCustomerSchema = Joi.object<CreateCustomerInput>({
   name: baseCustomerFields.name.required(),
   alice: baseCustomerFields.alice,
-  designation: baseCustomerFields.designation,
   contactPersonName: baseCustomerFields.contactPersonName,
   email: baseCustomerFields?.email.allow('', null),
   phone: baseCustomerFields?.phone.allow('', null),
@@ -274,7 +270,6 @@ export const createCustomerSchema = Joi.object<CreateCustomerInput>({
 export const updateCustomerSchema = Joi.object<UpdateCustomerInput>({
   name: baseCustomerFields.name,
   alice: baseCustomerFields.alice,
-  designation: baseCustomerFields.designation,
   contactPersonName: baseCustomerFields.contactPersonName,
   email: baseCustomerFields.email,
   phone: baseCustomerFields.phone,
@@ -351,7 +346,6 @@ export const scheduleFollowUpSchema = Joi.object<ScheduleFollowUpInput>({
 // Customer import schema (CSV/Excel)
 export const customerImportSchema = Joi.object<CustomerImportInput>({
   name: baseCustomerFields.name.required(),
-  designation: baseCustomerFields.designation,
   contactPersonName: baseCustomerFields.contactPersonName,
   gstNumber: baseCustomerFields.gstNumber,
   // email: baseCustomerFields.email,

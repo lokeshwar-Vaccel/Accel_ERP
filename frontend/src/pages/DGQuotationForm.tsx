@@ -202,23 +202,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
       subSegment: enquiry?.subSegment || '',
       dgOwnership: enquiry?.dgOwnership || '',
     },
-    items: [
-      {
-        product: '',
-        description: '',
-        quantity: enquiry?.quantity || 1,
-        unitPrice: 0,
-        totalPrice: 0,
-        // DG Product specific fields
-        kva: enquiry?.kva || '',
-        phase: enquiry?.phase || '3',
-        annexureRating: '',
-        dgModel: '',
-        numberOfCylinders: 0,
-        subject: '',
-        isActive: true
-      }
-    ],
+    items: [], // Start with empty items array to allow quotations without items
     subtotal: 0,
     totalDiscount: 0,
     totalTax: 0,
@@ -1321,10 +1305,11 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
       newErrors['shipToAddress.address'] = 'Ship to address is required';
     }
 
-    // Items validation
-    if (!formData.items || formData.items.length === 0) {
-      newErrors.items = 'At least one item is required';
-    } else {
+    // Items validation - Made optional to allow quotations without items
+    // if (!formData.items || formData.items.length === 0) {
+    //   newErrors.items = 'At least one item is required';
+    // } else {
+    if (formData.items && formData.items.length > 0) {
       formData.items.forEach((item, index) => {
         if (!item.product || item.product.trim() === '') {
           newErrors[`items.${index}.product`] = `Product name is required for item ${index + 1}`;
@@ -3238,17 +3223,14 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                         ₹{item.totalPrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className="border border-gray-300 p-3 text-center">
-                        {formData.items.length > 1 && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removeItem(index)}
-                            className="text-red-600 hover:text-red-800 hover:bg-red-50 border-red-200"
-                            disabled={formData.items.length === 1}
-                          >
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => removeItem(index)}
+                          className="text-red-600 hover:text-red-800 hover:bg-red-50 border-red-200"
+                        >
                             <X className="w-4 h-4" />
                           </Button>
-                        )}
                       </td>
                     </tr>
                   ))}

@@ -67,6 +67,11 @@ const addressSchema = new Schema({
     trim: true,
     maxlength: [100, 'Contact person name cannot exceed 100 characters']
   },
+  designation: {
+    type: String,
+    trim: true,
+    maxlength: [100, 'Designation cannot exceed 100 characters']
+  },
   email: {
     type: String,
     lowercase: true
@@ -94,11 +99,6 @@ const customerSchema = new Schema({
     type: String,
     trim: true,
     maxlength: [100, 'Customer alias cannot exceed 100 characters']
-  },
-  designation: {
-    type: String,
-    trim: true,
-    maxlength: [100, 'Designation cannot exceed 100 characters']
   },
   contactPersonName: {
     type: String,

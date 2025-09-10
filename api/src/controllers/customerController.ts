@@ -313,6 +313,7 @@ export const createCustomer = async (
       createdBy: req.user?.id
     };
 
+
     // Remove dgDetails from customerData to avoid validation issues
     delete customerData.dgDetails;
 
@@ -322,6 +323,7 @@ export const createCustomer = async (
     }
 
     const customer = await Customer.create(customerData);
+
 
     // Create DGDetails if provided
     let dgDetails = null;
@@ -441,6 +443,7 @@ export const updateCustomer = async (
       .populate('assignedTo', 'firstName lastName email')
       .populate('createdBy', 'firstName lastName email')
       .populate('dgDetails');
+
 
     // Handle DGDetails update if provided
     if (req.body.dgDetails) {

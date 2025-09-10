@@ -74,7 +74,11 @@ interface StockLocationData {
 
 
 
-const QuotationFormPage: React.FC = () => {
+interface QuotationFormPageProps {
+    showHeader?: boolean;
+}
+
+const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const currentUser = useSelector((state: RootState) => state.auth.user);
@@ -237,8 +241,8 @@ const QuotationFormPage: React.FC = () => {
                 return 'text-green-600';
             case 'partial':
                 return 'text-yellow-600';
-            case 'failed':
-                return 'text-red-600';
+            case 'gst_pending':
+                return 'text-orange-600';
             case 'pending':
             default:
                 return 'text-gray-600';
@@ -251,8 +255,8 @@ const QuotationFormPage: React.FC = () => {
                 return 'Paid';
             case 'partial':
                 return 'Partial';
-            case 'failed':
-                return 'Failed';
+            case 'gst_pending':
+                return 'GST Pending';
             case 'pending':
             default:
                 return 'Pending';
@@ -468,6 +472,7 @@ const QuotationFormPage: React.FC = () => {
                 })),
                 batteryBuyBack: quotation.batteryBuyBack ? {
                     description: quotation.batteryBuyBack.description || 'Battery Buy Back',
+                    hsnNumber: quotation.batteryBuyBack.hsnNumber || '',
                     quantity: quotation.batteryBuyBack.quantity || 0,
                     unitPrice: quotation.batteryBuyBack.unitPrice || 0,
                     discount: quotation.batteryBuyBack.discount || 0,
@@ -477,6 +482,7 @@ const QuotationFormPage: React.FC = () => {
                     totalPrice: quotation.batteryBuyBack.totalPrice || 0
                 } : {
                     description: 'Battery Buy Back',
+                    hsnNumber: '',
                     quantity: 0,
                     unitPrice: 0,
                     discount: 0,
@@ -2145,22 +2151,22 @@ const QuotationFormPage: React.FC = () => {
 
     return (
         <div className="pl-2 pr-6 py-6 space-y-4">
-            <PageHeader
-                title={isEditMode ? 'Edit Quotation' : 'Create Quotation'}
-                subtitle={isEditMode ? 'Modify quotation details' : 'Create a new customer quotation'}
-            >
-                <div className="flex space-x-3">
-                    <Button
-                        onClick={() => navigate('/billing')}
-                        className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
-                    >
-                        <ArrowLeft className="w-4 h-4" />
-                        <span>Back to Billing</span>
-                    </Button>
-
-
-                </div>
-            </PageHeader>
+            {showHeader && (
+                <PageHeader
+                    title={isEditMode ? 'Edit Quotation' : 'Create Quotation'}
+                    subtitle={isEditMode ? 'Modify quotation details' : 'Create a new customer quotation'}
+                >
+                    <div className="flex space-x-3">
+                        <Button
+                            onClick={() => navigate('/billing')}
+                            className="bg-gray-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-gray-700 transition-colors"
+                        >
+                            <ArrowLeft className="w-4 h-4" />
+                            <span>Back to Billing</span>
+                        </Button>
+                    </div>
+                </PageHeader>
+            )}
 
 
 
@@ -4665,7 +4671,8 @@ const QuotationFormPage: React.FC = () => {
                                     const newServiceCharges = [
                                         ...(prev.serviceCharges || []),
                                         {
-                                            description: 'Additional Service charges',
+                                            description: 'Service Charge',
+                                            hsnNumber: '', // Add HSN field for new service charges
                                             quantity: 0,
                                             unitPrice: 0,
                                             discount: 0,
@@ -4705,10 +4712,11 @@ const QuotationFormPage: React.FC = () => {
                     {/* Service Charges Table */}
                     <div className="border border-gray-300 rounded-lg bg-white shadow-sm overflow-hidden">
                         <div className="overflow-x-auto">
-                            <div className="bg-gray-100 border-b border-gray-300 min-w-[1000px]">
+                            <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
                                 <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
-                                    style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                                    style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSN</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
@@ -4717,10 +4725,10 @@ const QuotationFormPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            <div className="divide-y divide-gray-200 min-w-[1000px]">
+                            <div className="divide-y divide-gray-200 min-w-[1200px]">
                                 {(formData.serviceCharges || []).map((service, index) => (
                                     <div key={index} className="grid group hover:bg-blue-50 transition-colors bg-white"
-                                        style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                                        style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
 
                                         {/* Description */}
                                         <div className="p-2 border-r border-gray-200">
@@ -4750,6 +4758,21 @@ const QuotationFormPage: React.FC = () => {
                                                 }}
                                                 className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
                                                 placeholder="Service description..."
+                                            />
+                                        </div>
+
+                                        {/* HSN */}
+                                        <div className="p-2 border-r border-gray-200">
+                                            <input
+                                                type="text"
+                                                value={service.hsnNumber || ''}
+                                                onChange={(e) => {
+                                                    const newServiceCharges = [...(formData.serviceCharges || [])];
+                                                    newServiceCharges[index].hsnNumber = e.target.value;
+                                                    setFormData(prev => ({ ...prev, serviceCharges: newServiceCharges }));
+                                                }}
+                                                className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                                                placeholder="HSN Code"
                                             />
                                         </div>
 
@@ -4968,21 +4991,20 @@ const QuotationFormPage: React.FC = () => {
                                             <div className="text-sm font-bold text-blue-600">
                                                 ₹{((service.quantity * service.unitPrice) * (1 - service.discount / 100) * (1 + service.taxRate / 100)).toFixed(2)}
                                             </div>
-                                            {(formData.serviceCharges || []).length > 1 && (
-                                                <button
-                                                    onClick={() => {
-                                                        const newServiceCharges = (formData.serviceCharges || []).filter((_, i) => i !== index);
-                                                        setFormData(prev => {
-                                                            // Recalculate totals after removing service charge
-                                                            const calculationResult = calculateQuotationTotals(
-                                                                prev.items || [],
-                                                                newServiceCharges,
-                                                                prev.batteryBuyBack || null,
-                                                                prev.overallDiscount || 0
-                                                            );
+                                            <button
+                                                onClick={() => {
+                                                    const newServiceCharges = (formData.serviceCharges || []).filter((_, i) => i !== index);
+                                                    setFormData(prev => {
+                                                        // Recalculate totals after removing service charge
+                                                        const calculationResult = calculateQuotationTotals(
+                                                            prev.items || [],
+                                                            newServiceCharges,
+                                                            prev.batteryBuyBack || null,
+                                                            prev.overallDiscount || 0
+                                                        );
 
-                                                            return {
-                                                                ...prev,
+                                                        return {
+                                                            ...prev,
                                                                 serviceCharges: newServiceCharges,
                                                                 subtotal: calculationResult.subtotal,
                                                                 totalDiscount: calculationResult.totalDiscount,
@@ -4996,7 +5018,6 @@ const QuotationFormPage: React.FC = () => {
                                                 >
                                                     <X className="w-3 h-3" />
                                                 </button>
-                                            )}
                                         </div>
                                     </div>
                                 ))}
@@ -5011,10 +5032,11 @@ const QuotationFormPage: React.FC = () => {
 
                     <div className="border border-gray-300 rounded-lg bg-white shadow-sm overflow-hidden">
                         <div className="overflow-x-auto">
-                            <div className="bg-gray-100 border-b border-gray-300 min-w-[1000px]">
+                            <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
                                 <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
-                                    style={{ gridTemplateColumns: '1fr 100px 120px 80px 80px' }}>
+                                    style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 80px' }}>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSN</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
@@ -5024,7 +5046,7 @@ const QuotationFormPage: React.FC = () => {
 
                             <div className="bg-white">
                                 <div className="grid"
-                                    style={{ gridTemplateColumns: '1fr 100px 120px 80px 80px' }}>
+                                    style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 80px' }}>
 
                                     {/* Description */}
                                     <div className="p-2 border-r border-gray-200">
@@ -5037,6 +5059,7 @@ const QuotationFormPage: React.FC = () => {
                                                         ...prev,
                                                         batteryBuyBack: {
                                                             description: e.target.value,
+                                                            hsnNumber: prev.batteryBuyBack?.hsnNumber || '',
                                                             quantity: prev.batteryBuyBack?.quantity || 0,
                                                             unitPrice: prev.batteryBuyBack?.unitPrice || 0,
                                                             discount: prev.batteryBuyBack?.discount || 0,
@@ -5069,6 +5092,25 @@ const QuotationFormPage: React.FC = () => {
                                         />
                                     </div>
 
+                                    {/* HSN */}
+                                    <div className="p-2 border-r border-gray-200">
+                                        <input
+                                            type="text"
+                                            value={formData.batteryBuyBack?.hsnNumber || ''}
+                                            onChange={(e) => {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    batteryBuyBack: {
+                                                        ...prev.batteryBuyBack!,
+                                                        hsnNumber: e.target.value
+                                                    }
+                                                }));
+                                            }}
+                                            className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                                            placeholder="HSN Code"
+                                        />
+                                    </div>
+
                                     {/* Quantity */}
                                     <div className="p-2 border-r border-gray-200">
                                         <input
@@ -5086,6 +5128,7 @@ const QuotationFormPage: React.FC = () => {
                                                         ...prev,
                                                         batteryBuyBack: {
                                                             description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                                                            hsnNumber: prev.batteryBuyBack?.hsnNumber || '',
                                                             quantity,
                                                             unitPrice,
                                                             discount,
@@ -5134,6 +5177,7 @@ const QuotationFormPage: React.FC = () => {
                                                         ...prev,
                                                         batteryBuyBack: {
                                                             description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                                                            hsnNumber: prev.batteryBuyBack?.hsnNumber || '',
                                                             quantity,
                                                             unitPrice,
                                                             discount,
@@ -5184,6 +5228,7 @@ const QuotationFormPage: React.FC = () => {
                                                         ...prev,
                                                         batteryBuyBack: {
                                                             description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                                                            hsnNumber: prev.batteryBuyBack?.hsnNumber || '',
                                                             quantity,
                                                             unitPrice,
                                                             discount,
