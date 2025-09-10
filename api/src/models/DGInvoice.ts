@@ -32,7 +32,7 @@ export interface IInvoice extends mongoose.Document {
   paidAmount: number; // Amount paid so far
   remainingAmount: number; // Calculated: totalAmount - paidAmount
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
-  paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
   paymentMethod?: string;
   paymentDate?: Date;
   notes?: string;

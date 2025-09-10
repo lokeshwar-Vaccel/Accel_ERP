@@ -20,6 +20,7 @@ export interface QuotationItem {
 // New interface for service charges
 export interface ServiceCharge {
   description: string;
+  hsnNumber?: string; // Add HSN field for service charges
   quantity: number;
   unitPrice: number;
   discount: number;
@@ -33,6 +34,7 @@ export interface ServiceCharge {
 // New interface for battery buy back
 export interface BatteryBuyBack {
   description: string;
+  hsnNumber?: string; // Add HSN field for battery buy back
   quantity: number;
   unitPrice: number;
   discount: number;
@@ -224,10 +226,11 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
     // }
   // }
 
-  // Items validation
-  if (!data.items || data.items.length === 0) {
-    errors.push({ field: 'items', message: 'At least one item is required' });
-  } else {
+  // Items validation - Made optional to allow quotations without items
+  // if (!data.items || data.items.length === 0) {
+  //   errors.push({ field: 'items', message: 'At least one item is required' });
+  // } else {
+  if (data.items && data.items.length > 0) {
     data.items.forEach((item, index) => {
       if (!item.product || (typeof item.product === 'string' && !item.product.trim())) {
         errors.push({ field: `items[${index}].product`, message: 'Product is required' });
@@ -253,10 +256,10 @@ export const validateQuotationData = (data: Partial<QuotationData>): ValidationR
     });
   }
 
-  // Financial validation
-  if (data.grandTotal !== undefined && data.grandTotal <= 0) {
-    errors.push({ field: 'grandTotal', message: 'Grand total must be greater than 0' });
-  }
+  // Financial validation - Allow 0 total for quotations without items
+  // if (data.grandTotal !== undefined && data.grandTotal <= 0) {
+  //   errors.push({ field: 'grandTotal', message: 'Grand total must be greater than 0' });
+  // }
 
   return {
     isValid: errors.length === 0,
@@ -543,6 +546,7 @@ export const sanitizeQuotationData = (data: any): any => {
     // New fields for service charges and battery buy back
     serviceCharges: Array.isArray(data.serviceCharges) ? data.serviceCharges.map((service: any) => ({
       description: String(service.description || '').trim(),
+      hsnNumber: String(service.hsnNumber || '').trim(), // Add HSN field for service charges
       quantity: Number(service.quantity) || 1,
       unitPrice: Number(service.unitPrice) || 0,
       discount: Number(service.discount) || 0,
@@ -550,6 +554,7 @@ export const sanitizeQuotationData = (data: any): any => {
     })) : [],
     batteryBuyBack: data.batteryBuyBack ? {
       description: String(data.batteryBuyBack.description || 'Battery Buy Back').trim(),
+      hsnNumber: String(data.batteryBuyBack.hsnNumber || '').trim(), // Add HSN field for battery buy back
       quantity: Number(data.batteryBuyBack.quantity) || 0,
       unitPrice: Number(data.batteryBuyBack.unitPrice) || 0,
       discount: Number(data.batteryBuyBack.discount) || 0,
@@ -607,37 +612,12 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
     localDate.setDate(localDate.getDate() + 30);
     return localDate;
   })(),
-  items: [{
-    product: '',
-    description: '',
-    hsnCode: '',
-    hsnNumber: '',
-    partNo: '',
-    quantity: 1,
-    uom: 'nos',
-    unitPrice: 0,
-    discount: 0,
-    discountedAmount: 0,
-    taxRate: 18,
-    taxAmount: 0,
-    totalPrice: 0
-  }],
+  items: [], // Start with empty items array to allow quotations without items
   // New fields for service charges and battery buy back
-  serviceCharges: [
-    {
-      description: 'Additional Service charges',
-      quantity: 0,
-      unitPrice: 0,
-      discount: 0,
-      discountedAmount: 0,
-      taxRate: 18, // Default GST rate
-      taxAmount: 0,
-      totalPrice: 0,
-      uom: 'nos'
-    }
-  ],
+  serviceCharges: [], // Start with empty service charges array - users can add if needed
   batteryBuyBack: {
     description: 'Battery Buy Back',
+    hsnNumber: '', // Add HSN field for battery buy back
     quantity: 0,
     unitPrice: 0,
     discount: 0,

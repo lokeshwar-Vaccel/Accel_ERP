@@ -45,6 +45,7 @@ export interface IQuotation extends Document {
   // New fields for service charges and battery buy back
   serviceCharges: Array<{
     description: string;
+    hsnNumber?: string; // Add HSN field for service charges
     quantity: number;
     unitPrice: number;
     discount: number;
@@ -55,6 +56,7 @@ export interface IQuotation extends Document {
   }>;
   batteryBuyBack: {
     description: string;
+    hsnNumber?: string; // Add HSN field for battery buy back
     quantity: number;
     unitPrice: number;
     discount: number;
@@ -94,7 +96,7 @@ export interface IQuotation extends Document {
   assignedEngineer?: string | Types.ObjectId;
   paidAmount: number;
   remainingAmount: number;
-  paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
   paymentMethod?: string;
   paymentDate?: Date;
   status?: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
@@ -170,6 +172,7 @@ const QuotationSchema = new Schema<IQuotation>({
   serviceCharges: [
     {
       description: { type: String, required: true },
+      hsnNumber: { type: String, required: false }, // Add HSN field for service charges
       quantity: { type: Number, required: true },
       unitPrice: { type: Number, required: true },
       discount: { type: Number, default: 0 },
@@ -181,6 +184,7 @@ const QuotationSchema = new Schema<IQuotation>({
   ],
   batteryBuyBack: {
     description: { type: String, required: true },
+    hsnNumber: { type: String, required: false }, // Add HSN field for battery buy back
     quantity: { type: Number, required: true },
     unitPrice: { type: Number, required: true },
     discount: { type: Number, default: 0 },

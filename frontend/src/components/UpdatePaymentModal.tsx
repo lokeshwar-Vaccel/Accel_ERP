@@ -91,12 +91,46 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
     }
   };
 
+  // Calculate total tax amount from items
+  const getTotalTaxAmount = () => {
+    if (!item || !item.items) return 0;
+    
+    return item.items.reduce((total: number, item: any) => {
+      const itemTotal = (item.quantity || 0) * (item.unitPrice || 0);
+      const discountAmount = (itemTotal * (item.discount || 0)) / 100;
+      const discountedAmount = itemTotal - discountAmount;
+      const taxAmount = (discountedAmount * (item.taxRate || 0)) / 100;
+      return total + taxAmount;
+    }, 0);
+  };
+
+  // Calculate amount without GST (for GST Pending status)
+  const getAmountWithoutGST = () => {
+    return getTotalAmount() - getTotalTaxAmount();
+  };
+
+  // Get the payable amount based on payment status
+  const getPayableAmount = () => {
+    if (paymentData.paymentStatus === 'gst_pending') {
+      return getAmountWithoutGST();
+    }
+    return getTotalAmount();
+  };
+
+  // Get remaining amount based on payment status
+  const getRemainingPayableAmount = () => {
+    const payableAmount = getPayableAmount();
+    return payableAmount - getPaidAmount();
+  };
+
   const getPaymentStatusColor = (status: string) => {
     switch (status) {
       case 'paid':
         return 'bg-green-100 text-green-800';
       case 'partial':
         return 'bg-yellow-100 text-yellow-800';
+      case 'gst_pending':
+        return 'bg-orange-100 text-orange-800';
       case 'pending':
       default:
         return 'bg-gray-100 text-gray-800';
@@ -109,6 +143,8 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
         return 'Paid';
       case 'partial':
         return 'Partial';
+      case 'gst_pending':
+        return 'GST Pending';
       case 'pending':
       default:
         return 'Pending';
@@ -141,8 +177,8 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
       errors.paidAmount = 'Payment amount must be greater than 0';
     }
 
-    if (paymentData.paidAmount > getRemainingAmount()) {
-      errors.paidAmount = 'Payment amount cannot exceed remaining amount';
+    if (paymentData.paidAmount > getRemainingPayableAmount()) {
+      errors.paidAmount = `Payment amount cannot exceed remaining amount (₹${getRemainingPayableAmount().toLocaleString()})`;
     }
 
     if (!paymentData.paymentMethod) {
@@ -169,12 +205,16 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
 
   const handleAmountChange = (amount: number) => {
     let newPaymentStatus = paymentData.paymentStatus;
-    if (amount >= getRemainingAmount()) {
-      newPaymentStatus = 'paid';
-    } else if (amount > 0) {
-      newPaymentStatus = 'partial';
-    } else {
-      newPaymentStatus = 'pending';
+    
+    // Don't auto-change status if it's already set to gst_pending
+    if (paymentData.paymentStatus !== 'gst_pending') {
+      if (amount >= getRemainingPayableAmount()) {
+        newPaymentStatus = 'paid';
+      } else if (amount > 0) {
+        newPaymentStatus = 'partial';
+      } else {
+        newPaymentStatus = 'pending';
+      }
     }
 
     setPaymentData({
@@ -183,7 +223,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
       paymentStatus: newPaymentStatus
     });
 
-    if (formErrors.paidAmount && amount > 0 && amount <= getRemainingAmount()) {
+    if (formErrors.paidAmount && amount > 0 && amount <= getRemainingPayableAmount()) {
       setFormErrors(prev => ({ ...prev, paidAmount: '' }));
     }
   };
@@ -242,10 +282,32 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                   </div>
 
                   <div className="bg-white p-4 rounded-lg border border-gray-200">
-                    <span className="text-gray-500 text-sm">Remaining</span>
-                    <div className="text-2xl font-bold text-red-600">₹{getRemainingAmount().toLocaleString()}</div>
+                    <span className="text-gray-500 text-sm">
+                      {paymentData.paymentStatus === 'gst_pending' ? 'Payable Amount' : 'Remaining'}
+                    </span>
+                    <div className="text-2xl font-bold text-red-600">₹{getRemainingPayableAmount().toLocaleString()}</div>
                   </div>
                 </div>
+
+                {/* GST Breakdown - Show when GST Pending is selected */}
+                {paymentData.paymentStatus === 'gst_pending' && (
+                  <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                    <h4 className="text-sm font-semibold text-orange-800 mb-2">GST Breakdown</h4>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-orange-600">Amount without GST:</span>
+                        <div className="font-semibold text-orange-800">₹{getAmountWithoutGST().toLocaleString()}</div>
+                      </div>
+                      <div>
+                        <span className="text-orange-600">GST Amount:</span>
+                        <div className="font-semibold text-orange-800">₹{getTotalTaxAmount().toLocaleString()}</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-xs text-orange-600">
+                      GST amount (₹{getTotalTaxAmount().toLocaleString()}) will be paid separately
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-4 pt-4 border-t border-gray-200">
                   <span className="text-sm text-gray-500">Payment Status:</span>
@@ -356,21 +418,35 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                       </div>
                     </div>
 
-                    {paymentData.paidAmount < getRemainingAmount() && (
+                    {paymentData.paidAmount < getRemainingPayableAmount() && (
                       <div className="border-t border-yellow-200 pt-3">
                         <div className="flex justify-between">
                           <span className="text-yellow-700">Remaining Balance:</span>
-                          <span className="font-semibold text-red-600">₹{(getRemainingAmount() - paymentData.paidAmount).toLocaleString()}</span>
+                          <span className="font-semibold text-red-600">₹{(getRemainingPayableAmount() - paymentData.paidAmount).toLocaleString()}</span>
                         </div>
                       </div>
                     )}
 
-                    {paymentData.paidAmount >= getRemainingAmount() && (
+                    {paymentData.paidAmount >= getRemainingPayableAmount() && (
                       <div className="bg-green-100 p-3 rounded-lg mt-3">
                         <div className="flex items-center text-green-800">
                           <CheckCircle className="w-5 h-5 mr-2" />
                           <span className="font-semibold">
-                            {itemType === 'quotation' ? 'Quotation will be marked as PAID' : 'Invoice will be marked as PAID'}
+                            {paymentData.paymentStatus === 'gst_pending' 
+                              ? 'Amount without GST will be marked as PAID'
+                              : (itemType === 'quotation' ? 'Quotation will be marked as PAID' : 'Invoice will be marked as PAID')
+                            }
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* GST Pending Status Message */}
+                    {paymentData.paymentStatus === 'gst_pending' && (
+                      <div className="bg-orange-100 p-3 rounded-lg mt-3">
+                        <div className="flex items-center text-orange-800">
+                          <span className="font-semibold text-sm">
+                            GST amount (₹{getTotalTaxAmount().toLocaleString()}) will be paid separately
                           </span>
                         </div>
                       </div>
@@ -398,7 +474,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                     <input
                       type="number"
                       min="0"
-                      max={getRemainingAmount()}
+                      max={getRemainingPayableAmount()}
                       step="1"
                       value={paymentData.paidAmount}
                       onChange={(e) => handleAmountChange(parseFloat(e.target.value) || 0)}
@@ -410,7 +486,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                     <p className="text-red-500 text-sm mt-2">{formErrors.paidAmount}</p>
                   )}
                   <p className="text-xs text-gray-500 mt-1">
-                    Max: ₹{getRemainingAmount().toLocaleString()}
+                    Max: ₹{getRemainingPayableAmount().toLocaleString()}
                   </p>
                 </div>
 
@@ -420,38 +496,38 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                     <>
                       <button
                         type="button"
-                        onClick={() => handleAmountChange(Math.round(getRemainingAmount() * 0.5))}
+                        onClick={() => handleAmountChange(Math.round(getRemainingPayableAmount() * 0.5))}
                         className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
                       >
                         Half Remaining
-                        <div className="text-xs">₹{Math.round(getRemainingAmount() * 0.5).toLocaleString()}</div>
+                        <div className="text-xs">₹{Math.round(getRemainingPayableAmount() * 0.5).toLocaleString()}</div>
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleAmountChange(getRemainingAmount())}
+                        onClick={() => handleAmountChange(getRemainingPayableAmount())}
                         className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
                       >
                         Full Remaining
-                        <div className="text-xs">₹{getRemainingAmount().toLocaleString()}</div>
+                        <div className="text-xs">₹{getRemainingPayableAmount().toLocaleString()}</div>
                       </button>
                     </>
                   ) : (
                     <>
                       <button
                         type="button"
-                        onClick={() => handleAmountChange(Math.round(getRemainingAmount() * 0.5))}
+                        onClick={() => handleAmountChange(Math.round(getRemainingPayableAmount() * 0.5))}
                         className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
                       >
                         50% Payment
-                        <div className="text-xs">₹{Math.round(getRemainingAmount() * 0.5).toLocaleString()}</div>
+                        <div className="text-xs">₹{Math.round(getRemainingPayableAmount() * 0.5).toLocaleString()}</div>
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleAmountChange(getRemainingAmount())}
+                        onClick={() => handleAmountChange(getRemainingPayableAmount())}
                         className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
                       >
                         Full Amount
-                        <div className="text-xs">₹{getRemainingAmount().toLocaleString()}</div>
+                        <div className="text-xs">₹{getRemainingPayableAmount().toLocaleString()}</div>
                       </button>
                     </>
                   )}
@@ -490,7 +566,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                             { value: 'pending', label: 'Pending', color: 'text-yellow-600' },
                             { value: 'partial', label: 'Partial Payment', color: 'text-blue-600' },
                             { value: 'paid', label: 'Paid in Full', color: 'text-green-600' },
-                            { value: 'failed', label: 'Payment Failed', color: 'text-red-600' }
+                            { value: 'gst_pending', label: 'GST Pending', color: 'text-orange-600' }
                           ].map((option) => (
                             <button
                               key={option.value}
@@ -500,6 +576,9 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                                   newPaidAmount = Math.round(getRemainingAmount() * 0.5);
                                 } else if (option.value === 'paid') {
                                   newPaidAmount = getRemainingAmount();
+                                } else if (option.value === 'gst_pending') {
+                                  // For GST Pending, set amount to the amount without GST
+                                  newPaidAmount = getAmountWithoutGST();
                                 }
 
                                 setPaymentData({

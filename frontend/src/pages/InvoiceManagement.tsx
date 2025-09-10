@@ -1712,7 +1712,7 @@ const InvoiceManagement: React.FC = () => {
     let path: string;
     
     if (typeToUse === 'quotation') {
-      path = '/billing/quotation/create';
+      path = '/billing/quotation';
     } else if (typeToUse === 'challan') {
       // For challan, we render the form directly on this page, no navigation needed
       return;
@@ -1747,7 +1747,7 @@ const InvoiceManagement: React.FC = () => {
 
   // Quotation handlers
   const handleCreateQuotation = () => {
-    navigate('/billing/quotation/create');
+    navigate('/billing/quotation');
   };
 
   const handleExportQuotations = async () => {
@@ -3028,8 +3028,8 @@ const InvoiceManagement: React.FC = () => {
         return 'bg-yellow-100 text-yellow-800';
       case 'partial':
         return 'bg-orange-100 text-orange-800';
-      case 'failed':
-        return 'bg-red-100 text-red-800';
+      case 'gst_pending':
+        return 'bg-orange-100 text-orange-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -3303,19 +3303,19 @@ const InvoiceManagement: React.FC = () => {
         { value: 'partial', label: 'Partial' },
         { value: 'paid', label: 'Paid' },
         { value: 'advance', label: 'Advance' },
-        { value: 'failed', label: 'Failed' }
+        { value: 'gst_pending', label: 'GST Pending' }
       ] : [
         { value: 'all', label: 'All Payments' },
         { value: 'pending', label: 'Pending' },
         { value: 'partial', label: 'Partial' },
         { value: 'paid', label: 'Paid' },
-        { value: 'failed', label: 'Failed' }
+        { value: 'gst_pending', label: 'GST Pending' }
       ]) : [
         { value: 'all', label: 'All Payments' },
         { value: 'pending', label: 'Pending' },
         { value: 'partial', label: 'Partial' },
         { value: 'paid', label: 'Paid' },
-        { value: 'failed', label: 'Failed' }
+        { value: 'gst_pending', label: 'GST Pending' }
       ];
     return options.find(opt => opt.value === value)?.label || 'All Payments';
   };
@@ -3361,9 +3361,42 @@ const InvoiceManagement: React.FC = () => {
       { value: 'pending', label: 'Pending - No payment received' },
       { value: 'partial', label: 'Partial Payment - Some amount paid' },
       { value: 'paid', label: 'Paid in Full - Complete payment' },
-      { value: 'failed', label: 'Payment Failed - Transaction failed' }
+      { value: 'gst_pending', label: 'GST Pending - GST payment pending' }
     ];
     return options.find(opt => opt.value === value)?.label || 'Select payment status';
+  };
+
+  // Calculate total tax amount from selected invoice items
+  const getSelectedInvoiceTotalTax = () => {
+    if (!selectedInvoice || !selectedInvoice.items) return 0;
+    
+    return selectedInvoice.items.reduce((total: number, item: any) => {
+      const itemTotal = (item.quantity || 0) * (item.unitPrice || 0);
+      const discountAmount = (itemTotal * (item.discount || 0)) / 100;
+      const discountedAmount = itemTotal - discountAmount;
+      const taxAmount = (discountedAmount * (item.taxRate || 0)) / 100;
+      return total + taxAmount;
+    }, 0);
+  };
+
+  // Calculate amount without GST (for GST Pending status)
+  const getSelectedInvoiceAmountWithoutGST = () => {
+    if (!selectedInvoice) return 0;
+    return (selectedInvoice.totalAmount || 0) - getSelectedInvoiceTotalTax();
+  };
+
+  // Get the payable amount based on payment status
+  const getSelectedInvoicePayableAmount = () => {
+    if (paymentUpdate.paymentStatus === 'gst_pending') {
+      return getSelectedInvoiceAmountWithoutGST();
+    }
+    return selectedInvoice?.totalAmount || 0;
+  };
+
+  // Get remaining amount based on payment status
+  const getSelectedInvoiceRemainingPayableAmount = () => {
+    const payableAmount = getSelectedInvoicePayableAmount();
+    return payableAmount - (selectedInvoice?.paidAmount || 0);
   };
 
   const getPaymentMethodLabel = (value: string) => {
@@ -4539,7 +4572,7 @@ const InvoiceManagement: React.FC = () => {
                   <tr>
                     <td class="center-cell">${idx + 1}</td>
                     <td>${service.description || ''}</td>
-                    <td class="center-cell">-</td>
+                    <td class="center-cell">${service.hsnNumber || '-'}</td>
                     <td class="center-cell">NOS</td>
                     <td class="center-cell">${service.quantity || 0}</td>
                     <td class="number-cell">${basicAmount.toFixed(2)}</td>
@@ -4577,7 +4610,7 @@ const InvoiceManagement: React.FC = () => {
               <tr>
                 <td class="center-cell">1</td>
                 <td>${quotation.batteryBuyBack.description || ''}</td>
-                <td class="center-cell">-</td>
+                <td class="center-cell">${quotation.batteryBuyBack.hsnNumber || '-'}</td>
                 <td class="center-cell">NOS</td>
                 <td class="center-cell">${quotation.batteryBuyBack.quantity || 0}</td>
                 <td class="number-cell">${(quotation.batteryBuyBack.unitPrice || 0).toFixed(2)}</td>
@@ -5063,13 +5096,13 @@ const InvoiceManagement: React.FC = () => {
                     { value: 'partial', label: 'Partial' },
                     { value: 'paid', label: 'Paid' },
                     { value: 'advance', label: 'Advance' },
-                    { value: 'failed', label: 'Failed' }
+                    { value: 'gst_pending', label: 'GST Pending' }
                   ] : [
                     { value: 'all', label: 'All Payments' },
                     { value: 'pending', label: 'Pending' },
                     { value: 'partial', label: 'Partial' },
                     { value: 'paid', label: 'Paid' },
-                    { value: 'failed', label: 'Failed' }
+                    { value: 'gst_pending', label: 'GST Pending' }
                   ]).map((option) => (
                     <button
                       key={option.value}
@@ -6106,6 +6139,7 @@ const InvoiceManagement: React.FC = () => {
                       <thead className="bg-green-100">
                         <tr>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Description</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">HSN</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Quantity</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Unit Price</th>
                           {(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
@@ -6119,6 +6153,7 @@ const InvoiceManagement: React.FC = () => {
                         {selectedInvoice.serviceCharges.map((service: any, index: number) => (
                           <tr key={index} className="bg-white">
                             <td className="px-4 py-2 text-sm text-gray-900">{service.description}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{service.hsnNumber || '-'}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">{service.quantity}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">₹{service.unitPrice?.toFixed(2) || '0.00'}</td>
                             {(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
@@ -6148,6 +6183,7 @@ const InvoiceManagement: React.FC = () => {
                       <thead className="bg-orange-100">
                         <tr>
                           <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Description</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">HSN</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Quantity</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Unit Price</th>
                           {(selectedInvoice.batteryBuyBack?.discount || 0) > 0 && (
@@ -6165,6 +6201,7 @@ const InvoiceManagement: React.FC = () => {
                       <tbody className="divide-y divide-orange-200">
                         <tr className="bg-white">
                           <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.description}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.hsnNumber || '-'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{selectedInvoice.batteryBuyBack.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">₹{selectedInvoice.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}</td>
                           {(selectedInvoice.batteryBuyBack?.discount || 0) > 0 && (
@@ -6550,18 +6587,43 @@ const InvoiceManagement: React.FC = () => {
                           <span className="font-semibold text-yellow-800">₹{paymentUpdate.paidAmount.toLocaleString()}</span>
                         </div>
 
-                        {paymentUpdate.paidAmount < selectedInvoice.totalAmount && (
+                        {paymentUpdate.paidAmount < getSelectedInvoiceRemainingPayableAmount() && (
                           <div className="flex justify-between items-center py-2">
                             <span className="text-yellow-700">Remaining Balance:</span>
-                            <span className="font-semibold text-red-600">₹{(selectedInvoice.remainingAmount - paymentUpdate.paidAmount).toLocaleString()}</span>
+                            <span className="font-semibold text-red-600">₹{(getSelectedInvoiceRemainingPayableAmount() - paymentUpdate.paidAmount).toLocaleString()}</span>
                           </div>
                         )}
 
-                        {paymentUpdate.paidAmount >= selectedInvoice.totalAmount && (
+                        {paymentUpdate.paidAmount >= getSelectedInvoiceRemainingPayableAmount() && (
                           <div className="bg-green-100 p-3 rounded-lg">
                             <div className="flex items-center text-green-800">
                               <CheckCircle className="w-5 h-5 mr-2" />
-                              <span className="font-semibold">Invoice will be marked as PAID</span>
+                              <span className="font-semibold">
+                                {paymentUpdate.paymentStatus === 'gst_pending' 
+                                  ? 'Amount without GST will be marked as PAID'
+                                  : 'Invoice will be marked as PAID'
+                                }
+                              </span>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* GST Breakdown - Show when GST Pending is selected */}
+                        {paymentUpdate.paymentStatus === 'gst_pending' && (
+                          <div className="mt-4 p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                            <h4 className="text-sm font-semibold text-orange-800 mb-2">GST Breakdown</h4>
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div>
+                                <span className="text-orange-600">Amount without GST:</span>
+                                <div className="font-semibold text-orange-800">₹{getSelectedInvoiceAmountWithoutGST().toLocaleString()}</div>
+                              </div>
+                              <div>
+                                <span className="text-orange-600">GST Amount:</span>
+                                <div className="font-semibold text-orange-800">₹{getSelectedInvoiceTotalTax().toLocaleString()}</div>
+                              </div>
+                            </div>
+                            <div className="mt-2 text-xs text-orange-600">
+                              GST amount (₹{getSelectedInvoiceTotalTax().toLocaleString()}) will be paid separately
                             </div>
                           </div>
                         )}
@@ -6591,20 +6653,24 @@ const InvoiceManagement: React.FC = () => {
                         <input
                           type="number"
                           min="0"
-                          max={selectedInvoice.remainingAmount}
+                          max={getSelectedInvoiceRemainingPayableAmount()}
                           step="1"
                           value={paymentUpdate.paidAmount}
                           onChange={(e) => {
                             const amount = parseFloat(e.target.value) || 0;
-                            const remainingAmount = selectedInvoice.remainingAmount || (selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0));
+                            const remainingPayableAmount = getSelectedInvoiceRemainingPayableAmount();
 
                             let newPaymentStatus = paymentUpdate.paymentStatus;
-                            if (amount >= remainingAmount) {
-                              newPaymentStatus = 'paid';
-                            } else if (amount > 0) {
-                              newPaymentStatus = 'partial';
-                            } else {
-                              newPaymentStatus = 'pending';
+                            
+                            // Don't auto-change status if it's already set to gst_pending
+                            if (paymentUpdate.paymentStatus !== 'gst_pending') {
+                              if (amount >= remainingPayableAmount) {
+                                newPaymentStatus = 'paid';
+                              } else if (amount > 0) {
+                                newPaymentStatus = 'partial';
+                              } else {
+                                newPaymentStatus = 'pending';
+                              }
                             }
 
                             setPaymentUpdate({
@@ -6613,7 +6679,7 @@ const InvoiceManagement: React.FC = () => {
                               paymentStatus: newPaymentStatus
                             });
 
-                            if (formErrors.paidAmount && amount > 0 && amount <= remainingAmount) {
+                            if (formErrors.paidAmount && amount > 0 && amount <= remainingPayableAmount) {
                               setFormErrors(prev => ({ ...prev, paidAmount: '' }));
                             }
                           }}
@@ -6635,25 +6701,25 @@ const InvoiceManagement: React.FC = () => {
                             type="button"
                             onClick={() => setPaymentUpdate({
                               ...paymentUpdate,
-                              paidAmount: Math.round((selectedInvoice.remainingAmount || selectedInvoice.remainingAmount - (selectedInvoice.paidAmount || 0)) * 0.5),
+                              paidAmount: Math.round(getSelectedInvoiceRemainingPayableAmount() * 0.5),
                               paymentStatus: 'partial'
                             })}
                             className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
                           >
                             Half Remaining
-                            <div className="text-xs">₹{Math.round(((selectedInvoice.remainingAmount || selectedInvoice.remainingAmount - (selectedInvoice.paidAmount || 0)) * 0.5)).toLocaleString()}</div>
+                            <div className="text-xs">₹{Math.round(getSelectedInvoiceRemainingPayableAmount() * 0.5).toLocaleString()}</div>
                           </button>
                           <button
                             type="button"
                             onClick={() => setPaymentUpdate({
                               ...paymentUpdate,
-                              paidAmount: selectedInvoice.remainingAmount,
+                              paidAmount: getSelectedInvoiceRemainingPayableAmount(),
                               paymentStatus: 'paid'
                             })}
                             className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
                           >
                             Full Remaining
-                            <div className="text-xs">₹{(selectedInvoice.remainingAmount || selectedInvoice.totalAmount - (selectedInvoice.paidAmount || 0)).toLocaleString()}</div>
+                            <div className="text-xs">₹{getSelectedInvoiceRemainingPayableAmount().toLocaleString()}</div>
                           </button>
                         </>
                       ) : (
@@ -6662,25 +6728,25 @@ const InvoiceManagement: React.FC = () => {
                             type="button"
                             onClick={() => setPaymentUpdate({
                               ...paymentUpdate,
-                              paidAmount: Math.round(selectedInvoice.remainingAmount * 0.5),
+                              paidAmount: Math.round(getSelectedInvoiceRemainingPayableAmount() * 0.5),
                               paymentStatus: 'partial'
                             })}
                             className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
                           >
                             50% Payment
-                            <div className="text-xs">₹{Math.round(selectedInvoice.remainingAmount * 0.5).toLocaleString()}</div>
+                            <div className="text-xs">₹{Math.round(getSelectedInvoiceRemainingPayableAmount() * 0.5).toLocaleString()}</div>
                           </button>
                           <button
                             type="button"
                             onClick={() => setPaymentUpdate({
                               ...paymentUpdate,
-                              paidAmount: selectedInvoice.remainingAmount,
+                              paidAmount: getSelectedInvoiceRemainingPayableAmount(),
                               paymentStatus: 'paid'
                             })}
                             className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
                           >
                             Full Amount
-                            <div className="text-xs">₹{selectedInvoice.remainingAmount.toLocaleString()}</div>
+                            <div className="text-xs">₹{getSelectedInvoiceRemainingPayableAmount().toLocaleString()}</div>
                           </button>
                         </>
                       )}
@@ -6719,7 +6785,7 @@ const InvoiceManagement: React.FC = () => {
                                 { value: 'pending', label: 'Pending', color: 'text-yellow-600' },
                                 { value: 'partial', label: 'Partial Payment', color: 'text-blue-600' },
                                 { value: 'paid', label: 'Paid in Full', color: 'text-green-600' },
-                                { value: 'failed', label: 'Payment Failed', color: 'text-red-600' }
+                                { value: 'gst_pending', label: 'GST Pending', color: 'text-orange-600' }
                               ].map((option) => (
                                 <button
                                   key={option.value}
@@ -6729,6 +6795,9 @@ const InvoiceManagement: React.FC = () => {
                                       newPaidAmount = Math.round(selectedInvoice.remainingAmount * 0.5);
                                     } else if (option.value === 'paid') {
                                       newPaidAmount = selectedInvoice.remainingAmount;
+                                    } else if (option.value === 'gst_pending') {
+                                      // For GST Pending, set amount to the amount without GST
+                                      newPaidAmount = getSelectedInvoiceAmountWithoutGST();
                                     }
 
                                     setPaymentUpdate({
@@ -7203,6 +7272,7 @@ const InvoiceManagement: React.FC = () => {
                       <thead className="bg-green-100">
                         <tr>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Description</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">HSN</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Quantity</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-green-700 uppercase">Unit Price</th>
                           {(selectedQuotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
@@ -7216,6 +7286,7 @@ const InvoiceManagement: React.FC = () => {
                         {selectedQuotation.serviceCharges.map((service: any, index: number) => (
                           <tr key={index} className="bg-white">
                             <td className="px-4 py-2 text-sm text-gray-900">{service.description}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{service.hsnNumber || '-'}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">{service.quantity}</td>
                             <td className="px-4 py-2 text-sm text-gray-900">₹{service.unitPrice?.toFixed(2) || '0.00'}</td>
                             {(selectedQuotation.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) && (
@@ -7245,6 +7316,7 @@ const InvoiceManagement: React.FC = () => {
                       <thead className="bg-orange-100">
                         <tr>
                           <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Description</th>
+                          <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">HSN</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Quantity</th>
                           <th className="px-4 py-2 text-left text-xs font-medium text-orange-700 uppercase">Unit Price</th>
                           {(selectedQuotation.batteryBuyBack?.discount || 0) > 0 && (
@@ -7262,6 +7334,7 @@ const InvoiceManagement: React.FC = () => {
                       <tbody className="divide-y divide-orange-200">
                         <tr className="bg-white">
                           <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.description}</td>
+                          <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.hsnNumber || '-'}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">{selectedQuotation.batteryBuyBack.quantity}</td>
                           <td className="px-4 py-2 text-sm text-gray-900">₹{selectedQuotation.batteryBuyBack.unitPrice?.toFixed(2) || '0.00'}</td>
                           {(selectedQuotation.batteryBuyBack?.discount || 0) > 0 && (

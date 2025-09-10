@@ -9,6 +9,7 @@ import InventoryManagement from "../pages/InventoryManagement";
 import InvoiceManagement from "../pages/InvoiceManagement";
 import InvoiceForm from "../pages/InvoiceForm";
 import QuotationFormPage from "../pages/QuotationForm";
+import QuotationPage from "../pages/QuotationPage";
 import CreatePurchaseinvoiceForm from "../pages/CreatePurchaseinvoiceForm";
 import ServiceManagement from "../pages/ServiceManagement";
 import AMCManagement from "../pages/AMCManagement";
@@ -57,6 +58,7 @@ const AppRoutes: React.FC = () => {
             <Route path="/billing" element={<InvoiceManagement />} />
             <Route path="/billing/create" element={<InvoiceForm />} />
             <Route path="/billing/edit/:id" element={<InvoiceForm />} />
+            <Route path="/billing/quotation" element={<QuotationPage />} />
             <Route path="/billing/quotation/create" element={<QuotationFormPage />} />
             <Route path="/billing/quotation/edit" element={<QuotationFormPage />} />
             <Route path="/billing/challan/create" element={<DeliveryChallanForm />} />

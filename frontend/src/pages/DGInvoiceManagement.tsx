@@ -316,7 +316,7 @@ const DGInvoiceManagement: React.FC = () => {
       case 'pending': return 'Pending';
       case 'partial': return 'Partial Payment';
       case 'paid': return 'Paid in Full';
-      case 'failed': return 'Payment Failed';
+      case 'gst_pending': return 'GST Pending';
       case 'overdue': return 'Overdue';
       default: return 'Unknown';
     }
@@ -530,6 +530,8 @@ const DGInvoiceManagement: React.FC = () => {
       case 'pending':
         return 'bg-yellow-100 text-yellow-800';
       case 'partial':
+        return 'bg-orange-100 text-orange-800';
+      case 'gst_pending':
         return 'bg-orange-100 text-orange-800';
       case 'overdue':
         return 'bg-red-100 text-red-800';
@@ -1369,7 +1371,7 @@ const DGInvoiceManagement: React.FC = () => {
                                 { value: 'pending', label: 'Pending', color: 'text-yellow-600' },
                                 { value: 'partial', label: 'Partial Payment', color: 'text-blue-600' },
                                 { value: 'paid', label: 'Paid in Full', color: 'text-green-600' },
-                                { value: 'failed', label: 'Payment Failed', color: 'text-red-600' }
+                                { value: 'gst_pending', label: 'GST Pending', color: 'text-orange-600' }
                               ].map((option) => (
                                 <button
                                   key={option.value}

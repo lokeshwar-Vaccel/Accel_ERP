@@ -197,6 +197,7 @@ export interface Address {
   gstNumber?: string;
   notes?: string; // Added for storing notes from misused fields
   contactPersonName?: string;
+  designation?: string;
   email?: string;
   phone?: string;
   registrationStatus: 'registered' | 'non_registered';
@@ -217,7 +218,6 @@ export interface DGRequirements {
 export interface ICustomer extends Document {
   name: string;
   alice?: string;
-  designation?: string;
   contactPersonName?: string;
   email?: string;
   phone: string;
