@@ -1863,7 +1863,7 @@ const CustomerManagement: React.FC = () => {
                 type="text"
                 placeholder={customerTypeTab === 'oem' ? 
                   "Search OEMs by company name, contact person, email, OEM code, or products..." :
-                  "Search customers by name, email, or ID..."
+                  "Search customers by name, email, or ESN"
                 }
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}

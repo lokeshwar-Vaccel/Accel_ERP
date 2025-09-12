@@ -40,11 +40,26 @@ export const getAllCustomersForDropdown = async (
     const query: any = {};
     
     if (search) {
+      // First, find DG details that match the search term
+      const matchingDGDetails = await DGDetails.find({
+        $or: [
+          { engineSerialNumber: { $regex: search, $options: 'i' } },
+          { dgSerialNumbers: { $regex: search, $options: 'i' } },
+          { alternatorSerialNumber: { $regex: search, $options: 'i' } },
+          { dgMake: { $regex: search, $options: 'i' } },
+          { dgModel: { $regex: search, $options: 'i' } }
+        ]
+      }).select('customer').lean();
+
+      // Get customer IDs from matching DG details
+      const customerIdsFromDG = matchingDGDetails.map(dg => dg.customer);
+
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
         { customerId: { $regex: search, $options: 'i' } },
+        ...(customerIdsFromDG.length > 0 ? [{ _id: { $in: customerIdsFromDG } }] : [])
       ];
     }
     
@@ -137,11 +152,26 @@ export const getCustomers = async (
     const query: any = {};
     
     if (search) {
+      // First, find DG details that match the search term
+      const matchingDGDetails = await DGDetails.find({
+        $or: [
+          { engineSerialNumber: { $regex: search, $options: 'i' } },
+          { dgSerialNumbers: { $regex: search, $options: 'i' } },
+          { alternatorSerialNumber: { $regex: search, $options: 'i' } },
+          { dgMake: { $regex: search, $options: 'i' } },
+          { dgModel: { $regex: search, $options: 'i' } }
+        ]
+      }).select('customer').lean();
+
+      // Get customer IDs from matching DG details
+      const customerIdsFromDG = matchingDGDetails.map(dg => dg.customer);
+
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
         { customerId: { $regex: search, $options: 'i' } },
+        ...(customerIdsFromDG.length > 0 ? [{ _id: { $in: customerIdsFromDG } }] : [])
       ];
     }
     
@@ -879,11 +909,26 @@ export const getConvertedCustomers = async (
     const query: any = { status: 'converted' };
     
     if (search) {
+      // First, find DG details that match the search term
+      const matchingDGDetails = await DGDetails.find({
+        $or: [
+          { engineSerialNumber: { $regex: search, $options: 'i' } },
+          { dgSerialNumbers: { $regex: search, $options: 'i' } },
+          { alternatorSerialNumber: { $regex: search, $options: 'i' } },
+          { dgMake: { $regex: search, $options: 'i' } },
+          { dgModel: { $regex: search, $options: 'i' } }
+        ]
+      }).select('customer').lean();
+
+      // Get customer IDs from matching DG details
+      const customerIdsFromDG = matchingDGDetails.map(dg => dg.customer);
+
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
         { customerId: { $regex: search, $options: 'i' } },
+        ...(customerIdsFromDG.length > 0 ? [{ _id: { $in: customerIdsFromDG } }] : [])
       ];
     }
     
@@ -986,11 +1031,26 @@ export const exportCustomers = async (
     const query: any = {};
     
     if (search) {
+      // First, find DG details that match the search term
+      const matchingDGDetails = await DGDetails.find({
+        $or: [
+          { engineSerialNumber: { $regex: search, $options: 'i' } },
+          { dgSerialNumbers: { $regex: search, $options: 'i' } },
+          { alternatorSerialNumber: { $regex: search, $options: 'i' } },
+          { dgMake: { $regex: search, $options: 'i' } },
+          { dgModel: { $regex: search, $options: 'i' } }
+        ]
+      }).select('customer').lean();
+
+      // Get customer IDs from matching DG details
+      const customerIdsFromDG = matchingDGDetails.map(dg => dg.customer);
+
       query.$or = [
         { name: { $regex: search, $options: 'i' } },
         { email: { $regex: search, $options: 'i' } },
         { phone: { $regex: search, $options: 'i' } },
         { customerId: { $regex: search, $options: 'i' } },
+        ...(customerIdsFromDG.length > 0 ? [{ _id: { $in: customerIdsFromDG } }] : [])
       ];
     }
     
