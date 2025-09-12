@@ -98,12 +98,10 @@ const buildDGDetails = (row: any) => {
   const salesDealerName = getColumnValue(row, ['Sales Dealer Name', 'sales dealer name']);
   const commissioningDate = getColumnValue(row, ['Commissioning date', 'Commissioning Date', 'commissioning date']);
   const warrantyStatus = getColumnValue(row, ['Warranty / Non-Warranty', 'Warranty Status', 'warranty / non-warranty', 'warranty status']);
-  const installationType = getColumnValue(row, ['Infold / Out Fold', 'Installation Type', 'infold / out fold', 'installation type']);
-  const amcStatus = getColumnValue(row, ['AMC (Yes / No)', 'AMC Status', 'amc (yes / no)', 'amc status']);
   const cluster = getColumnValue(row, ['Cluster', 'cluster']);
   
   // Only create DG Details if we have meaningful data
-  if (dgSerialNo || dgMake || dgModel || alternatorMake || alternatorSlNo || engineSlNo || dgRatingKVA || salesDealerName || commissioningDate || warrantyStatus || installationType || amcStatus || cluster) {
+  if (dgSerialNo || dgMake || dgModel || alternatorMake || alternatorSlNo || engineSlNo || dgRatingKVA || salesDealerName || commissioningDate || warrantyStatus || cluster) {
     // Safe date parsing with validation
     let safeCommissioningDate = new Date().toISOString().split('T')[0]; // Default to today
     
@@ -161,8 +159,6 @@ const buildDGDetails = (row: any) => {
       salesDealerName: salesDealerName || '',
       commissioningDate: safeCommissioningDate,
       warrantyStatus: warrantyStatus && warrantyStatus.toLowerCase().includes('non') ? 'non_warranty' : 'warranty',
-      amcStatus: amcStatus && amcStatus.toLowerCase().includes('yes') ? 'yes' : 'no',
-      installationType: installationType && installationType.toLowerCase().includes('out') ? 'outfold' : 'infold',
       cluster: cluster || ''
     };
     dgDetails.push(dgDetail);

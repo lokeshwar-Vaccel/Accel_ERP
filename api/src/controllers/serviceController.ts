@@ -1640,7 +1640,7 @@ export const getCustomerEngines = async (
 
     // Find DG details for the customer
     const dgDetails = await DGDetails.find({ customer: customerId })
-      .select('engineSerialNumber dgModel dgRatingKVA dgMake dgSerialNumbers alternatorMake alternatorSerialNumber commissioningDate warrantyStatus amcStatus cluster')
+      .select('engineSerialNumber dgModel dgRatingKVA dgMake dgSerialNumbers alternatorMake alternatorSerialNumber commissioningDate warrantyStatus cluster')
       .lean();
 
 
@@ -1656,7 +1656,6 @@ export const getCustomerEngines = async (
       alternatorSerialNumber: dg.alternatorSerialNumber,
       commissioningDate: dg.commissioningDate,
       warrantyStatus: dg.warrantyStatus,
-      amcStatus: dg.amcStatus,
       cluster: dg.cluster
     }));
 
