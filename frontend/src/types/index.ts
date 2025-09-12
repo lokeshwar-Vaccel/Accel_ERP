@@ -94,8 +94,6 @@ export interface DGDetails {
   salesDealerName: string;
   commissioningDate: string;
   warrantyStatus: string;
-  installationType: string;
-  amcStatus: string;
   cluster: string;
   customer: string;
   createdBy: string;

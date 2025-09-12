@@ -119,7 +119,7 @@ export interface UpdatePurchaseOrderInput {
   // Payment fields
   paidAmount?: number;
   remainingAmount?: number;
-  paymentStatus?: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentStatus?: 'pending' | 'partial' | 'paid' | 'gst_pending';
   paymentMethod?: string;
   paymentDate?: string;
 }
@@ -426,7 +426,7 @@ export const updatePurchaseOrderSchema = Joi.object<UpdatePurchaseOrderInput>({
   // Payment fields
   paidAmount: Joi.number().min(0).precision(2).allow(null),
   remainingAmount: Joi.number().min(0).precision(2).allow(null),
-  paymentStatus: Joi.string().valid('pending', 'partial', 'paid', 'failed'),
+  paymentStatus: Joi.string().valid('pending', 'partial', 'paid', 'gst_pending'),
   paymentMethod: Joi.string().max(100),
   paymentDate: Joi.date().iso()
 });

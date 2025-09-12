@@ -116,17 +116,15 @@ interface Customer {
   // DG Details
   dgDetails?: {
     dgSerialNumbers: string;
-    alternatorMake: string;
-    alternatorSerialNumber: string;
+    alternatorMake?: string;
+    alternatorSerialNumber?: string;
     dgMake: string;
     engineSerialNumber: string;
     dgModel: string;
     dgRatingKVA: number;
-    salesDealerName: string;
+    salesDealerName?: string;
     commissioningDate: string;
     warrantyStatus: 'warranty' | 'non_warranty';
-    installationType: 'infold' | 'outfold';
-    amcStatus: 'yes' | 'no';
     cluster: string;
     warrantyStartDate?: string;
     warrantyEndDate?: string;
@@ -174,6 +172,7 @@ interface Address {
   isPrimary: boolean;
   gstNumber?: string; // <-- Add GST number per address, optional
   contactPersonName?: string;
+  designation?: string;
   email?: string;
   phone?: string;
   registrationStatus: 'registered' | 'non_registered';
@@ -182,7 +181,6 @@ interface Address {
 interface CustomerFormData {
   name: string;
   alice?: string;
-  designation: string;
   contactPersonName: string;
   email: string;
   phone: string;
@@ -204,17 +202,15 @@ interface CustomerFormData {
   };
   dgDetails?: {
     dgSerialNumbers: string;
-    alternatorMake: string;
-    alternatorSerialNumber: string;
+    alternatorMake?: string;
+    alternatorSerialNumber?: string;
     dgMake: string;
     engineSerialNumber: string;
     dgModel: string;
     dgRatingKVA: number;
-    salesDealerName: string;
+    salesDealerName?: string;
     commissioningDate: string;
     warrantyStatus: 'warranty' | 'non_warranty';
-    installationType: 'infold' | 'outfold';
-    amcStatus: 'yes' | 'no';
     cluster: string;
     warrantyStartDate?: string;
     warrantyEndDate?: string;
@@ -318,7 +314,6 @@ const CustomerManagement: React.FC = () => {
   const [customerFormData, setCustomerFormData] = useState<CustomerFormData>({
     name: '',
     alice: '',
-    designation: '',
     contactPersonName: '',
     email: '',
     phone: '',
@@ -337,6 +332,7 @@ const CustomerManagement: React.FC = () => {
       isPrimary: true,
       gstNumber: '', // Add default
       contactPersonName: '',
+      designation: '',
       email: '',
       phone: '',
       registrationStatus: 'non_registered',
@@ -354,8 +350,6 @@ const CustomerManagement: React.FC = () => {
       salesDealerName: '',
       commissioningDate: new Date().toISOString().split('T')[0],
       warrantyStatus: 'warranty',
-      installationType: 'infold',
-      amcStatus: 'yes',
       cluster: '',
       warrantyStartDate: '',
       warrantyEndDate: ''
@@ -584,6 +578,7 @@ const CustomerManagement: React.FC = () => {
       isPrimary: false,
       gstNumber: '',
       contactPersonName: '',
+      designation: '',
       email: '',
       phone: '',
       registrationStatus: 'non_registered',
@@ -728,11 +723,10 @@ const CustomerManagement: React.FC = () => {
         salesDealerName: '',
         commissioningDate: new Date().toISOString().split('T')[0],
         warrantyStatus: 'warranty' as const,
-        installationType: 'infold' as const,
-        amcStatus: 'yes' as const,
         cluster: '',
         warrantyStartDate: '',
-        warrantyEndDate: ''
+        warrantyEndDate: '',
+        locationAddress: ''
       }],
       numberOfDG: (prev.dgDetails?.length || 0) + 1
     }));
@@ -1298,7 +1292,6 @@ const CustomerManagement: React.FC = () => {
     setCustomerFormData({
       name: '',
       alice: '',
-      designation: '',
       contactPersonName: '',
       email: '',
       phone: '',
@@ -1318,6 +1311,7 @@ const CustomerManagement: React.FC = () => {
         isPrimary: true,
         gstNumber: '',
         contactPersonName: '',
+        designation: '',
         email: '',
         phone: '',
         registrationStatus: 'non_registered',
@@ -1335,11 +1329,10 @@ const CustomerManagement: React.FC = () => {
         salesDealerName: '',
         commissioningDate: new Date().toISOString().split('T')[0],
         warrantyStatus: 'warranty',
-        installationType: 'infold',
-        amcStatus: 'yes',
         cluster: '',
         warrantyStartDate: '',
-        warrantyEndDate: ''
+        warrantyEndDate: '',
+        locationAddress: ''
       }]
     });
     setShowAssignedToDropdown(false);
@@ -1365,7 +1358,6 @@ const CustomerManagement: React.FC = () => {
     setCustomerFormData({
       name: customer.name,
       alice: (customer as any).alice || '',
-      designation: customer.designation || '',
       contactPersonName: customer.contactPersonName || '',
       email: customer.email || '',
       phone: customer.phone || '',
@@ -1379,7 +1371,7 @@ const CustomerManagement: React.FC = () => {
       siteAddress: (customer as any).siteAddress || '',
       numberOfDG: (customer as any).numberOfDG || 0,
       addresses: (customer as any).addresses && Array.isArray((customer as any).addresses)
-        ? (customer as any).addresses.map((addr: any) => ({ ...addr, gstNumber: addr.gstNumber || '', contactPersonName: addr.contactPersonName || '', email: addr.email || '', phone: addr.phone || '', registrationStatus: addr.registrationStatus || 'non_registered' }))
+        ? (customer as any).addresses.map((addr: any) => ({ ...addr, gstNumber: addr.gstNumber || '', contactPersonName: addr.contactPersonName || '', designation: addr.designation || '', email: addr.email || '', phone: addr.phone || '', registrationStatus: addr.registrationStatus || 'non_registered' }))
         : [{
           id: Date.now(),
           address: '',
@@ -1389,6 +1381,7 @@ const CustomerManagement: React.FC = () => {
           isPrimary: true,
           gstNumber: '',
           contactPersonName: '',
+          designation: '',
           email: '',
           phone: '',
           registrationStatus: 'non_registered',
@@ -1409,11 +1402,14 @@ const CustomerManagement: React.FC = () => {
               ? new Date(dg.commissioningDate).toISOString().split('T')[0]
               : new Date().toISOString().split('T')[0],
             warrantyStatus: dg.warrantyStatus || determineWarrantyStatus(dg.commissioningDate),
-            installationType: dg.installationType || 'infold',
-            amcStatus: dg.amcStatus || 'yes',
             cluster: dg.cluster || '',
-            warrantyStartDate: dg.warrantyStartDate || '',
-            warrantyEndDate: dg.warrantyEndDate || ''
+            warrantyStartDate: dg.warrantyStartDate 
+              ? new Date(dg.warrantyStartDate).toISOString().split('T')[0]
+              : '',
+            warrantyEndDate: dg.warrantyEndDate 
+              ? new Date(dg.warrantyEndDate).toISOString().split('T')[0]
+              : '',
+            locationAddress: dg.locationAddress || ''
           }))
         : [{
             dgSerialNumbers: '',
@@ -1426,11 +1422,10 @@ const CustomerManagement: React.FC = () => {
             salesDealerName: '',
             commissioningDate: new Date().toISOString().split('T')[0],
             warrantyStatus: 'warranty',
-            installationType: 'infold',
-            amcStatus: 'yes',
             cluster: '',
             warrantyStartDate: '',
-            warrantyEndDate: ''
+            warrantyEndDate: '',
+            locationAddress: ''
           }]
     });
     console.log('Final form data set:', customerFormData);
@@ -1868,7 +1863,7 @@ const CustomerManagement: React.FC = () => {
                 type="text"
                 placeholder={customerTypeTab === 'oem' ? 
                   "Search OEMs by company name, contact person, email, OEM code, or products..." :
-                  "Search customers by name, email, or ID..."
+                  "Search customers by name, email, or ESN"
                 }
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
@@ -2181,7 +2176,13 @@ const CustomerManagement: React.FC = () => {
                     
                     {/* Designation Column */}
                     <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
-                      {customer.designation || '-'}
+                      {(() => {
+                        if (customerTypeTab === 'oem') return customer.designation || '-';
+                        const primary = customer.addresses && customer.addresses.length > 0
+                          ? (customer.addresses.find(a => a.isPrimary) || customer.addresses[0])
+                          : undefined;
+                        return (primary && (primary as any).designation) || customer.designation || '-';
+                      })()}
                     </td>
                     
                                           {/* Mobile Number Column */}
@@ -2482,7 +2483,15 @@ const CustomerManagement: React.FC = () => {
                             <td className="px-3 py-2">{customer.alice || '-'}</td>
                             <td className="px-3 py-2">{customer.phone || '-'}</td>
                             <td className="px-3 py-2">{customer.contactPersonName || '-'}</td>
-                            <td className="px-3 py-2">{customer.designation || '-'}</td>
+                            <td className="px-3 py-2">
+                              {(() => {
+                                if (customerTypeTab === 'oem') return customer.designation || '-';
+                                const primary = customer.addresses && customer.addresses.length > 0
+                                  ? (customer.addresses.find((a: any) => a.isPrimary) || customer.addresses[0])
+                                  : undefined;
+                                return (primary && (primary as any).designation) || customer.designation || '-';
+                              })()}
+                            </td>
                             <td className="px-3 py-2">{customer.siteAddress || '-'}</td>
                             {customerTypeTab === 'customer' && (
                               <>
@@ -2505,8 +2514,6 @@ const CustomerManagement: React.FC = () => {
                                                 `  Dealer: ${dg.salesDealerName}\n` +
                                                 `  Commissioning: ${dg.commissioningDate}\n` +
                                                 `  Warranty: ${dg.warrantyStatus}\n` +
-                                                `  Installation: ${dg.installationType}\n` +
-                                                `  AMC: ${dg.amcStatus}\n` +
                                                 `  Cluster: ${dg.cluster}`
                                               ).join('\n\n')}`);
                                             }
@@ -2645,7 +2652,15 @@ const CustomerManagement: React.FC = () => {
                                 <div><span className="font-medium">Name:</span> {firstCustomer.name}</div>
                                 <div><span className="font-medium">Alice:</span> {firstCustomer.alice || 'Not provided'}</div>
                                 <div><span className="font-medium">Contact Person:</span> {firstCustomer.contactPersonName || 'Not provided'}</div>
-                                <div><span className="font-medium">Designation:</span> {firstCustomer.designation || 'Not provided'}</div>
+                                <div><span className="font-medium">Designation:</span> {
+                                  (() => {
+                                    if (customerTypeTab === 'oem') return firstCustomer.designation || 'Not provided';
+                                    const primary = firstCustomer.addresses && firstCustomer.addresses.length > 0
+                                      ? (firstCustomer.addresses.find((a: any) => a.isPrimary) || firstCustomer.addresses[0])
+                                      : undefined;
+                                    return (primary && (primary as any).designation) || firstCustomer.designation || 'Not provided';
+                                  })()
+                                }</div>
                                 <div><span className="font-medium">Phone:</span> {firstCustomer.phone || 'Not provided'}</div>
                                 <div><span className="font-medium">Email:</span> {firstCustomer.email || 'Not provided'}</div>
                               </div>
@@ -2679,8 +2694,6 @@ const CustomerManagement: React.FC = () => {
                                       <div><span className="font-medium">Dealer:</span> {dg.salesDealerName || 'N/A'}</div>
                                       <div><span className="font-medium">Commissioning:</span> {dg.commissioningDate || 'N/A'}</div>
                                       <div><span className="font-medium">Warranty:</span> {dg.warrantyStatus || 'N/A'}</div>
-                                      <div><span className="font-medium">Installation:</span> {dg.installationType || 'N/A'}</div>
-                                      <div><span className="font-medium">AMC:</span> {dg.amcStatus || 'N/A'}</div>
                                       <div><span className="font-medium">Cluster:</span> {dg.cluster || 'N/A'}</div>
                                       <div><span className="font-medium">Warranty Start Date:</span> {dg.warrantyStartDate || 'N/A'}</div>
                                       <div><span className="font-medium">Warranty End Date:</span> {dg.warrantyEndDate || 'N/A'}</div>
@@ -2793,21 +2806,6 @@ const CustomerManagement: React.FC = () => {
                         {formErrors.name && (
                           <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
                         )}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 mt-4">
-                      {/* Designation */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Designation
-                        </label>
-                        <input
-                          type="text"
-                          value={customerFormData.designation}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, designation: e.target.value })}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter designation"
-                        />
                       </div>
                     </div>
                       <div className="mt-4">
@@ -2988,6 +2986,16 @@ const CustomerManagement: React.FC = () => {
                                     onChange={(e) => updateAddress(address.id, 'contactPersonName', e.target.value)}
                                     className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
                                     placeholder="Contact person"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                                  <input
+                                    type="text"
+                                    value={address.designation || ''}
+                                    onChange={(e) => updateAddress(address.id, 'designation', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Designation"
                                   />
                                 </div>
                                 <div>
@@ -3195,7 +3203,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Alternator Make */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Alternator Make *
+                                    Alternator Make
                                   </label>
                                   <input
                                     type="text"
@@ -3209,7 +3217,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Alternator Serial Number */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Alternator Serial Number *
+                                    Alternator Serial Number
                                   </label>
                                   <input
                                     type="text"
@@ -3237,7 +3245,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Sales Dealer Name */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Sales Dealer Name *
+                                    Sales Dealer Name
                                   </label>
                                   <input
                                     type="text"
@@ -3279,35 +3287,6 @@ const CustomerManagement: React.FC = () => {
                                   </div>
                                 </div>
 
-                                {/* Installation Type */}
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Installation Type *
-                                  </label>
-                                  <select
-                                    value={dgDetail.installationType}
-                                    onChange={(e) => updateDGDetails(index, 'installationType', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                  >
-                                    <option value="infold">In-Fold</option>
-                                    <option value="outfold">Out-Fold</option>
-                                  </select>
-                                </div>
-
-                                {/* AMC Status */}
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    AMC Status *
-                                  </label>
-                                  <select
-                                    value={dgDetail.amcStatus}
-                                    onChange={(e) => updateDGDetails(index, 'amcStatus', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                  >
-                                    <option value="yes">Yes</option>
-                                    <option value="no">No</option>
-                                  </select>
-                                </div>
 
                                 {/* Cluster */}
                                 <div>
@@ -3330,7 +3309,7 @@ const CustomerManagement: React.FC = () => {
                                   </label>
                                   <input
                                     type="date"
-                                    value={dgDetail.warrantyStartDate || dgDetail.commissioningDate}
+                                    value={dgDetail.warrantyStartDate || dgDetail.commissioningDate || ''}
                                     onChange={(e) => updateDGDetails(index, 'warrantyStartDate', e.target.value)}
                                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                   />
@@ -3346,7 +3325,16 @@ const CustomerManagement: React.FC = () => {
                                   </label>
                                   <input
                                     type="date"
-                                    value={dgDetail.warrantyEndDate || (dgDetail.dgRatingKVA > 0 ? calculateWarrantyEndDate(dgDetail.warrantyStartDate || dgDetail.commissioningDate, dgDetail.dgRatingKVA) : '')}
+                                    value={(() => {
+                                      if (dgDetail.warrantyEndDate) {
+                                        return dgDetail.warrantyEndDate;
+                                      }
+                                      const startDate = dgDetail.warrantyStartDate || dgDetail.commissioningDate;
+                                      if (startDate && dgDetail.dgRatingKVA > 0) {
+                                        return calculateWarrantyEndDate(startDate, dgDetail.dgRatingKVA);
+                                      }
+                                      return '';
+                                    })()}
                                     disabled
                                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
                                   />
@@ -3426,7 +3414,7 @@ const CustomerManagement: React.FC = () => {
                   customerTypeTab === 'dg_customer' ? 'DG Customer' :
                   'OEM Customer'
                 }</h2>
-                <p className="text-sm text-gray-600 mt-1">Update customer information and details</p>
+                <p className="text-sm text-gray-600 mt-1">{`Update ${entityLabelLower} information and details`}</p>
               </div>
               <button
                 onClick={() => {
@@ -3472,21 +3460,6 @@ const CustomerManagement: React.FC = () => {
                         {formErrors.name && (
                           <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
                         )}
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 mt-4">
-                      {/* Designation */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Designation
-                        </label>
-                        <input
-                          type="text"
-                          value={customerFormData.designation}
-                          onChange={(e) => setCustomerFormData({ ...customerFormData, designation: e.target.value })}
-                          className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Enter designation"
-                        />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4 mt-4">
@@ -3685,6 +3658,16 @@ const CustomerManagement: React.FC = () => {
                                     onChange={(e) => updateAddress(address.id, 'contactPersonName', e.target.value)}
                                     className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
                                     placeholder="Contact person"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+                                  <input
+                                    type="text"
+                                    value={address.designation || ''}
+                                    onChange={(e) => updateAddress(address.id, 'designation', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Designation"
                                   />
                                 </div>
                                 <div>
@@ -3892,7 +3875,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Alternator Make */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Alternator Make *
+                                    Alternator Make
                                   </label>
                                   <input
                                     type="text"
@@ -3906,7 +3889,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Alternator Serial Number */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Alternator Serial Number *
+                                    Alternator Serial Number
                                   </label>
                                   <input
                                     type="text"
@@ -3934,7 +3917,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Sales Dealer Name */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Sales Dealer Name *
+                                    Sales Dealer Name
                                   </label>
                                   <input
                                     type="text"
@@ -3980,35 +3963,6 @@ const CustomerManagement: React.FC = () => {
                                   </div>
                                 </div>
 
-                                {/* Installation Type */}
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Installation Type *
-                                  </label>
-                                  <select
-                                    value={dgDetail.installationType}
-                                    onChange={(e) => updateDGDetails(index, 'installationType', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                  >
-                                    <option value="infold">In-Fold</option>
-                                    <option value="outfold">Out-Fold</option>
-                                  </select>
-                                </div>
-
-                                {/* AMC Status */}
-                                <div>
-                                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    AMC Status *
-                                  </label>
-                                  <select
-                                    value={dgDetail.amcStatus}
-                                    onChange={(e) => updateDGDetails(index, 'amcStatus', e.target.value)}
-                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                                  >
-                                    <option value="yes">Yes</option>
-                                    <option value="no">No</option>
-                                  </select>
-                                </div>
 
                                 {/* Cluster */}
                                 <div>
@@ -4031,7 +3985,7 @@ const CustomerManagement: React.FC = () => {
                                   </label>
                                   <input
                                     type="date"
-                                    value={dgDetail.warrantyStartDate || dgDetail.commissioningDate}
+                                    value={dgDetail.warrantyStartDate || dgDetail.commissioningDate || ''}
                                     onChange={(e) => updateDGDetails(index, 'warrantyStartDate', e.target.value)}
                                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                   />
@@ -4047,13 +4001,42 @@ const CustomerManagement: React.FC = () => {
                                   </label>
                                   <input
                                     type="date"
-                                    value={dgDetail.warrantyEndDate || (dgDetail.warrantyStartDate && dgDetail.dgRatingKVA > 0 ? calculateWarrantyEndDate(dgDetail.warrantyStartDate, dgDetail.dgRatingKVA) : '')}
+                                    value={(() => {
+                                      if (dgDetail.warrantyEndDate) {
+                                        return dgDetail.warrantyEndDate;
+                                      }
+                                      const startDate = dgDetail.warrantyStartDate || dgDetail.commissioningDate;
+                                      if (startDate && dgDetail.dgRatingKVA > 0) {
+                                        return calculateWarrantyEndDate(startDate, dgDetail.dgRatingKVA);
+                                      }
+                                      return '';
+                                    })()}
                                     disabled
                                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
                                   />
                                   <p className="text-xs text-gray-500 mt-1">
                                     Auto-calculated based on start date and KVA ({dgDetail.dgRatingKVA > 0 ? `${calculateWarrantyPeriod(dgDetail.dgRatingKVA)} months` : 'Enter KVA first'})
                                   </p>
+                                </div>
+                                
+                                {/* DG Location (Address) */}
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    DG Location (Address) *
+                                  </label>
+                                  <select
+                                    value={(dgDetail as any).locationAddress || ''}
+                                    onChange={(e) => {
+                                      const selectedText = e.target.value;
+                                      updateDGDetails(index, 'locationAddress' as any, selectedText);
+                                    }}
+                                    className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                  >
+                                    <option value="" disabled>Select address</option>
+                                    {customerFormData.addresses.map(a => (
+                                      <option key={a.id} value={a.address}>{a.address ? a.address.slice(0, 80) : `Address #${a.id}`}</option>
+                                    ))}
+                                  </select>
                                 </div>
                               </div>
                             </div>
@@ -4223,12 +4206,18 @@ const CustomerManagement: React.FC = () => {
                         <p className="font-medium text-sm">{selectedCustomer.contactPerson}</p>
                       </div>
                     )}
-                    {customerTypeTab !== 'oem' && selectedCustomer.designation && (
-                      <div>
-                        <p className="text-xs text-gray-500">Designation</p>
-                        <p className="font-medium text-sm">{selectedCustomer.designation}</p>
-                      </div>
-                    )}
+                    {customerTypeTab !== 'oem' && (() => {
+                      const primary = selectedCustomer.addresses && selectedCustomer.addresses.length > 0
+                        ? (selectedCustomer.addresses.find(a => a.isPrimary) || selectedCustomer.addresses[0])
+                        : undefined;
+                      const designation = (primary && (primary as any).designation) || selectedCustomer.designation;
+                      return designation && (
+                        <div>
+                          <p className="text-xs text-gray-500">Designation</p>
+                          <p className="font-medium text-sm">{designation}</p>
+                        </div>
+                      );
+                    })()}
                     {customerTypeTab !== 'oem' && selectedCustomer.contactPersonName && (
                       <div>
                         <p className="text-xs text-gray-500">Contact Person</p>
@@ -4376,6 +4365,9 @@ const CustomerManagement: React.FC = () => {
                             </div>
                             <div className="text-xs text-gray-700 mt-1">
                               <strong>Contact Person Name:</strong> {address.contactPersonName || '-'}
+                            </div>
+                            <div className="text-xs text-gray-700 mt-1">
+                              <strong>Designation:</strong> {address.designation || '-'}
                             </div>
                             <div className="text-xs text-gray-700 mt-1">
                               <strong>Contact Number:</strong> {address.phone || '-'}
@@ -4574,14 +4566,6 @@ const CustomerManagement: React.FC = () => {
                           <div>
                             <p className="text-xs text-gray-500">Warranty Status</p>
                             <p className="font-medium text-sm capitalize">{dgDetail.warrantyStatus.replace('_', ' ')}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">Installation Type</p>
-                            <p className="font-medium text-sm capitalize">{dgDetail.installationType}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-gray-500">AMC Status</p>
-                            <p className="font-medium text-sm capitalize">{dgDetail.amcStatus}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Service Cluster</p>

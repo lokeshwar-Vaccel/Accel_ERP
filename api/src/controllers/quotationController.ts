@@ -478,14 +478,14 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
 
     console.log("Calculation result:", calculationResult);
     
-    // Step 6: Validate financial calculations
-    if (calculationResult.grandTotal <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: 'Quotation total must be greater than 0',
-        errors: [{ field: 'grandTotal', message: 'Grand total must be greater than 0' }]
-      });
-    }
+    // Step 6: Validate financial calculations - Allow 0 total for quotations without items
+    // if (calculationResult.grandTotal <= 0) {
+    //   return res.status(400).json({
+    //     success: false,
+    //     message: 'Quotation total must be greater than 0',
+    //     errors: [{ field: 'grandTotal', message: 'Grand total must be greater than 0' }]
+    //   });
+    // }
 
     // Step 7: Prepare final quotation data
     const quotationData = {
@@ -733,10 +733,11 @@ const validateQuotationData = (data: any): { isValid: boolean; errors: any[] } =
   //   }
   // }
 
-  // Items validation
-  if (!data.items || data.items.length === 0) {
-    errors.push({ field: 'items', message: 'At least one item is required' });
-  } else {
+  // Items validation - Made optional to allow quotations without items
+  // if (!data.items || data.items.length === 0) {
+  //   errors.push({ field: 'items', message: 'At least one item is required' });
+  // } else {
+  if (data.items && data.items.length > 0) {
     data.items.forEach((item: any, index: number) => {
       if (!item.product || (typeof item.product === 'string' && !item.product.trim())) {
         errors.push({ field: `items[${index}].product`, message: 'Product is required' });

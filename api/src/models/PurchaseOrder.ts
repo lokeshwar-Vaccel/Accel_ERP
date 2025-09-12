@@ -47,7 +47,7 @@ interface IPurchaseOrderSchema extends Document {
   // Payment fields - same structure as Invoice and Quotation models
   paidAmount: number;
   remainingAmount: number;
-  paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
   paymentMethod?: string;
   paymentMethodDetails?: any; // Will store payment method specific details
   paymentDate?: Date;

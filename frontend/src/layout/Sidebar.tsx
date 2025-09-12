@@ -15,7 +15,8 @@ import {
   Calendar,
   Cog,
   ChevronLeft,
-  Zap
+  Zap,
+  Warehouse
 } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
@@ -76,7 +77,7 @@ const menuItems = [
   {
     id: 6,
     name: 'Inventory Management',
-    icon: <Package className="w-4 h-4" />,
+    icon: <Warehouse className="w-4 h-4" />,
     path: '/inventory-management',
     key: 'inventory_management',
   },
@@ -110,39 +111,39 @@ const menuItems = [
   },
   {
     id: 11,
+    name: 'DG Sales',
+    icon: <Zap className="w-4 h-4" />,
+    path: '/dg-sales',
+    key: 'dg_sales',
+    // submodules: dgSalesSubmodules,
+  },
+  {
+    id: 12,
     name: 'Reports & Analytics',
     icon: <BarChart3 className="w-4 h-4" />,
     path: '/reports-management',
     key: 'reports_analytics',
   },
+  // {
+  //   id: 13,
+  //   name: 'File Management',
+  //   icon: <Upload className="w-4 h-4" />,
+  //   path: '/file-management',
+  //   key: 'file_management',
+  // },
   {
-    id: 12,
-    name: 'File Management',
-    icon: <Upload className="w-4 h-4" />,
-    path: '/file-management',
-    key: 'file_management',
-  },
-  {
-    id: 13,
+    id: 14,
     name: 'Communications',
     icon: <MessageSquare className="w-4 h-4" />,
     path: '/communication-management',
     key: 'communications',
   },
   {
-    id: 14,
+    id: 15,
     name: 'Admin Settings',
     icon: <Cog className="w-4 h-4" />,
     path: '/admin-settings',
     key: 'admin_settings',
-  },
-  {
-    id: 15,
-    name: 'DG Sales',
-    icon: <Zap className="w-4 h-4" />,
-    path: '/dg-sales',
-    key: 'dg_sales',
-    // submodules: dgSalesSubmodules,
   },
 ];
 
@@ -168,7 +169,7 @@ function getActiveKeyFromPath(pathname: string): string {
 }
 
 // Hook to get current module permission
-export function useCurrentModulePermission() {
+function useCurrentModulePermission() {
   const { user } = useSelector((state: RootState) => state.auth);
   const location = useLocation();
   const currentModuleKey = getActiveKeyFromPath(location.pathname);
@@ -178,6 +179,9 @@ export function useCurrentModulePermission() {
   
   return moduleEntry?.permission ?? null; // "read", "write", "admin", or null
 }
+
+// Export the hook separately to avoid Fast Refresh issues
+export { useCurrentModulePermission };
 
 export default function Sidebar({
   currentPanel,

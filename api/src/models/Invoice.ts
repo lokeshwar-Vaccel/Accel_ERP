@@ -26,6 +26,7 @@ export interface IInvoice extends mongoose.Document {
   // Service charges and battery buy back
   serviceCharges: Array<{
     description: string;
+    hsnNumber?: string; // Add HSN field for service charges
     quantity: number;
     unitPrice: number;
     discount: number;
@@ -36,6 +37,7 @@ export interface IInvoice extends mongoose.Document {
   }>;
   batteryBuyBack?: {
     description: string;
+    hsnNumber?: string; // Add HSN field for battery buy back
     quantity: number;
     unitPrice: number;
     discount: number;
@@ -58,7 +60,7 @@ export interface IInvoice extends mongoose.Document {
   paidAmount: number; // Amount paid so far
   remainingAmount: number; // Calculated: totalAmount - paidAmount
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
-  paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
   paymentMethod?: string;
   paymentDate?: Date;
   notes?: string;

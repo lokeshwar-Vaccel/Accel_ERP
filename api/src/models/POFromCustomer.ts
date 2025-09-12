@@ -38,7 +38,7 @@ interface IPOFromCustomerSchema extends Document {
   // Payment fields
   paidAmount: number;
   remainingAmount: number;
-  paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
   paymentMethod?: string;
   paymentDate?: Date;
   // Source tracking

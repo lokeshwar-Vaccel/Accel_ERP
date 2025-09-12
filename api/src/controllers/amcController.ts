@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { AMC } from '../models/AMC';
 import { Customer } from '../models/Customer';
+import { DGDetails } from '../models/DGDetails';
 import { AuthenticatedRequest, APIResponse, AMCStatus, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
 import * as XLSX from 'xlsx';
@@ -82,19 +83,47 @@ export const getAMCContracts = async (
         { engineSerialNumber: { $regex: search, $options: 'i' } }
       ];
       
-      // Add customer name search
+      // Add customer name and DG details search
       try {
         console.log('Searching customers with name pattern:', search);
+        
+        // Search customers by name, email, phone, customerId
         const matchingCustomers = await Customer.find({
-          name: { $regex: search, $options: 'i' }
+          $or: [
+            { name: { $regex: search, $options: 'i' } },
+            { email: { $regex: search, $options: 'i' } },
+            { phone: { $regex: search, $options: 'i' } },
+            { customerId: { $regex: search, $options: 'i' } }
+          ]
         }).select('_id');
         
-        console.log('Found matching customers:', matchingCustomers.length);
+        // Search customers by DG details (engine serial number, DG serial number, etc.)
+        const matchingDGDetails = await DGDetails.find({
+          $or: [
+            { engineSerialNumber: { $regex: search, $options: 'i' } },
+            { dgSerialNumbers: { $regex: search, $options: 'i' } },
+            { alternatorSerialNumber: { $regex: search, $options: 'i' } },
+            { dgMake: { $regex: search, $options: 'i' } },
+            { dgModel: { $regex: search, $options: 'i' } }
+          ]
+        }).select('customer').lean();
         
-        if (matchingCustomers.length > 0) {
-          const customerIds = matchingCustomers.map((c: any) => c._id);
-          query.$or.push({ customer: { $in: customerIds } });
-          console.log('Added customer IDs to search query:', customerIds);
+        const customerIdsFromDG = matchingDGDetails.map(dg => dg.customer);
+        
+        // Combine all customer IDs
+        const allCustomerIds = [
+          ...matchingCustomers.map((c: any) => c._id),
+          ...customerIdsFromDG
+        ];
+        
+        console.log('Found matching customers:', matchingCustomers.length);
+        console.log('Found matching DG details:', matchingDGDetails.length);
+        
+        if (allCustomerIds.length > 0) {
+          // Remove duplicates
+          const uniqueCustomerIds = [...new Set(allCustomerIds.map(id => id.toString()))];
+          query.$or.push({ customer: { $in: uniqueCustomerIds } });
+          console.log('Added customer IDs to search query:', uniqueCustomerIds);
         }
       } catch (error) {
         console.error('Error searching customers:', error);

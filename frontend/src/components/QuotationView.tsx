@@ -206,7 +206,7 @@ const QuotationView: React.FC<QuotationViewProps> = ({
                       <td className="border border-gray-300 p-2 text-sm font-medium">
                         {service.description}
                       </td>
-                      <td className="border border-gray-300 p-2 text-sm">-</td>
+                      <td className="border border-gray-300 p-2 text-sm">{service.hsnNumber || '-'}</td>
                       <td className="border border-gray-300 p-2 text-center text-sm">{service.uom}</td>
                       <td className="border border-gray-300 p-2 text-center text-sm">{service.quantity}</td>
                       <td className="border border-gray-300 p-2 text-right text-sm bg-yellow-100">
@@ -244,7 +244,7 @@ const QuotationView: React.FC<QuotationViewProps> = ({
                     <td className="border border-gray-300 p-2 text-sm font-medium">
                       {quotation.batteryBuyBack.description}
                     </td>
-                    <td className="border border-gray-300 p-2 text-sm">-</td>
+                    <td className="border border-gray-300 p-2 text-sm">{quotation.batteryBuyBack.hsnNumber || '-'}</td>
                     <td className="border border-gray-300 p-2 text-center text-sm">{quotation.batteryBuyBack.uom}</td>
                     <td className="border border-gray-300 p-2 text-center text-sm">{quotation.batteryBuyBack.quantity}</td>
                     <td className="border border-gray-300 p-2 text-right text-sm bg-yellow-100">

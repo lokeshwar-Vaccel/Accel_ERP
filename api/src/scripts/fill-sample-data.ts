@@ -203,7 +203,7 @@ async function main() {
       paidAmount: randomInt(0, 10000),
       remainingAmount: randomInt(0, 10000),
       status: pickRandom(['draft', 'sent', 'paid', 'overdue', 'cancelled']),
-      paymentStatus: pickRandom(['pending', 'partial', 'paid', 'failed']),
+      paymentStatus: pickRandom(['pending', 'partial', 'paid', 'gst_pending']),
       paymentMethod: pickRandom(['cash', 'cheque', 'bank_transfer', 'upi', 'card', 'razorpay', 'other']),
       paymentDate: new Date(),
       notes: `Notes ${randomString(10)}`,

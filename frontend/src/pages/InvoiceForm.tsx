@@ -4192,7 +4192,8 @@ const InvoiceFormPage: React.FC = () => {
                     const newServiceCharges = [
                       ...(prev.serviceCharges || []),
                       {
-                        description: 'Additional Service charges',
+                        description: 'Service Charge',
+                        hsnNumber: '', // Add HSN field for new service charges
                         quantity: 1,
                         unitPrice: 0,
                         discount: 0,
@@ -4232,10 +4233,11 @@ const InvoiceFormPage: React.FC = () => {
             {/* Service Charges Table */}
             <div className="border border-gray-300 rounded-lg bg-white shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
-                <div className="bg-gray-100 border-b border-gray-300 min-w-[1000px]">
+                <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
                   <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
-                    style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                    style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
                     <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSN</div>
                     <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                     <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
                     <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
@@ -4244,10 +4246,10 @@ const InvoiceFormPage: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="divide-y divide-gray-200 min-w-[1000px]">
+                <div className="divide-y divide-gray-200 min-w-[1200px]">
                   {(formData.serviceCharges || []).map((service, index) => (
                     <div key={index} className="grid group hover:bg-blue-50 transition-colors bg-white"
-                      style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px 80px' }}>
+                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
                       
                       {/* Description */}
                       <div className="p-2 border-r border-gray-200">
@@ -4277,6 +4279,21 @@ const InvoiceFormPage: React.FC = () => {
                           }}
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
                           placeholder="Service description..."
+                        />
+                      </div>
+
+                      {/* HSN */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="text"
+                          value={service.hsnNumber || ''}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            newServiceCharges[index].hsnNumber = e.target.value;
+                            setFormData(prev => ({ ...prev, serviceCharges: newServiceCharges }));
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                          placeholder="HSN Code"
                         />
                       </div>
 
@@ -4540,6 +4557,7 @@ const InvoiceFormPage: React.FC = () => {
                   setFormData(prev => {
                     const newBatteryBuyBack = {
                       description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                      hsnNumber: prev.batteryBuyBack?.hsnNumber || '', // Add HSN field for battery buy back
                       quantity: 1,
                       unitPrice: 0,
                       discount: 0,
@@ -4579,10 +4597,11 @@ const InvoiceFormPage: React.FC = () => {
             {formData.batteryBuyBack && formData.batteryBuyBack.description ? (
               <div className="border border-gray-300 rounded-lg bg-white shadow-sm overflow-hidden">
                 <div className="overflow-x-auto">
-                  <div className="bg-gray-100 border-b border-gray-300 min-w-[1000px]">
+                  <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
                     <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
-                      style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px' }}>
+                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px' }}>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">HSN</div>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
                       <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
@@ -4591,9 +4610,9 @@ const InvoiceFormPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="divide-y divide-gray-200 min-w-[1000px]">
+                  <div className="divide-y divide-gray-200 min-w-[1200px]">
                     <div className="grid group hover:bg-blue-50 transition-colors bg-white"
-                      style={{ gridTemplateColumns: '1fr 100px 120px 80px 100px' }}>
+                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px' }}>
                       
                       {/* Description */}
                       <div className="p-2 border-r border-gray-200">
@@ -4627,6 +4646,25 @@ const InvoiceFormPage: React.FC = () => {
                           }}
                           className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
                           placeholder="Battery Buy Back"
+                        />
+                      </div>
+
+                      {/* HSN */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="text"
+                          value={formData.batteryBuyBack.hsnNumber || ''}
+                          onChange={(e) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              batteryBuyBack: {
+                                ...prev.batteryBuyBack!,
+                                hsnNumber: e.target.value
+                              }
+                            }));
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                          placeholder="HSN Code"
                         />
                       </div>
 

@@ -54,12 +54,12 @@ interface User {
 
 interface Customer {
   _id: string;
-  name: string;
+  name?: string;
   email?: string;
-  phone: string;
-  address: string;
+  phone?: string;
+  address?: string;
   contactPersonName?: string;
-  customerType: string;
+  customerType?: string;
   addresses?: Array<{
     id: number;
     address: string;
@@ -86,7 +86,6 @@ interface Engine {
   alternatorSerialNumber: string;
   commissioningDate: string;
   warrantyStatus: string;
-  amcStatus: string;
   cluster: string;
 }
 
@@ -851,13 +850,26 @@ const AMCManagement: React.FC = () => {
         const addresses = addressesResponse.data.addresses;
         setCustomerAddresses(addresses);
         
-        // Auto-select primary address
+        // Auto-select address if available
+        let addressToSelect = null;
+        
+        // First, try to find primary address
         const primaryAddress = addresses.find((addr: any) => addr.isPrimary);
         if (primaryAddress) {
+          addressToSelect = primaryAddress;
+        } 
+        // If no primary address, but only one address available, select that one
+        else if (addresses.length === 1) {
+          addressToSelect = addresses[0];
+        }
+        
+        if (addressToSelect) {
           setAmcFormData(prev => ({
             ...prev,
-            customerAddress: primaryAddress.fullAddress || primaryAddress.address
+            customerAddress: addressToSelect.fullAddress || addressToSelect.address
           }));
+          // Clear address validation error when auto-selecting
+          clearFormError('customerAddress');
         }
       }
     } catch (error) {
@@ -1102,6 +1114,8 @@ const AMCManagement: React.FC = () => {
     }
     if (!amcFormData.contactNumber) {
       errors.contactNumber = 'Contact number is required';
+    } else if (amcFormData.contactNumber.length !== 10) {
+      errors.contactNumber = 'Contact number must be exactly 10 digits';
     }
     if (!amcFormData.engineSerialNumber) {
       errors.engineSerialNumber = 'Engine serial number is required';
@@ -1367,6 +1381,13 @@ const AMCManagement: React.FC = () => {
     }
   };
 
+  // Helper function to clear specific form error
+  const clearFormError = (fieldName: string) => {
+    if (formErrors[fieldName]) {
+      setFormErrors(prev => ({ ...prev, [fieldName]: '' }));
+    }
+  };
+
   const resetAMCForm = () => {
     setAmcFormData({
       customer: '',
@@ -1606,11 +1627,62 @@ const AMCManagement: React.FC = () => {
   const handleDropdownSearch = (type: 'customer' | 'address' | 'engine', searchTerm: string) => {
     switch (type) {
       case 'customer':
-        const filteredCustomers = customers.filter(customer => 
-          customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          customer.phone.toLowerCase().includes(searchTerm.toLowerCase())
-        );
+        // If search term is empty, show all customers
+        const filteredCustomers = searchTerm.trim() === '' 
+          ? customers 
+          : customers
+              .filter(customer => {
+                // Skip customers with no name
+                if (!customer.name) {
+                  return false;
+                }
+                
+                const nameMatch = customer.name.toLowerCase().includes(searchTerm.toLowerCase());
+                const emailMatch = customer.email?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
+                const phoneMatch = customer.phone?.toLowerCase().includes(searchTerm.toLowerCase()) || false;
+                
+                return nameMatch || emailMatch || phoneMatch;
+              })
+              .sort((a, b) => {
+                const searchLower = searchTerm.toLowerCase();
+                
+                // Priority 1: Exact name match
+                const aExactName = a.name?.toLowerCase() === searchLower;
+                const bExactName = b.name?.toLowerCase() === searchLower;
+                if (aExactName && !bExactName) return -1;
+                if (!aExactName && bExactName) return 1;
+                
+                // Priority 2: Name starts with search term
+                const aNameStartsWith = a.name?.toLowerCase().startsWith(searchLower);
+                const bNameStartsWith = b.name?.toLowerCase().startsWith(searchLower);
+                if (aNameStartsWith && !bNameStartsWith) return -1;
+                if (!aNameStartsWith && bNameStartsWith) return 1;
+                
+                // Priority 3: Name contains search term (closer to beginning is better)
+                const aNameIndex = a.name?.toLowerCase().indexOf(searchLower) ?? -1;
+                const bNameIndex = b.name?.toLowerCase().indexOf(searchLower) ?? -1;
+                if (aNameIndex !== -1 && bNameIndex !== -1) {
+                  return aNameIndex - bNameIndex;
+                }
+                if (aNameIndex !== -1 && bNameIndex === -1) return -1;
+                if (aNameIndex === -1 && bNameIndex !== -1) return 1;
+                
+                // Priority 4: Email starts with search term
+                const aEmailStartsWith = a.email?.toLowerCase().startsWith(searchLower);
+                const bEmailStartsWith = b.email?.toLowerCase().startsWith(searchLower);
+                if (aEmailStartsWith && !bEmailStartsWith) return -1;
+                if (!aEmailStartsWith && bEmailStartsWith) return 1;
+                
+                // Priority 5: Phone starts with search term
+                const aPhoneStartsWith = a.phone?.toLowerCase().startsWith(searchLower);
+                const bPhoneStartsWith = b.phone?.toLowerCase().startsWith(searchLower);
+                if (aPhoneStartsWith && !bPhoneStartsWith) return -1;
+                if (!aPhoneStartsWith && bPhoneStartsWith) return 1;
+                
+                // Final fallback: alphabetical order
+                return (a.name || '').localeCompare(b.name || '');
+              });
+        
         setCustomerDropdown(prev => ({
           ...prev,
           searchTerm,
@@ -1653,6 +1725,7 @@ const AMCManagement: React.FC = () => {
         setCustomerDropdown(prev => ({
           ...prev,
           isOpen: true,
+          searchTerm: '',
           filteredOptions: customers,
           selectedIndex: 0
         }));
@@ -1690,8 +1763,14 @@ const AMCManagement: React.FC = () => {
             contactNumber: selectedCustomer.phone || ''
           }));
           fetchCustomerData(value);
+          clearFormError('customer');
         }
-        setCustomerDropdown((prev: any) => ({ ...prev, isOpen: false, searchTerm: '' }));
+        setCustomerDropdown((prev: any) => ({ 
+          ...prev, 
+          isOpen: false, 
+          searchTerm: '',
+          selectedIndex: 0
+        }));
         break;
       
       case 'address':
@@ -1699,6 +1778,7 @@ const AMCManagement: React.FC = () => {
           ...prev,
           customerAddress: value
         }));
+        clearFormError('customerAddress');
         setAddressDropdown((prev: any) => ({ ...prev, isOpen: false, searchTerm: '' }));
         break;
       
@@ -1721,6 +1801,7 @@ const AMCManagement: React.FC = () => {
             dgMake: selectedEngine.dgMake,
             dateOfCommissioning: formattedCommissioningDate
           }));
+          clearFormError('engineSerialNumber');
         }
         setEngineDropdown((prev: any) => ({ ...prev, isOpen: false, searchTerm: '' }));
         break;
@@ -2842,11 +2923,14 @@ const AMCManagement: React.FC = () => {
                       type="text"
                       value={customerDropdown.searchTerm || (amcFormData.customer ? customers.find(c => c._id === amcFormData.customer)?.name || '' : '')}
                       onChange={(e) => {
-                        setCustomerDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
-                        handleDropdownSearch('customer', e.target.value);
-                        if (formErrors.customer) {
-                          setFormErrors(prev => ({ ...prev, customer: '' }));
-                        }
+                        const searchValue = e.target.value;
+                        setCustomerDropdown(prev => ({ 
+                          ...prev, 
+                          searchTerm: searchValue, 
+                          isOpen: true 
+                        }));
+                        handleDropdownSearch('customer', searchValue);
+                        clearFormError('customer');
                       }}
                       onKeyDown={(e) => handleDropdownKeyDown('customer', e, customerDropdown.filteredOptions, (value) => handleDropdownSelect('customer', value))}
                       onFocus={() => {
@@ -2855,7 +2939,7 @@ const AMCManagement: React.FC = () => {
                       onBlur={() => {
                         setTimeout(() => {
                           setCustomerDropdown(prev => ({ ...prev, isOpen: false }));
-                        }, 200);
+                        }, 300);
                       }}
                       placeholder="Search customer..."
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
@@ -2872,12 +2956,13 @@ const AMCManagement: React.FC = () => {
                           <button
                             key={customer._id}
                             type="button"
+                            onMouseDown={(e) => e.preventDefault()}
                             onClick={() => handleDropdownSelect('customer', customer._id)}
                             className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${
                               index === customerDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'
                             }`}
                           >
-                            <div className="font-medium">{customer.name}</div>
+                            <div className="font-medium">{customer.name || 'Unnamed Customer'}</div>
                             {customer.email && (
                               <div className="text-xs text-gray-500">{customer.email}</div>
                             )}
@@ -2901,7 +2986,10 @@ const AMCManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
                   <select
                     value={amcFormData.customerAddress}
-                    onChange={(e) => setAmcFormData({ ...amcFormData, customerAddress: e.target.value })}
+                    onChange={(e) => {
+                      setAmcFormData({ ...amcFormData, customerAddress: e.target.value });
+                      clearFormError('customerAddress');
+                    }}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                       formErrors.customerAddress ? 'border-red-500' : 'border-gray-300'
                     }`}
@@ -2925,7 +3013,10 @@ const AMCManagement: React.FC = () => {
                     <input
                       type="text"
                       value={amcFormData.contactPersonName}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, contactPersonName: e.target.value })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, contactPersonName: e.target.value });
+                        clearFormError('contactPersonName');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.contactPersonName ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -2939,12 +3030,19 @@ const AMCManagement: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number *</label>
                     <input
                       type="text"
+                      maxLength={10}
                       value={amcFormData.contactNumber}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, contactNumber: e.target.value })}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+                        if (value.length <= 10) {
+                          setAmcFormData({ ...amcFormData, contactNumber: value });
+                          clearFormError('contactNumber');
+                        }
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.contactNumber ? 'border-red-500' : 'border-gray-300'
                       }`}
-                      placeholder="Contact number"
+                      placeholder="Contact number (10 digits)"
                     />
                     {formErrors.contactNumber && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.contactNumber}</p>
@@ -2960,6 +3058,7 @@ const AMCManagement: React.FC = () => {
                     onChange={(e) => {
                       const engineSerial = e.target.value;
                       setAmcFormData({ ...amcFormData, engineSerialNumber: engineSerial });
+                      clearFormError('engineSerialNumber');
                       if (engineSerial) {
                         const selectedEngine = customerEngines.find(engine => engine.engineSerialNumber === engineSerial);
                         if (selectedEngine) {
@@ -3063,7 +3162,10 @@ const AMCManagement: React.FC = () => {
                     <input
                       type="date"
                       value={amcFormData.amcStartDate}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, amcStartDate: e.target.value })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, amcStartDate: e.target.value });
+                        clearFormError('amcStartDate');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.amcStartDate ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -3077,7 +3179,10 @@ const AMCManagement: React.FC = () => {
                     <input
                       type="date"
                       value={amcFormData.amcEndDate}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, amcEndDate: e.target.value })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, amcEndDate: e.target.value });
+                        clearFormError('amcEndDate');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.amcEndDate ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -3094,7 +3199,10 @@ const AMCManagement: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">AMC Type *</label>
                     <select
                       value={amcFormData.amcType}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, amcType: e.target.value as 'AMC' | 'CAMC' })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, amcType: e.target.value as 'AMC' | 'CAMC' });
+                        clearFormError('amcType');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.amcType ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -3112,7 +3220,10 @@ const AMCManagement: React.FC = () => {
                       type="number"
                       min="1"
                       value={amcFormData.numberOfVisits === 0 ? '' : amcFormData.numberOfVisits}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, numberOfVisits: Number(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, numberOfVisits: Number(e.target.value) || 0 });
+                        clearFormError('numberOfVisits');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.numberOfVisits ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -3123,16 +3234,19 @@ const AMCManagement: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Number of Oil Services *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Number of Oil Services</label>
                     <input
                       type="number"
                       min="0"
                       value={amcFormData.numberOfOilServices === 0 ? '' : amcFormData.numberOfOilServices}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, numberOfOilServices: Number(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, numberOfOilServices: Number(e.target.value) || 0 });
+                        clearFormError('numberOfOilServices');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.numberOfOilServices ? 'border-red-500' : 'border-gray-300'
                       }`}
-                      placeholder="Number of oil services"
+                      placeholder="Number of oil services (optional)"
                     />
                     {formErrors.numberOfOilServices && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.numberOfOilServices}</p>
@@ -3318,7 +3432,10 @@ const AMCManagement: React.FC = () => {
                   <label className="block text-sm font-medium text-gray-700 mb-1">Address *</label>
                   <select
                     value={amcFormData.customerAddress}
-                    onChange={(e) => setAmcFormData({ ...amcFormData, customerAddress: e.target.value })}
+                    onChange={(e) => {
+                      setAmcFormData({ ...amcFormData, customerAddress: e.target.value });
+                      clearFormError('customerAddress');
+                    }}
                     className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                       formErrors.customerAddress ? 'border-red-500' : 'border-gray-300'
                     }`}
@@ -3342,7 +3459,10 @@ const AMCManagement: React.FC = () => {
                     <input
                       type="text"
                       value={amcFormData.contactPersonName}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, contactPersonName: e.target.value })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, contactPersonName: e.target.value });
+                        clearFormError('contactPersonName');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.contactPersonName ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -3356,12 +3476,19 @@ const AMCManagement: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Contact Number *</label>
                     <input
                       type="text"
+                      maxLength={10}
                       value={amcFormData.contactNumber}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, contactNumber: e.target.value })}
+                      onChange={(e) => {
+                        const value = e.target.value.replace(/\D/g, ''); // Remove non-digits
+                        if (value.length <= 10) {
+                          setAmcFormData({ ...amcFormData, contactNumber: value });
+                          clearFormError('contactNumber');
+                        }
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.contactNumber ? 'border-red-500' : 'border-gray-300'
                       }`}
-                      placeholder="Contact number"
+                      placeholder="Contact number (10 digits)"
                     />
                     {formErrors.contactNumber && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.contactNumber}</p>
@@ -3377,6 +3504,7 @@ const AMCManagement: React.FC = () => {
                     onChange={(e) => {
                       const engineSerial = e.target.value;
                       setAmcFormData({ ...amcFormData, engineSerialNumber: engineSerial });
+                      clearFormError('engineSerialNumber');
                       if (engineSerial) {
                         const selectedEngine = customerEngines.find(engine => engine.engineSerialNumber === engineSerial);
                         if (selectedEngine) {
@@ -3480,7 +3608,10 @@ const AMCManagement: React.FC = () => {
                     <input
                       type="date"
                       value={amcFormData.amcStartDate}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, amcStartDate: e.target.value })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, amcStartDate: e.target.value });
+                        clearFormError('amcStartDate');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.amcStartDate ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -3494,7 +3625,10 @@ const AMCManagement: React.FC = () => {
                     <input
                       type="date"
                       value={amcFormData.amcEndDate}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, amcEndDate: e.target.value })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, amcEndDate: e.target.value });
+                        clearFormError('amcEndDate');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.amcEndDate ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -3527,7 +3661,10 @@ const AMCManagement: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">AMC Type *</label>
                     <select
                       value={amcFormData.amcType}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, amcType: e.target.value as 'AMC' | 'CAMC' })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, amcType: e.target.value as 'AMC' | 'CAMC' });
+                        clearFormError('amcType');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.amcType ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -3545,7 +3682,10 @@ const AMCManagement: React.FC = () => {
                       type="number"
                       min="1"
                       value={amcFormData.numberOfVisits === 0 ? '' : amcFormData.numberOfVisits}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, numberOfVisits: Number(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, numberOfVisits: Number(e.target.value) || 0 });
+                        clearFormError('numberOfVisits');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.numberOfVisits ? 'border-red-500' : 'border-gray-300'
                       }`}
@@ -3563,16 +3703,19 @@ const AMCManagement: React.FC = () => {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Number of Oil Services *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Number of Oil Services</label>
                     <input
                       type="number"
                       min="0"
                       value={amcFormData.numberOfOilServices === 0 ? '' : amcFormData.numberOfOilServices}
-                      onChange={(e) => setAmcFormData({ ...amcFormData, numberOfOilServices: Number(e.target.value) || 0 })}
+                      onChange={(e) => {
+                        setAmcFormData({ ...amcFormData, numberOfOilServices: Number(e.target.value) || 0 });
+                        clearFormError('numberOfOilServices');
+                      }}
                       className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 ${
                         formErrors.numberOfOilServices ? 'border-red-500' : 'border-gray-300'
                       }`}
-                      placeholder="Number of oil services"
+                      placeholder="Number of oil services (optional)"
                     />
                     {formErrors.numberOfOilServices && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.numberOfOilServices}</p>

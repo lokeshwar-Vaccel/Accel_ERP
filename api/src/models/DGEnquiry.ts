@@ -72,8 +72,6 @@ export interface IDGEnquiry extends Document {
     salesDealerName: string;
     commissioningDate: Date;
     warrantyStatus: 'warranty' | 'non_warranty';
-    installationType: 'infold' | 'outfold';
-    amcStatus: 'yes' | 'no';
     cluster: string;
     warrantyStartDate?: Date;
     warrantyEndDate?: Date;
@@ -154,8 +152,6 @@ const DGEnquirySchema = new Schema<IDGEnquiry>({
     salesDealerName: { type: String, trim: true },
     commissioningDate: { type: Date },
     warrantyStatus: { type: String, enum: ['warranty', 'non_warranty'], default: 'warranty' },
-    installationType: { type: String, enum: ['infold', 'outfold'], default: 'infold' },
-    amcStatus: { type: String, enum: ['yes', 'no'], default: 'yes' },
     cluster: { type: String, trim: true },
     warrantyStartDate: { type: Date },
     warrantyEndDate: { type: Date }

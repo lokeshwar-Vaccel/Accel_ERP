@@ -69,7 +69,7 @@ const DGPoFromCustomerViewModal: React.FC<DGPoFromCustomerViewModalProps> = ({
       pending: 'bg-red-100 text-red-800',
       partial: 'bg-yellow-100 text-yellow-800',
       paid: 'bg-green-100 text-green-800',
-      failed: 'bg-red-100 text-red-800'
+      gst_pending: 'bg-orange-100 text-orange-800'
     };
     return colorClasses[status as keyof typeof colorClasses] || 'bg-gray-100 text-gray-800';
   };

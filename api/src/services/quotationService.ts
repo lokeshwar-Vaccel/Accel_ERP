@@ -78,10 +78,11 @@ export class QuotationService {
       errors.push({ field: 'location', message: 'From location is required' });
     }
 
-    // Items validation
-    if (!data.items || data.items.length === 0) {
-      errors.push({ field: 'items', message: 'At least one item is required' });
-    } else {
+    // Items validation - Made optional to allow quotations without items
+    // if (!data.items || data.items.length === 0) {
+    //   errors.push({ field: 'items', message: 'At least one item is required' });
+    // } else {
+    if (data.items && data.items.length > 0) {
       data.items.forEach((item, index) => {
         if (!item.product?.trim()) {
           errors.push({ field: `items[${index}].product`, message: 'Product is required' });
@@ -107,10 +108,10 @@ export class QuotationService {
       });
     }
 
-    // Financial validation
-    if (data.grandTotal !== undefined && data.grandTotal <= 0) {
-      errors.push({ field: 'grandTotal', message: 'Grand total must be greater than 0' });
-    }
+    // Financial validation - Allow 0 total for quotations without items
+    // if (data.grandTotal !== undefined && data.grandTotal <= 0) {
+    //   errors.push({ field: 'grandTotal', message: 'Grand total must be greater than 0' });
+    // }
 
     return {
       isValid: errors.length === 0,
@@ -304,6 +305,7 @@ export class QuotationService {
       // New fields for service charges and battery buy back
       serviceCharges: Array.isArray(data.serviceCharges) ? data.serviceCharges.map((service: any) => ({
         description: String(service.description || '').trim(),
+        hsnNumber: String(service.hsnNumber || '').trim(), // Add HSN field for service charges
         quantity: Number(service.quantity) || 1,
         unitPrice: Number(service.unitPrice) || 0,
         discount: Number(service.discount) || 0,
@@ -314,6 +316,7 @@ export class QuotationService {
       })) : [],
       batteryBuyBack: data.batteryBuyBack ? {
         description: String(data.batteryBuyBack.description || 'Battery Buy Back').trim(),
+        hsnNumber: String(data.batteryBuyBack.hsnNumber || '').trim(), // Add HSN field for battery buy back
         quantity: Number(data.batteryBuyBack.quantity) || 1,
         unitPrice: Number(data.batteryBuyBack.unitPrice) || 0,
         discount: Number(data.batteryBuyBack.discount) || 0,

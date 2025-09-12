@@ -190,15 +190,17 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
   const validateForm = (): boolean => {
     const validationResult = validateQuotationData(formData);
     
+    // Only validate items if they exist (items are now optional)
     (formData.items || []).forEach((item, index) => {
       
-      // Check if product is selected
-      if (!item.product) {
-        validationResult.errors.push({ 
-          field: `items[${index}].product`, 
-          message: 'Product is required' 
-        });
-      } else {
+      // Check if product is selected (only if item has some data)
+      if (item.product || item.description || item.quantity || item.unitPrice) {
+        if (!item.product) {
+          validationResult.errors.push({ 
+            field: `items[${index}].product`, 
+            message: 'Product is required' 
+          });
+        } else {
         const product = products.find(p => p._id === item.product);
         
         if (product) {
@@ -215,6 +217,7 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
             message: 'Selected product not found' 
           });
         }
+      }
       }
     });
     
@@ -297,9 +300,9 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
     }));
   };
 
-  // Remove item
+  // Remove item - Allow removing all items
   const removeItem = (index: number) => {
-    if (formData.items && formData.items.length > 1) {
+    if (formData.items) {
       const newItems = formData.items.filter((_, i) => i !== index);
       setFormData(prev => ({ ...prev, items: newItems }));
     }

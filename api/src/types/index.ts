@@ -199,6 +199,7 @@ export interface Address {
   gstNumber?: string;
   notes?: string; // Added for storing notes from misused fields
   contactPersonName?: string;
+  designation?: string;
   email?: string;
   phone?: string;
   registrationStatus: 'registered' | 'non_registered';
@@ -219,7 +220,6 @@ export interface DGRequirements {
 export interface ICustomer extends Document {
   name: string;
   alice?: string;
-  designation?: string;
   contactPersonName?: string;
   email?: string;
   phone: string;
@@ -438,17 +438,15 @@ export interface AuthenticatedRequest extends Request {
 export interface IDGDetails extends Document {
   customer: Types.ObjectId;
   dgSerialNumbers: string;
-  alternatorMake: string;
-  alternatorSerialNumber: string;
+  alternatorMake?: string;
+  alternatorSerialNumber?: string;
   dgMake: string;
   engineSerialNumber: string;
   dgModel: string;
   dgRatingKVA: number;
-  salesDealerName: string;
+  salesDealerName?: string;
   commissioningDate: Date;
   warrantyStatus: 'warranty' | 'non_warranty';
-  installationType: 'infold' | 'outfold';
-  amcStatus: 'yes' | 'no';
   cluster: string;
   locationAddressId?: number;
   locationAddress?: string;
