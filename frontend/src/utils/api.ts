@@ -171,6 +171,9 @@ class ApiClient {
 
     getFieldEngineers: () =>
       this.makeRequest<{ success: boolean; data: { fieldEngineers: any[] } }>('/users/field-engineers'),
+
+    getSalesEngineers: () =>
+      this.makeRequest<{ success: boolean; data: { salesEngineers: any[] } }>('/users/sales-engineers'),
   };
 
   // Lead Management APIs

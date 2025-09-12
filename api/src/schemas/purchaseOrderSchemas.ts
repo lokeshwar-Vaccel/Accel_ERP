@@ -8,10 +8,8 @@ export interface POItemInput {
   unitPrice: number;
   taxRate: number;
   totalPrice?: number;
-  discount?: {
-    type?: 'percentage' | 'fixed';
-    value?: number;
-  };
+  discountRate?: number; // Discount percentage (0-100)
+  discountAmount?: number; // Calculated discount amount
   tax?: {
     type?: 'percentage' | 'fixed';
     value?: number;
@@ -315,10 +313,8 @@ const poItemSchema = Joi.object<POItemInput>({
   unitPrice: Joi.number().min(0).precision(2).required(),
   totalPrice: Joi.number().min(0).precision(2),
   taxRate: Joi.number().min(0).precision(2).required(),
-  discount: Joi.object({
-    type: Joi.string().valid('percentage', 'fixed'),
-    value: Joi.number().min(0)
-  }),
+  discountRate: Joi.number().min(0).max(100).precision(2).default(0), // Discount percentage (0-100)
+  discountAmount: Joi.number().min(0).precision(2).default(0), // Calculated discount amount
   tax: Joi.object({
     type: Joi.string().valid('percentage', 'fixed'),
     value: Joi.number().min(0)

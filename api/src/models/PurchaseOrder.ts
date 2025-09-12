@@ -5,6 +5,8 @@ interface IPOItemSchema {
   product: mongoose.Types.ObjectId;
   quantity: number;
   unitPrice: number;
+  discountRate?: number; // Discount percentage (0-100)
+  discountAmount?: number; // Calculated discount amount
   totalPrice: number;
   taxRate: number;
   receivedQuantity?: number;
@@ -69,6 +71,17 @@ const poItemSchema = new Schema({
     type: Number,
     required: [true, 'Unit price is required'],
     min: [0, 'Unit price cannot be negative']
+  },
+  discountRate: {
+    type: Number,
+    default: 0,
+    min: [0, 'Discount rate cannot be negative'],
+    max: [100, 'Discount rate cannot exceed 100%']
+  },
+  discountAmount: {
+    type: Number,
+    default: 0,
+    min: [0, 'Discount amount cannot be negative']
   },
   taxRate: {
     type: Number,
@@ -302,12 +315,29 @@ purchaseOrderSchema.pre('save', async function (this: IPurchaseOrderSchema, next
 
 purchaseOrderSchema.pre('save', function (this: IPurchaseOrderSchema, next) {
   if (this.items && this.items.length > 0) {
-    // First: calculate and update each item's totalPrice with tax
+    // First: calculate and update each item's totalPrice with discount and tax
     this.items.forEach((item: IPOItemSchema) => {
       const quantity = item.quantity || 0;
       const unitPrice = item.unitPrice || 0;
+      const discountRate = item.discountRate || 0;
       const taxRate = item.taxRate || 0;
-      item.totalPrice = quantity * unitPrice * (1 + taxRate / 100);
+      const subtotal = quantity * unitPrice;
+      
+      // ✅ GST inclusive price (base + GST)
+      const gstInclusiveSubtotal = subtotal * (1 + taxRate / 100);
+      
+      // ✅ Calculate discount on GST-inclusive subtotal
+      const calculatedDiscountAmount = Math.round((gstInclusiveSubtotal * discountRate) / 100);
+      
+      // Use provided discount amount or calculated amount
+      const discountAmount = item.discountAmount ? Math.round(item.discountAmount) : calculatedDiscountAmount;
+      
+      // Update both fields
+      item.discountRate = discountRate;
+      item.discountAmount = discountAmount;
+      
+      // ✅ Final total after discount (discount applied after GST)
+      item.totalPrice = Math.round(gstInclusiveSubtotal - discountAmount);
     });
 
     // Then: sum up totalAmount from updated item.totalPrice

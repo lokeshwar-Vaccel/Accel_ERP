@@ -20,7 +20,13 @@ const addressSchema = Joi.object({
   }),
   isPrimary: Joi.boolean().default(false),
   gstNumber: Joi.string().optional().trim().allow(''),
-  notes: Joi.string().optional().trim().allow('')
+  notes: Joi.string().optional().trim().allow(''),
+  contactPersonName: Joi.string().optional().trim().allow(''),
+  email: Joi.string().email().optional().allow('').messages({
+    'string.email': 'Please provide a valid email address'
+  }),
+  phone: Joi.string().optional().trim().allow(''),
+  registrationStatus: Joi.string().valid('registered', 'non_registered').default('non_registered')
 });
 
 // DG Details schema for DG Enquiry
@@ -59,7 +65,7 @@ export const createDGEnquirySchema = Joi.object({
   source: Joi.string().valid('Website', 'Referral', 'Cold Call', 'Social Media', 'Other').default('Website'),
   
   // Customer Information
-  customerType: Joi.string().valid('Retail', 'Corporate').required(),
+  customerType: Joi.string().valid('Retail', 'Corporate').default('Retail'),
   corporateName: Joi.when('customerType', {
     is: 'Corporate',
     then: Joi.string().required().trim().messages({
@@ -75,9 +81,7 @@ export const createDGEnquirySchema = Joi.object({
   alice: Joi.string().optional().trim().allow(''),
   designation: Joi.string().optional().trim().allow(''),
   contactPersonName: Joi.string().optional().trim().allow(''),
-  phoneNumber: Joi.string().required().trim().pattern(/^\+?[1-9]\d{1,14}$/).messages({
-    'string.empty': 'Phone number is required',
-    'any.required': 'Phone number is required',
+  phoneNumber: Joi.string().optional().trim().pattern(/^\+?[1-9]\d{1,14}$/).allow('').messages({
     'string.pattern.base': 'Please provide a valid phone number'
   }),
   email: Joi.string().email().optional().allow('').messages({
@@ -135,7 +139,7 @@ export const createDGEnquirySchema = Joi.object({
   branch: Joi.string().optional().allow(''),
   location: Joi.string().optional().allow(''),
   eoPoDate: Joi.date().optional(),
-  plannedFollowUpDate: Joi.date().optional(),
+  plannedFollowUpDate: Joi.date().optional().allow(null),
   sourceFrom: Joi.string().optional().allow(''),
   numberOfFollowUps: Joi.number().integer().min(0).default(0),
   lastFollowUpDate: Joi.date().optional(),
@@ -213,7 +217,7 @@ export const updateDGEnquirySchema = Joi.object({
   branch: Joi.string().optional().allow(''),
   location: Joi.string().optional().allow(''),
   eoPoDate: Joi.date().optional(),
-  plannedFollowUpDate: Joi.date().optional(),
+  plannedFollowUpDate: Joi.date().optional().allow(null),
   sourceFrom: Joi.string().optional().allow(''),
   numberOfFollowUps: Joi.number().integer().min(0).optional(),
   lastFollowUpDate: Joi.date().optional(),

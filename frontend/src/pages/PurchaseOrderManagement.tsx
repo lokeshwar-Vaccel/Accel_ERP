@@ -47,6 +47,8 @@ interface POItem {
     brand?: string;
     modelNumber?: string;
     partNo?: string;
+    hsnNumber?: string;
+    uom?: string;
     price?: number;
     gst?: number;
   };
@@ -54,6 +56,8 @@ interface POItem {
   unitPrice: number;
   totalPrice: number;
   taxRate: number;
+  discountRate?: number; // Discount percentage (0-100)
+  discountAmount?: number; // Calculated discount amount
   receivedQuantity?: number; // Track received quantities
   notes?: string;
 }
@@ -72,6 +76,7 @@ interface SupplierAddress {
   state: string;
   district: string;
   pincode: string;
+  gstNumber?: string;
   id?: string; // for frontend keying
   isPrimary?: boolean;
 }
@@ -228,6 +233,9 @@ const PurchaseOrderManagement: React.FC = () => {
 
   // Selected data
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+
+  console.log("selectedPO--:",selectedPO);
+  
 
   // Payment update state
   const [paymentUpdate, setPaymentUpdate] = useState({
@@ -649,7 +657,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
     setSelectedPO(po);
     setReceiveSearchTerm(''); // Clear search when opening modal
-    
+
     // Clear any existing form errors
     setFormErrors({});
 
@@ -735,8 +743,8 @@ const PurchaseOrderManagement: React.FC = () => {
       setLoadingPayments(true);
       const response = await apiClient.purchaseOrderPayments.getByPurchaseOrder(poId);
       if (response.success) {
-        console.log("response.data:",response.data);
-        
+        console.log("response.data:", response.data);
+
         setPaymentHistory(response.data.payments || []);
       }
     } catch (error) {
@@ -889,15 +897,15 @@ const PurchaseOrderManagement: React.FC = () => {
       console.log('===================================');
 
       await apiClient.purchaseOrderPayments.create(paymentData);
-      
+
       // Refresh purchase orders and payment history
       await fetchPurchaseOrders();
       await fetchPaymentHistory(selectedPO._id);
       setShowPaymentModal(false);
-      
+
       // Clear form errors
       setFormErrors({});
-      
+
       toast.success('Payment recorded successfully!');
     } catch (error) {
       console.error('Error recording payment:', error);
@@ -951,37 +959,37 @@ const PurchaseOrderManagement: React.FC = () => {
 
     // Collect ALL validation errors at once - this ensures all errors are shown together
     const allErrors: Record<string, string> = {};
-    
+
     // Critical field validations
     if (!receiveData.gstInvoiceNumber || receiveData.gstInvoiceNumber.trim() === '') {
       allErrors.gstInvoiceNumber = 'GST Invoice Number is required for invoice creation';
     }
-    
+
     if (!receiveData.location || receiveData.location.trim() === '') {
       allErrors.location = 'Delivery Location is required';
     }
-    
+
     if (!receiveData.receiptDate || receiveData.receiptDate.trim() === '') {
       allErrors.receiptDate = 'Receipt Date is required';
     }
-    
+
     if (!receiveData.shipDate || receiveData.shipDate.trim() === '') {
       allErrors.shipDate = 'Ship Date is required';
     }
-    
+
     if (!receiveData.noOfPackages || receiveData.noOfPackages <= 0) {
       allErrors.noOfPackages = 'Number of Packages must be greater than 0';
     }
-    
+
     if (!receiveData.invoiceDate || receiveData.invoiceDate.trim() === '') {
       allErrors.invoiceDate = 'Invoice Date is required';
     }
-    
+
     // Items validation
     if (receiveData.receivedItems.every(item => (item.quantityReceived || 0) === 0)) {
       allErrors.items = 'Please select items to receive';
     }
-    
+
     // Check for duplicate GST Invoice Number if provided
     if (receiveData.gstInvoiceNumber && receiveData.gstInvoiceNumber.trim() !== '') {
       try {
@@ -995,12 +1003,12 @@ const PurchaseOrderManagement: React.FC = () => {
         // Don't block validation if the check fails
       }
     }
-    
+
     // Filter out any empty error messages
     const validErrors = Object.fromEntries(
       Object.entries(allErrors).filter(([field, error]) => error && error.trim() !== '')
     );
-    
+
     // If there are any valid errors, display them all and stop
     if (Object.keys(validErrors).length > 0) {
       setFormErrors(validErrors);
@@ -1024,7 +1032,7 @@ const PurchaseOrderManagement: React.FC = () => {
       };
 
       console.log("Sending data to backend:", dataToSend);
-      
+
       const response = await apiClient.purchaseOrders.receiveItems(selectedPO._id, dataToSend);
 
       // Use the updated purchase order from the backend response
@@ -1066,7 +1074,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
       setShowReceiveModal(false);
       clearGstInvoiceValidation();
-      
+
       // Enhanced success message with invoice information
       if (response.data.invoice) {
         toast.success(`Items received successfully! Purchase invoice ${response.data.invoice.invoiceNumber} created with ${response.data.invoice.paymentStatus} payment status.`);
@@ -1098,7 +1106,7 @@ const PurchaseOrderManagement: React.FC = () => {
     try {
       // Show loading state
       toast.loading('Preparing export...', { id: 'export' });
-      
+
       // Get all purchase orders from backend (not just filtered ones)
       const response = await apiClient.purchaseOrders.getAll({
         sort: '-createdAt'
@@ -1126,10 +1134,10 @@ const PurchaseOrderManagement: React.FC = () => {
 
       // Create Excel workbook with proper formatting
       const workbook = XLSX.utils.book_new();
-      
+
       // Convert data to worksheet format
       const worksheet = XLSX.utils.json_to_sheet(exportData);
-      
+
       // Set column widths for better display
       const columnWidths = [
         { wch: 25 }, // Status - wide enough for long status text
@@ -1140,16 +1148,16 @@ const PurchaseOrderManagement: React.FC = () => {
         { wch: 25 }, // Order Type - wide enough for type names
         { wch: 15 }  // Order Value
       ];
-      
+
       worksheet['!cols'] = columnWidths;
-      
+
       // Add worksheet to workbook
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Purchase Orders');
-      
+
       // Generate Excel file
       const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
       const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      
+
       // Download the file
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
@@ -1159,7 +1167,7 @@ const PurchaseOrderManagement: React.FC = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      
+
       toast.success(`Exported ${exportData.length} purchase orders to Excel`, { id: 'export' });
     } catch (error) {
       console.error('Export error:', error);
@@ -1296,7 +1304,7 @@ const PurchaseOrderManagement: React.FC = () => {
     return matchesSearch && matchesStatus && matchesSupplier;
   });
   console.log("filteredPOs:", filteredPOs);
-  
+
 
   // Filter items for Details Modal
   const filteredDetailsItems = selectedPO ? selectedPO.items.filter(item => {
@@ -1467,7 +1475,7 @@ const PurchaseOrderManagement: React.FC = () => {
   const handleGeneratePDF = async (paymentId: string) => {
     try {
       const response = await apiClient.purchaseOrderPayments.generatePDF(paymentId);
-      
+
       // Create blob URL and trigger download
       const blob = new Blob([response], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
@@ -1478,7 +1486,7 @@ const PurchaseOrderManagement: React.FC = () => {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      
+
       toast.success('Payment receipt PDF generated successfully!');
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -1494,7 +1502,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
     // Fetch company information
     let companyInfo = {
-      name: 'SUN POWER SOLUTIONS',
+      name: 'SUN POWER SERVICES',
       address: 'Company Address',
       phone: '',
       email: '',
@@ -1506,7 +1514,7 @@ const PurchaseOrderManagement: React.FC = () => {
       if (response.success && response.data && response.data.companies && response.data.companies.length > 0) {
         const companySettings = response.data.companies[0];
         companyInfo = {
-          name: companySettings.companyName || 'SUN POWER SOLUTIONS',
+          name: companySettings.companyName || 'SUN POWER SERVICES',
           address: companySettings.companyAddress || 'Company Address',
           phone: companySettings.contactPhone || '',
           email: companySettings.contactEmail || '',
@@ -1517,12 +1525,12 @@ const PurchaseOrderManagement: React.FC = () => {
       console.error('Error fetching company settings:', error);
     }
 
-    const supplierName = typeof selectedPO.supplier === 'string' 
-      ? selectedPO.supplier 
+    const supplierName = typeof selectedPO.supplier === 'string'
+      ? selectedPO.supplier
       : (selectedPO.supplier as Supplier)?.name || 'Unknown Supplier';
 
-    const supplierEmail = typeof selectedPO.supplierEmail === 'string' 
-      ? selectedPO.supplierEmail 
+    const supplierEmail = typeof selectedPO.supplierEmail === 'string'
+      ? selectedPO.supplierEmail
       : (selectedPO.supplierEmail as any)?.email || 'No Email';
 
     // Extract supplier address
@@ -1551,7 +1559,7 @@ const PurchaseOrderManagement: React.FC = () => {
         <style>
           @media print {
             @page {
-              margin: 0.5in;
+              margin: 0.3in;
               size: A4;
             }
             body { margin: 0; }
@@ -1559,219 +1567,207 @@ const PurchaseOrderManagement: React.FC = () => {
           }
           
           body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.4;
-            color: #333;
+            font-family: Arial, sans-serif;
+            line-height: 1.3;
+            color: #000;
             margin: 0;
-            padding: 20px;
+            padding: 0;
             background: white;
+            font-size: 12px;
           }
           
           .header {
             text-align: center;
-            margin-bottom: 30px;
-            border-bottom: 3px solid #2563eb;
-            padding-bottom: 20px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #000;
+            padding-bottom: 10px;
+            background: #fff;
           }
           
           .company-name {
-            font-size: 28px;
+            font-size: 22px;
             font-weight: bold;
-            color: #2563eb;
             margin-bottom: 5px;
+            color: #000;
+            letter-spacing: 0.5px;
           }
           
           .company-tagline {
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 10px;
-          }
-          
-          .company-address {
             font-size: 12px;
-            color: #555;
-            margin-bottom: 15px;
-            line-height: 1.4;
+            margin-bottom: 8px;
+            color: #666;
             font-style: italic;
           }
           
+          .company-address {
+            font-size: 11px;
+            margin-bottom: 10px;
+            line-height: 1.3;
+            color: #555;
+          }
+          
           .po-title {
-            font-size: 24px;
+            font-size: 18px;
             font-weight: bold;
-            color: #1f2937;
-            margin-top: 20px;
+            margin-top: 15px;
+            text-decoration: underline;
+            color: #000;
+            letter-spacing: 1px;
           }
           
           .po-number {
-            font-size: 18px;
-            color: #374151;
-            margin-bottom: 20px;
+            font-size: 14px;
+            margin-bottom: 15px;
+            color: #333;
+            font-weight: 600;
           }
           
           .info-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
+            gap: 15px;
+            margin-bottom: 15px;
           }
           
           .info-section {
-            background: #f8fafc;
-            padding: 20px;
-            border-radius: 8px;
-            border-left: 4px solid #2563eb;
+            border: 1px solid #ccc;
+            padding: 8px;
+            background: #f9f9f9;
           }
           
           .info-section h3 {
-            margin: 0 0 15px 0;
-            font-size: 16px;
+            margin: 0 0 8px 0;
+            font-size: 14px;
             font-weight: bold;
-            color: #374151;
             text-transform: uppercase;
+            border-bottom: 1px solid #000;
+            padding-bottom: 4px;
+            text-align: center;
             letter-spacing: 0.5px;
           }
           
           .info-row {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 8px;
-            padding: 4px 0;
-            border-bottom: 1px solid #e5e7eb;
-          }
-          
-          .info-row:last-child {
-            border-bottom: none;
+            margin-bottom: 4px;
+            font-size: 11px;
+            padding: 2px 0;
           }
           
           .info-label {
-            font-weight: 600;
-            color: #6b7280;
-            font-size: 13px;
+            font-weight: bold;
+            width: 35%;
+            color: #333;
           }
           
           .info-value {
-            font-weight: 500;
-            color: #111827;
-            font-size: 13px;
+            width: 65%;
             text-align: right;
+            color: #000;
+            font-weight: 500;
           }
-          
-          .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-          }
-          
-          .status-approved { background: #dbeafe; color: #1e40af; }
-          .status-pending { background: #fef3c7; color: #92400e; }
-          .status-rejected { background: #fee2e2; color: #dc2626; }
-          .status-partial { background: #fed7aa; color: #ea580c; }
-          .status-paid { background: #d1fae5; color: #059669; }
           
           .items-section {
-            margin: 30px 0;
+            margin: 10px 0;
           }
           
           .items-title {
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
-            color: #1f2937;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #e5e7eb;
+            margin-bottom: 10px;
+            text-align: center;
+            border: 1px solid #000;
+            padding: 6px;
+            background: #f0f0f0;
+            letter-spacing: 0.5px;
           }
           
           .items-table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
-            background: white;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 15px;
+            font-size: 10px;
+            border: 1px solid #000;
           }
           
           .items-table th {
-            background: #f3f4f6;
-            color: #374151;
-            font-weight: 600;
-            font-size: 12px;
+            background: #e0e0e0;
+            font-weight: bold;
+            padding: 6px 3px;
+            text-align: center;
+            border: 1px solid #000;
+            font-size: 10px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            padding: 12px 8px;
-            text-align: left;
-            border: 1px solid #d1d5db;
+            letter-spacing: 0.3px;
+          }
+          
+          .items-table th:last-child {
+            border-right: 1px solid #000;
           }
           
           .items-table td {
-            padding: 10px 8px;
-            border: 1px solid #e5e7eb;
-            font-size: 13px;
-            vertical-align: top;
+            padding: 4px 3px;
+            border: 1px solid #000;
+            font-size: 10px;
+            vertical-align: middle;
           }
           
-          .items-table tbody tr:nth-child(even) {
-            background: #f9fafb;
-          }
-          
-          .items-table tbody tr:hover {
-            background: #f3f4f6;
+          .items-table td:last-child {
+            border-right: 1px solid #000;
           }
           
           .product-name {
-            font-weight: 600;
-            color: #111827;
+            font-weight: bold;
           }
           
           .product-part {
-            font-family: 'Courier New', monospace;
-            color: #2563eb;
-            font-size: 11px;
-            background: #eff6ff;
-            padding: 2px 6px;
-            border-radius: 4px;
+            font-family: monospace;
+            font-size: 9px;
           }
           
           .quantity {
             text-align: center;
-            font-weight: 600;
           }
           
           .price {
             text-align: right;
-            font-weight: 600;
           }
           
           .total-row {
-            background: #f3f4f6 !important;
+            background: #e0e0e0 !important;
             font-weight: bold;
           }
           
           .total-row td {
-            border-top: 2px solid #374151;
-            padding: 15px 8px;
+            border-top: 1px solid #000;
+            border-right: 1px solid #000;
+            padding: 5px 3px;
+            font-size: 10px;
+          }
+          
+          .total-row td:last-child {
+            border-right: 1px solid #000;
           }
           
           .grand-total {
-            background: #1f2937 !important;
+            background: #000 !important;
             color: white;
           }
           
           .grand-total td {
-            border-top: 3px solid #1f2937;
-            font-size: 14px;
+            border-top: 3px solid #000;
+            font-size: 11px;
             font-weight: bold;
           }
           
           .footer {
-            margin-top: 40px;
-            padding-top: 20px;
-            border-top: 2px solid #e5e7eb;
+            margin-top: 15px;
             text-align: center;
-            color: #6b7280;
-            font-size: 12px;
+            font-size: 10px;
+            border-top: 1px solid #000;
+            padding-top: 8px;
+            color: #666;
+            font-style: italic;
           }
           
           .print-button {
@@ -1799,7 +1795,6 @@ const PurchaseOrderManagement: React.FC = () => {
         
         <div class="header">
           <div class="company-name">${companyInfo.name}</div>
-          <div class="company-tagline">Solar Energy Solutions & Equipment</div>
           <div class="company-address">
             ${companyInfo.address}<br/>
             ${companyInfo.phone ? `Phone: ${companyInfo.phone}` : ''}${companyInfo.phone && companyInfo.email ? ' | ' : ''}${companyInfo.email ? `Email: ${companyInfo.email}` : ''}<br/>
@@ -1817,6 +1812,14 @@ const PurchaseOrderManagement: React.FC = () => {
               <span class="info-value">${selectedPO.poNumber}</span>
             </div>
             <div class="info-row">
+              <span class="info-label">Order Date:</span>
+              <span class="info-value">${formatDate(selectedPO.orderDate)}</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Expected Delivery:</span>
+              <span class="info-value">${selectedPO.expectedDeliveryDate ? formatDate(selectedPO.expectedDeliveryDate) : 'Not specified'}</span>
+            </div>
+            <div class="info-row">
               <span class="info-label">Order Type:</span>
               <span class="info-value">${getPurchaseOrderTypeLabel(selectedPO.purchaseOrderType)}</span>
             </div>
@@ -1828,33 +1831,6 @@ const PurchaseOrderManagement: React.FC = () => {
               <span class="info-label">Priority:</span>
               <span class="info-value">${selectedPO.priority ? selectedPO.priority.charAt(0).toUpperCase() + selectedPO.priority.slice(1) : 'Medium'}</span>
             </div>
-            <div class="info-row">
-              <span class="info-label">Status:</span>
-              <span class="info-value">
-                <span class="status-badge status-${selectedPO.status === 'approved_order_sent_sap' ? 'approved' : 
-                  selectedPO.status === 'rejected' ? 'rejected' : 
-                  selectedPO.status === 'partially_invoiced' ? 'partial' : 
-                  selectedPO.status === 'fully_invoiced' ? 'paid' : 'pending'}">
-                  ${getStatusLabel(selectedPO.status)}
-                </span>
-              </span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Order Date:</span>
-              <span class="info-value">${formatDate(selectedPO.orderDate)}</span>
-            </div>
-            ${selectedPO.expectedDeliveryDate ? `
-            <div class="info-row">
-              <span class="info-label">Expected Delivery:</span>
-              <span class="info-value">${formatDate(selectedPO.expectedDeliveryDate)}</span>
-            </div>
-            ` : ''}
-            ${selectedPO.actualDeliveryDate ? `
-            <div class="info-row">
-              <span class="info-label">Actual Delivery:</span>
-              <span class="info-value">${formatDate(selectedPO.actualDeliveryDate)}</span>
-            </div>
-            ` : ''}
           </div>
           
           <div class="info-section">
@@ -1873,118 +1849,86 @@ const PurchaseOrderManagement: React.FC = () => {
               <span class="info-value">${(selectedPO.supplier as Supplier).phone}</span>
             </div>
             ` : ''}
-            ${selectedPO.supplier && typeof selectedPO.supplier !== 'string' && (selectedPO.supplier as Supplier)?.contactPerson ? `
-            <div class="info-row">
-              <span class="info-label">Contact Person:</span>
-              <span class="info-value">${(selectedPO.supplier as Supplier).contactPerson}</span>
-            </div>
-            ` : ''}
             ${supplierAddress && supplierAddress.address ? `
             <div class="info-row">
               <span class="info-label">Address:</span>
-              <span class="info-value" style="text-align: left; max-width: 200px;">
+              <span class="info-value" style="text-align: left;">
                 ${supplierAddress.address}<br/>
                 ${supplierAddress.district ? supplierAddress.district + ', ' : ''}${supplierAddress.state ? supplierAddress.state : ''}<br/>
                 ${supplierAddress.pincode ? 'PIN: ' + supplierAddress.pincode : ''}
               </span>
             </div>
             ` : ''}
-          </div>
-        </div>
-        
-        <div class="info-grid">
-          <div class="info-section">
-            <h3>Payment Information</h3>
+            ${supplierAddress && supplierAddress.gstNumber ? `
             <div class="info-row">
-              <span class="info-label">Total Amount:</span>
-              <span class="info-value">${formatCurrency(selectedPO.totalAmount)}</span>
+              <span class="info-label">GST Number:</span>
+              <span class="info-value">${supplierAddress.gstNumber}</span>
             </div>
-            <div class="info-row">
-              <span class="info-label">Paid Amount:</span>
-              <span class="info-value">${formatCurrency(selectedPO.paidAmount || 0)}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Remaining Amount:</span>
-              <span class="info-value">${formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Payment Status:</span>
-              <span class="info-value">
-                <span class="status-badge status-${selectedPO.paymentStatus === 'paid' ? 'paid' : 
-                  selectedPO.paymentStatus === 'partial' ? 'partial' : 'pending'}">
-                  ${selectedPO.paymentStatus ? selectedPO.paymentStatus.charAt(0).toUpperCase() + selectedPO.paymentStatus.slice(1) : 'Pending'}
-                </span>
-              </span>
-            </div>
-          </div>
-          
-          <div class="info-section">
-            <h3>Created By</h3>
-            <div class="info-row">
-              <span class="info-label">Name:</span>
-              <span class="info-value">${createdByName}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Created:</span>
-              <span class="info-value">${formatDateTime(selectedPO.createdAt)}</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Last Updated:</span>
-              <span class="info-value">${formatDateTime(selectedPO.updatedAt)}</span>
-            </div>
+            ` : ''}
           </div>
         </div>
         
         <div class="items-section">
-          <div class="items-title">Items Ordered</div>
+          <div class="items-title">ITEMS ORDERED</div>
           <table class="items-table">
             <thead>
               <tr>
-                <th style="width: 25%;">Product</th>
-                <th style="width: 15%;">Part Number</th>
-                <th style="width: 12%;">Category</th>
-                <th style="width: 8%;">Ordered</th>
-                <th style="width: 8%;">Received</th>
-                <th style="width: 8%;">Remaining</th>
-                <th style="width: 12%;">Unit Price</th>
-                <th style="width: 12%;">Total Price</th>
+                <th style="width: 8%;">S.No</th>
+                <th style="width: 25%;">Product Name</th>
+                <th style="width: 12%;">Part No</th>
+                <th style="width: 8%;">HSN</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 8%;">Quantity</th>
+                <th style="width: 8%;">Unit Price</th>
+                <th style="width: 6%;">Tax %</th>
+                <th style="width: 6%;">Tax Amt</th>
+                <th style="width: 6%;">Disc %</th>
+                <th style="width: 6%;">Disc Amt</th>
+                <th style="width: 8%;">Total Price</th>
               </tr>
             </thead>
             <tbody>
-              ${selectedPO.items.map(item => {
-                const receivedQty = item.receivedQuantity || 0;
-                const remainingQty = item.quantity - receivedQty;
-                const productName = getProductName(item.product);
-                const partNo = getProductPartNo(item.product);
-                const category = typeof item.product === 'object' ? item.product?.category : '-';
-                const brand = typeof item.product === 'object' ? item.product?.brand : '';
-                
-                return `
+              ${selectedPO.items.map((item, index) => {
+          const receivedQty = item.receivedQuantity || 0;
+          const remainingQty = item.quantity - receivedQty;
+          const productName = getProductName(item.product);
+          const partNo = getProductPartNo(item.product);
+          const hsnNumber = (typeof item.product === 'object' && item.product?.hsnNumber) ? item.product.hsnNumber : '-';
+          const uom = typeof item.product === 'object' ? (item.product as any)?.uom || 'nos' : 'nos';
+          const taxAmount = (item.quantity * item.unitPrice * item.taxRate) / 100;
+          const discountAmount = item.discountAmount || 0;
+
+          return `
                   <tr>
+                    <td class="quantity">${index + 1}</td>
                     <td>
                       <div class="product-name">${productName}</div>
-                      ${brand ? `<div style="font-size: 11px; color: #6b7280;">Brand: ${brand}</div>` : ''}
                     </td>
                     <td>
                       <span class="product-part">${partNo}</span>
                     </td>
-                    <td>${category}</td>
+                    <td class="quantity">${hsnNumber}</td>
+                    <td class="quantity">${uom}</td>
                     <td class="quantity">${item.quantity}</td>
-                    <td class="quantity">${receivedQty}</td>
-                    <td class="quantity">${remainingQty}</td>
                     <td class="price">${formatCurrency(item.unitPrice)}</td>
+                    <td class="quantity">${item.taxRate}%</td>
+                    <td class="price">${formatCurrency(taxAmount)}</td>
+                    <td class="quantity">${item.discountRate || 0}%</td>
+                    <td class="price">${formatCurrency(discountAmount)}</td>
                     <td class="price">${formatCurrency(item.totalPrice)}</td>
                   </tr>
                 `;
-              }).join('')}
+        }).join('')}
             </tbody>
             <tfoot>
               <tr class="total-row">
-                <td colspan="3" style="text-align: right; font-weight: bold;">TOTALS:</td>
+                <td colspan="5" style="text-align: right; font-weight: bold;">TOTALS:</td>
                 <td class="quantity">${totalOrdered}</td>
-                <td class="quantity">${totalReceived}</td>
-                <td class="quantity">${totalRemaining}</td>
-                <td style="text-align: right; font-weight: bold;">Total Amount:</td>
+                <td class="price">${formatCurrency(selectedPO.items.reduce((sum, item) => sum + item.unitPrice, 0))}</td>
+                <td></td>
+                <td class="price">${formatCurrency(selectedPO.items.reduce((sum, item) => sum + (item.quantity * item.unitPrice * item.taxRate) / 100, 0))}</td>
+                <td></td>
+                <td class="price">${formatCurrency(selectedPO.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0))}</td>
                 <td class="price">${formatCurrency(selectedPO.totalAmount)}</td>
               </tr>
             </tfoot>
@@ -1992,24 +1936,23 @@ const PurchaseOrderManagement: React.FC = () => {
         </div>
         
         ${selectedPO.notes ? `
-        <div class="info-section" style="margin-top: 30px;">
+        <div class="info-section">
           <h3>Notes</h3>
-          <p style="margin: 0; padding: 10px; background: #f9fafb; border-radius: 4px; font-style: italic;">
+          <p style="margin: 0; padding: 5px; font-style: italic;">
             ${selectedPO.notes}
           </p>
         </div>
         ` : ''}
         
         <div class="footer">
-          <p>This is a computer-generated purchase order. No signature required.</p>
-          <p>Generated on ${new Date().toLocaleString('en-IN', { 
-            timeZone: 'Asia/Kolkata',
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-          })}</p>
+          <p>Generated on ${new Date().toLocaleString('en-IN', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })}</p>
         </div>
       </body>
       </html>
@@ -2017,7 +1960,7 @@ const PurchaseOrderManagement: React.FC = () => {
 
     printWindow.document.write(printContent);
     printWindow.document.close();
-    
+
     // Auto-print after a short delay to ensure content is loaded
     setTimeout(() => {
       printWindow.print();
@@ -2050,12 +1993,11 @@ const PurchaseOrderManagement: React.FC = () => {
           <div key={payment._id || index} className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center space-x-3">
-                <div className={`w-3 h-3 rounded-full ${
-                  payment.paymentStatus === 'completed' ? 'bg-green-500' :
-                  payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
-                  payment.paymentStatus === 'failed' ? 'bg-red-500' :
-                  'bg-gray-500'
-                }`}></div>
+                <div className={`w-3 h-3 rounded-full ${payment.paymentStatus === 'completed' ? 'bg-green-500' :
+                    payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
+                      payment.paymentStatus === 'failed' ? 'bg-red-500' :
+                        'bg-gray-500'
+                  }`}></div>
                 <div>
                   <h4 className="text-sm font-medium text-gray-900">
                     {getPaymentMethodLabel(payment.paymentMethod)} Payment
@@ -2086,7 +2028,7 @@ const PurchaseOrderManagement: React.FC = () => {
                 </button>
               </div>
             </div>
-            
+
             {/* Payment Method Details */}
             {payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-100">
@@ -2095,7 +2037,7 @@ const PurchaseOrderManagement: React.FC = () => {
                 </div>
               </div>
             )}
-            
+
             {/* Payment Notes */}
             {payment.notes && (
               <div className="mt-3 pt-3 border-t border-gray-100">
@@ -2466,12 +2408,12 @@ const PurchaseOrderManagement: React.FC = () => {
             <span className="text-sm">Refresh</span>
           </button>
           <button
-  onClick={handleExportToExcel}
-  className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
->
-  <Download className="w-4 h-4" />
-  <span className="text-sm">Export Excel</span>
-</button>
+            onClick={handleExportToExcel}
+            className="bg-gradient-to-r from-purple-600 to-purple-700 text-white px-3 py-1.5 rounded-lg flex items-center space-x-1.5 hover:from-purple-700 hover:to-purple-800 transition-all duration-300 transform hover:scale-105 shadow-md hover:shadow-lg"
+          >
+            <Download className="w-4 h-4" />
+            <span className="text-sm">Export Excel</span>
+          </button>
 
           <button
             onClick={handleImportClick}
@@ -2632,7 +2574,7 @@ const PurchaseOrderManagement: React.FC = () => {
                   {searchTerm}
                   <button onClick={() => setSearchTerm('')} className="ml-1 text-gray-500 hover:text-gray-700">×</button>
                 </span>
-              ) }
+              )}
             </div>
           </div>
         )}
@@ -2715,113 +2657,111 @@ const PurchaseOrderManagement: React.FC = () => {
                         {((currentPage - 1) * limit) + index + 1}
                       </div>
                     </td>
-                    
+
                     {/* Supplier */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {typeof po.supplier === 'string' ? po.supplier : (po.supplier as Supplier)?.name || 'Unknown Supplier'}
                       </div>
                     </td>
-                    
+
                     {/* Purchase Order No. */}
                     <td className="px-4 py-3 whitespace-nowrap w-48">
                       <div className="text-sm font-medium text-blue-600">
                         {po.poNumber}
                       </div>
                     </td>
-                    
+
                     {/* Order Date */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {formatDate(po.orderDate)}
                       </div>
                     </td>
-                    
+
                     {/* Department */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {po.department ? getDepartmentLabel(po.department) : 'Not specified'}
                       </div>
                     </td>
-                    
+
                     {/* PO Type */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        po.purchaseOrderType === 'commercial' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'
-                      }`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${po.purchaseOrderType === 'commercial' ? 'bg-blue-100 text-blue-800' : 'bg-orange-100 text-orange-800'
+                        }`}>
                         {getPurchaseOrderTypeLabel(po.purchaseOrderType)}
                       </span>
                     </td>
-                    
+
                     {/* Total Amount */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         ₹{po.totalAmount.toFixed(2)}
                       </div>
                     </td>
-                    
+
                     {/* Status */}
                     <td className="px-4 py-3 whitespace-nowrap w-48">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getStatusColor(po.status)}`}>
                         {getStatusLabel(po.status)}
                       </span>
                     </td>
-                    
+
                     {/* Payment */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         ₹{(po.paidAmount || 0).toFixed(2)} / ₹{po.totalAmount.toFixed(2)}
                       </div>
                     </td>
-                    
+
                     {/* Payment Status */}
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        po.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
-                        po.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${po.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                          po.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                        }`}>
                         {(po.paymentStatus
                           ? po.paymentStatus.charAt(0).toUpperCase() + po.paymentStatus.slice(1)
                           : 'Pending')}
                       </span>
                     </td>
-                    
+
                     {/* Supplier Email */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-xs text-gray-600">
                         {typeof po.supplierEmail === 'string' ? po.supplierEmail : (po.supplierEmail as any)?.email || 'No Email'}
                       </div>
                     </td>
-                    
+
                     {/* Created By */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {getCreatedByName(po.createdBy)}
                       </div>
                     </td>
-                    
+
                     {/* Items */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {po.items.length} item(s)
                       </div>
                     </td>
-                    
+
                     {/* Expected Delivery */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {po.expectedDeliveryDate ? formatDate(po.expectedDeliveryDate) : 'Not set'}
                       </div>
                     </td>
-                    
+
                     {/* Actual Delivery */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {po.actualDeliveryDate ? formatDate(po.actualDeliveryDate) : 'Not delivered'}
                       </div>
                     </td>
-                    
+
                     {/* Delivery Status */}
                     <td className="px-4 py-3 whitespace-nowrap">
                       {po.deliveryStatus ? (
@@ -2898,8 +2838,8 @@ const PurchaseOrderManagement: React.FC = () => {
                             className="text-purple-600 hover:text-purple-900 p-1 rounded hover:bg-indigo-50 transition-colors"
                             title="Update Payment"
                           >
-                          <IndianRupee className="w-4 h-4" />
-                        </button>)}
+                            <IndianRupee className="w-4 h-4" />
+                          </button>)}
                         {(po.status === 'order_under_process') && (
                           <button
                             onClick={() => handleStatusUpdate(po._id, 'rejected')}
@@ -2945,7 +2885,7 @@ const PurchaseOrderManagement: React.FC = () => {
       />
 
 
-        
+
 
 
 
@@ -3021,11 +2961,10 @@ const PurchaseOrderManagement: React.FC = () => {
                     <p><span className="text-xs text-gray-600">Paid Amount:</span> <span className="font-medium text-green-600">{formatCurrency(selectedPO.paidAmount || 0)}</span></p>
                     <p><span className="text-xs text-gray-600">Remaining Amount:</span> <span className="font-medium text-orange-600">{formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}</span></p>
                     <p><span className="text-xs text-gray-600">Payment Status:</span>
-                      <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                        selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
-                        selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
+                      <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                          selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                        }`}>
                         {(selectedPO.paymentStatus
                           ? selectedPO.paymentStatus.charAt(0).toUpperCase() + selectedPO.paymentStatus.slice(1)
                           : 'Pending')}
@@ -3060,7 +2999,7 @@ const PurchaseOrderManagement: React.FC = () => {
               <div className="mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-medium text-gray-900">Related Invoices</h3>
-                  <button
+                  {/* <button
                     onClick={async () => {
                       try {
                         await apiClient.purchaseOrders.syncPaymentStatus(selectedPO._id);
@@ -3075,20 +3014,19 @@ const PurchaseOrderManagement: React.FC = () => {
                   >
                     <RefreshCw className="w-4 h-4" />
                     <span>Sync Payment Status</span>
-                  </button>
+                  </button> */}
                 </div>
                 <div className="bg-gray-50 rounded-lg p-4">
                   <p className="text-sm text-gray-600">
-                    Purchase invoices are automatically created when items are received. 
+                    Purchase invoices are automatically created when items are received.
                     Payment status is synchronized between PO and invoices.
                   </p>
                   <div className="mt-3 text-sm">
                     <span className="font-medium">Current PO Payment Status:</span>
-                    <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
-                      selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
+                    <span className={`ml-2 inline-flex px-2 py-1 text-xs font-semibold rounded-full ${selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                        selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                          'bg-gray-100 text-gray-800'
+                      }`}>
                       {(selectedPO.paymentStatus
                         ? selectedPO.paymentStatus.charAt(0).toUpperCase() + selectedPO.paymentStatus.slice(1)
                         : 'Pending')}
@@ -3123,13 +3061,17 @@ const PurchaseOrderManagement: React.FC = () => {
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Received</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Remaining</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Unit Price</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GST (%)</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">GST Amount</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Discount (%)</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Discount (₹)</th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Price</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {filteredDetailsItems.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="px-6 py-8 text-center text-gray-500">
+                          <td colSpan={10} className="px-6 py-8 text-center text-gray-500">
                             {detailsSearchTerm ? 'No items match your search' : 'No items found'}
                           </td>
                         </tr>
@@ -3154,9 +3096,14 @@ const PurchaseOrderManagement: React.FC = () => {
                                   {getProductPartNo(item.product)}
                                 </span>
                               </td>
-                              <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
-                                {typeof item.product === 'object' ? item.product?.category : '-'}
+                              <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-800">
+                                {typeof item.product === "object" && item.product?.category
+                                  ? item.product.category
+                                    .replace(/_/g, " ")        // replace underscores
+                                    .replace(/\b\w/g, (c) => c.toUpperCase()) // capitalize each word
+                                  : "-"}
                               </td>
+
                               <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                                 <span className="font-medium">{item.quantity}</span>
                               </td>
@@ -3172,6 +3119,18 @@ const PurchaseOrderManagement: React.FC = () => {
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap text-xs text-gray-900">
                                 {formatCurrency(item.unitPrice)}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs font-medium text-gray-900">
+                                {item.taxRate}%
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs font-medium text-gray-900">
+                                {formatCurrency(item.taxRate * item.unitPrice / 100)}
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs font-medium text-gray-900">
+                                {(item.discountRate || 0)}%
+                              </td>
+                              <td className="px-4 py-4 whitespace-nowrap text-xs font-medium text-green-600">
+                                -{formatCurrency(item.discountAmount || 0)}
                               </td>
                               <td className="px-4 py-4 whitespace-nowrap text-xs font-medium text-gray-900">
                                 {formatCurrency(item.totalPrice)}
@@ -3209,15 +3168,92 @@ const PurchaseOrderManagement: React.FC = () => {
                             </div>
                           )}
                         </td>
+                        <td className="px-4 py-3 text-xs font-bold text-gray-900">
+                          {/* Average GST: */}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-bold text-gray-900">
+                          {/* Average Discount: */}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-bold text-green-600">
+                          {/* -{formatCurrency(
+                            selectedPO.items.reduce((sum, item) => sum + (item.discountAmount || 0), 0)
+                          )}
+                          {detailsSearchTerm && (
+                            <div className="text-xs text-gray-500 font-normal">
+                              (-{formatCurrency(filteredDetailsItems.reduce((sum, item) => sum + (item.discountAmount || 0), 0))} filtered)
+                            </div>
+                          )} */}
+                        </td>
+                        <td className="px-4 py-3 text-xs font-bold text-gray-900">
+                          {/* {formatCurrency(
+                            selectedPO.items.reduce((sum, item) => sum + (item.taxRate * item.unitPrice / 100), 0)
+                          )}
+                          {detailsSearchTerm && (
+                            <div className="text-xs text-gray-500 font-normal">
+                              ({formatCurrency(filteredDetailsItems.reduce((sum, item) => sum + (item.taxRate * item.unitPrice / 100), 0))} filtered)
+                            </div>
+                          )} */}
+                        </td>
                         <td className="px-4 py-3 text-right text-xs font-medium text-gray-900">
-                          Total Amount:
+                          {/* Total Amount: */}
                         </td>
                         <td className="px-4 py-3 text-sm font-bold text-gray-900">
-                          {formatCurrency(selectedPO.totalAmount)}
+                          {/* {formatCurrency(selectedPO.totalAmount)} */}
                         </td>
                       </tr>
                     </tfoot>
                   </table>
+                  <div className=" border-gray-200 p-4">
+                    <div className="flex flex-col items-end space-y-2">
+                      {/* Subtotal */}
+                      <div className="flex justify-between w-64">
+                        <span className="text-sm font-medium text-gray-600">Subtotal:</span>
+                        <span className="text-sm font-medium text-gray-900">
+                          {formatCurrency(
+                            selectedPO.items.reduce(
+                              (sum, item) => sum + item.quantity * item.unitPrice,
+                              0
+                            )
+                          )}
+                        </span>
+                      </div>
+
+                      {/* GST */}
+                      <div className="flex justify-between w-64">
+                        <span className="text-sm font-medium text-gray-600">Total GST:</span>
+                        <span className="text-sm font-medium text-gray-900">
+                          {formatCurrency(
+                            selectedPO.items.reduce(
+                              (sum, item) => sum + (item.quantity * item.unitPrice * item.taxRate) / 100,
+                              0
+                            )
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Discount */}
+                      <div className="flex justify-between w-64">
+                        <span className="text-sm font-medium text-gray-600">Total Discount:</span>
+                        <span className="text-sm font-medium text-green-600">
+                          -{formatCurrency(
+                            selectedPO.items.reduce(
+                              (sum, item) => sum + (item.discountAmount || 0),
+                              0
+                            )
+                          )}
+                        </span>
+                      </div>
+
+                      {/* Total */}
+                      <div className="flex justify-between w-64 border-t border-gray-300 pt-2">
+                        <span className="text-sm font-semibold text-gray-800">Total Amount:</span>
+                        <span className="text-sm font-semibold text-gray-900">
+                          {formatCurrency(selectedPO.totalAmount)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
                 </div>
               </div>
 
@@ -3242,7 +3278,7 @@ const PurchaseOrderManagement: React.FC = () => {
                       </button>
                     </>
                   )}
-                  {selectedPO.status === 'approved_order_sent_sap' && (
+                  {/* {selectedPO.status === 'approved_order_sent_sap' && (
                     <button
                       onClick={() => handleStatusUpdate(selectedPO._id, 'fully_invoiced')}
                       className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
@@ -3250,7 +3286,7 @@ const PurchaseOrderManagement: React.FC = () => {
                       <Check className="w-4 h-4" />
                       <span>Mark as Fully Invoiced</span>
                     </button>
-                  )}
+                  )} */}
                   {(selectedPO.status === 'approved_order_sent_sap' || selectedPO.status === 'partially_invoiced') && (
                     <button
                       onClick={() => openReceiveModal(selectedPO)}
@@ -3274,7 +3310,7 @@ const PurchaseOrderManagement: React.FC = () => {
                   {/* Payment Update Button */}
                   <button
                     onClick={() => openPaymentModal(selectedPO)}
-                    className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-purple-700 transition-colors"
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
                   >
                     <IndianRupee className="w-4 h-4" />
                     <span>Update Payment</span>
@@ -3290,7 +3326,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     <span>Print PO</span>
                   </button>
                   {/* Sync Payment Status Button */}
-                  <button
+                  {/* <button
                     onClick={async () => {
                       try {
                         await apiClient.purchaseOrders.syncPaymentStatus(selectedPO._id);
@@ -3305,7 +3341,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     title="Sync Payment Status from Invoices"
                   >
                     <RefreshCw className="w-4 h-4" />
-                  </button>
+                  </button> */}
                 </div>
                 <button
                   onClick={() => setShowDetailsModal(false)}
@@ -3512,18 +3548,18 @@ const PurchaseOrderManagement: React.FC = () => {
                         onChange={(e) => {
                           const value = e.target.value;
                           setReceiveData({ ...receiveData, gstInvoiceNumber: value });
-                          
+
                           // Clear form error when user starts typing
                           if (formErrors.gstInvoiceNumber) {
                             setFormErrors(prev => ({ ...prev, gstInvoiceNumber: '' }));
                           }
-                          
+
                           // Real-time validation
                           const error = validateField('gstInvoiceNumber', value);
                           if (error) {
                             setFormErrors(prev => ({ ...prev, gstInvoiceNumber: error }));
                           }
-                          
+
                           // Validate GST Invoice Number for duplicates
                           validateGstInvoiceNumber(value);
                         }}
@@ -3536,10 +3572,9 @@ const PurchaseOrderManagement: React.FC = () => {
                           }
                         }}
                         placeholder="GST Invoice Number"
-                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                          formErrors.gstInvoiceNumber || gstInvoiceValidation.isDuplicate ? 'border-red-500' : 
-                          gstInvoiceValidation.message && !gstInvoiceValidation.isDuplicate ? 'border-blue-300' : 'border-gray-300'
-                        }`}
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.gstInvoiceNumber || gstInvoiceValidation.isDuplicate ? 'border-red-500' :
+                            gstInvoiceValidation.message && !gstInvoiceValidation.isDuplicate ? 'border-blue-300' : 'border-gray-300'
+                          }`}
                       />
                       {gstInvoiceValidation.isValidating && (
                         <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
@@ -3550,18 +3585,17 @@ const PurchaseOrderManagement: React.FC = () => {
                     {formErrors.gstInvoiceNumber && (
                       <p className="text-red-500 text-xs mt-1">{formErrors.gstInvoiceNumber}</p>
                     )}
-                                          {gstInvoiceValidation.message && !formErrors.gstInvoiceNumber && (
-                        <p className={`text-xs mt-1 ${
-                          gstInvoiceValidation.isDuplicate ? 'text-red-500' : 'text-blue-600'
+                    {gstInvoiceValidation.message && !formErrors.gstInvoiceNumber && (
+                      <p className={`text-xs mt-1 ${gstInvoiceValidation.isDuplicate ? 'text-red-500' : 'text-blue-600'
                         }`}>
-                          {gstInvoiceValidation.message}
-                        </p>
-                      )}
-                      {!gstInvoiceValidation.message && !formErrors.gstInvoiceNumber && receiveData.gstInvoiceNumber && receiveData.gstInvoiceNumber.trim() !== '' && (
-                        <p className="text-xs mt-1 text-green-600">
-                          ✓ GST Invoice Number format is valid
-                        </p>
-                      )}
+                        {gstInvoiceValidation.message}
+                      </p>
+                    )}
+                    {!gstInvoiceValidation.message && !formErrors.gstInvoiceNumber && receiveData.gstInvoiceNumber && receiveData.gstInvoiceNumber.trim() !== '' && (
+                      <p className="text-xs mt-1 text-green-600">
+                        ✓ GST Invoice Number format is valid
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -3648,7 +3682,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     />
                   </div>
                 </div>
-                
+
                 {/* Items Validation Summary */}
                 {formErrors.items && (
                   <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -3658,7 +3692,7 @@ const PurchaseOrderManagement: React.FC = () => {
                     </div>
                   </div>
                 )}
-                
+
                 {/* Warning when no items are selected */}
                 {!hasSelectedItems() && !formErrors.items && (
                   <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
@@ -3987,12 +4021,12 @@ const PurchaseOrderManagement: React.FC = () => {
                       </span>
                     </div>
                     <div className="text-sm text-blue-600 mt-3 p-3 bg-blue-50 rounded-lg">
-                      <strong>Note:</strong> A purchase invoice will be automatically created when you receive these items. 
+                      <strong>Note:</strong> A purchase invoice will be automatically created when you receive these items.
                       The payment status will be synchronized with the PO payment status.
                     </div>
                     <div className="text-sm text-green-600 mt-2 p-3 bg-green-50 rounded-lg">
-                      <strong>Payment Logic:</strong> The paid amount will reflect the actual amount you have already paid to the supplier 
-                      (₹{selectedPO?.paidAmount || 0}), not a proportional amount based on items received. This ensures accurate 
+                      <strong>Payment Logic:</strong> The paid amount will reflect the actual amount you have already paid to the supplier
+                      (₹{selectedPO?.paidAmount || 0}), not a proportional amount based on items received. This ensures accurate
                       financial tracking across partial receipts.
                     </div>
                   </div>
@@ -4274,13 +4308,13 @@ const PurchaseOrderManagement: React.FC = () => {
                           .filter(([field, error]) => error && error.trim() !== '') // Only show fields with actual error messages
                           .map(([field, error]) => (
                             <li key={field}>
-                              <span className="font-medium">{field === 'gstInvoiceNumber' ? 'GST Invoice Number' : 
+                              <span className="font-medium">{field === 'gstInvoiceNumber' ? 'GST Invoice Number' :
                                 field === 'location' ? 'Delivery Location' :
-                                field === 'receiptDate' ? 'Receipt Date' :
-                                field === 'shipDate' ? 'Ship Date' :
-                                field === 'noOfPackages' ? 'Number of Packages' :
-                                field === 'invoiceDate' ? 'Invoice Date' :
-                                field === 'items' ? 'Items' : field}:</span> {error}
+                                  field === 'receiptDate' ? 'Receipt Date' :
+                                    field === 'shipDate' ? 'Ship Date' :
+                                      field === 'noOfPackages' ? 'Number of Packages' :
+                                        field === 'invoiceDate' ? 'Invoice Date' :
+                                          field === 'items' ? 'Items' : field}:</span> {error}
                             </li>
                           ))}
                       </ul>
@@ -4417,11 +4451,10 @@ const PurchaseOrderManagement: React.FC = () => {
                       <div className="pt-2 border-t border-green-200">
                         <div className="flex justify-between items-center">
                           <span className="text-green-700 font-medium">Payment Status:</span>
-                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${
-                            selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
-                            selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
-                            'bg-gray-100 text-gray-800'
-                          }`}>
+                          <span className={`inline-flex px-3 py-1 text-xs font-semibold rounded-full ${selectedPO.paymentStatus === 'paid' ? 'bg-green-100 text-green-800' :
+                              selectedPO.paymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-800' :
+                                'bg-gray-100 text-gray-800'
+                            }`}>
                             {(selectedPO.paymentStatus
                               ? selectedPO.paymentStatus.charAt(0).toUpperCase() + selectedPO.paymentStatus.slice(1)
                               : 'Pending')}
@@ -4436,32 +4469,33 @@ const PurchaseOrderManagement: React.FC = () => {
                 <div className="lg:col-span-2 space-y-6">
                   <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                      <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      {/* <svg className="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                      </svg>
+                      </svg> */}
                       Payment Details
                     </h3>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {/* Payment Amount */}
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Payment Amount (₹) <span className="text-red-500">*</span>
                         </label>
-                        
+
                         {/* Quick Payment Buttons */}
                         <div className="mb-2">
                           <div className="text-xs text-gray-500 mb-2">Quick Payment Options:</div>
                           <div className="flex space-x-3">
                             <button
                               type="button"
-                                                          onClick={() => {
-                              const halfAmount = Math.ceil((selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))) / 2);
-                              setPaymentUpdate({ ...paymentUpdate, paidAmount: halfAmount });
-                              if (formErrors.paidAmount) {
-                                setFormErrors(prev => ({ ...prev, paidAmount: '' }));
-                              }
-                            }}
+                              onClick={() => {
+                                const halfAmount = Math.ceil((selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))) / 2);
+                                const roundedHalfAmount = Math.round(halfAmount * 100) / 100; // Ensure 2 decimal places
+                                setPaymentUpdate({ ...paymentUpdate, paidAmount: roundedHalfAmount });
+                                if (formErrors.paidAmount) {
+                                  setFormErrors(prev => ({ ...prev, paidAmount: '' }));
+                                }
+                              }}
                               className="flex-1 px-4 py-2 bg-orange-100 text-orange-700 border border-orange-300 rounded-lg hover:bg-orange-200 transition-colors font-medium text-sm flex items-center justify-center"
                               title="Set payment amount to 50% of remaining balance"
                             >
@@ -4470,13 +4504,14 @@ const PurchaseOrderManagement: React.FC = () => {
                             </button>
                             <button
                               type="button"
-                                                          onClick={() => {
-                              const fullAmount = selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0));
-                              setPaymentUpdate({ ...paymentUpdate, paidAmount: fullAmount });
-                              if (formErrors.paidAmount) {
-                                setFormErrors(prev => ({ ...prev, paidAmount: '' }));
-                              }
-                            }}
+                              onClick={() => {
+                                const fullAmount = selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0));
+                                const roundedFullAmount = Math.round(fullAmount * 100) / 100; // Ensure 2 decimal places
+                                setPaymentUpdate({ ...paymentUpdate, paidAmount: roundedFullAmount });
+                                if (formErrors.paidAmount) {
+                                  setFormErrors(prev => ({ ...prev, paidAmount: '' }));
+                                }
+                              }}
                               className="flex-1 px-4 py-2 bg-green-100 text-green-700 border border-green-300 rounded-lg hover:bg-green-200 transition-colors font-medium text-sm flex items-center justify-center"
                               title="Set payment amount to 100% of remaining balance"
                             >
@@ -4485,7 +4520,7 @@ const PurchaseOrderManagement: React.FC = () => {
                             </button>
                           </div>
                         </div>
-                        
+
                         <div className="relative">
                           <span className="absolute left-3 top-3 text-gray-500 text-lg">₹</span>
                           <input
@@ -4493,30 +4528,47 @@ const PurchaseOrderManagement: React.FC = () => {
                             min="0"
                             max={selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0))}
                             step="1"
-                            value={paymentUpdate.paidAmount}
+                            value={paymentUpdate.paidAmount === 0 ? '' : paymentUpdate.paidAmount}
                             onChange={(e) => {
-                              const amount = parseFloat(e.target.value) || 0;
+                              const value = e.target.value;
+                              const amount = value === '' ? 0 : parseFloat(value) || 0;
                               setPaymentUpdate({ ...paymentUpdate, paidAmount: amount });
-                              
+
                               if (formErrors.paidAmount && amount > 0 && amount <= (selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))) {
                                 setFormErrors(prev => ({ ...prev, paidAmount: '' }));
                               }
                             }}
-                            className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-lg ${
-                              formErrors.paidAmount ? 'border-red-500' : 'border-gray-300'
-                            }`}
-                            placeholder="Enter payment amount"
+                            className={`w-full pl-10 pr-12 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-lg ${formErrors.paidAmount ? 'border-red-500' : 'border-gray-300'
+                              }`}
+                            placeholder="0"
                           />
+                          {paymentUpdate.paidAmount > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPaymentUpdate({ ...paymentUpdate, paidAmount: 0 });
+                                if (formErrors.paidAmount) {
+                                  setFormErrors(prev => ({ ...prev, paidAmount: '' }));
+                                }
+                              }}
+                              className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 transition-colors"
+                              title="Clear field"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          )}
                         </div>
                         {formErrors.paidAmount && (
                           <p className="text-red-500 text-xs mt-1">{formErrors.paidAmount}</p>
                         )}
-                        
+
                         {/* Amount Info */}
                         <div className="mt-2 text-xs text-gray-600">
                           <span className="font-medium">Remaining Amount:</span> {formatCurrency(selectedPO.remainingAmount || (selectedPO.totalAmount - (selectedPO.paidAmount || 0)))}
                         </div>
-                        
+
                         {/* Payment Type Indicator */}
                         {paymentUpdate.paidAmount > 0 && (
                           <div className="mt-2">
@@ -4548,9 +4600,8 @@ const PurchaseOrderManagement: React.FC = () => {
                         <div className="relative dropdown-container">
                           <button
                             onClick={() => setShowPaymentMethodDropdown(!showPaymentMethodDropdown)}
-                            className={`flex items-center justify-between w-full px-4 py-3 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400 bg-gray-50 ${
-                              formErrors.paymentMethod ? 'border-red-500' : 'border-gray-300'
-                            }`}
+                            className={`flex items-center justify-between w-full px-4 py-3 text-left border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors hover:border-gray-400 bg-gray-50 ${formErrors.paymentMethod ? 'border-red-500' : 'border-gray-300'
+                              }`}
                           >
                             <span className="text-gray-700 font-medium">{getPaymentMethodLabel(paymentUpdate.paymentMethod)}</span>
                             <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPaymentMethodDropdown ? 'rotate-180' : ''}`} />
@@ -4579,9 +4630,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, paymentMethod: '' }));
                                     }
                                   }}
-                                  className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors ${
-                                    paymentUpdate.paymentMethod === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
-                                  }`}
+                                  className={`w-full px-4 py-3 text-left hover:bg-gray-50 transition-colors ${paymentUpdate.paymentMethod === option.value ? 'bg-blue-50 text-blue-600' : 'text-gray-700'
+                                    }`}
                                 >
                                   {option.label}
                                 </button>
@@ -4600,7 +4650,7 @@ const PurchaseOrderManagement: React.FC = () => {
                             </svg>
                             Payment Method Details - {getPaymentMethodLabel(paymentUpdate.paymentMethod)}
                           </h4>
-                          
+
                           {/* Cash Payment Details */}
                           {paymentUpdate.paymentMethod === 'cash' && (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -4656,9 +4706,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, chequeNumber: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.chequeNumber ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.chequeNumber ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Enter cheque number"
                                   required
                                 />
@@ -4679,9 +4728,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, bankName: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.bankName ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.bankName ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Enter bank name"
                                   required
                                 />
@@ -4723,9 +4771,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, issueDate: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.issueDate ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.issueDate ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   required
                                 />
                                 {formErrors.issueDate && (
@@ -4793,9 +4840,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, bankName: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.bankName ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.bankName ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Enter bank name"
                                   required
                                 />
@@ -4816,9 +4862,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, accountNumber: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.accountNumber ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.accountNumber ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Enter account number"
                                   required
                                 />
@@ -4839,9 +4884,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, ifscCode: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.ifscCode ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.ifscCode ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Enter IFSC code"
                                   required
                                 />
@@ -4862,9 +4906,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, transactionId: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.transactionId ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Enter transaction ID"
                                   required
                                 />
@@ -4885,9 +4928,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, transferDate: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.transferDate ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transferDate ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   required
                                 />
                                 {formErrors.transferDate && (
@@ -4934,9 +4976,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, upiId: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.upiId ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.upiId ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Enter UPI ID"
                                   required
                                 />
@@ -4957,9 +4998,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, transactionId: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.transactionId ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Enter transaction ID"
                                   required
                                 />
@@ -5027,9 +5067,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, cardType: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.cardType ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.cardType ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   required
                                 >
                                   <option value="">Select card type</option>
@@ -5053,9 +5092,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, cardNetwork: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.cardNetwork ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.cardNetwork ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   required
                                 >
                                   <option value="">Select card network</option>
@@ -5083,9 +5121,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, lastFourDigits: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.lastFourDigits ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.lastFourDigits ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Last 4 digits"
                                   required
                                 />
@@ -5106,9 +5143,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, transactionId: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.transactionId ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Enter transaction ID"
                                   required
                                 />
@@ -5168,9 +5204,8 @@ const PurchaseOrderManagement: React.FC = () => {
                                       setFormErrors(prev => ({ ...prev, methodName: '' }));
                                     }
                                   }}
-                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                                    formErrors.methodName ? 'border-red-500' : 'border-gray-300'
-                                  }`}
+                                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.methodName ? 'border-red-500' : 'border-gray-300'
+                                    }`}
                                   placeholder="Enter payment method name"
                                   required
                                 />
@@ -5213,9 +5248,8 @@ const PurchaseOrderManagement: React.FC = () => {
                           type="date"
                           value={paymentUpdate.paymentDate}
                           onChange={(e) => setPaymentUpdate({ ...paymentUpdate, paymentDate: e.target.value })}
-                          className={`w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                            formErrors.paymentDate ? 'border-red-500' : 'border-gray-300'
-                          }`}
+                          className={`w-full px-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.paymentDate ? 'border-red-500' : 'border-gray-300'
+                            }`}
                         />
                         {formErrors.paymentDate && (
                           <p className="text-red-500 text-xs mt-1">{formErrors.paymentDate}</p>
@@ -5256,7 +5290,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         </div>
                       )}
                     </h4>
-                    
+
                     {/* Payment Options Summary */}
                     <div className="mb-3 p-3 bg-white rounded-lg border border-blue-200">
                       <div className="text-xs text-blue-700 mb-2 font-medium">Quick Payment Options:</div>
@@ -5275,7 +5309,7 @@ const PurchaseOrderManagement: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-blue-600">Current Paid:</span>
@@ -5308,7 +5342,7 @@ const PurchaseOrderManagement: React.FC = () => {
                           </svg>
                           Payment Method Details - {getPaymentMethodLabel(paymentUpdate.paymentMethod)}
                         </div>
-                        
+
                         {/* Cash Payment Details Summary */}
                         {paymentUpdate.paymentMethod === 'cash' && (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
@@ -5811,6 +5845,6 @@ const PurchaseOrderManagement: React.FC = () => {
   );
 };
 
-export default PurchaseOrderManagement; 
+export default PurchaseOrderManagement;
 
 

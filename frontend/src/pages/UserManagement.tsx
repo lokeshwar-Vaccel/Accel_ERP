@@ -41,6 +41,7 @@ const UserModuleMap = {
   hr: 'HR',
   manager: 'Manager',
   field_engineer: 'Field Engineer',
+  sales_engineer: 'Sales Engineer',
   viewer: 'Viewer',
 } as const;
 
@@ -63,6 +64,7 @@ interface UserDisplay {
   department: string;
   status: 'active' | 'inactive' | 'suspended' | 'deleted';
   lastLogin: string;
+  salesEmployeeCode?: string; // Unique code for Sales Engineers
   moduleAccess: { [key: string]: { access: boolean; permission: string } };
 }
 
@@ -118,7 +120,7 @@ export const UserManagement: React.FC = () => {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showRoleDropdown, setShowRoleDropdown] = useState(false);
 
-  const userRoles: UserModuleKey[] = ['super_admin', 'admin', 'hr', 'manager', 'field_engineer', 'viewer'];
+  const userRoles: UserModuleKey[] = ['super_admin', 'admin', 'hr', 'manager', 'field_engineer', 'sales_engineer', 'viewer'];
   const allModules: ModuleKey[] = [
     'dashboard',
     'lead_management',
@@ -155,6 +157,12 @@ export const UserManagement: React.FC = () => {
       'inventory_management',
       'product_management',
     ],
+    sales_engineer: [
+      'dashboard',
+      'dg_sales',
+      'product_management',
+      'lead_management',
+    ],
     viewer: ['dashboard'],
   };
 
@@ -170,6 +178,7 @@ export const UserManagement: React.FC = () => {
     { value: 'manager', label: 'Manager' },
     { value: 'hr', label: 'HR' },
     { value: 'field_engineer', label: 'Field Engineer' },
+    { value: 'sales_engineer', label: 'Sales Engineer' },
     { value: 'viewer', label: 'Viewer' }
   ];
 
@@ -237,6 +246,7 @@ export const UserManagement: React.FC = () => {
         status: user.status || 'active',
         lastLogin: user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never',
         phone: user.phone || '', // Ensure phone is included
+        salesEmployeeCode: user.salesEmployeeCode || '', // Sales Employee Code for Sales Engineers
         moduleAccess: user.moduleAccess || [] // Ensure module access is included
       }));
 
@@ -592,6 +602,7 @@ export const UserManagement: React.FC = () => {
       'manager': 'bg-orange-100 text-orange-800',
       'hr': 'bg-teal-100 text-teal-800',
       'field_engineer': 'bg-indigo-100 text-indigo-800',
+      'sales_engineer': 'bg-cyan-100 text-cyan-800',
       'viewer': 'bg-gray-100 text-gray-800',
     };
     return colors[role.toLowerCase()] || 'bg-gray-100 text-gray-800';
@@ -604,15 +615,16 @@ export const UserManagement: React.FC = () => {
       'manager': 'Manager',
       'hr': 'HR',
       'field_engineer': 'Field Engineer',
+      'sales_engineer': 'Sales Engineer',
       'viewer': 'Viewer',
     };
     return roleMap[role] || role;
   };
 
   const getAvailableModules = () => {
-    const roleKey = typeof formData.role === 'string' && (['super_admin', 'admin', 'hr', 'manager', 'field_engineer', 'viewer'] as const).includes(formData.role as any)
-      ? (formData.role as unknown as 'super_admin' | 'admin' | 'hr' | 'manager' | 'field_engineer' | 'viewer')
-      : 'Viewer';
+    const roleKey = typeof formData.role === 'string' && (['super_admin', 'admin', 'hr', 'manager', 'field_engineer', 'sales_engineer', 'viewer'] as const).includes(formData.role as any)
+      ? (formData.role as unknown as 'super_admin' | 'admin' | 'hr' | 'manager' | 'field_engineer' | 'sales_engineer' | 'viewer')
+      : 'viewer';
     return roleModuleMapping[roleKey] || [];
   };
 
@@ -627,6 +639,7 @@ export const UserManagement: React.FC = () => {
       'hr': 'Access to user management, HR-related modules',
       'manager': 'Comprehensive access to operational modules',
       'field_engineer': 'Access to field operations, service management, and inventory',
+      'sales_engineer': 'Access to DG sales, product management, and lead management',
       'viewer': 'Read-only access to selected modules'
     };
     return descriptions[role as keyof typeof descriptions] || '';
@@ -645,7 +658,7 @@ export const UserManagement: React.FC = () => {
 
     // Manager: Can edit/delete HR, Field Engineer and Viewer users
     if (currentUserRole === 'manager') {
-      return ['hr', 'field_engineer', 'viewer'].includes(targetUserRole);
+      return ['hr', 'field_engineer', 'sales_engineer', 'viewer'].includes(targetUserRole);
     }
 
     // HR: Can edit/delete Viewer users only (NOT Manager users)
@@ -655,6 +668,10 @@ export const UserManagement: React.FC = () => {
 
     // Field Engineer: Cannot edit/delete any users
     if (currentUserRole === 'field_engineer') {
+      return false;
+    }
+    // Sales Engineer: Cannot edit/delete any users
+    if (currentUserRole === 'sales_engineer') {
       return false;
     }
 
@@ -667,13 +684,14 @@ export const UserManagement: React.FC = () => {
   };
 
   const getAvailableRoles = (currentUserRole: any, existingUsers: any) => {
-    const allRoles = ['super_admin', 'admin', 'hr', 'manager', 'field_engineer', 'viewer'];
+    const allRoles = ['super_admin', 'admin', 'hr', 'manager', 'field_engineer', 'sales_engineer', 'viewer'];
     const UserModuleMap: any = {
       super_admin: 'Super Admin',
       admin: 'Admin',
       hr: 'HR',
       manager: 'Manager',
       field_engineer: 'Field Engineer',
+      sales_engineer: 'Sales Engineer',
       viewer: 'Viewer'
     };
 
@@ -691,18 +709,23 @@ export const UserManagement: React.FC = () => {
           return true;
         }
 
-        // Admin: Can assign hr, manager, field_engineer, viewer roles
+        // Admin: Can assign hr, manager, field_engineer, sales_engineer, viewer roles
         if (currentUserRole === 'admin') {
-          return ['hr', 'manager', 'field_engineer', 'viewer'].includes(role);
+          return ['hr', 'manager', 'field_engineer', 'sales_engineer', 'viewer'].includes(role);
         }
 
-        // Manager: Can assign hr, field_engineer and viewer roles
+        // Manager: Can assign hr, field_engineer, sales_engineer and viewer roles
         if (currentUserRole === 'manager') {
-          return ['hr', 'field_engineer', 'viewer'].includes(role);
+          return ['hr', 'field_engineer', 'sales_engineer', 'viewer'].includes(role);
         }
 
         // Field Engineer: Cannot assign any roles
         if (currentUserRole === 'field_engineer') {
+          return false;
+        }
+
+        // Sales Engineer: Cannot assign any roles
+        if (currentUserRole === 'sales_engineer') {
           return false;
         }
 
@@ -924,6 +947,9 @@ export const UserManagement: React.FC = () => {
                     Role
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Sales Code
+                  </th>
+                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Department
                   </th>
                   <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -940,7 +966,7 @@ export const UserManagement: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {sortedUsers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-gray-500">
+                    <td colSpan={7} className="px-4 py-6 text-center text-gray-500">
                       No users found
                     </td>
                   </tr>
@@ -984,6 +1010,16 @@ export const UserManagement: React.FC = () => {
                         >
                           {formatRoleDisplay(user.role)}
                         </span>
+                      </td>
+
+                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
+                        {user.role === 'sales_engineer' && user.salesEmployeeCode ? (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            {user.salesEmployeeCode}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
 
                       <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">

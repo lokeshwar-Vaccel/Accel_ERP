@@ -1,7 +1,22 @@
 import { Response, NextFunction } from 'express';
 import { User } from '../models/User';
+import { TransactionCounter } from '../models/TransactionCounter';
 import { AuthenticatedRequest, APIResponse, UserRole, UserStatus, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
+
+// Utility to generate unique sales employee code
+async function generateSalesEmployeeCode(): Promise<string> {
+  // Use TransactionCounter to get next sequence number
+  const counter = await TransactionCounter.findOneAndUpdate(
+    { type: 'salesEmployeeCode' },
+    { $inc: { sequence: 1 } },
+    { new: true, upsert: true }
+  );
+  
+  // Format: EMPSPS + 5-digit sequence number (e.g., EMPSPS00054)
+  const sequenceNumber = String(counter.sequence).padStart(5, '0');
+  return `EMPSPS${sequenceNumber}`;
+}
 
 // @desc    Get all users
 // @route   GET /api/v1/users
@@ -180,8 +195,14 @@ export const createUser = async (
       }
     }
 
-    if (req.user?.role === UserRole.FIELD_ENGINEER || req.user?.role === UserRole.VIEWER) {
+    if (req.user?.role === UserRole.FIELD_ENGINEER || req.user?.role === UserRole.SALES_ENGINEER || req.user?.role === UserRole.VIEWER) {
       return next(new AppError('You cannot assign any roles', 403));
+    }
+
+    // Generate sales employee code if role is SALES_ENGINEER
+    let salesEmployeeCode;
+    if (role === UserRole.SALES_ENGINEER) {
+      salesEmployeeCode = await generateSalesEmployeeCode();
     }
 
     // Create user
@@ -193,6 +214,7 @@ export const createUser = async (
       role: role || UserRole.VIEWER,
       phone,
       address,
+      salesEmployeeCode,
       moduleAccess,
       createdBy: req.user?.id
     });
@@ -208,6 +230,7 @@ export const createUser = async (
           email: user.email,
           role: user.role,
           status: user.status,
+          salesEmployeeCode: user.salesEmployeeCode,
           moduleAccess: user.moduleAccess
         }
       }
@@ -260,8 +283,22 @@ export const updateUser = async (
       }
     }
 
-    if (role && (req.user?.role === UserRole.FIELD_ENGINEER || req.user?.role === UserRole.VIEWER)) {
+    if (role && (req.user?.role === UserRole.FIELD_ENGINEER || req.user?.role === UserRole.SALES_ENGINEER || req.user?.role === UserRole.VIEWER)) {
       return next(new AppError('You cannot assign any roles', 403));
+    }
+
+    // Handle sales employee code generation/removal based on role change
+    if (role) {
+      if (role === UserRole.SALES_ENGINEER && user.role !== UserRole.SALES_ENGINEER) {
+        // Role changed to SALES_ENGINEER, generate code if not exists
+        if (!user.salesEmployeeCode) {
+          user.salesEmployeeCode = await generateSalesEmployeeCode();
+        }
+      } else if (role !== UserRole.SALES_ENGINEER && user.role === UserRole.SALES_ENGINEER) {
+        // Role changed from SALES_ENGINEER, remove code
+        user.salesEmployeeCode = undefined;
+      }
+      user.role = role;
     }
 
     // Update fields
@@ -269,7 +306,6 @@ export const updateUser = async (
     if (lastName) user.lastName = lastName;
     if (phone) user.phone = phone;
     if (address) user.address = address;
-    if (role) user.role = role;
     if (status) user.status = status;
     if (moduleAccess) user.moduleAccess = moduleAccess;
 
@@ -288,6 +324,7 @@ export const updateUser = async (
           status: user.status,
           phone: user.phone,
           address: user.address,
+          salesEmployeeCode: user.salesEmployeeCode,
           moduleAccess: user.moduleAccess
         }
       }
@@ -507,6 +544,46 @@ export const getFieldEngineers = async (
           lastName: engineer.lastName,
           email: engineer.email,
           phone: engineer.phone
+        }))
+      }
+    };
+
+    res.status(200).json(response);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// @desc    Get all sales engineers for dropdown
+// @route   GET /api/v1/users/sales-engineers
+// @access  Private
+export const getSalesEngineers = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    // Get all active sales engineers
+    const salesEngineers = await User.find({
+      role: UserRole.SALES_ENGINEER,
+      status: UserStatus.ACTIVE
+    })
+    .select('_id firstName lastName email phone salesEmployeeCode status')
+    .sort({ firstName: 1, lastName: 1 });
+
+    const response: APIResponse = {
+      success: true,
+      message: 'Sales engineers retrieved successfully',
+      data: {
+        salesEngineers: salesEngineers.map(engineer => ({
+          _id: engineer._id,
+          firstName: engineer.firstName,
+          lastName: engineer.lastName,
+          fullName: `${engineer.firstName} ${engineer.lastName}`,
+          email: engineer.email,
+          phone: engineer.phone,
+          salesEmployeeCode: engineer.salesEmployeeCode,
+          status: engineer.status
         }))
       }
     };

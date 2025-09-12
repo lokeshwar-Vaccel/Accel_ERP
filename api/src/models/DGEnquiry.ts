@@ -114,7 +114,7 @@ const DGEnquirySchema = new Schema<IDGEnquiry>({
   enquiryType: { type: String, trim: true },
   enquiryStage: { type: String, trim: true },
   eoPoDate: { type: Date },
-  plannedFollowUpDate: { type: Date },
+  plannedFollowUpDate: { type: Date, required: false },
   source: { type: String, trim: true },
   referenceEmployeeName: { type: String, trim: true },
   referenceEmployeeMobileNumber: { type: String, trim: true },

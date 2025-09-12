@@ -32,14 +32,19 @@ export const createDGEnquiry = async (
       }
     }
 
+    // Extract phone and email from addresses if not provided at top level
+    const primaryAddress = enquiryData.addresses && enquiryData.addresses.length > 0 ? enquiryData.addresses[0] : null;
+    const phoneFromAddress = primaryAddress?.phone || '';
+    const emailFromAddress = primaryAddress?.email || '';
+
     // Create customer data from enquiry data
     const customerData = {
       name: enquiryData.customerName,
       alice: enquiryData.alice || undefined,
       designation: enquiryData.designation || undefined,
       contactPersonName: enquiryData.contactPersonName || enquiryData.customerName,
-      email: enquiryData.email || undefined,
-      phone: enquiryData.phoneNumber,
+      email: enquiryData.email || emailFromAddress || undefined,
+      phone: enquiryData.phoneNumber || phoneFromAddress || undefined,
       panNumber: enquiryData.panNumber || undefined,
       addresses: enquiryData.addresses && enquiryData.addresses.length > 0 ? enquiryData.addresses.map((addr: any) => ({
         id: addr.id || 1,
@@ -90,10 +95,12 @@ export const createDGEnquiry = async (
       if (customerError.code === 11000) {
         // Customer with same name/phone already exists, try to find it
         try {
-          customer = await Customer.findOne({
-            name: enquiryData.customerName,
-            phone: enquiryData.phoneNumber
-          });
+          const searchCriteria: any = { name: enquiryData.customerName };
+          if (enquiryData.phoneNumber && enquiryData.phoneNumber.trim()) {
+            searchCriteria.phone = enquiryData.phoneNumber;
+          }
+          
+          customer = await Customer.findOne(searchCriteria);
           if (!customer) {
             return next(new AppError('Failed to create customer and no existing customer found', 500));
           }

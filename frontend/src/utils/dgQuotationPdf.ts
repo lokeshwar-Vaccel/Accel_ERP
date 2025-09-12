@@ -1,5 +1,14 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+
+// Extend jsPDF type to include autoTable
+declare module 'jspdf' {
+  interface jsPDF {
+    autoTable: (options: any) => jsPDF;
+    lastAutoTable: {
+      finalY: number;
+    };
+  }
+}
 
 interface DGQuotationData {
   quotationNumber: string;
@@ -39,6 +48,14 @@ interface DGQuotationData {
       branch: string;
     };
   };
+  salesEngineer?: {
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    email: string;
+    phone: string;
+    salesEmployeeCode: string;
+  };
   dgSpecifications: {
     kva: string;
     phase: string;
@@ -73,9 +90,24 @@ interface DGQuotationData {
   installationTerms: string;
   commissioningTerms: string;
   status: string;
+  subject?: string;
+  annexureRating?: string;
+  dgModel?: string;
+  cylinder?: string;
+  warrantyFromInvoice?: string;
+  warrantyFromCommissioning?: string;
+  warrantyHours?: string;
+  taxRate?: string;
+  freightTerms?: string;
+  deliveryPeriod?: string;
+  validityDays?: string;
+  quotationRevisionNo?: string;
 }
 
-export const generateDGQuotationPDF = (quotationData: DGQuotationData): jsPDF => {
+export const generateDGQuotationPDF = async (quotationData: DGQuotationData): Promise<jsPDF> => {
+  // Dynamically import jspdf-autotable
+  await import('jspdf-autotable');
+  
   const doc = new jsPDF();
   
   // Set font
@@ -107,17 +139,6 @@ export const generateDGQuotationPDF = (quotationData: DGQuotationData): jsPDF =>
   const sunPowerWidth = doc.getTextWidth(sunPowerText);
   doc.text(sunPowerText, pageWidth - margin - sunPowerWidth, yPosition);
   
-  // Date
-  doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100);
-  const dateText = new Date(quotationData.issueDate).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  });
-  const dateWidth = doc.getTextWidth(dateText);
-  doc.text(dateText, pageWidth - margin - dateWidth, yPosition + 8);
-  
   yPosition += 20;
   
   // Red line separator
@@ -126,62 +147,128 @@ export const generateDGQuotationPDF = (quotationData: DGQuotationData): jsPDF =>
   doc.line(margin, yPosition, pageWidth - margin, yPosition);
   yPosition += 15;
   
-  // Enquiry details
+  // Enquiry/Quotation Header
+  doc.setFontSize(12);
+  doc.setTextColor(0, 0, 0);
+  doc.setFont('helvetica', 'bold');
+  doc.text('Enquiry/Quotation', margin, yPosition);
+  yPosition += 8;
+  
+  // Enquiry No and Ref/Date
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  const enquiryNoText = `Enquiry No: ${quotationData.enquiryDetails?.enquiryNo || 'Drop Down'}`;
+  doc.text(enquiryNoText, margin, yPosition);
+  
+  const refText = `Ref: ${quotationData.quotationNumber || 'SPS / 0001 / 25-26'}`;
+  const dateText = `Date: ${quotationData.issueDate || '03-July-2025'}`;
+  const refWidth = doc.getTextWidth(refText);
+  const dateWidth = doc.getTextWidth(dateText);
+  
+  doc.text(refText, margin, yPosition + 5);
+  doc.text(dateText, pageWidth - margin - dateWidth, yPosition + 5);
+  yPosition += 15;
+  
+  // Recipient Details
   doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
   doc.setFont('helvetica', 'bold');
-  
-  // Highlighted enquiry number
-  const enquiryNoText = `Enquiry No: ${quotationData.enquiryDetails?.enquiryNo || '-'}`;
-  doc.setFillColor(255, 255, 0); // Yellow background
-  doc.rect(margin - 2, yPosition - 3, doc.getTextWidth(enquiryNoText) + 4, 6, 'F');
-  doc.setTextColor(0, 0, 0);
-  doc.text(enquiryNoText, margin, yPosition);
-  yPosition += 5;
-  doc.text('TO', margin, yPosition);
+  doc.text('To,', margin, yPosition);
   yPosition += 5;
   
   doc.setFont('helvetica', 'normal');
-  doc.text(quotationData.customer.name, margin, yPosition);
+  doc.text(quotationData.customer.name || 'M/s. Enpar Heater', margin, yPosition);
   yPosition += 4;
-  doc.text(quotationData.customer.address || '', margin, yPosition);
-  yPosition += 4;
-  doc.text(`Kind Attn. ${quotationData.customer.corporateName || ''}`, margin, yPosition);
-  yPosition += 4;
-  doc.text(`Mob number - ${quotationData.customer.phone}`, margin, yPosition);
-  yPosition += 4;
-  doc.text(`Site @${quotationData.customer.district || ''}`, margin, yPosition);
+  
+  // Use shipToAddress if available, otherwise fallback to customer address
+  const address = quotationData.customer.address || '2nd floor Sri Towers, 17/18, Pattullos Road, Mount Road, Bayapettak, Chennai.';
+  doc.text(address, margin, yPosition);
   yPosition += 8;
+  
   doc.text('Dear Sir,', margin, yPosition);
+  yPosition += 5;
+  
+  // Introduction text
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  const introText = [
+    "We thank you very much for the interest shown in Mahindra Powerol Genset.",
+    "Mahindra Powerol offers end to end solution for your back power requirements from 5 kVA to 625 kVA gensets in single configuration and up-to 4000 kVA in multiple configurations.",
+    "Mahindra Powerol is the only Indian Industrial Engine manufacturer to win the prestigious JQM & DEMING AWARD. All Mahindra Engines meet the stringent CPCB IV+ norms for Noise and Exhaust Emission.",
+    "Mahindra engines are manufactured at our facilities in Chakan, Pune and Nagpur with fully automated, controlled environment engine assembly and Quality control systems.",
+    "More than 4,00,000 Mahindra Powerol gensets are powering diversified segments like Engineering, Realty, Retail, IT, Telecom, BFSI, Manufacturing, Pharma, Textile, Oil & Gas, DGSND.",
+    "It will be our pleasure to serve you. Thanking you and assuring you of our prompt attention at all times."
+  ];
+  
+  for (const line of introText) {
+    const lines = doc.splitTextToSize(line, contentWidth);
+    doc.text(lines, margin, yPosition);
+    yPosition += lines.length * 5 + 3;
+  }
+  
   yPosition += 10;
   
-  // Subject line
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  const subjectText = `Sub: Best Quote for Supply ${quotationData.dgSpecifications.kva} & ${quotationData.dgSpecifications.kva} Kva Mahindra Powerol DG set CPCB IV+`;
-  const subjectLines = doc.splitTextToSize(subjectText, contentWidth);
-  doc.text(subjectLines, pageWidth / 2, yPosition, { align: 'center' });
-  yPosition += subjectLines.length * 5 + 10;
+  // Commercial Terms Table
+  const commercialTermsData = [
+    ['Quotation No.', quotationData.quotationNumber || 'Internal Entry'],
+    ['Issue Date', quotationData.issueDate || 'Internal Entry'],
+    ['Valid Until', quotationData.validUntil || 'Internal Entry'],
+    ['Quotation Revision No.', quotationData.quotationRevisionNo || 'Internal Entry'],
+    ['DG Enquiry No.', quotationData.enquiryDetails?.enquiryNo || 'Internal Entry'],
+    ['Subject', quotationData.subject || 'Internal Entry'],
+    ['Annexure Rating', quotationData.annexureRating || 'Internal Entry'],
+    ['DG Model', quotationData.dgModel || 'Internal Entry'],
+    ['Cylinder', quotationData.cylinder || 'Internal Entry'],
+    ['Warranty From Invoice', quotationData.warrantyFromInvoice || 'Internal Entry'],
+    ['Warranty From Commissioning', quotationData.warrantyFromCommissioning || 'Internal Entry'],
+    ['Warranty Hours', quotationData.warrantyHours || 'Internal Entry'],
+    ['Tax Rate', quotationData.taxRate || 'Internal Entry'],
+    ['Freight Terms', quotationData.freightTerms || 'Internal Entry'],
+    ['Delivery Period', quotationData.deliveryPeriod || 'Internal Entry'],
+    ['Validity Days', quotationData.validityDays || 'Internal Entry']
+  ];
   
-  // Body content
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(10);
-  const notesLines = doc.splitTextToSize(quotationData.notes, contentWidth);
-  doc.text(notesLines, margin, yPosition);
-  yPosition += notesLines.length * 5 + 10;
+  doc.autoTable({
+    startY: yPosition,
+    head: [['Commercial Terms', 'Details']],
+    body: commercialTermsData,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [240, 240, 240],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold'
+    },
+    styles: {
+      fontSize: 9,
+      cellPadding: 3
+    },
+    columnStyles: {
+      0: { cellWidth: 80, fontStyle: 'bold' },
+      1: { cellWidth: 80 }
+    }
+  });
   
-  // Items table
-  const tableData = quotationData.items.map((item, index) => [
+  yPosition = (doc as any).lastAutoTable.finalY + 10;
+  
+  // Product Details Table
+  const productData = quotationData.items.map((item, index) => [
     (index + 1).toString(),
     item.description,
     item.quantity.toString(),
-    `₹${item.unitPrice.toLocaleString()}`
+    `₹${item.unitPrice.toLocaleString()}`,
+    `₹${item.totalPrice.toLocaleString()}`
   ]);
   
-  (doc as any).autoTable({
+  // Add totals
+  productData.push(['', '', '', 'Subtotal', `₹${quotationData.subtotal.toLocaleString()}`]);
+  productData.push(['', '', '', 'Discount', `₹${quotationData.totalDiscount.toLocaleString()}`]);
+  productData.push(['', '', '', 'Tax', `₹${quotationData.totalTax.toLocaleString()}`]);
+  productData.push(['', '', '', 'Grand Total', `₹${quotationData.grandTotal.toLocaleString()}`]);
+  
+  doc.autoTable({
     startY: yPosition,
-    head: [['Sl.No', 'Description', 'Qty', 'Basic price']],
-    body: tableData,
+    head: [['Sr. No.', 'Product Description', 'Quantity', 'Unit Rate (INR)', 'Total (INR)']],
+    body: productData,
     theme: 'grid',
     headStyles: {
       fillColor: [240, 240, 240],
@@ -194,72 +281,101 @@ export const generateDGQuotationPDF = (quotationData: DGQuotationData): jsPDF =>
     },
     columnStyles: {
       0: { cellWidth: 20 },
-      1: { cellWidth: 100 },
+      1: { cellWidth: 80 },
       2: { cellWidth: 20, halign: 'center' },
-      3: { cellWidth: 30, halign: 'right' }
+      3: { cellWidth: 30, halign: 'right' },
+      4: { cellWidth: 30, halign: 'right' }
     }
   });
   
   yPosition = (doc as any).lastAutoTable.finalY + 10;
   
-  // Commercial terms
+  // Warranty Policy
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text('Commercial Terms:', margin, yPosition);
+  doc.text('WARRANTY POLICY:', margin, yPosition);
   yPosition += 5;
   
   doc.setFont('helvetica', 'normal');
-  const termsLines = doc.splitTextToSize(quotationData.terms, contentWidth);
-  doc.text(termsLines, margin, yPosition);
-  yPosition += termsLines.length * 5 + 10;
+  const warrantyText = `Warranty period: ${quotationData.warrantyFromInvoice || '12'} months from date of invoice OR ${quotationData.warrantyFromCommissioning || '18'} months from Date of commissioning OR ${quotationData.warrantyHours || '3000'} Hours of operation whichever is earlier. Warranty for electrical/proprietary items as per manufacturer's standard clause. Warranty does not cover normal wear and tear, accident, wrong handling, improper maintenance.`;
+  const warrantyLines = doc.splitTextToSize(warrantyText, contentWidth);
+  doc.text(warrantyLines, margin, yPosition);
+  yPosition += warrantyLines.length * 5 + 10;
   
-  // Bank details table
-  const bankData = [
-    ['GST NO', quotationData.company.pan],
-    ['ACCOUNT NAME', quotationData.company.name],
-    ['ACCOUNT NUMBER', quotationData.company.bankDetails.accountNo],
-    ['BANK', quotationData.company.bankDetails.bankName],
-    ['BRANCH', quotationData.company.bankDetails.branch],
-    ['IFSC CODE', quotationData.company.bankDetails.ifsc]
+  // Terms & Conditions
+  doc.setFont('helvetica', 'bold');
+  doc.text('TERMS & CONDITIONS:', margin, yPosition);
+  yPosition += 5;
+  
+  doc.setFont('helvetica', 'normal');
+  const termsText = [
+    `Taxes: Prices are inclusive of GST @${quotationData.taxRate || '18'}%.`,
+    `Freight: Prices are Exclusive of freight charges - Separately mentioned ${quotationData.freightTerms || 'Extra'}.`,
+    `Transit Insurance: Extra at actuals.`,
+    `Approvals: Approval from concern authorities shall be by customers account.`,
+    `Delivery: Ex-stock subject to prior sale. ${quotationData.deliveryPeriod || '2-3 weeks'} from the date of receipt of your confirmed order/advance payment. We shall not be responsible for any delay due to force majeure conditions.`,
+    `Validity: Our offer shall remain valid for a period of ${quotationData.validityDays || '30'} Days from the date of our offer and subject to your confirmation/amendment.`,
+    `Scope of Supply: Our offer is confined to the stipulated technical and commercial clauses and subject to mutual agreement.`
   ];
   
-  (doc as any).autoTable({
-    startY: yPosition,
-    body: bankData,
-    theme: 'grid',
-    styles: {
-      fontSize: 9,
-      cellPadding: 3
-    },
-    columnStyles: {
-      0: { cellWidth: 50, fontStyle: 'bold' },
-      1: { cellWidth: 100 }
-    }
-  });
+  for (const term of termsText) {
+    const lines = doc.splitTextToSize(term, contentWidth);
+    doc.text(lines, margin, yPosition);
+    yPosition += lines.length * 5 + 2;
+  }
   
-  yPosition = (doc as any).lastAutoTable.finalY + 10;
+  yPosition += 5;
   
-  // Validity
-  doc.setFontSize(10);
-  const validityText = `Validity: Offer shall be valid for a period of ${quotationData.validityPeriod} days from the date of submission of offer and thereafter on written confirmation.`;
-  const validityLines = doc.splitTextToSize(validityText, contentWidth);
-  doc.text(validityLines, margin, yPosition);
-  yPosition += validityLines.length * 5 + 15;
+  // Exclusions
+  doc.setFont('helvetica', 'bold');
+  doc.text('EXCLUSIONS:', margin, yPosition);
+  yPosition += 5;
+  
+  doc.setFont('helvetica', 'normal');
+  const exclusionsText = "Installation/job work, unloading, earthing pits, DG room, foundation, cabling, exhaust piping, manual changeover switch, etc. will be charged extra.";
+  const exclusionsLines = doc.splitTextToSize(exclusionsText, contentWidth);
+  doc.text(exclusionsLines, margin, yPosition);
+  yPosition += exclusionsLines.length * 5 + 10;
+  
+  // Arbitration
+  doc.setFont('helvetica', 'bold');
+  doc.text('ARBITRATION:', margin, yPosition);
+  yPosition += 5;
+  
+  doc.setFont('helvetica', 'normal');
+  const arbitrationText = "Any dispute arising out of or in connection with this contract shall be settled by arbitration in accordance with the Arbitration and Conciliation Act 1996. The arbitration shall be conducted by a single arbitrator appointed by mutual consent. The venue of arbitration shall be at Chennai and the language of arbitration shall be English.";
+  const arbitrationLines = doc.splitTextToSize(arbitrationText, contentWidth);
+  doc.text(arbitrationLines, margin, yPosition);
+  yPosition += arbitrationLines.length * 5 + 15;
   
   // Signature section
   doc.text('Yours Truly,', margin, yPosition);
   yPosition += 5;
   doc.setFont('helvetica', 'bold');
-  doc.text(`For ${quotationData.company.name}`, margin, yPosition);
+  doc.text('For SUN POWER SERVICES', margin, yPosition);
   yPosition += 5;
   doc.setFont('helvetica', 'normal');
-  doc.text('P.S.Sayee Ganesh', margin, yPosition);
+  doc.text(`Name: ${quotationData.salesEngineer?.firstName || ''} ${quotationData.salesEngineer?.lastName || '________________'}`, margin, yPosition);
   yPosition += 4;
-  doc.text('Senior Sales Manager - HKVA', margin, yPosition);
+  doc.text('Role: Sales Engineer', margin, yPosition);
   yPosition += 4;
-  doc.text(`Mob: ${quotationData.company.phone}`, margin, yPosition);
+  doc.text(`Mobile: ${quotationData.salesEngineer?.phone || quotationData.company.phone || '________________'}`, margin, yPosition);
   yPosition += 4;
-  doc.text(`Email: ${quotationData.company.email}`, margin, yPosition);
+  doc.text(`Email: ${quotationData.salesEngineer?.email || quotationData.company.email || '________________'}`, margin, yPosition);
+  yPosition += 10;
+  
+  // Footer
+  doc.setFontSize(8);
+  doc.setTextColor(220, 38, 38);
+  doc.setFont('helvetica', 'bold');
+  doc.text('AUTHORISED DEALER OF SALES AND SERVICE FOR MAHINDRA DIESEL GENERATORS', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 5;
+  doc.setFont('helvetica', 'normal');
+  doc.text('Door No. 53, Plot No. 4, 4th Street, Phase-1Extension, Vivekakonni Nagar, Chennai - 600 116.', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 4;
+  doc.text('Phone: 044 2482 8218', pageWidth / 2, yPosition, { align: 'center' });
+  yPosition += 4;
+  doc.text('E-mail: sunpowerservices@gmail.com Web: www.sunpowerservices.in', pageWidth / 2, yPosition, { align: 'center' });
   
   // Add enquiry tracking information at the bottom
   if (quotationData.enquiryDetails) {
@@ -277,13 +393,13 @@ export const generateDGQuotationPDF = (quotationData: DGQuotationData): jsPDF =>
   return doc;
 };
 
-export const downloadDGQuotationPDF = (quotationData: DGQuotationData, filename?: string): void => {
-  const doc = generateDGQuotationPDF(quotationData);
+export const downloadDGQuotationPDF = async (quotationData: DGQuotationData, filename?: string): Promise<void> => {
+  const doc = await generateDGQuotationPDF(quotationData);
   const defaultFilename = `DG_Quotation_${quotationData.quotationNumber}_${new Date().toISOString().split('T')[0]}.pdf`;
   doc.save(filename || defaultFilename);
 };
 
 export const generateDGQuotationPDFBlob = async (quotationData: DGQuotationData): Promise<Blob> => {
-  const doc = generateDGQuotationPDF(quotationData);
+  const doc = await generateDGQuotationPDF(quotationData);
   return doc.output('blob');
 }; 

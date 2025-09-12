@@ -129,6 +129,14 @@ export const checkPermission = (action: 'read' | 'write' | 'delete') => {
       }
     }
 
+    // Sales Engineer-specific restrictions (dg_sales, product_management, lead_management access)
+    if (req.user.role === UserRole.SALES_ENGINEER) {
+      const salesEngineerModules = ['dg_sales', 'product_management', 'lead_management'];
+      if (!salesEngineerModules.includes(requestedModule)) {
+        return next(new AppError('You do not have access to this module', 403));
+      }
+    }
+
     // Check if the user has permission for this module and action
     const modulePermission = req.user.moduleAccess.find(
       m => m.module === requestedModule && m.access

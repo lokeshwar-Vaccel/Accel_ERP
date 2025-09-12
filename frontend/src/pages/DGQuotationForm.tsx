@@ -33,6 +33,16 @@ interface QuotationData {
   freightTerms: string;
   deliveryPeriod: string;
   validityDays: string;
+  // Sales Engineer assignment
+  salesEngineer?: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    email: string;
+    phone: string;
+    salesEmployeeCode: string;
+  };
   enquiryDetails?: {
     enquiryNo: string;
     enquiryDate: string;
@@ -61,6 +71,7 @@ interface QuotationData {
     state: string;
     district: string;
     pincode: string;
+    gstNumber?: string;
     addressId?: number;
   };
   shipToAddress?: {
@@ -68,6 +79,7 @@ interface QuotationData {
     state: string;
     district: string;
     pincode: string;
+    gstNumber?: string;
     addressId?: number;
   };
   company: {
@@ -179,8 +191,8 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
       tehsil: enquiry?.tehsil || '',
       district: enquiry?.district || ''
     },
-    billToAddress: { address: '', state: '', district: '', pincode: '' },
-    shipToAddress: { address: '', state: '', district: '', pincode: '' },
+    billToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' },
+    shipToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' },
     company: {
       name: 'Sun Power Services',
       address: 'Chennai, Tamil Nadu',
@@ -286,6 +298,10 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
   const [deliveryPeriodSearchTerm, setDeliveryPeriodSearchTerm] = useState('');
   const [validityDaysSearchTerm, setValidityDaysSearchTerm] = useState('');
   
+  // Address search terms
+  const [billToAddressSearchTerm, setBillToAddressSearchTerm] = useState('');
+  const [shipToAddressSearchTerm, setShipToAddressSearchTerm] = useState('');
+  
   const [highlightedWarrantyInvoiceIndex, setHighlightedWarrantyInvoiceIndex] = useState(-1);
   const [highlightedWarrantyCommissioningIndex, setHighlightedWarrantyCommissioningIndex] = useState(-1);
   const [highlightedWarrantyHoursIndex, setHighlightedWarrantyHoursIndex] = useState(-1);
@@ -310,11 +326,18 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
   const [highlightedModelIndex, setHighlightedModelIndex] = useState(-1);
   const [highlightedCylinderIndex, setHighlightedCylinderIndex] = useState(-1);
 
+  // Sales Engineer dropdown states
+  const [salesEngineers, setSalesEngineers] = useState<any[]>([]);
+  const [showSalesEngineerDropdown, setShowSalesEngineerDropdown] = useState(false);
+  const [salesEngineerSearchTerm, setSalesEngineerSearchTerm] = useState('');
+  const [highlightedSalesEngineerIndex, setHighlightedSalesEngineerIndex] = useState(-1);
+
   useEffect(() => {
     generateQuotationNumber();
     fetchDGProducts();
     fetchLocations();
     fetchCustomers();
+    fetchSalesEngineers();
   }, []);
 
   // Recalculate totals when tax rate changes
@@ -337,7 +360,6 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
     formData.quotationRevisionNo,
     formData.customer.name,
     formData.customer.email, // Still watch for changes to validate format if provided
-    formData.customer.phone,
     formData.billToAddress,
     formData.shipToAddress,
     formData.items,
@@ -462,6 +484,22 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
     } catch (error) {
       console.error('Failed to fetch customers:', error);
       setCustomers([]);
+    }
+  };
+
+  const fetchSalesEngineers = async () => {
+    try {
+      const response = await apiClient.users.getSalesEngineers();
+      if (response.success && response.data && response.data.salesEngineers) {
+        console.log('Fetched sales engineers:', response.data.salesEngineers);
+        setSalesEngineers(response.data.salesEngineers);
+      } else {
+        console.log('No sales engineers found or invalid response format');
+        setSalesEngineers([]);
+      }
+    } catch (error) {
+      console.error('Failed to fetch sales engineers:', error);
+      setSalesEngineers([]);
     }
   };
 
@@ -957,6 +995,39 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
     }
   };
 
+  const handleSalesEngineerKeyDown = (e: React.KeyboardEvent) => {
+    if (!Array.isArray(salesEngineers)) return;
+
+    const filteredSalesEngineers = salesEngineers.filter(engineer =>
+      engineer.fullName.toLowerCase().includes(salesEngineerSearchTerm.toLowerCase()) ||
+      engineer.email?.toLowerCase().includes(salesEngineerSearchTerm.toLowerCase()) ||
+      engineer.salesEmployeeCode?.toLowerCase().includes(salesEngineerSearchTerm.toLowerCase())
+    );
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedSalesEngineerIndex(prev =>
+        prev < filteredSalesEngineers.length - 1 ? prev + 1 : 0
+      );
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedSalesEngineerIndex(prev =>
+        prev > 0 ? prev - 1 : filteredSalesEngineers.length - 1
+      );
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      if (highlightedSalesEngineerIndex >= 0) {
+        const salesEngineer = filteredSalesEngineers[highlightedSalesEngineerIndex];
+        handleSalesEngineerSelect(salesEngineer._id);
+        setSalesEngineerSearchTerm('');
+        setHighlightedSalesEngineerIndex(-1);
+      }
+    } else if (e.key === 'Escape') {
+      setShowSalesEngineerDropdown(false);
+      setHighlightedSalesEngineerIndex(-1);
+    }
+  };
+
   const handleBillToAddressKeyDown = (e: React.KeyboardEvent) => {
     if (!Array.isArray(addresses)) return;
 
@@ -981,6 +1052,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
             state: address.state,
             district: address.district,
             pincode: address.pincode,
+            gstNumber: address.gstNumber || '',
             ...(address.id && { addressId: address.id })
           }
         }));
@@ -1017,6 +1089,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
             state: address.state,
             district: address.district,
             pincode: address.pincode,
+            gstNumber: address.gstNumber || '',
             ...(address.id && { addressId: address.id })
           }
         }));
@@ -1266,11 +1339,31 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
           tehsil: customer.tehsil || '',
           district: customer.district || ''
         },
-        billToAddress: { address: '', state: '', district: '', pincode: '' },
-        shipToAddress: { address: '', state: '', district: '', pincode: '' }
+        billToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' },
+        shipToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' }
       }));
       setShowCustomerDropdown(false);
       setAddresses(customer.addresses || []);
+    }
+  };
+
+  const handleSalesEngineerSelect = (salesEngineerId: string) => {
+    const salesEngineer = salesEngineers.find(se => se._id === salesEngineerId);
+    if (salesEngineer) {
+      setFormData(prev => ({
+        ...prev,
+        salesEngineer: {
+          _id: salesEngineer._id,
+          firstName: salesEngineer.firstName,
+          lastName: salesEngineer.lastName,
+          fullName: salesEngineer.fullName,
+          email: salesEngineer.email,
+          phone: salesEngineer.phone,
+          salesEmployeeCode: salesEngineer.salesEmployeeCode
+        }
+      }));
+      setShowSalesEngineerDropdown(false);
+      setSalesEngineerSearchTerm('');
     }
   };
 
@@ -1308,9 +1401,6 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
       if (!emailRegex.test(formData.customer.email)) {
         newErrors['customer.email'] = 'Please enter a valid email address';
       }
-    }
-    if (!formData.customer.phone || formData.customer.phone.trim() === '') {
-      newErrors['customer.phone'] = 'Customer phone is required';
     }
 
     // Address validation
@@ -1462,62 +1552,241 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
 
   const renderPreview = () => {
     return (
-      <div className="bg-white p-8 max-w-4xl mx-auto shadow-lg">
+      <div className="bg-white p-8 max-w-4xl mx-auto shadow-lg" style={{ fontFamily: 'Arial, sans-serif' }}>
         {/* Header with Logos */}
-        <div className="flex justify-between items-start mb-8">
+        <div className="flex justify-between items-start mb-6">
           <div className="flex items-center">
-            <div className="text-red-600 font-bold text-2xl italic">powerol</div>
+            <div className="text-red-600 font-bold text-3xl italic" style={{ color: '#dc2626' }}>powerol</div>
             <div className="text-sm text-gray-600 ml-2">by Mahindra</div>
           </div>
           <div className="text-right">
-            <div className="text-red-600 font-bold text-xl italic">Sun Power Services</div>
-            <div className="text-sm text-gray-600">{formData.issueDate}</div>
-            <div className="text-xs text-gray-500">Rev. {formData.quotationRevisionNo}</div>
+            <div className="text-red-600 font-bold text-xl italic flex items-center" style={{ color: '#dc2626' }}>
+              <span className="mr-2">☀️</span>Sun Power Services
+            </div>
           </div>
         </div>
 
-        <div className="border-t-2 border-red-600 mb-6"></div>
+        <div className="border-t-2 border-red-600 mb-6" style={{ borderColor: '#dc2626' }}></div>
 
-        {/* Quotation and Enquiry Details */}
+        {/* Enquiry/Quotation Header */}
         <div className="mb-6">
+          <div className="text-sm mb-2">
+            <span className="font-semibold">Enquiry No:</span> {formData.enquiryDetails?.enquiryNo || 'Drop Down'} 
+            {/* <span className="text-xs text-gray-500 ml-2">(Able to search either customer name or the Enquiry number)</span> */}
+          </div>
           <div className="flex justify-between items-center mb-4">
-            <div className="text-sm font-semibold bg-blue-200 px-2 py-1 rounded">
-              Quotation No: {formData.quotationNumber || '-'}
+            <div className="text-sm">
+              <span className="font-semibold">Ref:</span> {formData.quotationNumber || 'SPS / 0001 / 25-26'}
             </div>
-            <div className="text-sm font-semibold bg-yellow-200 px-2 py-1 rounded">
-              Enquiry No: {formData.enquiryDetails?.enquiryNo || '-'}
+            <div className="text-sm">
+              <span className="font-semibold">Date:</span> {formData.issueDate || '03-July-2025'}
             </div>
           </div>
-          <div className="text-sm font-semibold mb-2">TO</div>
-          <div className="text-sm mb-1">{formData.customer.name}</div>
-          <div className="text-sm mb-1">{formData.customer.address}</div>
-          <div className="text-sm mb-1">Kind Attn. {formData.customer.corporateName}</div>
-          <div className="text-sm mb-1">Mob number - {formData.customer.phone}</div>
-          <div className="text-sm mb-4">Site @{formData.customer.district}</div>
-          <div className="text-sm mb-4">Dear Sir,</div>
         </div>
 
-        {/* Subject */}
-        <div className="text-center font-bold text-lg mb-6">
-          Sub: Best Quote for Supply {formData.dgSpecifications.kva} & {formData.dgSpecifications.kva} Kva Mahindra Powerol DG set CPCB IV+
-        </div>
-
-        {/* Body Content */}
-        <div className="text-sm leading-relaxed mb-6">
-          {formData.notes.split('\n').map((paragraph, index) => (
-            <p key={index} className="mb-2">{paragraph}</p>
-          ))}
-        </div>
-
-        {/* Items Table */}
+        {/* Recipient Details */}
         <div className="mb-6">
-          <table className="w-full border border-gray-300">
+          <div className="text-sm font-semibold mb-2">To,</div>
+          <div className="text-sm mb-1">{formData.customer.name || 'M/s. Enpar Heater'}</div>
+          <div className="text-sm mb-1">{formData?.shipToAddress?.address + ', ' + formData?.shipToAddress?.district + ', ' + formData?.shipToAddress?.state + ' - ' + formData?.shipToAddress?.pincode + (formData?.shipToAddress?.gstNumber ? ' GST: ' + formData?.shipToAddress?.gstNumber : '')}</div>
+          {/* {formData.salesEngineer && (
+            <div className="text-sm mb-2">
+              <span className="font-semibold">Sales Engineer:</span> {formData.salesEngineer.fullName} 
+              <span className="text-gray-600 ml-2">({formData.salesEngineer.salesEmployeeCode})</span>
+            </div>
+          )} */}
+          <div className="text-sm mb-4">Dear Sir,</div>
+          <div className="text-sm mb-2">
+            <span className="font-semibold">Subject:</span> {formData.subject || 'Drop Down-A'}
+          </div>
+        </div>
+
+        {/* Introduction Text */}
+        <div className="text-sm leading-relaxed mb-6">
+          <p className="mb-3">
+            We thank you very much for the interest shown in Mahindra Powerol Genset.
+          </p>
+          <p className="mb-3">
+            Mahindra Powerol offers end to end solution for your back power requirements from 5 kVA to 625 kVA gensets in single configuration and up-to 4000 kVA in multiple configurations.
+          </p>
+          <p className="mb-3">
+            Mahindra Powerol is the only Indian Industrial Engine manufacturer to win the prestigious JQM & DEMING AWARD. All Mahindra Engines meet the stringent CPCB IV+ norms for Noise and Exhaust Emission.
+          </p>
+          <p className="mb-3">
+            Mahindra engines are manufactured at our facilities in Chakan, Pune and Nagpur with fully automated, controlled environment engine assembly and Quality control systems.
+          </p>
+          <p className="mb-3">
+            More than 4,00,000 Mahindra Powerol gensets are powering diversified segments like Engineering, Realty, Retail, IT, Telecom, BFSI, Manufacturing, Pharma, Textile, Oil & Gas, DGSND.
+          </p>
+          <p className="mb-3">
+            It will be our pleasure to serve you. Thanking you and assuring you of our prompt attention at all times.
+          </p>
+        </div>
+
+        {/* Services Section */}
+        <div className="mb-6">
+          <div className="text-sm mb-3">
+            We, Dealer / GOEM name are the leading authorized channel partner of Mahindra Powerol.
+          </div>
+          <div className="text-sm mb-3">
+            We offer end to end power solutions to our valued customers that include:
+          </div>
+          <div className="text-sm ml-4 mb-3">
+            <div className="mb-1">1. Pre-sales consultation on power requirement and genset selection.</div>
+            <div className="mb-1">2. Delivery, Installation and commissioning at the site</div>
+            <div className="mb-1">3. Assistance in fulfilling statutory formalities</div>
+            <div className="mb-1">4. Onsite training for operation & maintenance.</div>
+          </div>
+          <div className="text-sm mb-3">
+            We also undertake supply of multiple gensets in synchronization and turnkey projects for higher power requirements. We offer need specific customized control panels for operating Gensets in AMF, synchronizing, grid power synchronizing and distribution.
+          </div>
+          <div className="text-sm mb-3">
+            We are pleased to enclose herewith our detailed Techno - Commercial offer with following annexures.
+          </div>
+          <div className="text-sm ml-4 mb-3">
+            <div className="mb-1">Annexure A: Technical specifications</div>
+            <div className="mb-1">Annexure B: Commercial terms and conditions</div>
+          </div>
+          <div className="text-sm mb-3">
+            We trust you would find the same in line with your requirement and welcome any clarification sought pertaining to the subject. We look forward to establish a long term business association with you and await your favourable response.
+          </div>
+          <div className="text-sm">
+            Thanking you and assuring you of our best attention at all times
+          </div>
+        </div>
+
+        {/* Salient Features */}
+        <div className="mb-6">
+          <div className="text-center font-bold text-lg mb-4 underline">Salient Features of MAHINDRA POWEROL Silent Genset</div>
+          <div className="text-sm space-y-1">
+            <div>• Compact size with Manual/Automatic starting system. IoT Remote Monitoring System will be provided as standard feature.</div>
+            <div>• Sound Proof, Weather Proof enclosure.</div>
+            <div>• Low vibration, best in class fuel consumption with electronic fuel injection system.</div>
+            <div>• Class G3 Governing in its range, which gives better accuracy in decreasing the speed drop in transient and lowering the recovery time of the speed.</div>
+            <div>• Low cost of service & spares.</div>
+            <div>• Low operation cost.</div>
+            <div>• Confirms to statutory Govt. CPCBIV+ emission & noise level norms.</div>
+            <div>• The Enclosure is of modular construction with the provision to assemble and dismantle easily.</div>
+            <div>• The sheet metal components are <strong>9 tanks pre-treated</strong> and is <strong>Polyester based powder coated (inside as well as outside)</strong> for long life.</div>
+            <div>• All <strong>Nuts-bolts, hardware are of Stainless Steel</strong> for longer life.</div>
+            <div>• Battery is provided in a tray inside the enclosure.</div>
+            <div>• Doors are gasketed with high quality EPDN gaskets to avoid leakage of sound.</div>
+            <div>• <strong>Optimised EATS (Exhaust After Treatment System) is provided to control exhaust noise & emission.</strong></div>
+            <div>• Specially designed sound attenuators are provided to control sound at air entry & exit points inside the enclosure.</div>
+            <div>• To make the system vibration free, engine and alternator are mounted on specially designed anti-vibration pads mounted on base frame.</div>
+            <div>• The enclosure is designed and layout of the equipment is such that there is easy access to all serviceable parts.</div>
+            <div>• Adequate ventilation is provided to meet air requirement for combustion & heat removal.</div>
+            <div>• Fluid drains for lube oil and fuel.</div>
+          </div>
+          
+          <div className="mt-4">
+            <div className="text-sm font-semibold mb-2">The silent DG set comes with following safety features:</div>
+            <div className="text-sm space-y-1">
+              <div>• High water temperature</div>
+              <div>• Low lube oil pressure</div>
+              <div>• Emergency stop push button outside the enclosure.</div>
+              <div>• EGR</div>
+              <div>• Cold Start feature (Optional)</div>
+              <div>• Specially designed Standard Control Panel is mounted inside enclosure itself.</div>
+              <div>• In-built draw in type fuel tank of suitable capacity.</div>
+              <div>• With UV resistant powder coating, can withstand extreme environments.</div>
+              <div>• The walls of the enclosure are insulated with the fire-retardant & noise absorbent foam/rockwool so as to comply with the noise level of 75 dB(A) at distance of 1 mtr. in open free field environment as per ISO 8528 part 10 specified by ministry of Environment & Forest.</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Technical Specifications */}
+        <div className="mb-6">
+          <div className="text-center font-bold text-lg mb-4">TECHNICAL SPECIFICATIONS OF MAHINDRA POWEROL DIESEL GENERATING SET</div>
+          
+          <div className="mb-4">
+            <div className="text-sm font-bold mb-2">DIESEL ENGINE:</div>
+            <div className="text-sm mb-2">
+              Mahindra Engine Model: {formData.dgSpecifications.kva || '300'} KVA CPCB II, 6 Cylinder, liquid cooled, Turbocharged aftercooled, 1500 RPM, rotary, compression ignition, 4 stroke, 2500 Hrs continuous run, CPCB IV+ norms.
+            </div>
+            <div className="text-sm space-y-1">
+              <div>• Radiator with Fan</div>
+              <div>• Electric starter motor</div>
+              <div>• Oil as per IS 1368/Part II class governor</div>
+              <div>• Battery charging alternator</div>
+              <div>• Dry type air cleaner</div>
+              <div>• CRDI System</div>
+              <div>• Lube Oil & fuel filter</div>
+              <div>• COC, MR</div>
+              <div>• Fuel tank</div>
+              <div>• Inbuilt drain trays for fuel and lube oil, coolant/oil area</div>
+              <div>• Robust & corrosion resistant enclosure</div>
+              <div>• Insulated walls</div>
+              <div>• IoT/Remote Monitoring System</div>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="text-sm font-bold mb-2">ALTERNATOR:</div>
+            <div className="text-sm">
+              Mahindra Alternator: 2500 rpm, 415V, 3 phase, 50Hz, 0.8 PF, self excited, self regulated, Brushless, floor mounted, conforms to IS 4722/IEC 60034-1, suitable for tropical conditions.
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="text-sm font-bold mb-2">ACOUSTIC ENCLOSURE:</div>
+            <div className="text-sm space-y-1">
+              <div>• Modular construction, easily dismantled</div>
+              <div>• 7 tank pre treated, polyester powder coated sheet metal</div>
+              <div>• Specially designed sound attenuators</div>
+              <div>• In-built drain trays</div>
+              <div>• Insulated walls with fire retardant & noise absorbers</div>
+              <div>• Designed for 75dB(A) noise level compliance and certified by Ministry of Environment & Forests</div>
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="text-sm font-bold mb-2">CONTROL PANEL:</div>
+            <div className="text-sm mb-2">
+              14/16 gauge CRCA sheet, powder coated, Microprocessor based genset controller, MCCB, Key Switch, Push Button, LED indicators, Current Transformer, Instrument Fuses, basic safeties and protections.
+            </div>
+            <div className="text-sm">Contact our consultants for more details.</div>
+          </div>
+        </div>
+
+        {/* Commercial Terms - Annexure B */}
+        <div className="mb-6">
+          <div className="text-center font-bold text-lg mb-4">ANNEXURE B</div>
+          
+          <div className="mb-4">
+            <div className="text-sm font-bold mb-2">Commercial Terms:</div>
+            <table className="w-full border border-gray-300 text-sm">
+              <tbody>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Quotation No.</td><td className="border border-gray-300 p-2">{formData.quotationNumber || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Issue Date</td><td className="border border-gray-300 p-2">{formData.issueDate || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Valid Until</td><td className="border border-gray-300 p-2">{formData.validUntil || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Quotation Revision No.</td><td className="border border-gray-300 p-2">{formData.quotationRevisionNo || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">DG Enquiry No.</td><td className="border border-gray-300 p-2">{formData.enquiryDetails?.enquiryNo || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Subject</td><td className="border border-gray-300 p-2">{formData.subject || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Annexure Rating</td><td className="border border-gray-300 p-2">{formData.annexureRating || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">DG Model</td><td className="border border-gray-300 p-2">{formData.dgModel || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Cylinder</td><td className="border border-gray-300 p-2">{formData.cylinder || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Warranty From Invoice</td><td className="border border-gray-300 p-2">{formData.warrantyFromInvoice || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Warranty From Commissioning</td><td className="border border-gray-300 p-2">{formData.warrantyFromCommissioning || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Warranty Hours</td><td className="border border-gray-300 p-2">{formData.warrantyHours || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Tax Rate</td><td className="border border-gray-300 p-2">{formData.taxRate || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Freight Terms</td><td className="border border-gray-300 p-2">{formData.freightTerms || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Delivery Period</td><td className="border border-gray-300 p-2">{formData.deliveryPeriod || 'Internal Entry'}</td></tr>
+                <tr><td className="border border-gray-300 p-2 font-semibold">Validity Days</td><td className="border border-gray-300 p-2">{formData.validityDays || 'Internal Entry'}</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mb-4">
+            <div className="text-sm font-bold mb-2">Product Details:</div>
+            <table className="w-full border border-gray-300 text-sm">
             <thead>
               <tr className="bg-gray-100">
-                <th className="border border-gray-300 p-2 text-left">Sl.No</th>
-                <th className="border border-gray-300 p-2 text-left">Description</th>
-                <th className="border border-gray-300 p-2 text-center">Qty</th>
-                <th className="border border-gray-300 p-2 text-right">Basic price</th>
+                  <th className="border border-gray-300 p-2 text-left">Sr. No.</th>
+                  <th className="border border-gray-300 p-2 text-left">Product Description</th>
+                  <th className="border border-gray-300 p-2 text-center">Quantity</th>
+                  <th className="border border-gray-300 p-2 text-right">Unit Rate (INR)</th>
+                  <th className="border border-gray-300 p-2 text-right">Total (INR)</th>
               </tr>
             </thead>
             <tbody>
@@ -1526,69 +1795,85 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                   <td className="border border-gray-300 p-2">{index + 1}</td>
                   <td className="border border-gray-300 p-2">{item.description}</td>
                   <td className="border border-gray-300 p-2 text-center">{item.quantity}</td>
-                  <td className="border border-gray-300 p-2 text-right">
-                    ₹{item.unitPrice.toLocaleString()}
-                  </td>
+                    <td className="border border-gray-300 p-2 text-right">₹{item.unitPrice.toLocaleString()}</td>
+                    <td className="border border-gray-300 p-2 text-right">₹{item.totalPrice.toLocaleString()}</td>
                 </tr>
               ))}
-              {dgProducts
-                .filter(product =>
-                  !dgProductSearchTerm ||
-                  product.kva?.toLowerCase().includes(dgProductSearchTerm.toLowerCase()) ||
-                  product.phase?.toLowerCase().includes(dgProductSearchTerm.toLowerCase()) ||
-                  product.dgModel?.toLowerCase().includes(dgProductSearchTerm.toLowerCase()) ||
-                  product.subject?.toLowerCase().includes(dgProductSearchTerm.toLowerCase())
-                ).length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="border border-gray-300 p-4 text-center text-gray-500">
-                      {dgProductSearchTerm ? 'No DG products found matching your search.' : 'No DG products available.'}
-                    </td>
+                <tr>
+                  <td className="border border-gray-300 p-2 font-semibold" colSpan={4}>Subtotal</td>
+                  <td className="border border-gray-300 p-2 text-right font-semibold">₹{formData.subtotal.toLocaleString()}</td>
                   </tr>
-                )}
+                <tr>
+                  <td className="border border-gray-300 p-2 font-semibold" colSpan={4}>Discount</td>
+                  <td className="border border-gray-300 p-2 text-right font-semibold">₹{formData.totalDiscount.toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td className="border border-gray-300 p-2 font-semibold" colSpan={4}>Tax</td>
+                  <td className="border border-gray-300 p-2 text-right font-semibold">₹{formData.totalTax.toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td className="border border-gray-300 p-2 font-semibold" colSpan={4}>Grand Total</td>
+                  <td className="border border-gray-300 p-2 text-right font-semibold">₹{formData.grandTotal.toLocaleString()}</td>
+                </tr>
             </tbody>
           </table>
-        </div>
-
-        {/* Commercial Terms */}
-        <div className="mb-6">
-          <div className="text-sm">
-            <div className="mb-1"><strong>GST:</strong> 18% Extra</div>
-            <div className="mb-1"><strong>Transport:</strong> Extra</div>
-            <div className="mb-1"><strong>Unloading:</strong> Extra</div>
-            <div className="mb-1"><strong>Delivery:</strong> {formData.deliveryTerms}</div>
-            <div className="mb-1"><strong>Payment Terms:</strong> {formData.paymentTerms}</div>
           </div>
         </div>
 
-        {/* Bank Details */}
+        {/* Warranty Policy */}
         <div className="mb-6">
-          <table className="w-full border border-gray-300">
-            <tbody>
-              <tr><td className="border border-gray-300 p-2 font-semibold">GST NO</td><td className="border border-gray-300 p-2">{formData.company.pan}</td></tr>
-              <tr><td className="border border-gray-300 p-2 font-semibold">ACCOUNT NAME</td><td className="border border-gray-300 p-2">{formData.company.name}</td></tr>
-              <tr><td className="border border-gray-300 p-2 font-semibold">ACCOUNT NUMBER</td><td className="border border-gray-300 p-2">{formData.company.bankDetails.accountNo}</td></tr>
-              <tr><td className="border border-gray-300 p-2 font-semibold">BANK</td><td className="border border-gray-300 p-2">{formData.company.bankDetails.bankName}</td></tr>
-              <tr><td className="border border-gray-300 p-2 font-semibold">BRANCH</td><td className="border border-gray-300 p-2">{formData.company.bankDetails.branch}</td></tr>
-              <tr><td className="border border-gray-300 p-2 font-semibold">IFSC CODE</td><td className="border border-gray-300 p-2">{formData.company.bankDetails.ifsc}</td></tr>
-            </tbody>
-          </table>
+          <div className="text-sm font-bold mb-2">WARRANTY POLICY:</div>
+          <div className="text-sm mb-3">
+            `Warranty period: {formData.warrantyFromInvoice} months from date of invoice OR {formData.warrantyFromCommissioning} months from Date of commissioning OR {formData.warrantyHours} Hours of operation whichever is earlier. Warranty for electrical/proprietary items as per manufacturer's standard clause. Warranty does not cover normal wear and tear, accident, wrong handling, improper maintenance.`
+          </div>
         </div>
 
-        {/* Validity */}
+        {/* Terms & Conditions */}
         <div className="mb-6">
+          <div className="text-sm font-bold mb-2">TERMS & CONDITIONS:</div>
+          <div className="text-sm space-y-2">
+            <div><span className="font-semibold">Taxes:</span> Prices are inclusive of GST @{formData.taxRate || '18'}%.</div>
+            <div><span className="font-semibold">Freight:</span> Prices are Exclusive of freight charges - Separately mentioned {formData.freightTerms || 'Extra'}.</div>
+            <div><span className="font-semibold">Transit Insurance:</span> Extra at actuals.</div>
+            <div><span className="font-semibold">Approvals:</span> Approval from concern authorities shall be by customers account.</div>
+            <div><span className="font-semibold">Delivery:</span> Ex-stock subject to prior sale. {formData.deliveryPeriod || '2-3 weeks'} from the date of receipt of your confirmed order/advance payment. We shall not be responsible for any delay due to force majeure conditions.</div>
+            <div><span className="font-semibold">Validity:</span> Our offer shall remain valid for a period of {formData.validityDays || '30'} Days from the date of our offer and subject to your confirmation/amendment.</div>
+            <div><span className="font-semibold">Scope of Supply:</span> Our offer is confined to the stipulated technical and commercial clauses and subject to mutual agreement.</div>
+          </div>
+        </div>
+
+        {/* Exclusions */}
+        <div className="mb-6">
+          <div className="text-sm font-bold mb-2">EXCLUSIONS:</div>
           <div className="text-sm">
-            <strong>Validity:</strong> Offer shall be valid for a period of {formData.validityPeriod} days from the date of submission of offer and thereafter on written confirmation.
+            Installation/job work, unloading, earthing pits, DG room, foundation, cabling, exhaust piping, manual changeover switch, etc. will be charged extra.
+          </div>
+        </div>
+
+        {/* Arbitration */}
+        <div className="mb-6">
+          <div className="text-sm font-bold mb-2">ARBITRATION:</div>
+          <div className="text-sm">
+            Any dispute arising out of or in connection with this contract shall be settled by arbitration in accordance with the Arbitration and Conciliation Act 1996. The arbitration shall be conducted by a single arbitrator appointed by mutual consent. The venue of arbitration shall be at Chennai and the language of arbitration shall be English.
           </div>
         </div>
 
         {/* Signature */}
         <div className="mt-8">
           <div className="text-sm mb-2">Yours Truly,</div>
-          <div className="text-sm font-semibold mb-1">For {formData.company.name}</div>
-          <div className="text-sm mb-1">P.S.Sayee Ganesh</div>
-          <div className="text-sm mb-1">Senior Sales Manager - HKVA</div>
-          <div className="text-sm mb-1">Mob: {formData.company.phone}</div>
-          <div className="text-sm">Email: {formData.company.email}</div>
+          <div className="text-sm font-semibold mb-1">For SUN POWER SERVICES</div>
+          <div className="text-sm mb-1">Name: {formData.salesEngineer?.firstName + ' ' + formData.salesEngineer?.lastName || '________________'}</div>
+          <div className="text-sm mb-1">Role:  Sales Engineer</div>
+          <div className="text-sm mb-1">Mobile: {formData.salesEngineer?.phone || formData.company.phone || '________________'}</div>
+          <div className="text-sm">Email: {formData.salesEngineer?.email || formData.company.email || '________________'}</div>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-8 text-center text-red-600">
+          <div className="text-sm font-bold mb-2">AUTHORISED DEALER OF SALES AND SERVICE FOR MAHINDRA DIESEL GENERATORS</div>
+          <div className="text-sm mb-1">Door No. 53, Plot No. 4, 4th Street, Phase-1Extension, Vivekakonni Nagar, Chennai - 600 116.</div>
+          <div className="text-sm mb-1">Phone: 044 2482 8218</div>
+          <div className="text-sm">E-mail: sunpowerservices@gmail.com Web: www.sunpowerservices.in</div>
         </div>
       </div>
     );
@@ -1636,6 +1921,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
               state: primaryAddress.state,
               district: primaryAddress.district,
               pincode: primaryAddress.pincode,
+              gstNumber: primaryAddress.gstNumber || '',
               ...(primaryAddress.id && { addressId: primaryAddress.id })
             },
             shipToAddress: {
@@ -1643,6 +1929,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
               state: primaryAddress.state,
               district: primaryAddress.district,
               pincode: primaryAddress.pincode,
+              gstNumber: primaryAddress.gstNumber || '',
               ...(primaryAddress.id && { addressId: primaryAddress.id })
             }
           }));
@@ -1699,7 +1986,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => downloadDGQuotationPDF(convertToDGQuotationData(formData))}
+                  onClick={async () => await downloadDGQuotationPDF(convertToDGQuotationData(formData))}
                 >
                   <Download className="h-4 w-4 mr-2" />
                   Download PDF
@@ -1710,6 +1997,15 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
         </div>
         <div className="py-8">
           {renderPreview()}
+          <div className="flex justify-center mt-8">
+            <Button
+              onClick={async () => await downloadDGQuotationPDF(convertToDGQuotationData(formData))}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download PDF
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -1717,7 +2013,31 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <div className="bg-white shadow-sm border-b">
+      {/* Fixed Information Message at Top */}
+      {/* <div className="bg-blue-50 border-b border-blue-200 sticky top-0 z-10">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8 py-3">
+          <div className="flex items-start">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-blue-800">
+                DG Quotation Creation
+              </h3>
+              <div className="mt-1 text-sm text-blue-700">
+                <p>
+                  You are creating a quotation for a <strong>converted customer</strong>. 
+                  This quotation will be based on the enquiry details and can be sent to the customer for approval.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div> */}
+
+      <div className="bg-white shadow-sm border-b border-blue-200 sticky top-0 z-10">
         <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center space-x-4">
@@ -1731,15 +2051,15 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
               <h1 className="text-xl font-semibold">Create DG Quotation</h1>
               {enquiry && (
                 <div className="flex items-center space-x-2">
-                  <Badge variant="info">
+                  {/* <Badge variant="info">
                     From Enquiry: {enquiry.customerName}
-                  </Badge>
+                  </Badge> */}
                   {formData.enquiryDetails?.enquiryNo && (
                     <Badge variant="warning">
                       Enquiry: {formData.enquiryDetails.enquiryNo}
                     </Badge>
                   )}
-                  {formData.enquiryDetails?.enquiryStatus && (
+                  {/* {formData.enquiryDetails?.enquiryStatus && (
                     <Badge variant={
                       formData.enquiryDetails.enquiryStatus === 'Active' ? 'success' :
                         formData.enquiryDetails.enquiryStatus === 'Pending' ? 'warning' :
@@ -1747,7 +2067,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                     }>
                       {formData.enquiryDetails.enquiryStatus}
                     </Badge>
-                  )}
+                  )} */}
                 </div>
               )}
             </div>
@@ -1756,19 +2076,26 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <Eye className="h-4 w-4 mr-2" />
                 Preview
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowTechnicalSpec(true)}
-              >
-                Technical Spec
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => downloadDGQuotationPDF(convertToDGQuotationData(formData))}
+              <Button 
+                variant="outline" 
+                onClick={async () => await downloadDGQuotationPDF(convertToDGQuotationData(formData))}
               >
                 <Download className="h-4 w-4 mr-2" />
                 Download PDF
               </Button>
+              {/* <Button
+                variant="outline"
+                onClick={() => setShowTechnicalSpec(true)}
+              >
+                Technical Spec
+              </Button> */}
+              {/* <Button
+                variant="outline"
+                onClick={async () => await downloadDGQuotationPDF(convertToDGQuotationData(formData))}
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Download PDF
+              </Button> */}
               <Button onClick={handleSubmit} disabled={submitting}>
                 <Save className="h-4 w-4 mr-2" />
                 {submitting ? 'Saving...' : 'Save Quotation'}
@@ -1793,9 +2120,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
               <div className="relative dropdown-container">
                 <input
                   type="text"
-                  value={subjectSearchTerm || getSubjectLabel(formData.subject)}
+                  value={subjectSearchTerm || (formData.subject ? getSubjectLabel(formData.subject) : '')}
                   onChange={(e) => {
-                    setSubjectSearchTerm(e.target.value);
+                    const value = e.target.value;
+                    setSubjectSearchTerm(value);
+                    
+                    // If input is cleared, clear the subject selection
+                    if (!value) {
+                      setFormData(prev => ({ ...prev, subject: '' }));
+                    }
+                    
                     if (!showSubjectDropdown) setShowSubjectDropdown(true);
                     setHighlightedSubjectIndex(-1);
                   }}
@@ -1807,7 +2141,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                   placeholder="Search or select subject"
                   className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  {formData.subject && !subjectSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, subject: '' }));
+                        setSubjectSearchTerm('');
+                      }}
+                      className="text-gray-400 hover:text-gray-600 mr-2"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showSubjectDropdown ? 'rotate-180' : ''}`} />
                 </div>
                 {showSubjectDropdown && (
@@ -1855,9 +2201,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
               <div className="relative dropdown-container">
                 <input
                   type="text"
-                  value={annexureRatingSearchTerm || getAnnexureRatingLabel(formData.annexureRating)}
+                  value={annexureRatingSearchTerm || (formData.annexureRating ? getAnnexureRatingLabel(formData.annexureRating) : '')}
                   onChange={(e) => {
-                    setAnnexureRatingSearchTerm(e.target.value);
+                    const value = e.target.value;
+                    setAnnexureRatingSearchTerm(value);
+                    
+                    // If input is cleared, clear the annexure rating selection
+                    if (!value) {
+                      setFormData(prev => ({ ...prev, annexureRating: '' }));
+                    }
+                    
                     if (!showAnnexureRatingDropdown) setShowAnnexureRatingDropdown(true);
                     setHighlightedAnnexureRatingIndex(-1);
                   }}
@@ -1869,7 +2222,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                   placeholder="Search or select annexure rating"
                   className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  {formData.annexureRating && !annexureRatingSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, annexureRating: '' }));
+                        setAnnexureRatingSearchTerm('');
+                      }}
+                      className="text-gray-400 hover:text-gray-600 mr-2"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAnnexureRatingDropdown ? 'rotate-180' : ''}`} />
                 </div>
                 {showAnnexureRatingDropdown && (
@@ -1917,9 +2282,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
               <div className="relative dropdown-container">
                 <input
                   type="text"
-                  value={modelSearchTerm || getModelLabel(formData.dgModel)}
+                  value={modelSearchTerm || (formData.dgModel ? getModelLabel(formData.dgModel) : '')}
                   onChange={(e) => {
-                    setModelSearchTerm(e.target.value);
+                    const value = e.target.value;
+                    setModelSearchTerm(value);
+                    
+                    // If input is cleared, clear the model selection
+                    if (!value) {
+                      setFormData(prev => ({ ...prev, dgModel: '' }));
+                    }
+                    
                     if (!showModelDropdown) setShowModelDropdown(true);
                     setHighlightedModelIndex(-1);
                   }}
@@ -1931,7 +2303,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                   placeholder="Search or select model"
                   className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  {formData.dgModel && !modelSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, dgModel: '' }));
+                        setModelSearchTerm('');
+                      }}
+                      className="text-gray-400 hover:text-gray-600 mr-2"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
                 </div>
                 {showModelDropdown && (
@@ -1979,9 +2363,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
               <div className="relative dropdown-container">
                 <input
                   type="text"
-                  value={cylinderSearchTerm || getCylinderLabel(formData.cylinder)}
+                  value={cylinderSearchTerm || (formData.cylinder ? getCylinderLabel(formData.cylinder) : '')}
                   onChange={(e) => {
-                    setCylinderSearchTerm(e.target.value);
+                    const value = e.target.value;
+                    setCylinderSearchTerm(value);
+                    
+                    // If input is cleared, clear the cylinder selection
+                    if (!value) {
+                      setFormData(prev => ({ ...prev, cylinder: '' }));
+                    }
+                    
                     if (!showCylinderDropdown) setShowCylinderDropdown(true);
                     setHighlightedCylinderIndex(-1);
                   }}
@@ -1993,7 +2384,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                   placeholder="Search or select cylinder"
                   className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  {formData.cylinder && !cylinderSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, cylinder: '' }));
+                        setCylinderSearchTerm('');
+                      }}
+                      className="text-gray-400 hover:text-gray-600 mr-2"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCylinderDropdown ? 'rotate-180' : ''}`} />
                 </div>
                 {showCylinderDropdown && (
@@ -2051,9 +2454,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={warrantyInvoiceSearchTerm || getWarrantyInvoiceLabel(formData.warrantyFromInvoice)}
+                    value={warrantyInvoiceSearchTerm || (formData.warrantyFromInvoice ? getWarrantyInvoiceLabel(formData.warrantyFromInvoice) : '')}
                     onChange={(e) => {
-                      setWarrantyInvoiceSearchTerm(e.target.value);
+                      const value = e.target.value;
+                      setWarrantyInvoiceSearchTerm(value);
+                      
+                      // If input is cleared, clear the warranty selection
+                      if (!value) {
+                        setFormData(prev => ({ ...prev, warrantyFromInvoice: '30' }));
+                      }
+                      
                       if (!showWarrantyInvoiceDropdown) setShowWarrantyInvoiceDropdown(true);
                       setHighlightedWarrantyInvoiceIndex(-1);
                     }}
@@ -2065,7 +2475,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                     placeholder="Select warranty period"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.warrantyFromInvoice && formData.warrantyFromInvoice !== '30' && !warrantyInvoiceSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, warrantyFromInvoice: '30' }));
+                          setWarrantyInvoiceSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showWarrantyInvoiceDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showWarrantyInvoiceDropdown && (
@@ -2148,9 +2570,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={warrantyHoursSearchTerm || getWarrantyHoursLabel(formData.warrantyHours)}
+                    value={warrantyHoursSearchTerm || (formData.warrantyHours ? getWarrantyHoursLabel(formData.warrantyHours) : '')}
                     onChange={(e) => {
-                      setWarrantyHoursSearchTerm(e.target.value);
+                      const value = e.target.value;
+                      setWarrantyHoursSearchTerm(value);
+                      
+                      // If input is cleared, clear the warranty selection
+                      if (!value) {
+                        setFormData(prev => ({ ...prev, warrantyHours: '5000' }));
+                      }
+                      
                       if (!showWarrantyHoursDropdown) setShowWarrantyHoursDropdown(true);
                       setHighlightedWarrantyHoursIndex(-1);
                     }}
@@ -2161,7 +2590,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                     placeholder="Select warranty hours"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.warrantyHours && formData.warrantyHours !== '5000' && !warrantyHoursSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, warrantyHours: '5000' }));
+                          setWarrantyHoursSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showWarrantyHoursDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showWarrantyHoursDropdown && (
@@ -2207,9 +2648,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={taxRateSearchTerm || getTaxRateLabel(formData.taxRate)}
+                    value={taxRateSearchTerm || (formData.taxRate ? getTaxRateLabel(formData.taxRate) : '')}
                     onChange={(e) => {
-                      setTaxRateSearchTerm(e.target.value);
+                      const value = e.target.value;
+                      setTaxRateSearchTerm(value);
+                      
+                      // If input is cleared, clear the tax rate selection
+                      if (!value) {
+                        setFormData(prev => ({ ...prev, taxRate: '18' }));
+                      }
+                      
                       if (!showTaxRateDropdown) setShowTaxRateDropdown(true);
                       setHighlightedTaxRateIndex(-1);
                     }}
@@ -2221,7 +2669,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                     placeholder="Select tax rate"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.taxRate && formData.taxRate !== '18' && !taxRateSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, taxRate: '18' }));
+                          setTaxRateSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showTaxRateDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showTaxRateDropdown && (
@@ -2261,9 +2721,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={freightTermsSearchTerm || getFreightTermsLabel(formData.freightTerms)}
+                    value={freightTermsSearchTerm || (formData.freightTerms ? getFreightTermsLabel(formData.freightTerms) : '')}
                     onChange={(e) => {
-                      setFreightTermsSearchTerm(e.target.value);
+                      const value = e.target.value;
+                      setFreightTermsSearchTerm(value);
+                      
+                      // If input is cleared, clear the freight terms selection
+                      if (!value) {
+                        setFormData(prev => ({ ...prev, freightTerms: 'extra' }));
+                      }
+                      
                       if (!showFreightTermsDropdown) setShowFreightTermsDropdown(true);
                       setHighlightedFreightTermsIndex(-1);
                     }}
@@ -2275,7 +2742,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                     placeholder="Select freight terms"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.freightTerms && formData.freightTerms !== 'extra' && !freightTermsSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, freightTerms: 'extra' }));
+                          setFreightTermsSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showFreightTermsDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showFreightTermsDropdown && (
@@ -2315,9 +2794,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={deliveryPeriodSearchTerm || getDeliveryPeriodLabel(formData.deliveryPeriod)}
+                    value={deliveryPeriodSearchTerm || (formData.deliveryPeriod ? getDeliveryPeriodLabel(formData.deliveryPeriod) : '')}
                     onChange={(e) => {
-                      setDeliveryPeriodSearchTerm(e.target.value);
+                      const value = e.target.value;
+                      setDeliveryPeriodSearchTerm(value);
+                      
+                      // If input is cleared, clear the delivery period selection
+                      if (!value) {
+                        setFormData(prev => ({ ...prev, deliveryPeriod: '6' }));
+                      }
+                      
                       if (!showDeliveryPeriodDropdown) setShowDeliveryPeriodDropdown(true);
                       setHighlightedDeliveryPeriodIndex(-1);
                     }}
@@ -2329,7 +2815,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                     placeholder="Select delivery period"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.deliveryPeriod && formData.deliveryPeriod !== '6' && !deliveryPeriodSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, deliveryPeriod: '6' }));
+                          setDeliveryPeriodSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showDeliveryPeriodDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showDeliveryPeriodDropdown && (
@@ -2369,9 +2867,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={validityDaysSearchTerm || getValidityDaysLabel(formData.validityDays)}
+                    value={validityDaysSearchTerm || (formData.validityDays ? getValidityDaysLabel(formData.validityDays) : '')}
                     onChange={(e) => {
-                      setValidityDaysSearchTerm(e.target.value);
+                      const value = e.target.value;
+                      setValidityDaysSearchTerm(value);
+                      
+                      // If input is cleared, clear the validity days selection
+                      if (!value) {
+                        setFormData(prev => ({ ...prev, validityDays: '30' }));
+                      }
+                      
                       if (!showValidityDaysDropdown) setShowValidityDaysDropdown(true);
                       setHighlightedValidityDaysIndex(-1);
                     }}
@@ -2383,7 +2888,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                     placeholder="Select validity period"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.validityDays && formData.validityDays !== '30' && !validityDaysSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, validityDays: '30' }));
+                          setValidityDaysSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showValidityDaysDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showValidityDaysDropdown && (
@@ -2535,6 +3052,88 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 error={errors.quotationRevisionNo}
               />
             </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Sales Engineer
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 pr-10 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Search sales engineer..."
+                    value={salesEngineerSearchTerm}
+                    onChange={(e) => {
+                      setSalesEngineerSearchTerm(e.target.value);
+                      setShowSalesEngineerDropdown(true);
+                      setHighlightedSalesEngineerIndex(-1);
+                    }}
+                    onFocus={() => setShowSalesEngineerDropdown(true)}
+                    onKeyDown={handleSalesEngineerKeyDown}
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </div>
+                
+                {showSalesEngineerDropdown && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                    {salesEngineers
+                      .filter(engineer =>
+                        engineer.fullName.toLowerCase().includes(salesEngineerSearchTerm.toLowerCase()) ||
+                        engineer.email?.toLowerCase().includes(salesEngineerSearchTerm.toLowerCase()) ||
+                        engineer.salesEmployeeCode?.toLowerCase().includes(salesEngineerSearchTerm.toLowerCase())
+                      )
+                      .map((engineer, index) => (
+                        <div
+                          key={engineer._id}
+                          className={`px-4 py-3 cursor-pointer hover:bg-gray-100 ${
+                            index === highlightedSalesEngineerIndex ? 'bg-blue-100' : ''
+                          }`}
+                          onClick={() => handleSalesEngineerSelect(engineer._id)}
+                        >
+                          <div className="font-medium text-gray-900">{engineer.fullName}</div>
+                          <div className="text-sm text-gray-500">{engineer.email}</div>
+                          <div className="text-xs text-gray-400">Code: {engineer.salesEmployeeCode}</div>
+                        </div>
+                      ))}
+                    {salesEngineers.filter(engineer =>
+                      engineer.fullName.toLowerCase().includes(salesEngineerSearchTerm.toLowerCase()) ||
+                      engineer.email?.toLowerCase().includes(salesEngineerSearchTerm.toLowerCase()) ||
+                      engineer.salesEmployeeCode?.toLowerCase().includes(salesEngineerSearchTerm.toLowerCase())
+                    ).length === 0 && (
+                      <div className="px-4 py-3 text-gray-500">No sales engineers found</div>
+                    )}
+                  </div>
+                )}
+                
+                {formData.salesEngineer && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="font-medium text-blue-900">{formData.salesEngineer.fullName}</div>
+                        <div className="text-sm text-blue-700">{formData.salesEngineer.email}</div>
+                        <div className="text-xs text-blue-600">Code: {formData.salesEngineer.salesEmployeeCode}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, salesEngineer: undefined }));
+                          setSalesEngineerSearchTerm('');
+                        }}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-1 gap-4 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2564,9 +3163,16 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={locationSearchTerm || getLocationLabel(formData.location || '')}
+                    value={locationSearchTerm || (formData.location ? getLocationLabel(formData.location) : '')}
                     onChange={(e) => {
-                      setLocationSearchTerm(e.target.value);
+                      const value = e.target.value;
+                      setLocationSearchTerm(value);
+                      
+                      // If input is cleared, clear the location selection
+                      if (!value) {
+                        setFormData(prev => ({ ...prev, location: '' }));
+                      }
+                      
                       if (!showLocationDropdown) setShowLocationDropdown(true);
                       setHighlightedLocationIndex(-1);
                     }}
@@ -2579,7 +3185,19 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                     placeholder="Search location or press ↓ to open"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.location && !locationSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({ ...prev, location: '' }));
+                          setLocationSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showLocationDropdown && (
@@ -2647,9 +3265,22 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={customerSearchTerm || getCustomerLabel(formData.customer._id || '')}
+                    value={customerSearchTerm || (formData.customer._id ? getCustomerLabel(formData.customer._id) : '')}
                     onChange={(e) => {
-                      setCustomerSearchTerm(e.target.value);
+                      const value = e.target.value;
+                      setCustomerSearchTerm(value);
+                      
+                      // If input is cleared, clear the customer selection
+                      if (!value) {
+                        setFormData(prev => ({
+                          ...prev,
+                          customer: { _id: '', name: '', email: '', phone: '', pan: '', corporateName: '', address: '', pinCode: '', tehsil: '', district: '' },
+                          billToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' },
+                          shipToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' }
+                        }));
+                        setAddresses([]);
+                      }
+                      
                       if (!showCustomerDropdown) setShowCustomerDropdown(true);
                       setHighlightedCustomerIndex(-1);
                     }}
@@ -2662,7 +3293,25 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                     placeholder="Search customer or press ↓ to open"
                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.customer._id && !customerSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            customer: { _id: '', name: '', email: '', phone: '', pan: '', corporateName: '', address: '', pinCode: '', tehsil: '', district: '' },
+                            billToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' },
+                            shipToAddress: { address: '', state: '', district: '', pincode: '' }
+                          }));
+                          setAddresses([]);
+                          setCustomerSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showCustomerDropdown && (
@@ -2677,7 +3326,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                           setFormData(prev => ({
                             ...prev,
                             customer: { _id: '', name: '', email: '', phone: '', pan: '', corporateName: '', address: '', pinCode: '', tehsil: '', district: '' },
-                            billToAddress: { address: '', state: '', district: '', pincode: '' },
+                            billToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' },
                             shipToAddress: { address: '', state: '', district: '', pincode: '' }
                           }));
                           setShowCustomerDropdown(false);
@@ -2742,23 +3391,53 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={getAddressLabel((formData.billToAddress as any)?.addressId?.toString())}
-                    readOnly
-                    disabled={!formData.customer._id}
+                    value={billToAddressSearchTerm || (formData.billToAddress?.address ? getAddressLabel((formData.billToAddress as any)?.addressId?.toString()) : '')}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setBillToAddressSearchTerm(value);
+                      
+                      // If input is cleared, clear the address selection
+                      if (!value) {
+                        setFormData(prev => ({
+                          ...prev,
+                          billToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' }
+                        }));
+                      }
+                      
+                      if (!showBillToAddressDropdown) setShowBillToAddressDropdown(true);
+                      setHighlightedBillToAddressIndex(-1);
+                    }}
                     onFocus={() => {
                       if (formData.customer._id) {
                         setShowBillToAddressDropdown(true);
                         setHighlightedBillToAddressIndex(-1);
                       }
                     }}
+                    autoComplete="off"
                     onKeyDown={handleBillToAddressKeyDown}
-                    placeholder={!formData.customer._id ? "Select customer first" : "Press ↓ to open address list"}
+                    disabled={!formData.customer._id}
+                    placeholder={!formData.customer._id ? "Select customer first" : "Search address or press ↓ to open"}
                     className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer._id
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                       }`}
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.billToAddress?.address && !billToAddressSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            billToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' }
+                          }));
+                          setBillToAddressSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showBillToAddressDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showBillToAddressDropdown && formData.customer._id && (
@@ -2772,7 +3451,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                         onClick={() => {
                           setFormData(prev => ({
                             ...prev,
-                            billToAddress: { address: '', state: '', district: '', pincode: '' }
+                            billToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' }
                           }));
                           setShowBillToAddressDropdown(false);
                         }}
@@ -2780,7 +3459,15 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       >
                         Select bill to address
                       </button>
-                      {addresses.map((address, index) => (
+                      {addresses
+                        .filter(address =>
+                          !billToAddressSearchTerm ||
+                          address.address.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                          address.district.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                          address.state.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                          address.pincode.includes(billToAddressSearchTerm)
+                        )
+                        .map((address, index) => (
                         <button
                           key={address.id}
                           onClick={() => {
@@ -2796,6 +3483,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                             }));
                             setShowBillToAddressDropdown(false);
                             setHighlightedBillToAddressIndex(-1);
+                            setBillToAddressSearchTerm('');
                           }}
                           className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.billToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
                             highlightedBillToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
@@ -2811,9 +3499,15 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                           </div>
                         </button>
                       ))}
-                      {addresses.length === 0 && (
+                      {addresses.filter(address =>
+                        !billToAddressSearchTerm ||
+                        address.address.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                        address.district.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                        address.state.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                        address.pincode.includes(billToAddressSearchTerm)
+                      ).length === 0 && (
                         <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                          No addresses found for this customer
+                          {addresses.length === 0 ? 'No addresses found for this customer' : `No addresses found for "${billToAddressSearchTerm}"`}
                         </div>
                       )}
                     </div>
@@ -2828,23 +3522,53 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={getAddressLabel((formData.shipToAddress as any)?.addressId?.toString())}
-                    readOnly
-                    disabled={!formData.customer._id}
+                    value={shipToAddressSearchTerm || (formData.shipToAddress?.address ? getAddressLabel((formData.shipToAddress as any)?.addressId?.toString()) : '')}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setShipToAddressSearchTerm(value);
+                      
+                      // If input is cleared, clear the address selection
+                      if (!value) {
+                        setFormData(prev => ({
+                          ...prev,
+                          shipToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' }
+                        }));
+                      }
+                      
+                      if (!showShipToAddressDropdown) setShowShipToAddressDropdown(true);
+                      setHighlightedShipToAddressIndex(-1);
+                    }}
                     onFocus={() => {
                       if (formData.customer._id) {
                         setShowShipToAddressDropdown(true);
                         setHighlightedShipToAddressIndex(-1);
                       }
                     }}
+                    autoComplete="off"
                     onKeyDown={handleShipToAddressKeyDown}
-                    placeholder={!formData.customer._id ? "Select customer first" : "Press ↓ to open address list"}
+                    disabled={!formData.customer._id}
+                    placeholder={!formData.customer._id ? "Select customer first" : "Search address or press ↓ to open"}
                     className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer._id
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                       }`}
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.shipToAddress?.address && !shipToAddressSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            shipToAddress: { address: '', state: '', district: '', pincode: '' }
+                          }));
+                          setShipToAddressSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showShipToAddressDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showShipToAddressDropdown && formData.customer._id && (
@@ -2866,7 +3590,15 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       >
                         Select ship to address
                       </button>
-                      {addresses.map((address, index) => (
+                      {addresses
+                        .filter(address =>
+                          !shipToAddressSearchTerm ||
+                          address.address.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                          address.district.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                          address.state.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                          address.pincode.includes(shipToAddressSearchTerm)
+                        )
+                        .map((address, index) => (
                         <button
                           key={address.id}
                           onClick={() => {
@@ -2882,6 +3614,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                             }));
                             setShowShipToAddressDropdown(false);
                             setHighlightedShipToAddressIndex(-1);
+                            setShipToAddressSearchTerm('');
                           }}
                           className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.shipToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
                             highlightedShipToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
@@ -2897,9 +3630,15 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                           </div>
                         </button>
                       ))}
-                      {addresses.length === 0 && (
+                      {addresses.filter(address =>
+                        !shipToAddressSearchTerm ||
+                        address.address.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                        address.district.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                        address.state.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                        address.pincode.includes(shipToAddressSearchTerm)
+                      ).length === 0 && (
                         <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                          No addresses found for this customer
+                          {addresses.length === 0 ? 'No addresses found for this customer' : `No addresses found for "${shipToAddressSearchTerm}"`}
                         </div>
                       )}
                     </div>
@@ -2925,8 +3664,8 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                       setFormData(prev => ({
                         ...prev,
                         customer: { _id: '', name: '', email: '', phone: '', pan: '', corporateName: '', address: '', pinCode: '', tehsil: '', district: '' },
-                        billToAddress: { address: '', state: '', district: '', pincode: '' },
-                        shipToAddress: { address: '', state: '', district: '', pincode: '' }
+                        billToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' },
+                        shipToAddress: { address: '', state: '', district: '', pincode: '', gstNumber: '' }
                       }));
                       setAddresses([]);
                     }}
@@ -2981,6 +3720,11 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                               <div className="text-sm text-gray-600 mt-1">
                                 {formData.billToAddress.district}, {formData.billToAddress.state} - {formData.billToAddress.pincode}
                               </div>
+                              {formData.billToAddress.gstNumber && (
+                                <div className="text-sm text-gray-600 mt-1">
+                                  <span className="font-medium">GST:</span> {formData.billToAddress.gstNumber}
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <span className="text-gray-500 italic">No bill to address selected</span>
@@ -2997,6 +3741,11 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                               <div className="text-sm text-gray-600 mt-1">
                                 {formData.shipToAddress.district}, {formData.shipToAddress.state} - {formData.shipToAddress.pincode}
                               </div>
+                              {formData.shipToAddress.gstNumber && (
+                                <div className="text-sm text-gray-600 mt-1">
+                                  <span className="font-medium">GST:</span> {formData.shipToAddress.gstNumber}
+                                </div>
+                              )}
                             </div>
                           ) : (
                             <span className="text-gray-500 italic">No ship to address selected</span>
@@ -3231,7 +3980,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                           className="w-full text-center border-none focus:outline-none bg-transparent"
                           placeholder="0"
                           min="0"
-                          step="0.01"
+                          step="1"
                         />
                       </td>
                       <td className="border border-gray-300 p-3 text-center font-medium">
@@ -3318,7 +4067,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
             <h2 className="text-lg font-semibold mb-4 text-blue-600">📞 Follow-up Tracking</h2>
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
+                {/* <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Next Follow-up Date
                   </label>
@@ -3335,7 +4084,7 @@ const DGQuotationForm: React.FC<DGQuotationFormProps> = ({ enquiryId }) => {
                   <div className="p-2 bg-white border border-gray-300 rounded text-sm">
                     {formData.enquiryDetails?.numberOfFollowUps || 0} follow-ups completed
                   </div>
-                </div>
+                </div> */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Assigned Employee

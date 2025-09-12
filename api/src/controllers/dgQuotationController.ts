@@ -61,8 +61,19 @@ export const createDGQuotation = async (
   next: NextFunction
 ): Promise<void> => {
   try {
+    // Convert string dates to Date objects before validation
+    const requestData = { ...req.body };
+    if (requestData.enquiryDetails) {
+      if (requestData.enquiryDetails.enquiryDate && typeof requestData.enquiryDetails.enquiryDate === 'string' && requestData.enquiryDetails.enquiryDate.trim() !== '') {
+        requestData.enquiryDetails.enquiryDate = new Date(requestData.enquiryDetails.enquiryDate);
+      }
+      if (requestData.enquiryDetails.plannedFollowUpDate && typeof requestData.enquiryDetails.plannedFollowUpDate === 'string' && requestData.enquiryDetails.plannedFollowUpDate.trim() !== '') {
+        requestData.enquiryDetails.plannedFollowUpDate = new Date(requestData.enquiryDetails.plannedFollowUpDate);
+      }
+    }
+
     // Validate request body
-    const { error, value } = createDGQuotationSchema.validate(req.body);
+    const { error, value } = createDGQuotationSchema.validate(requestData);
     if (error) {
       throw new AppError(error.details[0].message, 400);
     }
@@ -232,8 +243,19 @@ export const updateDGQuotation = async (
   try {
     const { id } = req.params;
 
+    // Convert string dates to Date objects before validation
+    const requestData = { ...req.body };
+    if (requestData.enquiryDetails) {
+      if (requestData.enquiryDetails.enquiryDate && typeof requestData.enquiryDetails.enquiryDate === 'string' && requestData.enquiryDetails.enquiryDate.trim() !== '') {
+        requestData.enquiryDetails.enquiryDate = new Date(requestData.enquiryDetails.enquiryDate);
+      }
+      if (requestData.enquiryDetails.plannedFollowUpDate && typeof requestData.enquiryDetails.plannedFollowUpDate === 'string' && requestData.enquiryDetails.plannedFollowUpDate.trim() !== '') {
+        requestData.enquiryDetails.plannedFollowUpDate = new Date(requestData.enquiryDetails.plannedFollowUpDate);
+      }
+    }
+
     // Validate request body
-    const { error, value } = updateDGQuotationSchema.validate(req.body);
+    const { error, value } = updateDGQuotationSchema.validate(requestData);
     if (error) {
       throw new AppError(error.details[0].message, 400);
     }

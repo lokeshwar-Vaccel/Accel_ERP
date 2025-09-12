@@ -2534,14 +2534,14 @@ const InvoiceManagement: React.FC = () => {
       // }
 
       // Edit Status - Available for all invoices except cancelled
-      if (invoice.status !== 'cancelled') {
-        actions.push({
-          icon: <Edit className="w-4 h-4" />,
-          label: 'Edit Status',
-          action: () => handleUpdateStatus(invoice, invoice.status),
-          color: 'text-purple-600 hover:text-purple-900 hover:bg-purple-50'
-        });
-      }
+      // if (invoice.status !== 'cancelled') {
+      //   actions.push({
+      //     icon: <Edit className="w-4 h-4" />,
+      //     label: 'Edit Status',
+      //     action: () => handleUpdateStatus(invoice, invoice.status),
+      //     color: 'text-purple-600 hover:text-purple-900 hover:bg-purple-50'
+      //   });
+      // }
 
       // Payment Management - Available for invoices that can have payments
       if (invoice.status !== 'cancelled' && invoice.status !== 'draft' || invoice.invoiceType === 'purchase') {
@@ -3604,253 +3604,568 @@ const InvoiceManagement: React.FC = () => {
     return result + ' Only';
   }
 
-  // Update printInvoice function
+  // Print invoice function
   const printInvoice = () => {
     if (!selectedInvoice) return;
+    
+    const printWindow = window.open('', '_blank');
+    
     const printContent = `
-    <html>
+      <!DOCTYPE html>
+      <html>
       <head>
         <title>Invoice ${selectedInvoice.invoiceNumber}</title>
         <style>
-          @page { size: A4; margin: 0.5in; }
-          body { font-family: Arial, sans-serif; margin: 0; padding: 0; line-height: 1.4; color: #000; font-size: 12px; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
-          .header h1 { margin: 0 0 8px 0; font-size: 22px; font-weight: bold; color: #000; }
-          .header div { margin: 3px 0; font-size: 11px; }
-          .invoice-details { margin-bottom: 15px; }
-          .invoice-details h2 { margin: 0 0 10px 0; text-align: center; font-size: 20px; font-weight: bold; border: 2px solid #000; padding: 8px; display: inline-block; width: 200px; margin-left: calc(50% - 100px); }
-          .details-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-          .details-table td { padding: 6px 10px; font-size: 11px; border: 1px solid #000; }
-          .details-table td:first-child { font-weight: bold; background-color: #f5f5f5; width: 20%; }
-          .engineer-date-section { display: flex; gap: 15px; margin-bottom: 15px; }
-          .engineer-box, .date-box { flex: 1; border: 1px solid #000; padding: 8px; background-color: #f9f9f9; }
-          .engineer-box h4, .date-box h4 { margin: 0 0 5px 0; font-size: 12px; font-weight: bold; }
-          .from-to-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 15px; }
-          .from-to-box { flex: 1; min-width: 200px; padding: 10px; border: 1px solid #000; }
-          .from-to-box h3 { margin: 0 0 8px 0; font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; }
-          .from-to-box div { font-size: 10px; line-height: 1.3; }
-          .from-to-box strong { color: #000; }
-          table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10px; }
-          table.items th, table.items td { border: 1px solid #000; padding: 5px 4px; text-align: center; vertical-align: middle; }
-          table.items th { background: #f0f0f0; font-weight: bold; font-size: 9px; }
-          table.items .description-col { text-align: left; max-width: 150px; }
-          .summary-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 20px; }
-          .notes-box { flex: 1; padding: 10px; border: 1px solid #000; min-height: 120px; }
-          .notes-box h4 { margin: 0 0 8px 0; font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; }
-          .notes-box div { font-size: 10px; line-height: 1.3; }
-          .summary-box { flex: 1; padding: 10px; border: 1px solid #000; min-height: 120px; }
-          .summary-table { width: 100%; border-collapse: collapse; }
-          .summary-table td { padding: 5px 8px; font-size: 11px; border-bottom: 1px solid #ccc; }
-          .summary-table td:first-child { font-weight: bold; }
-          .summary-table .total-row { font-weight: bold; background-color: #f0f0f0; border-top: 2px solid #000; font-size: 12px; }
-          .summary-table .amount-words { border-top: 1px solid #000; font-size: 9px; line-height: 1.2; word-wrap: break-word; max-width: 180px; }
-          .footer { margin-top: 30px; text-align: center; font-size: 11px; }
-          .footer div { margin: 8px 0; }
-          @media print { body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none; } .invoice-details { border: none !important; background: none !important; } }
+          @media print {
+            @page {
+              margin: 0.5in;
+              size: A4;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+            }
+          }
+          
+          body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.2;
+            margin: 0;
+            padding: 20px;
+            background: white;
+          }
+          
+          .invoice-container {
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto;
+            background: white;
+          }
+          
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 15px;
+          }
+          
+          .invoice-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+          }
+          
+          .info-section {
+            display: table;
+            width: 100%;
+            margin-bottom: 20px;
+          }
+          
+          .info-row {
+            display: table-row;
+          }
+          
+          .info-cell {
+            display: table-cell;
+            padding: 3px 5px;
+            vertical-align: top;
+            border: none;
+          }
+          
+          .info-left {
+            width: 50%;
+            padding-right: 20px;
+          }
+          
+          .info-right {
+            width: 50%;
+            padding-left: 20px;
+          }
+          
+          .from-to-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            gap: 15px;
+          }
+          
+          .from-to-box {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px;
+            border: 1px solid #000;
+          }
+          
+          .from-to-box h3 {
+            margin: 0 0 8px 0;
+            font-size: 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #000;
+            padding-bottom: 3px;
+          }
+          
+          .from-to-box div {
+            font-size: 10px;
+            line-height: 1.3;
+          }
+          
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 11px;
+          }
+          
+          .items-table th,
+          .items-table td {
+            border: 1px solid #333;
+            padding: 4px 6px;
+            text-align: left;
+          }
+          
+          .items-table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            text-align: center;
+          }
+          
+          .items-table .number-cell {
+            text-align: right;
+          }
+          
+          .items-table .center-cell {
+            text-align: center;
+          }
+          
+          .totals-row {
+            font-weight: bold;
+            background-color: #f9f9f9;
+          }
+          
+          .grand-total-row {
+            font-weight: bold;
+            background-color: #e9e9e9;
+            font-size: 12px;
+          }
+          
+          .summary-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            gap: 20px;
+          }
+          
+          .notes-box {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #000;
+            min-height: 120px;
+          }
+          
+          .notes-box h4 {
+            margin: 0 0 8px 0;
+            font-size: 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #000;
+            padding-bottom: 3px;
+          }
+          
+          .notes-box div {
+            font-size: 10px;
+            line-height: 1.3;
+          }
+          
+          .summary-box {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #000;
+            min-height: 120px;
+          }
+          
+          .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          
+          .summary-table td {
+            padding: 5px 8px;
+            font-size: 11px;
+            border-bottom: 1px solid #ccc;
+          }
+          
+          .summary-table td:first-child {
+            font-weight: bold;
+          }
+          
+          .summary-table .total-row {
+            font-weight: bold;
+            background-color: #f0f0f0;
+            border-top: 2px solid #000;
+            font-size: 12px;
+          }
+          
+          .summary-table .amount-words {
+            border-top: 1px solid #000;
+            font-size: 9px;
+            line-height: 1.2;
+            word-wrap: break-word;
+            max-width: 180px;
+          }
+          
+          .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 11px;
+          }
+          
+          .footer div {
+            margin: 8px 0;
+          }
+          
+          .section-title {
+            font-weight: bold;
+            margin: 20px 0 10px 0;
+            font-size: 13px;
+            color: #374151;
+            border-bottom: 1px solid #d1d5db;
+            padding-bottom: 5px;
+          }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</h1>
-          ${selectedInvoice.company?.address || generalSettings?.companyAddress ? `<div>${selectedInvoice.company?.address || generalSettings?.companyAddress || ''}</div>` : ''}
-          ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `<div>Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone || ''} | Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail || ''}</div>` : ''}
-          ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `<div>PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN || ''} | GSTIN: ${selectedInvoice.company?.gstin || generalSettings?.companyGSTIN || ''}</div>` : ''}
-        </div>
-        <div class="invoice-details">
-          <h2>INVOICE</h2>
-          <table class="details-table">
-            <tr>
-              <td>Invoice No:</td>
-              <td>${selectedInvoice.invoiceNumber}</td>
-              <td><strong>Issue Date:</strong></td>
-              <td>${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : ''}</td>
-            </tr>
-            <tr>
-              <td><strong>Due Date:</strong></td>
-              <td>${selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : ''}</td>
-              <td>Status:</td>
-              <td>${selectedInvoice.status ? selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1) : ''}</td>
-            </tr>
+        <div class="invoice-container">
+          <div class="header">
+            <h1>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</h1>
+            ${selectedInvoice.company?.address || generalSettings?.companyAddress ? `<div>${selectedInvoice.company?.address || generalSettings?.companyAddress || ''}</div>` : ''}
+            ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `<div>Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone || ''} | Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail || ''}</div>` : ''}
+            ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `<div>PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN || ''} | GSTIN: ${selectedInvoice.company?.gstin || generalSettings?.companyGSTIN || ''}</div>` : ''}
+          </div>
+          
+          <div class="invoice-title">INVOICE</div>
+          
+          <div class="info-section">
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>Invoice No:</strong> ${selectedInvoice.invoiceNumber || 'N/A'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Issue Date:</strong> ${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : 'N/A'}
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>Due Date:</strong> ${selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : 'N/A'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Status:</strong> ${selectedInvoice.status ? selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1) : 'N/A'}
+              </div>
+            </div>
             ${selectedInvoice.poNumber ? `
-            <tr>
-              <td>PO Number:</td>
-              <td>${selectedInvoice.poNumber}</td>
-              <td>Payment Status:</td>
-              <td>${selectedInvoice.paymentStatus ? selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1) : ''}</td>
-            </tr>
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>PO Number:</strong> ${selectedInvoice.poNumber}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Payment Status:</strong> ${selectedInvoice.paymentStatus ? selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1) : 'N/A'}
+              </div>
+            </div>
             ` : ''}
+          </div>
+          
+          <div class="from-to-section">
+            <div class="from-to-box">
+              <h3>From:</h3>
+              ${selectedInvoice.invoiceType === 'purchase' ? `
+                <div>
+                  <strong>${selectedInvoice.supplier?.name || 'N/A'}</strong><br>
+                  ${selectedInvoice.supplierEmail ? `Email: ${selectedInvoice.supplierEmail}<br>` : ''}
+                  ${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}<br>${selectedInvoice.supplierAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.supplierAddress.gstNumber}` : ''}` : ''}
+                </div>
+              ` : `
+                <div>
+                  <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
+                  ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
+                  ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
+                  ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
+                  ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
+                </div>
+              `}
+            </div>
+            
+            <div class="from-to-box">
+              <h3>${selectedInvoice.invoiceType === 'purchase' ? 'To' : 'Bill To'}:</h3>
+              ${selectedInvoice.invoiceType === 'purchase' ? `
+                <div>
+                  <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
+                  ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
+                  ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
+                  ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
+                  ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
+                </div>
+              ` : `
+                <div>
+                  <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
+                  ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
+                  ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
+                  ${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}<br>${selectedInvoice.billToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}` : ''}` : ''}
+                </div>
+              `}
+            </div>
+            
+            ${selectedInvoice.invoiceType !== 'purchase' ? `
+            <div class="from-to-box">
+              <h3>Ship To:</h3>
+              <div>
+                <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
+                ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.state || 'N/A'}<br>${selectedInvoice.shipToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}` : ''}` : ''}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+          
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 6%;">Sr.No</th>
+                <th style="width: 25%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 8%;">Part No</th>
+                <th style="width: 10%;">Unit Price</th>
+                ${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
+                <th style="width: 8%;">Total Basic</th>
+                <th style="width: 5%;">GST</th>
+                <th style="width: 8%;">GST Amount</th>
+                <th style="width: 10%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(selectedInvoice.items || []).map((item: any, idx: number) => {
+                const basicAmount = item.unitPrice || 0;
+                const discountPercent = item.discount || 0;
+                const totalBasic = basicAmount * (1 - discountPercent / 100);
+                const gstRate = item.taxRate || 0;
+                const gstAmount = totalBasic * (gstRate / 100);
+                const totalAmount = totalBasic + gstAmount;
+                const showDiscount = (selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0);
+                
+                return `
+                  <tr>
+                    <td class="center-cell">${idx + 1}</td>
+                    <td>${item.description || ''}</td>
+                    <td class="center-cell">${item.hsnNumber || item?.product?.hsnNumber || '-'}</td>
+                    <td class="center-cell">${item.quantity || 0}</td>
+                    <td class="center-cell">${item.uom || 'NOS'}</td>
+                    <td class="center-cell">${item.partNo || item?.product?.partNo || '-'}</td>
+                    <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
+                    ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
+                    <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
+                    <td class="center-cell">${gstRate}%</td>
+                    <td class="number-cell">₹${gstAmount.toFixed(2)}</td>
+                    <td class="number-cell">₹${totalAmount.toFixed(2)}</td>
+                  </tr>
+                `;
+              }).join('')}
+              <tr class="totals-row">
+                <td colspan="${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '8' : '7'}" style="text-align: left; font-weight: bold;">Total Amount</td>
+                <td class="number-cell">₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  return sum + (basicAmount * (1 - discountPercent / 100));
+                }, 0).toFixed(2)}</td>
+                <td></td>
+                <td class="number-cell">₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  const totalBasic = basicAmount * (1 - discountPercent / 100);
+                  const gstRate = item.taxRate || 0;
+                  return sum + (totalBasic * (gstRate / 100));
+                }, 0).toFixed(2)}</td>
+                <td class="number-cell">₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  const totalBasic = basicAmount * (1 - discountPercent / 100);
+                  const gstRate = item.taxRate || 0;
+                  const gstAmount = totalBasic * (gstRate / 100);
+                  return sum + (totalBasic + gstAmount);
+                }, 0).toFixed(2)}</td>
+              </tr>
+            </tbody>
           </table>
-        </div>
-        <div class="engineer-date-section">
-          <div class="engineer-box">
-            <h4>Assigned Engineer:</h4>
-            <div>
-              <strong>Name:</strong> ${selectedInvoice.assignedEngineer ? `${selectedInvoice.assignedEngineer.firstName || ''} ${selectedInvoice.assignedEngineer.lastName || ''}`.trim() : 'Not Assigned'}<br>
-              ${selectedInvoice.assignedEngineer?.phone ? `<strong>Phone:</strong> ${selectedInvoice.assignedEngineer.phone}<br>` : ''}
-              ${selectedInvoice.assignedEngineer?.email ? `<strong>Email:</strong> ${selectedInvoice.assignedEngineer.email}` : ''}
+          
+          ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
+          <div class="section-title" style="color: #059669;">SERVICE CHARGES</div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">Sr.No</th>
+                <th style="width: 35%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 10%;">Basic Amount</th>
+                ${(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
+                <th style="width: 9%;">Total Basic</th>
+                <th style="width: 5%;">GST</th>
+                <th style="width: 9%;">GST Amount</th>
+                <th style="width: 10%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${selectedInvoice.serviceCharges.map((service: any, idx: number) => {
+                const basicAmount = service.unitPrice || 0;
+                const discountPercent = service.discount || 0;
+                const totalBasic = basicAmount * (1 - discountPercent / 100);
+                const gstRate = service.taxRate || 0;
+                const gstAmount = totalBasic * (gstRate / 100);
+                const totalAmount = totalBasic + gstAmount;
+                const showDiscount = (selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
+                
+                return `
+                  <tr>
+                    <td class="center-cell">${idx + 1}</td>
+                    <td>${service.description || ''}</td>
+                    <td class="center-cell">-</td>
+                    <td class="center-cell">NOS</td>
+                    <td class="center-cell">${service.quantity || 0}</td>
+                    <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
+                    ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
+                    <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
+                    <td class="center-cell">${gstRate}%</td>
+                    <td class="number-cell">₹${gstAmount.toFixed(2)}</td>
+                    <td class="number-cell">₹${totalAmount.toFixed(2)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          ` : ''}
+          
+          ${selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 ? `
+          <div class="section-title" style="color: #ea580c;">BATTERY BUYBACK CHARGES</div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">Sr.No</th>
+                <th style="width: 35%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 10%;">Basic Amount</th>
+                ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th>' : ''}
+                <th style="width: 9%;">Total Basic</th>
+                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 5%;">GST</th>' : ''}
+                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 9%;">GST Amount</th>' : ''}
+                <th style="width: 10%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="center-cell">1</td>
+                <td>${selectedInvoice.batteryBuyBack.description || ''}</td>
+                <td class="center-cell">-</td>
+                <td class="center-cell">NOS</td>
+                <td class="center-cell">${selectedInvoice.batteryBuyBack.quantity || 0}</td>
+                <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.unitPrice || 0).toFixed(2)}</td>
+                ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.discount}%</td>` : ''}
+                <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.discountedAmount || 0).toFixed(2)}</td>
+                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.taxRate || 0}%</td>` : ''}
+                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="number-cell">₹${(selectedInvoice.batteryBuyBack.taxAmount || 0).toFixed(2)}</td>` : ''}
+                <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+          ` : ''}
+          
+          <table class="items-table">
+            <tbody>
+              <tr class="grand-total-row">
+                <td colspan="${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '11' : '10'}" style="text-align: right; padding-right: 20px;">Grand Total</td>
+                <td class="number-cell">₹${selectedInvoice.totalAmount?.toFixed(2) || '0.00'}</td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <div class="summary-section">
+            ${(selectedInvoice.notes || selectedInvoice.terms) && `
+            <div class="notes-box">
+              ${selectedInvoice.notes ? `
+                <h4>Notes:</h4>
+                <div>${selectedInvoice.notes}</div>
+              ` : ''}
+              ${selectedInvoice.terms ? `
+                <h4 ${selectedInvoice.notes ? 'style="margin-top: 15px;"' : ''}>Terms & Conditions:</h4>
+                <div>${selectedInvoice.terms}</div>
+              ` : ''}
+            </div>
+            `}
+            <div class="summary-box">
+              <table class="summary-table">
+                <tr>
+                  <td>Subtotal:</td>
+                  <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Total Tax:</td>
+                  <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Total Discount:</td>
+                  <td>-₹${(selectedInvoice.discountAmount || 0).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Overall Discount:</td>
+                  <td>-${selectedInvoice.overallDiscount || 0}% (-₹${selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</td>
+                </tr>
+                ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
+                <tr>
+                  <td>Service Charges:</td>
+                  <td>+₹${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</td>
+                </tr>
+                ` : ''}
+                ${selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 ? `
+                <tr>
+                  <td>Battery Buyback:</td>
+                  <td>-₹${(selectedInvoice.batteryBuyBack?.totalPrice || 0).toFixed(2)}</td>
+                </tr>
+                ` : ''}
+                <tr class="total-row">
+                  <td>Grand Total:</td>
+                  <td><strong>₹${selectedInvoice.totalAmount?.toFixed(2) || '0'}</strong></td>
+                </tr>
+                <tr>
+                  <td>Amount in Words:</td>
+                  <td class="amount-words">
+                    ${selectedInvoice.totalAmount ? numberToWords(selectedInvoice.totalAmount) : 'Zero Rupees Only'}
+                  </td>
+                </tr>
+              </table>
             </div>
           </div>
-          <div class="date-box">
-            <h4>Important Dates:</h4>
-            <div>
-              <strong>Issue Date:</strong> ${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : 'Not Set'}<br>
-              <strong>Due Date:</strong> ${selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : 'Not Set'}<br>
-              <strong>Status:</strong> ${selectedInvoice.status ? selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1) : 'Draft'}
+          
+          <div class="footer">
+            <div><strong>For ${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong></div>
+            <br><br>
+            <div><strong>Authorized Signatory</strong></div>
+            <div style="margin-top: 20px; font-size: 9px; border-top: 1px solid #000; padding-top: 10px;">
+              <strong>Address:</strong> Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116<br>
+              <strong>Mobile:</strong> +91 9176660123 | <strong>GSTIN:</strong> 33BLFPS9951M1ZC | <strong>Email:</strong> 24x7powerolservice@gmail.com
             </div>
-          </div>
-        </div>
-        <div class="from-to-section">
-          <div class="from-to-box">
-            <h3>From:</h3>
-            ${selectedInvoice.invoiceType === 'purchase' ?
-        `<div>
-              <strong>${selectedInvoice.customer?.name ? selectedInvoice.customer?.name : selectedInvoice?.supplier?.name || 'N/A'}</strong><br>
-              ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
-              ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
-              ${selectedInvoice.invoiceType === 'purchase' ?
-          `${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}<br>${selectedInvoice.supplierAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.supplierAddress.gstNumber}<br>` : ''}${selectedInvoice.supplierAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}` :
-          `${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}<br>${selectedInvoice.billToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}<br>` : ''}${selectedInvoice.billToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}`}          
-                </div> `: `
-            <div>
-              <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
-              ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
-              ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
-              ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
-              ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
-            </div>`}
-          </div>
-          <div class="from-to-box">
-          <h3>${selectedInvoice.invoiceType === 'purchase' ? 'To' : 'Bill To'}:</h3>
-          ${selectedInvoice.invoiceType === 'purchase' ? `
-            <div>
-              <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
-              ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
-              ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
-              ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
-              ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
-            </div>` : `
-            <div>
-              <strong>${selectedInvoice.customer?.name ? selectedInvoice.customer?.name : selectedInvoice?.supplier?.name || 'N/A'}</strong><br>
-              ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
-              ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
-              ${selectedInvoice.invoiceType === 'purchase' ?
-        `${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}<br>${selectedInvoice.supplierAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.supplierAddress.gstNumber}<br>` : ''}${selectedInvoice.supplierAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}` :
-        `${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}<br>${selectedInvoice.billToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}<br>` : ''}${selectedInvoice.billToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}`}          
-                </div> `} 
-          </div>
-          ${selectedInvoice.invoiceType === 'purchase' ? '' : `
-          <div class="from-to-box">
-            <h3>Ship To:</h3>
-            <div>
-              <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
-              ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.state || 'N/A'}<br>${selectedInvoice.shipToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}<br>` : ''}${selectedInvoice.shipToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}
-            </div>
-          </div>`}
-        </div>
-        <table class="items">
-          <thead>
-            <tr>
-              <th style="width: 30px;">S.No</th>
-              <th class="description-col">Description</th>
-              <th style="width: 80px;">HSN Number</th>
-              <th style="width: 40px;">Qty</th>
-              <th style="width: 40px;">UOM</th>
-              <th style="width: 80px;">Part No</th>
-              <th style="width: 70px;">Unit Price</th>
-              <th style="width: 50px;">Discount</th>
-              <th style="width: 50px;">Tax Rate</th>
-              <th style="width: 80px;">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(selectedInvoice.items || []).map((item: any, idx: number) => `
-              <tr>
-                <td>${idx + 1}</td>
-                <td class="description-col">${item.description || ''}</td>
-                <td>${item.hsnNumber || item?.product?.hsnNumber || 'N/A'}</td>
-                <td>${item.quantity || 0}</td>
-                <td>${item.uom || 'nos'}</td>
-                <td>${item.partNo || item?.product?.partNo || 'N/A'}</td>
-                <td>₹${item.unitPrice?.toLocaleString() || '0'}</td>
-                <td>${item.discount || 0}%</td>
-                <td>${item.taxRate || 0}%</td>
-                <td>₹${(item.unitPrice * item.quantity * (1 - (item.discount || 0) / 100) * (1 + (item.taxRate || 0) / 100)).toFixed(2)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <div class="summary-section">
-          ${(selectedInvoice.notes || selectedInvoice.terms) ? `
-          <div class="notes-box">
-            ${selectedInvoice.notes ? `
-              <h4>Notes:</h4>
-              <div>${selectedInvoice.notes}</div>
-            ` : ''}
-            ${selectedInvoice.terms ? `
-              <h4 ${selectedInvoice.notes ? 'style="margin-top: 15px;"' : ''}>Terms & Conditions:</h4>
-              <div>${selectedInvoice.terms}</div>
-            ` : ''}
-          </div>
-          ` : `
-          <div class="notes-box">
-            <h4>Standard Terms & Conditions:</h4>
-            <div>
-              • Payment: 100% advance payment along with P.O.<br>
-              • Ordering: In Favour of Sun Power Services<br>
-              • Delivery: Within One Month after your P.O.<br>
-              • Prices are subject to change without prior notice<br>
-              • All disputes subject to Chennai jurisdiction
-            </div>
-          </div>
-          `}
-          <div class="summary-box">
-            <table class="summary-table">
-              <tr>
-                <td>Subtotal:</td>
-                <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>Total Tax:</td>
-                <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>Total Discount:</td>
-                <td>-₹${(selectedInvoice.discountAmount || 0).toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>Overall Discount:</td>
-                <td>-${selectedInvoice.overallDiscount || 0}% (-₹${selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</td>
-              </tr>
-              <tr class="total-row">
-                <td>Grand Total:</td>
-                <td><strong>₹${selectedInvoice.totalAmount?.toFixed(2) || '0'}</strong></td>
-              </tr>
-              <tr>
-                <td>Amount in Words:</td>
-                <td class="amount-words">
-                  ${selectedInvoice.totalAmount ? numberToWords(selectedInvoice.totalAmount) : 'Zero Rupees Only'}
-                </td>
-              </tr>
-            </table>
-          </div>
-        </div>
-        <div class="footer">
-          <div><strong>For ${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong></div>
-          <br><br>
-          <div><strong>Authorized Signatory</strong></div>
-          <div style="margin-top: 20px; font-size: 9px; border-top: 1px solid #000; padding-top: 10px;">
-            <strong>Address:</strong> Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116<br>
-            <strong>Mobile:</strong> +91 9176660123 | <strong>GSTIN:</strong> 33BLFPS9951M1ZC | <strong>Email:</strong> 24x7powerolservice@gmail.com
           </div>
         </div>
       </body>
-    </html>
+      </html>
     `;
-    const printWindow = window.open('', '_blank');
+
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      printWindow.onload = function () {
+
+      // Wait for content to load, then print
+      printWindow.onload = () => {
         setTimeout(() => {
           printWindow.print();
         }, 500);
@@ -6184,6 +6499,34 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
+              {/* Notes and Terms Section */}
+              {(selectedInvoice.notes || selectedInvoice.terms) && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Additional Information
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {selectedInvoice.notes && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2">Notes:</h5>
+                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
+                          {selectedInvoice.notes}
+                        </div>
+                      </div>
+                    )}
+                    {selectedInvoice.terms && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2">Terms & Conditions:</h5>
+                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
+                          {selectedInvoice.terms}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Edit Mode Actions */}
               {editMode && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -6251,10 +6594,10 @@ const InvoiceManagement: React.FC = () => {
                       <span className="text-gray-600">Total Discount:</span>
                       <span className="font-medium text-green-600">-₹{(selectedInvoice.discountAmount || 0).toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
+                    {/* <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Overall Discount:</span>
                       <span className="font-medium text-green-600">-{selectedInvoice.overallDiscount || 0}% (-₹{selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
-                    </div>
+                    </div> */}
                     
                     {/* Service Charges Total */}
                     {selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 && (
@@ -7281,6 +7624,34 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
+              {/* Notes and Terms Section */}
+              {(selectedQuotation.notes || selectedQuotation.terms) && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Additional Information
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {selectedQuotation.notes && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2">Notes:</h5>
+                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
+                          {selectedQuotation.notes}
+                        </div>
+                      </div>
+                    )}
+                    {selectedQuotation.terms && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2">Terms & Conditions:</h5>
+                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
+                          {selectedQuotation.terms}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Quotation Summary */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-end">
@@ -7297,10 +7668,10 @@ const InvoiceManagement: React.FC = () => {
                       <span className="text-gray-600">Total Discount:</span>
                       <span className="font-medium text-green-600">-₹{(selectedQuotation.totalDiscount || 0).toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
+                    {/* <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Overall Discount:</span>
                       <span className="font-medium text-green-600">-{selectedQuotation.overallDiscount || 0}% (-₹{selectedQuotation.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
-                    </div>
+                    </div> */}
                     
                     {/* Service Charges Total */}
                     {selectedQuotation.serviceCharges && selectedQuotation.serviceCharges.length > 0 && (

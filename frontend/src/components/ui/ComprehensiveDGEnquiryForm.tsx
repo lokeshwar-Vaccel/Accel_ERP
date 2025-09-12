@@ -5,6 +5,42 @@ import { Input } from './Input';
 import { Select } from './Select';
 import { toast } from 'react-hot-toast';
 import apiClient from '../../utils/api';
+import CustomerSearchDropdown from './CustomerSearchDropdown';
+import SalesEngineerSearchDropdown from './SalesEngineerSearchDropdown';
+
+interface Customer {
+  _id: string;
+  name: string;
+  alice?: string;
+  designation?: string;
+  contactPersonName?: string;
+  email?: string;
+  phone?: string;
+  panNumber?: string;
+  addresses: Array<{
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
+    contactPersonName?: string;
+    email?: string;
+    phone?: string;
+    registrationStatus: 'registered' | 'non_registered';
+  }>;
+}
+
+interface SalesEngineer {
+  _id: string;
+  firstName: string;
+  lastName: string;
+  fullName: string;
+  email: string;
+  salesEmployeeCode: string;
+  status: string;
+}
 
 interface ComprehensiveDGEnquiryFormProps {
   isOpen: boolean;
@@ -23,6 +59,10 @@ interface Address {
   isPrimary: boolean;
   gstNumber?: string;
   notes?: string;
+  contactPersonName?: string;
+  email?: string;
+  phone?: string;
+  registrationStatus: 'registered' | 'non_registered';
 }
 
 interface EnquiryFormData {
@@ -35,14 +75,9 @@ interface EnquiryFormData {
   source: string;
   
   // Customer Information
-  customerType: string;
-  corporateName: string;
   customerName: string;
   alice?: string;
   designation?: string;
-  contactPersonName: string;
-  phoneNumber: string;
-  email: string;
   panNumber: string;
   
   // Address Information
@@ -79,17 +114,22 @@ interface EnquiryFormErrors {
   enquiryType?: string;
   enquiryStage?: string;
   source?: string;
-  customerType?: string;
-  corporateName?: string;
   customerName?: string;
-  phoneNumber?: string;
+  panNumber?: string;
   addresses?: string | Record<number, string>;
+  addressFields?: Record<number, {
+    address?: string;
+    state?: string;
+    district?: string;
+    pincode?: string;
+  }>;
   kva?: string;
   quantity?: string;
   phase?: string;
   dgOwnership?: string;
   segment?: string;
   employeeStatus?: string;
+  gstNumber?: string | Record<number, string>;
 }
 
 const initialFormData: EnquiryFormData = {
@@ -102,14 +142,9 @@ const initialFormData: EnquiryFormData = {
   source: 'Website',
   
   // Customer Information
-  customerType: 'Retail',
-  corporateName: '',
   customerName: '',
   alice: '',
   designation: '',
-  contactPersonName: '',
-  phoneNumber: '',
-  email: '',
   panNumber: '',
   
   // Address Information
@@ -121,7 +156,11 @@ const initialFormData: EnquiryFormData = {
     pincode: '',
     isPrimary: true,
     gstNumber: '',
-    notes: ''
+    notes: '',
+    contactPersonName: '',
+    email: '',
+    phone: '',
+    registrationStatus: 'non_registered' as 'registered' | 'non_registered'
   }],
   
   // DG Requirements
@@ -153,6 +192,22 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
   const [errors, setErrors] = useState<EnquiryFormErrors>({});
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [selectedSalesEngineer, setSelectedSalesEngineer] = useState<SalesEngineer | null>(null);
+
+  // Validation functions
+  const validatePAN = (pan: string): boolean => {
+    // PAN format: 5 letters, 4 digits, 1 letter (e.g., ABCDE1234F)
+    const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+    return panRegex.test(pan);
+  };
+
+  const validateGST = (gst: string): boolean => {
+    // GST format: 2 digits, 4 letters, 5 alphanumeric, 4 alphanumeric (e.g., 33AABCT3518Q1Z2)
+    // Indian GST format: 2 digits (state code) + 4 letters (entity code) + 5 alphanumeric + 4 alphanumeric
+    const gstRegex = /^[0-9]{2}[A-Z]{4}[A-Z0-9]{5}[A-Z0-9]{4}$/;
+    return gstRegex.test(gst);
+  };
 
   useEffect(() => {
     if (initialData && mode === 'edit') {
@@ -172,7 +227,11 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
               pincode: addr.pincode || '',
               isPrimary: addr.isPrimary || index === 0,
               gstNumber: addr.gstNumber || '',
-              notes: addr.notes || ''
+              notes: addr.notes || '',
+              contactPersonName: addr.contactPersonName || '',
+              email: addr.email || '',
+              phone: addr.phone || '',
+              registrationStatus: addr.registrationStatus || 'non_registered'
             }))
           : [{
               id: 1,
@@ -182,7 +241,11 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
               pincode: initialData.pincode || '',
               isPrimary: true,
               gstNumber: '',
-              notes: ''
+              notes: '',
+              contactPersonName: '',
+              email: '',
+              phone: '',
+              registrationStatus: 'non_registered'
             }],
         // Ensure required fields have fallback values
         enquiryStatus: initialData.enquiryStatus || 'Open',
@@ -245,9 +308,6 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       newErrors.source = 'Valid source is required';
     }
 
-    if (!formData.customerType || !['Retail', 'Corporate'].includes(formData.customerType)) {
-      newErrors.customerType = 'Valid customer type is required';
-    }
 
     if (!formData.phase || !['Single Phase', 'Three Phase'].includes(formData.phase)) {
       newErrors.phase = 'Valid phase is required';
@@ -266,16 +326,15 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
     }
 
     // Customer Information Validation
-    if (formData.customerType === 'Corporate' && !formData.corporateName.trim()) {
-      newErrors.corporateName = 'Corporate name is required for corporate customers';
-    }
-
     if (!formData.customerName.trim()) {
       newErrors.customerName = 'Customer name is required';
     }
 
-    if (!formData.phoneNumber.trim()) {
-      newErrors.phoneNumber = 'Phone number is required';
+    // PAN Number Validation
+    if (formData.panNumber && formData.panNumber.trim()) {
+      if (!validatePAN(formData.panNumber.trim())) {
+        newErrors.panNumber = 'PAN number must be in format ABCDE1234F (5 letters, 4 digits, 1 letter)';
+      }
     }
 
     // Address Validation
@@ -283,29 +342,73 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       newErrors.addresses = 'At least one address is required';
     } else {
       const addressErrors: Record<number, string> = {};
+      const gstErrors: Record<number, string> = {};
+      const addressFieldErrors: Record<number, {
+        address?: string;
+        state?: string;
+        district?: string;
+        pincode?: string;
+      }> = {};
       let hasAddressErrors = false;
+      let hasGstErrors = false;
+      let hasFieldErrors = false;
       
       formData.addresses.forEach((addr, index) => {
         const addrErrors: string[] = [];
+        const fieldErrors: {
+          address?: string;
+          state?: string;
+          district?: string;
+          pincode?: string;
+        } = {};
         
         if (!addr.address.trim()) {
           addrErrors.push('Address is required');
+          fieldErrors.address = 'Address is required';
         }
         if (!addr.state.trim()) {
           addrErrors.push('State is required');
+          fieldErrors.state = 'State is required';
         }
         if (!addr.district.trim()) {
           addrErrors.push('District is required');
+          fieldErrors.district = 'District is required';
+        }
+        if (!addr.pincode.trim()) {
+          addrErrors.push('Pincode is required');
+          fieldErrors.pincode = 'Pincode is required';
+        } else if (!/^\d{6}$/.test(addr.pincode.trim())) {
+          addrErrors.push('Pincode must be exactly 6 digits');
+          fieldErrors.pincode = 'Pincode must be exactly 6 digits';
+        }
+        
+        // GST Number Validation
+        if (addr.gstNumber && addr.gstNumber.trim()) {
+          if (!validateGST(addr.gstNumber.trim())) {
+            gstErrors[addr.id] = 'GST number must be in format 33AABCT3518Q1Z2 (2 digits, 4 letters, 5 alphanumeric, 4 alphanumeric)';
+            hasGstErrors = true;
+          }
         }
         
         if (addrErrors.length > 0) {
           addressErrors[index] = addrErrors.join(', ');
           hasAddressErrors = true;
         }
+        
+        if (Object.keys(fieldErrors).length > 0) {
+          addressFieldErrors[addr.id] = fieldErrors;
+          hasFieldErrors = true;
+        }
       });
       
       if (hasAddressErrors) {
         newErrors.addresses = addressErrors;
+      }
+      if (hasGstErrors) {
+        newErrors.gstNumber = gstErrors;
+      }
+      if (hasFieldErrors) {
+        newErrors.addressFields = addressFieldErrors;
       }
     }
 
@@ -339,7 +442,6 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
     console.log('enquiryType:', formData.enquiryType, 'type:', typeof formData.enquiryType);
     console.log('enquiryStage:', formData.enquiryStage, 'type:', typeof formData.enquiryStage);
     console.log('source:', formData.source, 'type:', typeof formData.source);
-    console.log('customerType:', formData.customerType, 'type:', typeof formData.customerType);
     console.log('phase:', formData.phase, 'type:', typeof formData.phase);
     console.log('dgOwnership:', formData.dgOwnership, 'type:', typeof formData.dgOwnership);
     console.log('employeeStatus:', formData.employeeStatus, 'type:', typeof formData.employeeStatus);
@@ -369,9 +471,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
         enquiryType: formData.enquiryType || 'New',
         enquiryStage: formData.enquiryStage || 'Initial',
         source: formData.source || 'Website',
-        customerType: formData.customerType || 'Retail',
         customerName: formData.customerName.trim(),
-        phoneNumber: formData.phoneNumber.trim(),
         kva: parseInt(formData.kva) || 0,
         quantity: parseInt(formData.quantity) || 1,
         phase: formData.phase || 'Three Phase',
@@ -384,27 +484,22 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
           state: addr.state.trim(),
           district: addr.district.trim(),
           isPrimary: addr.isPrimary,
+          registrationStatus: addr.registrationStatus,
           ...(addr.pincode?.trim() && { pincode: addr.pincode.trim() }),
           ...(addr.gstNumber?.trim() && { gstNumber: addr.gstNumber.trim() }),
-          ...(addr.notes?.trim() && { notes: addr.notes.trim() })
+          ...(addr.notes?.trim() && { notes: addr.notes.trim() }),
+          ...(addr.contactPersonName?.trim() && { contactPersonName: addr.contactPersonName.trim() }),
+          ...(addr.email?.trim() && { email: addr.email.trim() }),
+          ...(addr.phone?.trim() && { phone: addr.phone.trim() })
         }))
       };
 
       // Add optional fields only if they have values
-      if (formData.corporateName?.trim()) {
-        payload.corporateName = formData.corporateName.trim();
-      }
       if (formData.alice?.trim()) {
         payload.alice = formData.alice.trim();
       }
       if (formData.designation?.trim()) {
         payload.designation = formData.designation.trim();
-      }
-      if (formData.contactPersonName?.trim()) {
-        payload.contactPersonName = formData.contactPersonName.trim();
-      }
-      if (formData.email?.trim()) {
-        payload.email = formData.email.trim();
       }
       if (formData.panNumber?.trim()) {
         payload.panNumber = formData.panNumber.trim();
@@ -450,7 +545,6 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       console.log('enquiryType type:', typeof payload.enquiryType, 'value:', payload.enquiryType);
       console.log('enquiryStage type:', typeof payload.enquiryStage, 'value:', payload.enquiryStage);
       console.log('source type:', typeof payload.source, 'value:', payload.source);
-      console.log('customerType type:', typeof payload.customerType, 'value:', payload.customerType);
       console.log('phase type:', typeof payload.phase, 'value:', payload.phase);
       console.log('dgOwnership type:', typeof payload.dgOwnership, 'value:', payload.dgOwnership);
       console.log('employeeStatus type:', typeof payload.employeeStatus, 'value:', payload.employeeStatus);
@@ -519,6 +613,46 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
     }
   };
 
+  const handleCustomerSelect = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    
+    // Auto-fill customer details
+    setFormData(prev => ({
+      ...prev,
+      customerName: customer.name,
+      alice: customer.alice || '',
+      designation: customer.designation || '',
+      panNumber: customer.panNumber || '',
+      // Update addresses with customer's addresses
+      addresses: customer.addresses.length > 0 ? customer.addresses.map((addr, index) => ({
+        id: addr.id || index + 1,
+        address: addr.address || '',
+        state: addr.state || '',
+        district: addr.district || '',
+        pincode: addr.pincode || '',
+        isPrimary: addr.isPrimary || index === 0,
+        gstNumber: addr.gstNumber || '',
+        notes: '',
+        contactPersonName: addr.contactPersonName || '',
+        email: addr.email || '',
+        phone: addr.phone || '',
+        registrationStatus: addr.registrationStatus || 'non_registered'
+      })) : prev.addresses
+    }));
+  };
+
+  const handleSalesEngineerSelect = (salesEngineer: SalesEngineer) => {
+    setSelectedSalesEngineer(salesEngineer);
+    
+    // Auto-fill employee details
+    setFormData(prev => ({
+      ...prev,
+      assignedEmployeeCode: salesEngineer.salesEmployeeCode,
+      assignedEmployeeName: salesEngineer.fullName,
+      employeeStatus: salesEngineer.status === 'active' ? 'Active' : 'Inactive'
+    }));
+  };
+
   const addAddress = () => {
     const newAddress: Address = {
       id: Date.now(),
@@ -528,7 +662,11 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       pincode: '',
       isPrimary: false,
       gstNumber: '',
-      notes: ''
+      notes: '',
+      contactPersonName: '',
+      email: '',
+      phone: '',
+      registrationStatus: 'non_registered'
     };
     setFormData(prev => ({
       ...prev,
@@ -559,6 +697,26 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       ...prev,
       addresses: updatedAddresses
     }));
+
+    // Clear individual field errors when user starts typing
+    if (typeof value === 'string' && value.trim()) {
+      setErrors(prev => {
+        if (prev.addressFields && prev.addressFields[addressId]) {
+          const newAddressFields = { ...prev.addressFields };
+          if (newAddressFields[addressId][field as keyof typeof newAddressFields[typeof addressId]]) {
+            delete newAddressFields[addressId][field as keyof typeof newAddressFields[typeof addressId]];
+            if (Object.keys(newAddressFields[addressId]).length === 0) {
+              delete newAddressFields[addressId];
+            }
+            return {
+              ...prev,
+              addressFields: Object.keys(newAddressFields).length > 0 ? newAddressFields : undefined
+            };
+          }
+        }
+        return prev;
+      });
+    }
   };
 
   const setPrimaryAddress = (addressId: number) => {
@@ -574,8 +732,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
 
   const tabs = [
     { id: 'basic', label: 'Basic Info', icon: FileText },
-    { id: 'customer', label: 'Customer', icon: User },
-    { id: 'address', label: 'Address', icon: MapPin },
+    { id: 'customer', label: 'Customer & Address', icon: User },
     { id: 'dg-requirements', label: 'DG Requirements', icon: Settings },
     { id: 'employee', label: 'Employee', icon: User },
     { id: 'additional', label: 'Additional', icon: FileText }
@@ -755,65 +912,80 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
               </div>
             )}
 
-            {/* Customer Information Tab */}
+            {/* Customer & Address Information Tab */}
             {activeTab === 'customer' && (
               <div className="space-y-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-4">Customer Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex flex-col lg:flex-row">
+                  {/* Left: Basic Information */}
+                  <div className="w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col p-6">
+                    <div className="flex items-center justify-between mb-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Customer Type
-                    </label>
-                    <Select
-                      value={formData.customerType}
-                      onChange={(e) => handleInputChange('customerType', e.target.value)}
-                      options={[
-                        { value: 'Retail', label: 'Retail' },
-                        { value: 'Corporate', label: 'Corporate' }
-                      ]}
-                      error={errors.customerType}
-                    />
+                        <h3 className="text-xl font-bold text-gray-800">Basic Information</h3>
+                        <p className="text-sm text-gray-600 mt-1">Customer details and contact information</p>
                   </div>
-
-                  {formData.customerType === 'Corporate' && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Corporate Name *
-                      </label>
-                      <Input
-                        value={formData.corporateName}
-                        onChange={(e) => handleInputChange('corporateName', e.target.value)}
-                        placeholder="Enter corporate name"
-                        error={errors.corporateName}
-                      />
                     </div>
-                  )}
-
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Customer Name *
+                      {/* Customer Name */}
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Name *
                     </label>
-                    <Input
+                        <CustomerSearchDropdown
                       value={formData.customerName}
-                      onChange={(e) => handleInputChange('customerName', e.target.value)}
-                      placeholder="Enter customer name"
+                          onChange={(value) => handleInputChange('customerName', value)}
+                          onCustomerSelect={handleCustomerSelect}
+                          placeholder="Search customers or enter new name"
                       error={errors.customerName}
                     />
+                        {selectedCustomer && (
+                          <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded-lg">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center">
+                                <User className="h-4 w-4 text-green-600 mr-2" />
+                                <span className="text-sm text-green-800">
+                                  Customer selected: {selectedCustomer.name}
+                                  {selectedCustomer.alice && ` (${selectedCustomer.alice})`}
+                                </span>
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Alias
-                    </label>
-                    <Input
-                      value={formData.alice}
-                      onChange={(e) => handleInputChange('alice', e.target.value)}
-                      placeholder="Enter alias"
-                    />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedCustomer(null);
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    customerName: '',
+                                    alice: '',
+                                    designation: '',
+                                    panNumber: '',
+                                    addresses: [{
+                                      id: 1,
+                                      address: '',
+                                      state: '',
+                                      district: '',
+                                      pincode: '',
+                                      isPrimary: true,
+                                      gstNumber: '',
+                                      notes: '',
+                                      contactPersonName: '',
+                                      email: '',
+                                      phone: '',
+                                      registrationStatus: 'non_registered'
+                                    }]
+                                  }));
+                                }}
+                                className="text-green-600 hover:text-green-800"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
                   </div>
-
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4 mt-4">
+                      {/* Designation */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
                       Designation
                     </label>
                     <Input
@@ -822,162 +994,316 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                       placeholder="Enter designation"
                     />
                   </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Contact Person Name
+                    </div>
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        PAN Number
                     </label>
                     <Input
-                      value={formData.contactPersonName}
-                      onChange={(e) => handleInputChange('contactPersonName', e.target.value)}
-                      placeholder="Enter contact person name"
+                        value={formData.panNumber || ''}
+                        onChange={(e) => {
+                          const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+                          handleInputChange('panNumber', value);
+                          
+                          // Real-time validation
+                          if (value.length === 10 && !validatePAN(value)) {
+                            setErrors(prev => ({
+                              ...prev,
+                              panNumber: 'PAN number must be in format ABCDE1234F (5 letters, 4 digits, 1 letter)'
+                            }));
+                          } else if (value.length === 10 && validatePAN(value)) {
+                            setErrors(prev => ({
+                              ...prev,
+                              panNumber: undefined
+                            }));
+                          }
+                        }}
+                        placeholder="Enter PAN number (e.g., ABCDE1234F)"
+                        maxLength={10}
+                        error={errors.panNumber}
+                      />
+                      {formData.panNumber && formData.panNumber.length === 10 && !errors.panNumber && (
+                        <p className="mt-1 text-sm text-green-600">✓ Valid PAN format</p>
+                      )}
+                  </div>
+
+                    <div className='mt-4'>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Notes
+                    </label>
+                      <textarea
+                        value={formData.notes}
+                        onChange={(e) => handleInputChange('notes', e.target.value)}
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Additional notes"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Phone Number *
+                    {/* Alice (Alias) Field */}
+                    <div className="mt-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Alice
                     </label>
                     <Input
-                      value={formData.phoneNumber}
-                      onChange={(e) => handleInputChange('phoneNumber', e.target.value)}
-                      placeholder="Enter phone number"
-                      error={errors.phoneNumber}
+                        value={formData.alice || ''}
+                        onChange={(e) => handleInputChange('alice', e.target.value)}
+                        placeholder="Enter customer alias/short name"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Email
-                    </label>
-                    <Input
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => handleInputChange('email', e.target.value)}
-                      placeholder="Enter email address"
-                    />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      PAN Number
-                    </label>
-                    <Input
-                      value={formData.panNumber}
-                      onChange={(e) => handleInputChange('panNumber', e.target.value)}
-                      placeholder="Enter PAN number"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Address Information Tab */}
-            {activeTab === 'address' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-medium text-gray-900">Address Information</h3>
-                  <Button
+                  {/* Right: Addresses */}
+                  <div className="w-full lg:w-1/2 p-6">
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="text-lg font-semibold text-gray-800">Addresses</h3>
+                        <button
                     type="button"
-                    variant="outline"
                     onClick={addAddress}
-                    className="flex items-center gap-2"
+                          className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm"
                   >
-                    <Plus className="w-4 h-4" />
                     Add Address
-                  </Button>
+                        </button>
                 </div>
 
+                      {/* Scrollable container for address list */}
+                      <div className="max-h-[600px] overflow-y-auto pr-1 space-y-2">
                 {formData.addresses.map((address, index) => (
-                  <div key={address.id} className="border border-gray-200 rounded-lg p-4 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-md font-medium text-gray-700">
-                        Address {index + 1}
-                      </h4>
-                      <div className="flex items-center gap-2">
-                        <label className="flex items-center">
-                          <input
-                            type="radio"
-                            name="primaryAddress"
-                            checked={address.isPrimary}
-                            onChange={() => setPrimaryAddress(address.id)}
-                            className="mr-2"
-                          />
-                          <span className="text-sm text-gray-600">Primary</span>
-                        </label>
-                        {formData.addresses.length > 1 && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => removeAddress(address.id)}
-                            className="text-red-600 hover:text-red-700"
+                          <div
+                            key={address.id}
+                            className="border rounded px-3 pb-3 pt-2 bg-white flex justify-between"
                           >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
+                            <div className='flex-1'>
+                              <div className="flex justify-between my-1">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  Address {index + 1} *{' '}
+                                  {address.isPrimary && <span className="text-xs text-blue-600">(Primary)</span>}
+                        </label>
+                                {!address.isPrimary && (
+                                  <button
+                            type="button"
+                                    onClick={() => setPrimaryAddress(address.id)}
+                                    className="px-2 py-1 mb-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-xs"
+                          >
+                                    Set as Primary
+                                  </button>
                         )}
                       </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Address *
-                        </label>
                         <textarea
                           value={address.address}
                           onChange={(e) => updateAddress(address.id, 'address', e.target.value)}
-                          placeholder="Enter complete address"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${
+                                  errors.addressFields && errors.addressFields[address.id]?.address 
+                                    ? 'border-red-300' 
+                                    : 'border-gray-300'
+                                }`}
+                                placeholder="Enter full address"
                           rows={3}
                         />
+                        {errors.addressFields && errors.addressFields[address.id]?.address && (
+                          <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].address}</p>
+                        )}
+                              {/* Registration Status per address */}
+                              <div className="mt-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Registration Status *</label>
+                                <select
+                                  value={address.registrationStatus}
+                                  onChange={(e) => updateAddress(address.id, 'registrationStatus', e.target.value)}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm bg-white"
+                                >
+                                  <option value="registered">Registered</option>
+                                  <option value="non_registered">Non Registered</option>
+                                </select>
                       </div>
-
+                              {/* GST Number per address */}
+                              <div className="mt-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                  GST Number
+                                </label>
+                                <input
+                                  type="text"
+                                  value={address.gstNumber || ''}
+                                  onChange={(e) => {
+                                    const value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
+                                    updateAddress(address.id, 'gstNumber', value);
+                                    
+                                    // Real-time validation
+                                    if (value.length === 15 && !validateGST(value)) {
+                                      console.log('GST validation failed for address', address.id, 'value:', value);
+                                      setErrors(prev => {
+                                        const currentGstErrors = (prev.gstNumber as Record<number, string>) || {};
+                                        return {
+                                          ...prev,
+                                          gstNumber: {
+                                            ...currentGstErrors,
+                                            [address.id]: 'GST number must be in format 33AABCT3518Q1Z2 (2 digits, 4 letters, 5 alphanumeric, 4 alphanumeric)'
+                                          }
+                                        };
+                                      });
+                                    } else if (value.length === 15 && validateGST(value)) {
+                                      console.log('GST validation passed for address', address.id, 'value:', value);
+                                      setErrors(prev => {
+                                        const currentGstErrors = (prev.gstNumber as Record<number, string>) || {};
+                                        const newGstErrors = { ...currentGstErrors };
+                                        delete newGstErrors[address.id];
+                                        return {
+                                          ...prev,
+                                          gstNumber: Object.keys(newGstErrors).length > 0 ? newGstErrors : undefined
+                                        };
+                                      });
+                                    } else if (value.length < 15) {
+                                      // Clear error if user is still typing
+                                      setErrors(prev => {
+                                        const currentGstErrors = (prev.gstNumber as Record<number, string>) || {};
+                                        if (currentGstErrors[address.id]) {
+                                          const newGstErrors = { ...currentGstErrors };
+                                          delete newGstErrors[address.id];
+                                          return {
+                                            ...prev,
+                                            gstNumber: Object.keys(newGstErrors).length > 0 ? newGstErrors : undefined
+                                          };
+                                        }
+                                        return prev;
+                                      });
+                                    }
+                                  }}
+                                  className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${
+                                    errors.gstNumber && (errors.gstNumber as Record<number, string>)?.[address.id] 
+                                      ? 'border-red-300' 
+                                      : 'border-gray-300'
+                                  }`}
+                                  placeholder="GST Number (e.g., 33AABCT3518Q1Z2)"
+                                  maxLength={15}
+                                />
+                                {address.registrationStatus === 'registered' && (!address.gstNumber || !address.gstNumber.trim()) && (
+                                  <p className="text-red-500 text-xs mt-1">GST Number is required for Registered status</p>
+                                )}
+                                {errors.gstNumber && (errors.gstNumber as Record<number, string>)?.[address.id] && (
+                                  <p className="text-red-500 text-xs mt-1">{(errors.gstNumber as Record<number, string>)[address.id]}</p>
+                                )}
+                                {address.gstNumber && address.gstNumber.length === 15 && !(errors.gstNumber as Record<number, string>)?.[address.id] && (
+                                  <p className="text-green-600 text-xs mt-1">✓ Valid GST format</p>
+                                )}
+                              </div>
+                              {/* Per-address contact details */}
+                              <div className="grid grid-cols-1 gap-2 mt-2">
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact Person</label>
+                                  <input
+                                    type="text"
+                                    value={address.contactPersonName || ''}
+                                    onChange={(e) => updateAddress(address.id, 'contactPersonName', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Contact person"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                  <input
+                                    type="email"
+                                    value={address.email || ''}
+                                    onChange={(e) => updateAddress(address.id, 'email', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Email"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                                  <input
+                                    type="text"
+                                    value={address.phone || ''}
+                                    onChange={(e) => updateAddress(address.id, 'phone', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm"
+                                    placeholder="Phone"
+                                  />
+                                </div>
+                              </div>
+                              {/* New fields for state, district, pincode */}
+                              <div className="grid grid-cols-3 gap-2 mt-2">
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
                           State *
                         </label>
-                        <Input
+                                  <input
+                                    type="text"
                           value={address.state}
                           onChange={(e) => updateAddress(address.id, 'state', e.target.value)}
-                          placeholder="Enter state"
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${
+                                      errors.addressFields && errors.addressFields[address.id]?.state 
+                                        ? 'border-red-300' 
+                                        : 'border-gray-300'
+                                    }`}
+                                    placeholder="State"
                         />
+                        {errors.addressFields && errors.addressFields[address.id]?.state && (
+                          <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].state}</p>
+                        )}
                       </div>
-
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
                           District *
                         </label>
-                        <Input
+                                  <input
+                                    type="text"
                           value={address.district}
                           onChange={(e) => updateAddress(address.id, 'district', e.target.value)}
-                          placeholder="Enter district"
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${
+                                      errors.addressFields && errors.addressFields[address.id]?.district 
+                                        ? 'border-red-300' 
+                                        : 'border-gray-300'
+                                    }`}
+                                    placeholder="District"
                         />
+                        {errors.addressFields && errors.addressFields[address.id]?.district && (
+                          <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].district}</p>
+                        )}
                       </div>
-
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Pincode
+                                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Pincode *
                         </label>
-                        <Input
+                                  <input
+                                    type="text"
                           value={address.pincode}
-                          onChange={(e) => updateAddress(address.id, 'pincode', e.target.value)}
-                          placeholder="Enter pincode"
+                                    onChange={(e) => {
+                                      const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                      updateAddress(address.id, 'pincode', value);
+                                    }}
+                                    className={`w-full px-2 py-1 border rounded focus:ring-1 focus:ring-blue-400 focus:border-blue-400 text-sm ${
+                                      errors.addressFields && errors.addressFields[address.id]?.pincode 
+                                        ? 'border-red-300' 
+                                        : 'border-gray-300'
+                                    }`}
+                                    placeholder="Pincode"
+                                    pattern="[0-9]{6}"
+                                    maxLength={6}
                         />
+                        {errors.addressFields && errors.addressFields[address.id]?.pincode && (
+                          <p className="text-red-500 text-xs mt-1">{errors.addressFields[address.id].pincode}</p>
+                        )}
                       </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          GST Number
-                        </label>
-                        <Input
-                          value={address.gstNumber}
-                          onChange={(e) => updateAddress(address.id, 'gstNumber', e.target.value)}
-                          placeholder="Enter GST number"
-                        />
                       </div>
+                              {formData.addresses.length > 1 && (
+                                <div className="mt-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => removeAddress(address.id)}
+                                    className="text-red-600 hover:text-red-700 text-sm"
+                                  >
+                                    <Trash2 className="w-4 h-4 inline mr-1" />
+                                    Remove Address
+                                  </button>
+                                </div>
+                              )}
                     </div>
                   </div>
                 ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -1105,6 +1431,52 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
             {activeTab === 'employee' && (
               <div className="space-y-6">
                 <h3 className="text-lg font-medium text-gray-900 mb-4">Employee Information</h3>
+                
+                {/* Sales Engineer Selection */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Sales Engineer *
+                  </label>
+                  <SalesEngineerSearchDropdown
+                    value={formData.assignedEmployeeName}
+                    onChange={(value) => handleInputChange('assignedEmployeeName', value)}
+                    onSalesEngineerSelect={handleSalesEngineerSelect}
+                    placeholder="Search and select a sales engineer..."
+                  />
+                  {selectedSalesEngineer && (
+                    <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <User className="h-4 w-4 text-blue-600 mr-2" />
+                          <div>
+                            <span className="text-sm font-medium text-blue-800">
+                              {selectedSalesEngineer.fullName}
+                            </span>
+                            <div className="text-xs text-blue-600">
+                              Code: {selectedSalesEngineer.salesEmployeeCode} • {selectedSalesEngineer.email}
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedSalesEngineer(null);
+                            setFormData(prev => ({
+                              ...prev,
+                              assignedEmployeeCode: '',
+                              assignedEmployeeName: '',
+                              employeeStatus: 'Active'
+                            }));
+                          }}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1113,7 +1485,9 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                     <Input
                       value={formData.assignedEmployeeCode}
                       onChange={(e) => handleInputChange('assignedEmployeeCode', e.target.value)}
-                      placeholder="Enter employee code"
+                      placeholder="Employee code (auto-filled)"
+                      readOnly
+                      className="bg-gray-50"
                     />
                   </div>
 
@@ -1124,7 +1498,9 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                     <Input
                       value={formData.assignedEmployeeName}
                       onChange={(e) => handleInputChange('assignedEmployeeName', e.target.value)}
-                      placeholder="Enter employee name"
+                      placeholder="Employee name (auto-filled)"
+                      readOnly
+                      className="bg-gray-50"
                     />
                   </div>
 

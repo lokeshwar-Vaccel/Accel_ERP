@@ -165,7 +165,10 @@ export default function DGEnquiryViewModal({ isOpen, onClose, onSuccess, enquiry
 
             {/* Customer Information */}
             <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Customer Information</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <User className="h-5 w-5 mr-2 text-blue-600" />
+                Customer Information
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Customer Name</label>
@@ -193,11 +196,25 @@ export default function DGEnquiryViewModal({ isOpen, onClose, onSuccess, enquiry
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">PAN Number</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.panNumber || 'N/A'}</p>
+                  <p className="mt-1 text-sm text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">
+                    {enquiry.panNumber || 'N/A'}
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Customer Type</label>
+                  <p className="mt-1 text-sm text-gray-900">
+                    <Badge variant={enquiry.customerType === 'Corporate' ? 'warning' : 'info'}>
+                      {enquiry.customerType || 'Retail'}
+                    </Badge>
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Finance Required</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.financeRequired ? 'Yes' : 'No'}</p>
+                  <p className="mt-1 text-sm text-gray-900">
+                    <Badge variant={enquiry.financeRequired ? 'warning' : 'success'}>
+                      {enquiry.financeRequired ? 'Yes' : 'No'}
+                    </Badge>
+                  </p>
                 </div>
                 {enquiry.financeRequired && (
                   <div>
@@ -207,7 +224,11 @@ export default function DGEnquiryViewModal({ isOpen, onClose, onSuccess, enquiry
                 )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">DG Ownership</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.dgOwnership || 'NOT_OWNED'}</p>
+                  <p className="mt-1 text-sm text-gray-900">
+                    <Badge variant={enquiry.dgOwnership === 'OWNED' ? 'success' : 'info'}>
+                      {enquiry.dgOwnership || 'NOT_OWNED'}
+                    </Badge>
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Customer Status</label>
@@ -217,68 +238,143 @@ export default function DGEnquiryViewModal({ isOpen, onClose, onSuccess, enquiry
                     </Badge>
                   </p>
                 </div>
+                {enquiry.alice && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Alice</label>
+                    <p className="mt-1 text-sm text-gray-900">{enquiry.alice}</p>
+                  </div>
+                )}
+                {enquiry.designation && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Designation</label>
+                    <p className="mt-1 text-sm text-gray-900">{enquiry.designation}</p>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Address Information */}
             <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Address Information</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700">Address</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.address || 'N/A'}</p>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <MapPin className="h-5 w-5 mr-2 text-blue-600" />
+                Address Information
+              </h3>
+              {enquiry.addresses && enquiry.addresses.length > 0 ? (
+                <div className="space-y-4">
+                  {enquiry.addresses.map((address: any, index: number) => (
+                    <div key={address.id || index} className="bg-white rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium text-gray-900">
+                          Address {index + 1}
+                          {address.isPrimary && (
+                            <Badge variant="success" className="ml-2">Primary</Badge>
+                          )}
+                        </h4>
+                        <Badge variant={address.registrationStatus === 'registered' ? 'success' : 'warning'}>
+                          {address.registrationStatus === 'registered' ? 'Registered' : 'Non-Registered'}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="md:col-span-2">
+                          <label className="block text-sm font-medium text-gray-700">Address</label>
+                          <p className="mt-1 text-sm text-gray-900">{address.address || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">State</label>
+                          <p className="mt-1 text-sm text-gray-900">{address.state || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">District</label>
+                          <p className="mt-1 text-sm text-gray-900">{address.district || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">Pincode</label>
+                          <p className="mt-1 text-sm text-gray-900">{address.pincode || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700">GST Number</label>
+                          <p className="mt-1 text-sm text-gray-900">{address.gstNumber || 'N/A'}</p>
+                        </div>
+                        {address.contactPersonName && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Contact Person</label>
+                            <p className="mt-1 text-sm text-gray-900 flex items-center">
+                              <User className="h-4 w-4 mr-2 text-gray-400" />
+                              {address.contactPersonName}
+                            </p>
+                          </div>
+                        )}
+                        {address.email && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Email</label>
+                            <p className="mt-1 text-sm text-gray-900 flex items-center">
+                              <Mail className="h-4 w-4 mr-2 text-gray-400" />
+                              {address.email}
+                            </p>
+                          </div>
+                        )}
+                        {address.phone && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Phone</label>
+                            <p className="mt-1 text-sm text-gray-900 flex items-center">
+                              <Phone className="h-4 w-4 mr-2 text-gray-400" />
+                              {address.phone}
+                            </p>
+                          </div>
+                        )}
+                        {address.notes && (
+                          <div className="md:col-span-2">
+                            <label className="block text-sm font-medium text-gray-700">Notes</label>
+                            <p className="mt-1 text-sm text-gray-900 bg-gray-50 p-2 rounded">{address.notes}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Pincode</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.pincode || 'N/A'}</p>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  <MapPin className="h-12 w-12 mx-auto mb-2 text-gray-300" />
+                  <p>No address information available</p>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Tehsil</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.tehsil || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">District</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.district || enquiry.customerDistrict || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">State</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.state || enquiry.customerState || 'N/A'}</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Zone</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.zone || 'N/A'}</p>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* DG Requirements */}
             <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">DG Requirements</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <Settings className="h-5 w-5 mr-2 text-blue-600" />
+                DG Requirements
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">KVA Required</label>
-                  <p className="mt-1 text-sm text-gray-900 font-semibold">
+                  <p className="mt-1 text-2xl font-bold text-blue-600">
                     {enquiry.kva || enquiry.kvaRequired || 'N/A'}
                     {typeof (enquiry.kva || enquiry.kvaRequired) === 'number' && ' KVA'}
                   </p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Phase</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.phase || 'Three Phase'}</p>
+                  <p className="mt-1 text-lg font-semibold text-gray-900">
+                    <Badge variant={enquiry.phase === 'Three Phase' ? 'success' : 'info'}>
+                      {enquiry.phase || 'Three Phase'}
+                    </Badge>
+                  </p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Quantity</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.quantity || '1'}</p>
+                  <p className="mt-1 text-lg font-semibold text-gray-900">{enquiry.quantity || '1'}</p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Segment</label>
                   <p className="mt-1 text-sm text-gray-900">{enquiry.segment || enquiry.applicationArea || 'N/A'}</p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Sub Segment</label>
                   <p className="mt-1 text-sm text-gray-900">{enquiry.subSegment || 'N/A'}</p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Events</label>
                   <p className="mt-1 text-sm text-gray-900">{enquiry.events || 'N/A'}</p>
                 </div>
@@ -287,65 +383,93 @@ export default function DGEnquiryViewModal({ isOpen, onClose, onSuccess, enquiry
 
             {/* Employee Information */}
             <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Employee Information</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <Users className="h-5 w-5 mr-2 text-blue-600" />
+                Employee Information
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Assigned Employee Code</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.assignedEmployeeCode || 'N/A'}</p>
+                  <p className="mt-1 text-sm text-gray-900 font-mono bg-gray-100 px-2 py-1 rounded">
+                    {enquiry.assignedEmployeeCode || 'N/A'}
+                  </p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Assigned Employee Name</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.assignedEmployeeName || 'N/A'}</p>
+                  <p className="mt-1 text-sm text-gray-900 font-semibold">{enquiry.assignedEmployeeName || 'N/A'}</p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Employee Status</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.employeeStatus || 'N/A'}</p>
+                  <p className="mt-1 text-sm text-gray-900">
+                    <Badge variant={enquiry.employeeStatus === 'Active' ? 'success' : 'warning'}>
+                      {enquiry.employeeStatus || 'N/A'}
+                    </Badge>
+                  </p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Reference Employee Name</label>
                   <p className="mt-1 text-sm text-gray-900">{enquiry.referenceEmployeeName || 'N/A'}</p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Reference Employee Mobile</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.referenceEmployeeMobileNumber || 'N/A'}</p>
+                  <p className="mt-1 text-sm text-gray-900 flex items-center">
+                    <Phone className="h-4 w-4 mr-2 text-gray-400" />
+                    {enquiry.referenceEmployeeMobileNumber || 'N/A'}
+                  </p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Number of Follow-ups</label>
-                  <p className="mt-1 text-sm text-gray-900">{enquiry.numberOfFollowUps || '0'}</p>
+                  <p className="mt-1 text-lg font-semibold text-blue-600">{enquiry.numberOfFollowUps || '0'}</p>
                 </div>
               </div>
             </div>
 
             {/* Additional Information */}
             <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Additional Information</h3>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Remarks</label>
-                <p className="mt-1 text-sm text-gray-900 bg-white p-3 rounded-lg border">
-                  {enquiry.remarks || 'No remarks available'}
-                </p>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <FileText className="h-5 w-5 mr-2 text-blue-600" />
+                Additional Information
+              </h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Remarks</label>
+                  <p className="mt-1 text-sm text-gray-900 bg-white p-3 rounded-lg border min-h-[80px]">
+                    {enquiry.remarks || 'No remarks available'}
+                  </p>
+                </div>
+                {enquiry.notes && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Notes</label>
+                    <p className="mt-1 text-sm text-gray-900 bg-white p-3 rounded-lg border min-h-[60px]">
+                      {enquiry.notes}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
             {/* Important Dates */}
             <div className="bg-gray-50 rounded-lg p-6">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Important Dates</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-4 flex items-center">
+                <Calendar className="h-5 w-5 mr-2 text-blue-600" />
+                Important Dates
+              </h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">EO/PO Date</label>
-                  <p className="mt-1 text-sm text-gray-900">{formatDate(enquiry.eoPoDate)}</p>
+                  <p className="mt-1 text-sm text-gray-900 font-semibold">{formatDate(enquiry.eoPoDate)}</p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Planned Follow-up Date</label>
-                  <p className="mt-1 text-sm text-gray-900">{formatDate(enquiry.plannedFollowUpDate)}</p>
+                  <p className="mt-1 text-sm text-gray-900 font-semibold">{formatDate(enquiry.plannedFollowUpDate)}</p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Last Follow-up Date</label>
-                  <p className="mt-1 text-sm text-gray-900">{formatDate(enquiry.lastFollowUpDate)}</p>
+                  <p className="mt-1 text-sm text-gray-900 font-semibold">{formatDate(enquiry.lastFollowUpDate)}</p>
                 </div>
-                <div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200">
                   <label className="block text-sm font-medium text-gray-700">Enquiry Closure Date</label>
-                  <p className="mt-1 text-sm text-gray-900">{formatDate(enquiry.enquiryClosureDate)}</p>
+                  <p className="mt-1 text-sm text-gray-900 font-semibold">{formatDate(enquiry.enquiryClosureDate)}</p>
                 </div>
               </div>
             </div>

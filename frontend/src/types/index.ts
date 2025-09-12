@@ -7,6 +7,7 @@ export interface User {
   isActive: boolean;
   moduleAccess: string[];
   phone?: string;
+  salesEmployeeCode?: string; // Unique code for Sales Engineers
   createdAt: string;
   updatedAt: string;
   lastLogin?: string;
@@ -18,6 +19,7 @@ export enum UserRole {
   HR = 'hr',
   MANAGER = 'manager',
   FIELD_ENGINEER = 'field_engineer',
+  SALES_ENGINEER = 'sales_engineer',
   VIEWER = 'viewer'
 }
 
