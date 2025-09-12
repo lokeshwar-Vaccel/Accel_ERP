@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import toast from 'react-hot-toast';
@@ -268,6 +268,51 @@ const ServiceManagement: React.FC = () => {
   const [engineerReportTotals, setEngineerReportTotals] = useState<{ byEngineer: { engineerId: string; engineerName: string; totalAmount: number }[]; grandTotal: number }>({ byEngineer: [], grandTotal: 0 });
   const [loadingEngineerReport, setLoadingEngineerReport] = useState(false);
   const [exportingEngineerReport, setExportingEngineerReport] = useState(false);
+  const [reportTab, setReportTab] = useState<'all' | 'specific'>('all');
+  const [reportApplied, setReportApplied] = useState(false);
+
+  useEffect(() => {
+    // On modal open or tab switch, clear existing data and reset applied flag
+    setEngineerReportRows([]);
+    setEngineerReportTotals({ byEngineer: [], grandTotal: 0 });
+    setReportApplied(false);
+  }, [showEngineerReportModal, reportTab]);
+
+  const engineerTicketCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of engineerReportRows) {
+      const id = (r as any).engineerId as string | undefined;
+      if (!id) continue;
+      counts.set(id, (counts.get(id) || 0) + 1);
+    }
+    return counts;
+  }, [engineerReportRows]);
+
+  const engineerCustomerVisitMatrix = useMemo(() => {
+    // Build structure: engineerId -> { engineerName, customers: Map<customerName, Map<typeOfVisit, count>> }
+    const matrix = new Map<string, { engineerName: string; customers: Map<string, Map<string, number>> }>();
+    const visitKeys = new Set<string>();
+    for (const r of engineerReportRows) {
+      const engId = (r as any).engineerId as string | undefined;
+      const engName = (r as any).serviceEngineerName || '';
+      const customerName = (r as any).customerName || 'Unknown';
+      const visit = (r as any).typeOfVisit || '';
+      if (!engId) continue;
+      visit && visitKeys.add(visit);
+      if (!matrix.has(engId)) {
+        matrix.set(engId, { engineerName: engName, customers: new Map() });
+      }
+      const entry = matrix.get(engId)!;
+      if (!entry.customers.has(customerName)) {
+        entry.customers.set(customerName, new Map());
+      }
+      const custMap = entry.customers.get(customerName)!;
+      custMap.set(visit, (custMap.get(visit) || 0) + 1);
+    }
+    // Columns: derive from data and sort for stable order
+    const visitColumns = Array.from(visitKeys).sort((a, b) => String(a).localeCompare(String(b)));
+    return { matrix, visitColumns };
+  }, [engineerReportRows]);
 
   // Excel upload states
   const [excelFile, setExcelFile] = useState<File | null>(null);
@@ -1526,17 +1571,10 @@ const ServiceManagement: React.FC = () => {
     { value: 'closed', label: 'Closed' }
   ];
 
-
-
-
-
   const getStatusLabel = (value: string) => {
     const option = statusOptions.find(opt => opt.value === value);
     return option ? option.label : 'All Status';
   };
-
-
-
 
 
   const getAssigneeLabel = (value: string) => {
@@ -2180,14 +2218,16 @@ const ServiceManagement: React.FC = () => {
     try {
       setLoadingEngineerReport(true);
       const params: any = { month: reportMonth };
-      if (reportEngineerId) params.engineerId = reportEngineerId;
+      if (reportTab === 'specific' && reportEngineerId) params.engineerId = reportEngineerId;
       const res = await apiClient.services.getEngineerPaymentReport(params);
       if (res.success && res.data) {
         setEngineerReportRows(res.data.rows || []);
         setEngineerReportTotals(res.data.totals || { byEngineer: [], grandTotal: 0 });
+        setReportApplied(true);
       } else {
         setEngineerReportRows([]);
         setEngineerReportTotals({ byEngineer: [], grandTotal: 0 });
+        setReportApplied(true);
       }
     } catch (err: any) {
       console.error('Engineer report fetch error:', err);
@@ -2202,54 +2242,67 @@ const ServiceManagement: React.FC = () => {
       setExportingEngineerReport(true);
       const XLSX = await import('xlsx');
 
-      // Prepare worksheet data: add a header row
-      const headers = [
-        'Service Attended Date',
-        'Customer',
-        'Type of Visit',
-        'Nature of Work',
-        'Sub Nature of Work',
-        'Engineer',
-        'Ticket Number',
-        'Convenience Charges'
-      ];
-
-      const rows = engineerReportRows.map((r) => ([
-        r.serviceAttendedDate ? new Date(r.serviceAttendedDate).toISOString().replace('T', ' ').substring(0, 19) : '',
-        r.customerName || '',
-        r.typeOfVisit || '',
-        r.natureOfWork || '',
-        r.subNatureOfWork || '',
-        r.serviceEngineerName || '',
-        r.ticketNumber || '',
-        Number(r.convenienceCharges || 0)
-      ]));
-
-      const summarySheetTitle = 'Engineer Summary';
-      const detailsSheetTitle = 'Ticket Details';
-
-      // Create workbook
       const wb = XLSX.utils.book_new();
 
-      // Summary sheet (per engineer + grand total)
-      const summaryData = [
-        ['Engineer', 'Total Amount'],
-        ...engineerReportTotals.byEngineer.map(e => [e.engineerName, e.totalAmount]),
-        [],
-        ['Grand Total', engineerReportTotals.grandTotal]
-      ];
-      const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
-      XLSX.utils.book_append_sheet(wb, wsSummary, summarySheetTitle);
+      if (reportTab === 'all') {
+        const totalsMap = new Map<string, number>();
+        engineerReportTotals.byEngineer.forEach(e => {
+          totalsMap.set(e.engineerId, Number(e.totalAmount) || 0);
+        });
 
-      // Details sheet
-      const aoa = [headers, ...rows];
-      const ws = XLSX.utils.aoa_to_sheet(aoa);
-      // Optional: Autosize columns
-      const colWidths = headers.map((h) => ({ wch: Math.max(h.length + 2, 18) }));
-      (ws as any)['!cols'] = colWidths;
-      XLSX.utils.book_append_sheet(wb, ws, detailsSheetTitle);
+        const sortedUsers = users.slice().sort((a, b) => getUserName(a).localeCompare(getUserName(b)));
 
-      const filename = `engineer_payment_report_${reportMonth || new Date().toISOString().slice(0,7)}.xlsx`;
+        const summaryData = [
+          ['Engineer', 'Tickets', 'Total Amount'],
+          ...sortedUsers.map(u => [
+            getUserName(u),
+            engineerTicketCounts.get(u._id) || 0,
+            totalsMap.get(u._id) ?? 0
+          ]),
+          [],
+          ['Grand Total', '', engineerReportTotals.grandTotal]
+        ];
+        const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(wb, wsSummary, 'All Engineers Summary');
+      } else {
+        const headers = [
+          'Service Attended Date',
+          'Customer',
+          'Type of Visit',
+          'Nature of Work',
+          'Sub Nature of Work',
+          'Engineer',
+          'Ticket Number',
+          'Convenience Charges'
+        ];
+        const rows = engineerReportRows.map((r) => ([
+          r.serviceAttendedDate ? new Date(r.serviceAttendedDate).toISOString().replace('T', ' ').substring(0, 19) : '',
+          r.customerName || '',
+          r.typeOfVisit || '',
+          r.natureOfWork || '',
+          r.subNatureOfWork || '',
+          r.serviceEngineerName || '',
+          r.ticketNumber || '',
+          Number(r.convenienceCharges || 0)
+        ]));
+
+        const summaryData = [
+          ['Engineer', 'Total Amount'],
+          ...engineerReportTotals.byEngineer.map(e => [e.engineerName, e.totalAmount]),
+          [],
+          ['Grand Total', engineerReportTotals.grandTotal]
+        ];
+        const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+        XLSX.utils.book_append_sheet(wb, wsSummary, 'Engineer Summary');
+
+        const aoa = [headers, ...rows];
+        const ws = XLSX.utils.aoa_to_sheet(aoa);
+        const colWidths = headers.map((h) => ({ wch: Math.max(h.length + 2, 18) }));
+        (ws as any)['!cols'] = colWidths;
+        XLSX.utils.book_append_sheet(wb, ws, 'Ticket Details');
+      }
+
+      const filename = `engineer_payment_report_${reportTab}_${reportMonth || new Date().toISOString().slice(0,7)}.xlsx`;
       XLSX.writeFile(wb, filename);
 
       toast.success('Report exported to Excel');
@@ -5869,6 +5922,21 @@ const ServiceManagement: React.FC = () => {
               </div>
             </div>
             <div className="p-6 space-y-4 max-h-[calc(90vh-120px)] overflow-y-auto">
+              {/* Tabs */}
+              <div className="inline-flex bg-gray-100 rounded-lg p-1">
+                <button
+                  className={`px-3 py-1.5 text-sm rounded-md ${reportTab === 'all' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+                  onClick={() => { setReportTab('all'); setReportEngineerId(''); }}
+                >
+                  All Engineers Monthly Summary
+                </button>
+                <button
+                  className={`ml-1 px-3 py-1.5 text-sm rounded-md ${reportTab === 'specific' ? 'bg-white shadow text-gray-900' : 'text-gray-600 hover:text-gray-900'}`}
+                  onClick={() => setReportTab('specific')}
+                >
+                  Specific Engineer Monthly Summary
+                </button>
+              </div>
               {/* Report Filters */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
@@ -5880,46 +5948,48 @@ const ServiceManagement: React.FC = () => {
                     className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm text-gray-700 mb-1">Engineer</label>
-                  <div className="relative dropdown-container">
-                    <button
-                      onClick={() => setShowReportEngineerDropdown(!showReportEngineerDropdown)}
-                      className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm"
-                    >
-                      <span className="text-gray-700 truncate mr-1">{getReportEngineerLabel(reportEngineerId)}</span>
-                      <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showReportEngineerDropdown ? 'rotate-180' : ''}`} />
-                    </button>
-                    {showReportEngineerDropdown && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-80 overflow-y-auto">
-                        <button
-                          onClick={() => {
-                            setReportEngineerId('');
-                            setShowReportEngineerDropdown(false);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!reportEngineerId ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                        >
-                          All Engineers
-                        </button>
-                        {users
-                          .slice()
-                          .sort((a, b) => getUserName(a).localeCompare(getUserName(b)))
-                          .map(user => (
-                            <button
-                              key={user._id}
-                              onClick={() => {
-                                setReportEngineerId(user._id);
-                                setShowReportEngineerDropdown(false);
-                              }}
-                              className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${reportEngineerId === user._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
-                            >
-                              {getUserName(user)}
-                            </button>
-                          ))}
-                      </div>
-                    )}
+                {reportTab === 'specific' && (
+                  <div>
+                    <label className="block text-sm text-gray-700 mb-1">Engineer</label>
+                    <div className="relative dropdown-container">
+                      <button
+                        onClick={() => setShowReportEngineerDropdown(!showReportEngineerDropdown)}
+                        className="flex items-center justify-between w-full px-2.5 py-1.5 text-left bg-white border border-gray-300 rounded-lg hover:border-gray-400 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors text-sm"
+                      >
+                        <span className="text-gray-700 truncate mr-1">{getReportEngineerLabel(reportEngineerId)}</span>
+                        <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform flex-shrink-0 ${showReportEngineerDropdown ? 'rotate-180' : ''}`} />
+                      </button>
+                      {showReportEngineerDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-80 overflow-y-auto">
+                          <button
+                            onClick={() => {
+                              setReportEngineerId('');
+                              setShowReportEngineerDropdown(false);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${!reportEngineerId ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                          >
+                            All Engineers
+                          </button>
+                          {users
+                            .slice()
+                            .sort((a, b) => getUserName(a).localeCompare(getUserName(b)))
+                            .map(user => (
+                              <button
+                                key={user._id}
+                                onClick={() => {
+                                  setReportEngineerId(user._id);
+                                  setShowReportEngineerDropdown(false);
+                                }}
+                                className={`w-full px-3 py-1.5 text-left hover:bg-gray-50 transition-colors text-sm ${reportEngineerId === user._id ? 'bg-blue-50 text-blue-600' : 'text-gray-700'}`}
+                              >
+                                {getUserName(user)}
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
                 <div className="flex items-end">
                   <button
                     onClick={() => { void fetchEngineerReport(); }}
@@ -5932,72 +6002,119 @@ const ServiceManagement: React.FC = () => {
               </div>
 
               {/* Summary Totals */}
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-gray-700">Grand Total</p>
-                  <p className="text-lg font-semibold text-gray-900">₹ {engineerReportTotals.grandTotal.toFixed(2)}</p>
+              {reportApplied && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-700">Grand Total</p>
+                    <p className="text-lg font-semibold text-gray-900">₹ {engineerReportTotals.grandTotal.toFixed(2)}</p>
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Per Engineer Totals */}
-              {engineerReportTotals.byEngineer.length > 0 && (
+              {/* Per Engineer Totals (All Engineers view) */}
+              {reportTab === 'all' && (
                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-gray-50">
                       <tr>
-                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Engineer</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase align-bottom">Engineer</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase align-bottom">Customer</th>
+                        {engineerCustomerVisitMatrix.visitColumns.map(vc => (
+                          <th key={vc} className="px-4 py-2 text-right text-[10px] font-medium text-gray-500 uppercase">{(typeOfVisitOptions.find(o => o.value === vc)?.label) || vc}</th>
+                        ))}
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Tickets</th>
                         <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Total Amount</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
-                      {engineerReportTotals.byEngineer.map((e, idx) => (
-                        <tr key={idx}>
-                          <td className="px-4 py-2 text-sm text-gray-900">{e.engineerName}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900 text-right">₹ {e.totalAmount.toFixed(2)}</td>
-                        </tr>
-                      ))}
+                      {users
+                        .slice()
+                        .sort((a, b) => getUserName(a).localeCompare(getUserName(b)))
+                        .flatMap((u, idx) => {
+                          const totalsEntry = engineerReportTotals.byEngineer.find(e => e.engineerId === u._id);
+                          const total = totalsEntry?.totalAmount || 0;
+                          const count = engineerTicketCounts.get(u._id) || 0;
+                          const matrixEntry = engineerCustomerVisitMatrix.matrix.get(u._id);
+                          const rows: JSX.Element[] = [];
+                          if (matrixEntry && matrixEntry.customers.size > 0) {
+                            const customerNames = Array.from(matrixEntry.customers.keys()).sort((a, b) => a.localeCompare(b));
+                            customerNames.forEach((custName, rowIdx) => {
+                              const visitMap = matrixEntry.customers.get(custName)!;
+                              rows.push(
+                                <tr key={`${u._id}-${custName}`}>
+                                  <td className="px-4 py-2 text-sm text-gray-900">{rowIdx === 0 ? getUserName(u) : ''}</td>
+                                  <td className="px-4 py-2 text-sm text-gray-900">{custName}</td>
+                                  {engineerCustomerVisitMatrix.visitColumns.map(vc => (
+                                    <td key={vc} className="px-4 py-2 text-sm text-gray-900 text-right">{visitMap.get(vc) || 0}</td>
+                                  ))}
+                                  <td className="px-4 py-2 text-sm text-gray-900 text-right">{rowIdx === 0 ? count : ''}</td>
+                                  <td className="px-4 py-2 text-sm text-gray-900 text-right">{rowIdx === 0 ? `₹ ${Number(total).toFixed(2)}` : ''}</td>
+                                </tr>
+                              );
+                            });
+                          } else {
+                            rows.push(
+                              <tr key={`${u._id}-none`}>
+                                <td className="px-4 py-2 text-sm text-gray-900">{getUserName(u)}</td>
+                                <td className="px-4 py-2 text-sm text-gray-500">-</td>
+                                {engineerCustomerVisitMatrix.visitColumns.map(vc => (
+                                  <td key={vc} className="px-4 py-2 text-sm text-gray-900 text-right">0</td>
+                                ))}
+                                <td className="px-4 py-2 text-sm text-gray-900 text-right">{count}</td>
+                                <td className="px-4 py-2 text-sm text-gray-900 text-right">₹ {Number(total).toFixed(2)}</td>
+                              </tr>
+                            );
+                          }
+                          return rows;
+                        })}
                     </tbody>
                   </table>
                 </div>
               )}
 
-              {/* Ticket Detail Rows */}
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ticket Number</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Service Attended Date</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type of Visit</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nature of Work</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sub Nature of Work</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Engineer</th>
-                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Convenience Charges</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {engineerReportRows.length === 0 ? (
+              {/* Ticket Detail Rows (Specific Engineer view) */}
+              {reportTab === 'specific' && (
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
                       <tr>
-                        <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">No records</td>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ticket Number</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Service Attended Date</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Type of Visit</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nature of Work</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sub Nature of Work</th>
+                        <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Engineer</th>
+                        <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Convenience Charges</th>
                       </tr>
-                    ) : (
-                      engineerReportRows.map((r, idx) => (
-                        <tr key={idx}>
-                          <td className="px-4 py-2 text-sm text-blue-600">{r.ticketNumber || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{r.serviceAttendedDate ? formatDateTime(r.serviceAttendedDate) : '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{r.customerName || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{formatFieldValue(r.typeOfVisit)}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{formatFieldValue(r.natureOfWork)}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{formatFieldValue(r.subNatureOfWork)}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900">{r.serviceEngineerName || '-'}</td>
-                          <td className="px-4 py-2 text-sm text-gray-900 text-right">₹ {Number(r.convenienceCharges || 0).toFixed(2)}</td>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {!reportApplied ? (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">Select month and engineer, then click Apply</td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                      ) : engineerReportRows.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-6 text-center text-sm text-gray-500">No records</td>
+                        </tr>
+                      ) : (
+                        engineerReportRows.map((r, idx) => (
+                          <tr key={idx}>
+                            <td className="px-4 py-2 text-sm text-blue-600">{r.ticketNumber || '-'}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{r.serviceAttendedDate ? formatDateTime(r.serviceAttendedDate) : '-'}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{r.customerName || '-'}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{formatFieldValue(r.typeOfVisit)}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{formatFieldValue(r.natureOfWork)}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{formatFieldValue(r.subNatureOfWork)}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900">{r.serviceEngineerName || '-'}</td>
+                            <td className="px-4 py-2 text-sm text-gray-900 text-right">₹ {Number(r.convenienceCharges || 0).toFixed(2)}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>

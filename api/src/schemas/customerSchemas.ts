@@ -32,17 +32,15 @@ export interface CreateCustomerInput {
   isDGSalesCustomer?: boolean;
   dgDetails?: {
     dgSerialNumbers: string;
-    alternatorMake: string;
-    alternatorSerialNumber: string;
+    alternatorMake?: string;
+    alternatorSerialNumber?: string;
     dgMake: string;
     engineSerialNumber: string;
     dgModel: string;
     dgRatingKVA: number;
-    salesDealerName: string;
+    salesDealerName?: string;
     commissioningDate: Date;
     warrantyStatus: 'warranty' | 'non_warranty';
-    installationType: 'infold' | 'outfold';
-    amcStatus: 'yes' | 'no';
     cluster: string;
     warrantyStartDate?: Date;
     warrantyEndDate?: Date;
@@ -75,17 +73,15 @@ export interface UpdateCustomerInput {
   isDGSalesCustomer?: boolean;
   dgDetails?: {
     dgSerialNumbers: string;
-    alternatorMake: string;
-    alternatorSerialNumber: string;
+    alternatorMake?: string;
+    alternatorSerialNumber?: string;
     dgMake: string;
     engineSerialNumber: string;
     dgModel: string;
     dgRatingKVA: number;
-    salesDealerName: string;
+    salesDealerName?: string;
     commissioningDate: Date;
     warrantyStatus: 'warranty' | 'non_warranty';
-    installationType: 'infold' | 'outfold';
-    amcStatus: 'yes' | 'no';
     cluster: string;
     warrantyStartDate?: Date;
     warrantyEndDate?: Date;
@@ -205,8 +201,6 @@ const dgDetailsJoiSchema = Joi.object({
   salesDealerName: Joi.string().trim().max(200).allow('', null),
   commissioningDate: Joi.date().allow('', null),
   warrantyStatus: Joi.string().valid('warranty', 'non_warranty').allow('', null),
-  installationType: Joi.string().valid('infold', 'outfold').allow('', null),
-  amcStatus: Joi.string().valid('yes', 'no').allow('', null),
   cluster: Joi.string().trim().max(100).allow('', null),
   warrantyStartDate: Joi.date().allow('', null),
   warrantyEndDate: Joi.date().allow('', null),

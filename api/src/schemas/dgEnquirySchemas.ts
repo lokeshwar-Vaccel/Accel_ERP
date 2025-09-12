@@ -35,8 +35,6 @@ const dgDetailsSchema = Joi.object({
   salesDealerName: Joi.string().optional().trim().allow(''),
   commissioningDate: Joi.date().optional(),
   warrantyStatus: Joi.string().valid('warranty', 'non_warranty').default('warranty'),
-  installationType: Joi.string().valid('infold', 'outfold').default('infold'),
-  amcStatus: Joi.string().valid('yes', 'no').default('yes'),
   cluster: Joi.string().optional().trim().allow(''),
   warrantyStartDate: Joi.date().optional().allow(null),
   warrantyEndDate: Joi.date().optional().allow(null)

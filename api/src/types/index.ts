@@ -436,17 +436,15 @@ export interface AuthenticatedRequest extends Request {
 export interface IDGDetails extends Document {
   customer: Types.ObjectId;
   dgSerialNumbers: string;
-  alternatorMake: string;
-  alternatorSerialNumber: string;
+  alternatorMake?: string;
+  alternatorSerialNumber?: string;
   dgMake: string;
   engineSerialNumber: string;
   dgModel: string;
   dgRatingKVA: number;
-  salesDealerName: string;
+  salesDealerName?: string;
   commissioningDate: Date;
   warrantyStatus: 'warranty' | 'non_warranty';
-  installationType: 'infold' | 'outfold';
-  amcStatus: 'yes' | 'no';
   cluster: string;
   locationAddressId?: number;
   locationAddress?: string;

@@ -14,13 +14,13 @@ const dgDetailsSchema = new Schema({
   },
   alternatorMake: {
     type: String,
-    required: [true, 'Alternator make is required'],
+    required: false,
     trim: true,
     maxlength: [100, 'Alternator make cannot exceed 100 characters']
   },
   alternatorSerialNumber: {
     type: String,
-    required: [true, 'Alternator serial number is required'],
+    required: false,
     trim: true,
     maxlength: [100, 'Alternator serial number cannot exceed 100 characters']
   },
@@ -49,7 +49,7 @@ const dgDetailsSchema = new Schema({
   },
   salesDealerName: {
     type: String,
-    required: [true, 'Sales dealer name is required'],
+    required: false,
     trim: true,
     maxlength: [200, 'Sales dealer name cannot exceed 200 characters']
   },
@@ -61,16 +61,6 @@ const dgDetailsSchema = new Schema({
     type: String,
     enum: ['warranty', 'non_warranty'],
     required: [true, 'Warranty status is required']
-  },
-  installationType: {
-    type: String,
-    enum: ['infold', 'outfold'],
-    required: [true, 'Installation type is required']
-  },
-  amcStatus: {
-    type: String,
-    enum: ['yes', 'no'],
-    required: [true, 'AMC status is required']
   },
   cluster: {
     type: String,
@@ -108,7 +98,6 @@ dgDetailsSchema.index({ dgSerialNumbers: 1 });
 dgDetailsSchema.index({ dgMake: 1 });
 dgDetailsSchema.index({ dgModel: 1 });
 dgDetailsSchema.index({ commissioningDate: 1 });
-dgDetailsSchema.index({ amcStatus: 1 });
 dgDetailsSchema.index({ warrantyStatus: 1 });
 
 // Compound index for customer and DG serial numbers
