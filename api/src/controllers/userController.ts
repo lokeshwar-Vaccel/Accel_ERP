@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { User } from '../models/User';
 import { TransactionCounter } from '../models/TransactionCounter';
-import { AuthenticatedRequest, APIResponse, UserRole, UserStatus, QueryParams } from '../types';
+import { AuthenticatedRequest, APIResponse, UserRole, UserStatus, UserDepartment, QueryParams } from '../types';
 import { AppError } from '../middleware/errorHandler';
 
 // Utility to generate unique sales employee code
@@ -91,6 +91,7 @@ export const getUsers = async (
           email: user.email,
           role: user.role,
           status: user.status,
+          department: user.department,
           phone: user.phone,
           moduleAccess: user.moduleAccess,
           lastLoginAt: user.lastLoginAt,
@@ -140,6 +141,7 @@ export const getUser = async (
           email: user.email,
           role: user.role,
           status: user.status,
+          department: user.department,
           phone: user.phone,
           address: user.address,
           moduleAccess: user.moduleAccess,
@@ -167,7 +169,7 @@ export const createUser = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { firstName, lastName, email, password, role, phone, address, moduleAccess } = req.body;
+    const { firstName, lastName, email, password, role, department, phone, address, moduleAccess } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
@@ -212,6 +214,7 @@ export const createUser = async (
       email,
       password,
       role: role || UserRole.VIEWER,
+      department,
       phone,
       address,
       salesEmployeeCode,
@@ -230,6 +233,7 @@ export const createUser = async (
           email: user.email,
           role: user.role,
           status: user.status,
+          department: user.department,
           salesEmployeeCode: user.salesEmployeeCode,
           moduleAccess: user.moduleAccess
         }
@@ -251,7 +255,7 @@ export const updateUser = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { firstName, lastName, phone, address, role, status, moduleAccess } = req.body;
+    const { firstName, lastName, phone, address, role, department, status, moduleAccess } = req.body;
 
     const user = await User.findById(req.params.id);
     if (!user) {
@@ -306,6 +310,7 @@ export const updateUser = async (
     if (lastName) user.lastName = lastName;
     if (phone) user.phone = phone;
     if (address) user.address = address;
+    if (department) user.department = department;
     if (status) user.status = status;
     if (moduleAccess) user.moduleAccess = moduleAccess;
 
@@ -322,6 +327,7 @@ export const updateUser = async (
           email: user.email,
           role: user.role,
           status: user.status,
+          department: user.department,
           phone: user.phone,
           address: user.address,
           salesEmployeeCode: user.salesEmployeeCode,
