@@ -97,8 +97,6 @@ export interface IQuotation extends Document {
   paidAmount: number;
   remainingAmount: number;
   paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
-  paymentMethod?: string;
-  paymentDate?: Date;
   status?: 'draft' | 'sent' | 'accepted' | 'rejected' | 'expired';
 }
 
@@ -230,11 +228,6 @@ const QuotationSchema = new Schema<IQuotation>({
     enum: ['pending', 'partial', 'paid', 'failed'], 
     default: 'pending' 
   },
-  paymentMethod: { 
-    type: String,
-    enum: ['cash', 'cheque', 'bank_transfer', 'upi', 'card', 'razorpay', 'other']
-  },
-  paymentDate: { type: Date },
   status: { 
     type: String, 
     enum: ['draft', 'sent', 'accepted', 'rejected', 'expired'], 
@@ -245,6 +238,26 @@ const QuotationSchema = new Schema<IQuotation>({
 // Pre-save middleware to calculate all required fields
 QuotationSchema.pre('save', function(next) {
   const doc = this as any; // Type assertion to access dynamic properties
+  
+  // Only recalculate if the values haven't been set by QuotationService
+  // Check if grandTotal is already calculated (indicates QuotationService has run)
+  if (doc.grandTotal !== undefined && doc.grandTotal !== null) {
+    // Values are already calculated by QuotationService, just ensure remaining amount and payment status
+    if (!doc.paidAmount) doc.paidAmount = 0;
+    doc.remainingAmount = Math.max(0, Math.round((doc.grandTotal - doc.paidAmount) * 100) / 100);
+
+    // --- Auto set paymentStatus based on amounts ---
+    if (doc.paidAmount === 0) {
+      doc.paymentStatus = 'pending';
+    } else if (doc.paidAmount < doc.grandTotal) {
+      doc.paymentStatus = 'partial';
+    } else if (doc.paidAmount >= doc.grandTotal) {
+      doc.paymentStatus = 'paid';
+    }
+    
+    next();
+    return;
+  }
   
   // --- Service Charges calculation ---
   if (doc.serviceCharges && doc.serviceCharges.length > 0) {
@@ -266,23 +279,18 @@ QuotationSchema.pre('save', function(next) {
     const itemSubtotal = doc.batteryBuyBack.quantity * doc.batteryBuyBack.unitPrice;
     const discountAmount = (doc.batteryBuyBack.discount / 100) * itemSubtotal;
     const discountedAmount = itemSubtotal - discountAmount;
-    const taxAmount = (doc.batteryBuyBack.taxRate / 100) * discountedAmount;
-    const totalPrice = discountedAmount + taxAmount;
+    const taxAmount = 0; // No GST for battery buy back
+    const totalPrice = discountedAmount; // No GST added
     
     doc.batteryBuyBack.discountedAmount = Math.round(discountAmount * 100) / 100;
-    doc.batteryBuyBack.taxAmount = Math.round(taxAmount * 100) / 100;
+    doc.batteryBuyBack.taxAmount = 0; // No GST for battery buy back
     doc.batteryBuyBack.totalPrice = Math.round(totalPrice * 100) / 100;
   }
 
   // --- Overall Discount calculation ---
   if (doc.overallDiscount && doc.overallDiscount > 0) {
-    let grandTotalBeforeOverallDiscount = doc.subtotal + doc.totalTax - doc.totalDiscount;
-
-    if (doc.serviceCharges && doc.serviceCharges.length > 0) {
-      doc.serviceCharges.forEach((service: any) => {
-        grandTotalBeforeOverallDiscount += service.totalPrice;
-      });
-    }
+    // Use the grand total before overall discount that was calculated by QuotationService
+    let grandTotalBeforeOverallDiscount = doc.subtotal - doc.totalDiscount + doc.totalTax;
     
     doc.overallDiscountAmount =
       Math.round((doc.overallDiscount / 100) * grandTotalBeforeOverallDiscount * 100) / 100;
@@ -291,13 +299,8 @@ QuotationSchema.pre('save', function(next) {
   }
 
   // --- Grand Total calculation ---
-  let grandTotal = doc.subtotal + doc.totalTax - doc.totalDiscount;
-
-  if (doc.serviceCharges && doc.serviceCharges.length > 0) {
-    doc.serviceCharges.forEach((service: any) => {
-      grandTotal += service.totalPrice;
-    });
-  }
+  // Use the values already calculated by QuotationService
+  let grandTotal = doc.subtotal - doc.totalDiscount + doc.totalTax;
 
   if (doc.overallDiscountAmount && doc.overallDiscountAmount > 0) {
     grandTotal -= doc.overallDiscountAmount;
@@ -307,6 +310,8 @@ QuotationSchema.pre('save', function(next) {
     grandTotal -= doc.batteryBuyBack.totalPrice;
   }
 
+  console.log("____step 3", grandTotal);
+  
   doc.grandTotal = Math.round(grandTotal * 100) / 100;
 
   // --- Remaining Amount calculation ---

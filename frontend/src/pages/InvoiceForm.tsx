@@ -3974,9 +3974,9 @@ const InvoiceFormPage: React.FC = () => {
                           type="number"
                           min="0"
                           step="1"
-                          value={item.quantity}
+                          value={item.quantity || ''}
                           onChange={(e) => {
-                            let newQuantity = parseFloat(e.target.value) || 0;
+                            let newQuantity = parseFloat(e.target.value) || '' || 0;
 
                             if (item.product && productStockCache[item.product]) {
                               const stockInfo = productStockCache[item.product];
@@ -4017,7 +4017,7 @@ const InvoiceFormPage: React.FC = () => {
                                 : ''
                           ) : ''
                             }`}
-                          placeholder="1.00"
+                          placeholder="0"
                           title={
                             item.product && productStockCache[item.product]?.available === 0
                               ? isDeliveryChallan
@@ -4303,7 +4303,7 @@ const InvoiceFormPage: React.FC = () => {
                           type="number"
                           min="1"
                           step="1"
-                          value={service.quantity}
+                          value={service.quantity || ''}
                           onChange={(e) => {
                             const newServiceCharges = [...(formData.serviceCharges || [])];
                             const quantity = parseFloat(e.target.value) || 1;
@@ -4354,7 +4354,7 @@ const InvoiceFormPage: React.FC = () => {
                           type="number"
                           min="0"
                           step="0.01"
-                          value={service.unitPrice}
+                          value={service.unitPrice || ''}
                           onChange={(e) => {
                             const newServiceCharges = [...(formData.serviceCharges || [])];
                             const unitPrice = parseFloat(e.target.value) || 0;
@@ -4406,7 +4406,7 @@ const InvoiceFormPage: React.FC = () => {
                           min="0"
                           max="100"
                           step="0.01"
-                          value={service.discount}
+                          value={service.discount || ''}
                           onChange={(e) => {
                             const newServiceCharges = [...(formData.serviceCharges || [])];
                             const discount = parseFloat(e.target.value) || 0;
@@ -4458,7 +4458,7 @@ const InvoiceFormPage: React.FC = () => {
                           min="0"
                           max="100"
                           step="0.01"
-                          value={service.taxRate}
+                          value={service.taxRate || ''}
                           onChange={(e) => {
                             const newServiceCharges = [...(formData.serviceCharges || [])];
                             const taxRate = parseFloat(e.target.value) || 0;
@@ -4674,7 +4674,7 @@ const InvoiceFormPage: React.FC = () => {
                           type="number"
                           min="1"
                           step="1"
-                          value={formData.batteryBuyBack.quantity}
+                          value={formData.batteryBuyBack.quantity || ''}
                           onChange={(e) => {
                             setFormData(prev => {
                               const quantity = parseFloat(e.target.value) || 1;
@@ -4725,7 +4725,7 @@ const InvoiceFormPage: React.FC = () => {
                           type="number"
                           min="0"
                           step="0.01"
-                          value={formData.batteryBuyBack.unitPrice}
+                          value={formData.batteryBuyBack.unitPrice || ''}
                           onChange={(e) => {
                             setFormData(prev => {
                               const unitPrice = parseFloat(e.target.value) || 0;
@@ -4777,7 +4777,7 @@ const InvoiceFormPage: React.FC = () => {
                           min="0"
                           max="100"
                           step="0.01"
-                          value={formData.batteryBuyBack.discount}
+                          value={formData.batteryBuyBack.discount || ''}
                           onChange={(e) => {
                             setFormData(prev => {
                               const discount = parseFloat(e.target.value) || 0;
@@ -5075,12 +5075,12 @@ const InvoiceFormPage: React.FC = () => {
                   <span className="text-gray-600">Total Discount:</span>
                   <span className="font-medium text-green-600">-₹{formData.totalDiscount?.toFixed(2) || '0.00'}</span>
                 </div>
-                {isSalesInvoice && (
+                {/* {isSalesInvoice && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Overall Discount:</span>
                     <span className="font-medium text-green-600">-{formData.overallDiscount || 0}% (-₹{formData.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
                   </div>
-                )}
+                )} */}
                 <div className="flex justify-between font-bold text-lg border-t pt-3">
                   <span>Grand Total:</span>
                   <span className="text-blue-600">₹{formData.grandTotal?.toFixed(2) || '0.00'}</span>

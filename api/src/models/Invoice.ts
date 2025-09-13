@@ -61,8 +61,6 @@ export interface IInvoice extends mongoose.Document {
   remainingAmount: number; // Calculated: totalAmount - paidAmount
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
-  paymentMethod?: string;
-  paymentDate?: Date;
   notes?: string;
   terms?: string;
   invoiceType: 'sale' | 'purchase' | 'challan' | 'quotation' ;
@@ -316,14 +314,9 @@ const invoiceSchema = new Schema<IInvoice>({
   },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'partial', 'paid', 'failed'],
+    enum: ['pending', 'partial', 'paid', 'gst_pending'],
     default: 'pending'
   },
-  paymentMethod: {
-    type: String,
-    enum: ['cash', 'cheque', 'bank_transfer', 'upi', 'card', 'razorpay', 'other']
-  },
-  paymentDate: Date,
   notes: {
     type: String,
     trim: true

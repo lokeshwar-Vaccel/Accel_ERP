@@ -622,7 +622,7 @@ export const getDefaultQuotationData = (): Partial<QuotationData> => ({
     unitPrice: 0,
     discount: 0,
     discountedAmount: 0,
-    taxRate: 18, // Default GST rate
+    taxRate: 0, // No GST for battery buy back
     taxAmount: 0,
     totalPrice: 0,
     uom: 'nos'

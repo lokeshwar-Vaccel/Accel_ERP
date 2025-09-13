@@ -171,10 +171,7 @@ export const processEmailPayment = async (
       freshInvoice.paymentStatus = 'partial';
     }
 
-    // Add payment method if not set
-    if (!freshInvoice.paymentMethod) {
-      freshInvoice.paymentMethod = paymentMethod || 'razorpay';
-    }
+    // Payment method is now handled in separate InvoicePayment records
 
     await freshInvoice.save();
 

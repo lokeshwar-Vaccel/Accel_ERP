@@ -29,7 +29,8 @@ import {
   Receipt,
   Calculator,
   Battery,
-  Trash2
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -672,6 +673,14 @@ interface PaymentUpdate {
   useRazorpay?: boolean;
   razorpayOrderId?: string;
   paymentId?: string;
+  paymentMethodDetails?: {
+    cash?: { receivedBy?: string; receiptNumber?: string };
+    cheque?: { chequeNumber: string; bankName: string; branchName?: string; issueDate: Date; clearanceDate?: Date; accountHolderName?: string; accountNumber?: string; ifscCode?: string };
+    bankTransfer?: { bankName: string; branchName?: string; accountNumber: string; ifscCode: string; transactionId: string; transferDate: Date; accountHolderName?: string; referenceNumber?: string };
+    upi?: { upiId: string; transactionId: string; transactionReference?: string; payerName?: string; payerPhone?: string };
+    card?: { cardType: 'credit' | 'debit' | 'prepaid'; cardNetwork: 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other'; lastFourDigits: string; transactionId: string; authorizationCode?: string; cardHolderName?: string };
+    other?: { methodName: string; referenceNumber?: string; additionalDetails?: Record<string, any> };
+  };
 }
 
 // Add advance payment fields to the quotation interface
@@ -860,7 +869,15 @@ const InvoiceManagement: React.FC = () => {
     paymentDate: '',
     paidAmount: 0,
     notes: '',
-    useRazorpay: false
+    useRazorpay: false,
+    paymentMethodDetails: {
+      cash: { receivedBy: '', receiptNumber: '' },
+      cheque: { chequeNumber: '', bankName: '', issueDate: new Date() },
+      bankTransfer: { bankName: '', accountNumber: '', ifscCode: '', transactionId: '', transferDate: new Date() },
+      upi: { upiId: '', transactionId: '' },
+      card: { cardType: 'credit', cardNetwork: 'visa', lastFourDigits: '', transactionId: '' },
+      other: { methodName: '' }
+    }
   });
 
   // Form states
@@ -954,6 +971,10 @@ const InvoiceManagement: React.FC = () => {
   // Quotation-specific state
   const [selectedQuotation, setSelectedQuotation] = useState<any | null>(null);
   const [showQuotationViewModal, setShowQuotationViewModal] = useState(false);
+  const [quotationPaymentHistory, setQuotationPaymentHistory] = useState<any[]>([]);
+  const [loadingQuotationPayments, setLoadingQuotationPayments] = useState(false);
+  const [invoicePaymentHistory, setInvoicePaymentHistory] = useState<any[]>([]);
+  const [loadingInvoicePayments, setLoadingInvoicePayments] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [confirmationData, setConfirmationData] = useState<{
     title: string;
@@ -961,6 +982,8 @@ const InvoiceManagement: React.FC = () => {
     onConfirm: () => void;
     type: 'danger' | 'warning' | 'info';
   } | null>(null);
+
+  
 
   // Old advance payment states removed - now using unified UpdatePaymentModal
   const [showAdvancePaymentModal, setShowAdvancePaymentModal] = useState(false);
@@ -1243,6 +1266,8 @@ const InvoiceManagement: React.FC = () => {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+
 
   // 🚀 KEYBOARD SHORTCUTS FOR QUICK INVOICE CREATION
   useEffect(() => {
@@ -1735,6 +1760,7 @@ const InvoiceManagement: React.FC = () => {
     setSelectedInvoice(invoice);
     setOriginalInvoiceData(JSON.parse(JSON.stringify(invoice))); // Deep copy for backup
     setShowViewModal(true);
+    fetchInvoicePaymentHistory(invoice._id);
   };
 
   const handleEditInvoice = (invoice: Invoice) => {
@@ -1938,6 +1964,405 @@ const InvoiceManagement: React.FC = () => {
 
     setSelectedQuotation(quotation);
     setShowQuotationViewModal(true);
+    // Fetch payment history when opening quotation view modal
+    fetchQuotationPaymentHistory(quotation._id);
+  };
+
+  // Fetch payment history for a quotation
+  const fetchQuotationPaymentHistory = async (quotationId: string) => {
+    try {
+      setLoadingQuotationPayments(true);
+      const response = await apiClient.quotationPayments.getByQuotation(quotationId);
+      if (response.success) {
+        setQuotationPaymentHistory(response.data.payments || []);
+      }
+    } catch (error) {
+      console.error('Error fetching quotation payment history:', error);
+      toast.error('Failed to fetch payment history');
+    } finally {
+      setLoadingQuotationPayments(false);
+    }
+  };
+
+  // Helper function to handle PDF generation for quotation payments
+  const handleGenerateQuotationPaymentPDF = async (paymentId: string) => {
+    try {
+      const response = await apiClient.quotationPayments.generatePDF(paymentId);
+
+      // Create blob URL and trigger download
+      const blob = new Blob([response], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `quotation-payment-receipt-${paymentId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Payment receipt PDF generated successfully!');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF');
+    }
+  };
+  // Fetch payment history for an invoice
+  const fetchInvoicePaymentHistory = async (invoiceId: string) => {
+    try {
+      setLoadingInvoicePayments(true);
+      const response = await apiClient.invoicePayments.getByInvoice(invoiceId);
+      if (response.success) {
+        setInvoicePaymentHistory(response.data as any || response.data?.payments || []);
+      }
+    } catch (error) {
+      console.error('Error fetching invoice payment history:', error);
+      toast.error('Failed to fetch payment history');
+    } finally {
+      setLoadingInvoicePayments(false);
+    }
+  };
+
+  // Helper function to handle PDF generation for invoice payments
+  const handleGenerateInvoicePaymentPDF = async (paymentId: string) => {
+    try {
+      const response = await apiClient.invoicePayments.generatePDF(paymentId);
+
+      // Create blob URL and trigger download
+      const blob = new Blob([response], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `invoice-payment-receipt-${paymentId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Payment receipt PDF generated successfully!');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF');
+    }
+  };
+
+  // Helper function to render quotation payment history
+  const renderQuotationPaymentHistory = () => {
+    if (loadingQuotationPayments) {
+      return (
+        <div className="flex items-center justify-center py-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-sm text-gray-600">Loading payment history...</span>
+        </div>
+      );
+    }
+
+    if (quotationPaymentHistory.length === 0) {
+      return (
+        <div className="text-center py-4 text-gray-500">
+          <p className="text-sm">No payment records found</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {quotationPaymentHistory.map((payment, index) => (
+          <div key={payment._id || index} className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-3">
+                <div className={`w-3 h-3 rounded-full ${payment.paymentStatus === 'completed' ? 'bg-green-500' :
+                    payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
+                      payment.paymentStatus === 'failed' ? 'bg-red-500' :
+                        'bg-gray-500'
+                  }`}></div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900">
+                    {getPaymentMethodLabel(payment.paymentMethod)} Payment
+                  </h4>
+                  <p className="text-xs text-gray-500">
+                    {formatDate(payment.paymentDate)} • {payment.paymentStatus}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-green-600">
+                    {formatCurrency(payment.amount)}
+                  </p>
+                  {payment.receiptNumber && (
+                    <p className="text-xs text-gray-500">Receipt: {payment.receiptNumber}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleGenerateQuotationPaymentPDF(payment._id)}
+                  className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
+                  title="Generate PDF Receipt"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>PDF</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Payment Method Details */}
+            {payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {renderQuotationPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails)}
+                </div>
+              </div>
+            )}
+
+            {/* Payment Notes */}
+            {payment.notes && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-gray-600">
+                  <span className="font-medium">Notes:</span> {payment.notes}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Helper function to render invoice payment history
+  const renderInvoicePaymentHistory = () => {
+    if (loadingInvoicePayments) {
+      return (
+        <div className="flex items-center justify-center py-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-sm text-gray-600">Loading payment history...</span>
+        </div>
+      );
+    }
+
+    if (invoicePaymentHistory.length === 0) {
+      return (
+        <div className="text-center py-4 text-gray-500">
+          <p className="text-sm">No payment records found</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {invoicePaymentHistory.map((payment, index) => (
+          <div key={payment._id || index} className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-3">
+                <div className={`w-3 h-3 rounded-full ${payment.paymentStatus === 'completed' ? 'bg-green-500' :
+                    payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
+                      payment.paymentStatus === 'failed' ? 'bg-red-500' :
+                        'bg-gray-500'
+                  }`}></div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900">
+                    {getPaymentMethodLabel(payment.paymentMethod)} Payment
+                  </h4>
+                  <p className="text-xs text-gray-500">
+                    {formatDate(payment.paymentDate)} • {payment.paymentStatus}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-green-600">
+                    {formatCurrency(payment.amount)}
+                  </p>
+                  {payment.receiptNumber && (
+                    <p className="text-xs text-gray-500">Receipt: {payment.receiptNumber}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleGenerateInvoicePaymentPDF(payment._id)}
+                  className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
+                  title="Generate PDF Receipt"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>PDF</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Payment Method Details */}
+            {payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {renderQuotationPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails)}
+                </div>
+              </div>
+            )}
+
+            {/* Payment Notes */}
+            {payment.notes && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-gray-600">
+                  <span className="font-medium">Notes:</span> {payment.notes}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Helper function to render payment method details for quotations
+  const renderQuotationPaymentMethodDetails = (paymentMethod: string, details: any) => {
+    switch (paymentMethod) {
+      case 'cash':
+        return (
+          <>
+            {details.cash?.receivedBy && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Received By:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cash.receivedBy}</span>
+              </div>
+            )}
+            {details.cash?.receiptNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Receipt Number:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cash.receiptNumber}</span>
+              </div>
+            )}
+          </>
+        );
+      case 'cheque':
+        return (
+          <>
+            {details.cheque?.chequeNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Cheque Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.cheque.chequeNumber}</span>
+              </div>
+            )}
+            {details.cheque?.bankName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Bank Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cheque.bankName}</span>
+              </div>
+            )}
+            {details.cheque?.issueDate && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Issue Date:</span>
+                <span className="ml-2 text-sm text-gray-900">{formatDate(details.cheque.issueDate)}</span>
+              </div>
+            )}
+            {details.cheque?.accountHolderName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Account Holder:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cheque.accountHolderName}</span>
+              </div>
+            )}
+          </>
+        );
+      case 'bank_transfer':
+        return (
+          <>
+            {details.bankTransfer?.bankName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Bank Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.bankTransfer.bankName}</span>
+              </div>
+            )}
+            {details.bankTransfer?.accountNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Account Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.bankTransfer.accountNumber}</span>
+              </div>
+            )}
+            {details.bankTransfer?.transactionId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transaction ID:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.bankTransfer.transactionId}</span>
+              </div>
+            )}
+            {details.bankTransfer?.transferDate && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transfer Date:</span>
+                <span className="ml-2 text-sm text-gray-900">{formatDate(details.bankTransfer.transferDate)}</span>
+              </div>
+            )}
+          </>
+        );
+      case 'upi':
+        return (
+          <>
+            {details.upi?.upiId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">UPI ID:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.upi.upiId}</span>
+              </div>
+            )}
+            {details.upi?.transactionId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transaction ID:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.upi.transactionId}</span>
+              </div>
+            )}
+            {details.upi?.payerName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Payer Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.upi.payerName}</span>
+              </div>
+            )}
+          </>
+        );
+      case 'card':
+        return (
+          <>
+            {details.card?.cardType && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Card Type:</span>
+                <span className="ml-2 text-sm text-gray-900 capitalize">{details.card.cardType}</span>
+              </div>
+            )}
+            {details.card?.cardNetwork && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Card Network:</span>
+                <span className="ml-2 text-sm text-gray-900 capitalize">{details.card.cardNetwork}</span>
+              </div>
+            )}
+            {details.card?.lastFourDigits && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Last 4 Digits:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">****{details.card.lastFourDigits}</span>
+              </div>
+            )}
+            {details.card?.transactionId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transaction ID:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.card.transactionId}</span>
+              </div>
+            )}
+          </>
+        );
+      case 'other':
+        return (
+          <>
+            {details.other?.methodName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Method Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.other.methodName}</span>
+              </div>
+            )}
+            {details.other?.referenceNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Reference Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.other.referenceNumber}</span>
+              </div>
+            )}
+          </>
+        );
+      default:
+        return null;
+    }
   };
 
   const handleEditQuotation = (quotation: any) => {
@@ -2350,25 +2775,133 @@ const InvoiceManagement: React.FC = () => {
     }
   };
 
+  // Validate payment method details
+  const validatePaymentMethodDetails = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    if (!paymentUpdate.paymentMethod) {
+      errors.paymentMethod = 'Payment method is required';
+      setFormErrors(prev => ({ ...prev, ...errors }));
+      return false;
+    }
+
+    const methodDetails = paymentUpdate.paymentMethodDetails;
+    
+    switch (paymentUpdate.paymentMethod) {
+      case 'cheque':
+        if (!methodDetails?.cheque?.chequeNumber?.trim()) {
+          errors.chequeNumber = 'Cheque number is required';
+        }
+        if (!methodDetails?.cheque?.bankName?.trim()) {
+          errors.bankName = 'Bank name is required';
+        }
+        if (!methodDetails?.cheque?.issueDate) {
+          errors.issueDate = 'Issue date is required';
+        }
+        break;
+        
+      case 'bank_transfer':
+        if (!methodDetails?.bankTransfer?.bankName?.trim()) {
+          errors.bankName = 'Bank name is required';
+        }
+        if (!methodDetails?.bankTransfer?.accountNumber?.trim()) {
+          errors.accountNumber = 'Account number is required';
+        }
+        if (!methodDetails?.bankTransfer?.ifscCode?.trim()) {
+          errors.ifscCode = 'IFSC code is required';
+        }
+        if (!methodDetails?.bankTransfer?.transactionId?.trim()) {
+          errors.transactionId = 'Transaction ID is required';
+        }
+        if (!methodDetails?.bankTransfer?.transferDate) {
+          errors.transferDate = 'Transfer date is required';
+        }
+        break;
+        
+      case 'upi':
+        if (!methodDetails?.upi?.upiId?.trim()) {
+          errors.upiId = 'UPI ID is required';
+        }
+        if (!methodDetails?.upi?.transactionId?.trim()) {
+          errors.transactionId = 'Transaction ID is required';
+        }
+        break;
+        
+      case 'card':
+        if (!methodDetails?.card?.cardType?.trim()) {
+          errors.cardType = 'Card type is required';
+        }
+        if (!methodDetails?.card?.cardNetwork?.trim()) {
+          errors.cardNetwork = 'Card network is required';
+        }
+        if (!methodDetails?.card?.lastFourDigits?.trim()) {
+          errors.lastFourDigits = 'Last 4 digits are required';
+        }
+        if (!methodDetails?.card?.transactionId?.trim()) {
+          errors.transactionId = 'Transaction ID is required';
+        }
+        break;
+        
+      case 'other':
+        if (!methodDetails?.other?.methodName?.trim()) {
+          errors.methodName = 'Method name is required';
+        }
+        break;
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(prev => ({ ...prev, ...errors }));
+      return false;
+    }
+    
+    return true;
+  };
+
   // Process manual payment
   const processManualPayment = async () => {
     if (!selectedInvoice) return;
 
+    // Validate payment method details
+    if (!validatePaymentMethodDetails()) {
+      return;
+    }
+
     try {
-      const response = await apiClient.payments.processManualPayment({
+      const paymentData = {
         invoiceId: selectedInvoice._id,
+        invoiceNumber: selectedInvoice.invoiceNumber,
+        customerId: selectedInvoice.customer._id || selectedInvoice.customerId,
         amount: paymentUpdate.paidAmount,
         paymentMethod: paymentUpdate.paymentMethod,
+        paymentMethodDetails: paymentUpdate.paymentMethodDetails || {},
+        paymentStatus: 'completed',
         paymentDate: paymentUpdate.paymentDate,
         notes: paymentUpdate.notes,
         currency: 'INR'
-      });
+      };
+
+      const response = await apiClient.invoicePayments.create(paymentData);
 
       if (response.success) {
         await fetchInvoices();
         await fetchStats();
         setShowPaymentModal(false);
-        setPaymentUpdate({ paymentStatus: '', paymentMethod: '', paymentDate: '', paidAmount: 0, notes: '', useRazorpay: false });
+        setPaymentUpdate({ 
+          paymentStatus: '', 
+          paymentMethod: '', 
+          paymentDate: '', 
+          paidAmount: 0, 
+          notes: '', 
+          useRazorpay: false, 
+          paymentMethodDetails: {
+            cash: { receivedBy: '', receiptNumber: '' },
+            cheque: { chequeNumber: '', bankName: '', issueDate: new Date() },
+            bankTransfer: { bankName: '', accountNumber: '', ifscCode: '', transactionId: '', transferDate: new Date() },
+            upi: { upiId: '', transactionId: '' },
+            card: { cardType: 'credit', cardNetwork: 'visa', lastFourDigits: '', transactionId: '' },
+            other: { methodName: '' }
+          }
+        });
         toast.success('Payment processed successfully!');
       } else {
         throw new Error('Failed to process payment');
@@ -3410,6 +3943,20 @@ const InvoiceManagement: React.FC = () => {
       { value: 'other', label: 'Other' }
     ];
     return options.find(opt => opt.value === value)?.label || 'Select payment method';
+  };
+
+  // Helper functions for payment history
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-IN');
   };
 
   // Add this import at the top of your file
@@ -6615,6 +7162,24 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
+              {/* Payment History */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Payment History</h3>
+                  <button
+                    onClick={() => fetchInvoicePaymentHistory(selectedInvoice._id)}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                    disabled={loadingInvoicePayments}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingInvoicePayments ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  {renderInvoicePaymentHistory()}
+                </div>
+              </div>
+
               {/* Invoice Summary */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-end">
@@ -6998,7 +7563,7 @@ const InvoiceManagement: React.FC = () => {
                           min="0"
                           max={getSelectedInvoiceRemainingPayableAmount()}
                           step="1"
-                          value={paymentUpdate.paidAmount}
+                            value={paymentUpdate.paidAmount.toFixed(2)}
                           onChange={(e) => {
                             const amount = parseFloat(e.target.value) || 0;
                             const remainingPayableAmount = getSelectedInvoiceRemainingPayableAmount();
@@ -7212,6 +7777,876 @@ const InvoiceManagement: React.FC = () => {
                           )}
                         </div>
                       </div>
+
+                      {/* Payment Method Details */}
+                      {paymentUpdate.paymentMethod && (
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                          <h4 className="text-sm font-medium text-gray-700 mb-3">Payment Method Details</h4>
+                          
+                          {paymentUpdate.paymentMethod === 'cash' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Received By</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cash?.receivedBy || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cash: { ...paymentUpdate.paymentMethodDetails?.cash, receivedBy: e.target.value }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Enter receiver name"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Receipt Number</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cash?.receiptNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cash: { ...paymentUpdate.paymentMethodDetails?.cash, receiptNumber: e.target.value }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Enter receipt number"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {paymentUpdate.paymentMethod === 'cheque' && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Cheque Number *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          cheque: { 
+                                            ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                            chequeNumber: e.target.value,
+                                            bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                            issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.chequeNumber) {
+                                        setFormErrors(prev => ({ ...prev, chequeNumber: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.chequeNumber ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter cheque number"
+                                  />
+                                  {formErrors.chequeNumber && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.chequeNumber}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Bank Name *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.bankName || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          cheque: { 
+                                            ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                            bankName: e.target.value,
+                                            chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                            issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.bankName) {
+                                        setFormErrors(prev => ({ ...prev, bankName: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.bankName ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter bank name"
+                                  />
+                                  {formErrors.bankName && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.bankName}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Issue Date *</label>
+                                  <input
+                                    type="date"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.issueDate ? new Date(paymentUpdate.paymentMethodDetails.cheque.issueDate).toISOString().split('T')[0] : ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          cheque: { 
+                                            ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                            issueDate: new Date(e.target.value),
+                                            chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                            bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.issueDate) {
+                                        setFormErrors(prev => ({ ...prev, issueDate: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.issueDate ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  {formErrors.issueDate && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.issueDate}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Branch Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.branchName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        cheque: { 
+                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          branchName: e.target.value,
+                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter branch name"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Holder Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.accountHolderName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        cheque: { 
+                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          accountHolderName: e.target.value,
+                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter account holder name"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Number</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.accountNumber || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        cheque: { 
+                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          accountNumber: e.target.value,
+                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter account number"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">IFSC Code</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.ifscCode || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        cheque: { 
+                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          ifscCode: e.target.value,
+                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter IFSC code"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Clearance Date</label>
+                                  <input
+                                    type="date"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.clearanceDate ? new Date(paymentUpdate.paymentMethodDetails.cheque.clearanceDate).toISOString().split('T')[0] : ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        cheque: { 
+                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          clearanceDate: new Date(e.target.value),
+                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {paymentUpdate.paymentMethod === 'bank_transfer' && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Bank Name *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          bankTransfer: { 
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                            bankName: e.target.value,
+                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.bankName) {
+                                        setFormErrors(prev => ({ ...prev, bankName: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.bankName ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter bank name"
+                                  />
+                                  {formErrors.bankName && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.bankName}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Number *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          bankTransfer: { 
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                            accountNumber: e.target.value,
+                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.accountNumber) {
+                                        setFormErrors(prev => ({ ...prev, accountNumber: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.accountNumber ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter account number"
+                                  />
+                                  {formErrors.accountNumber && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.accountNumber}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">IFSC Code *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          bankTransfer: { 
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                            ifscCode: e.target.value,
+                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.ifscCode) {
+                                        setFormErrors(prev => ({ ...prev, ifscCode: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.ifscCode ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter IFSC code"
+                                  />
+                                  {formErrors.ifscCode && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.ifscCode}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          bankTransfer: { 
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                            transactionId: e.target.value,
+                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.transactionId) {
+                                        setFormErrors(prev => ({ ...prev, transactionId: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter transaction ID"
+                                  />
+                                  {formErrors.transactionId && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transfer Date *</label>
+                                  <input
+                                    type="date"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate ? new Date(paymentUpdate.paymentMethodDetails.bankTransfer.transferDate).toISOString().split('T')[0] : ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          bankTransfer: {
+                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                            branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
+                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                            transferDate: new Date(e.target.value),
+                                            accountHolderName: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || '',
+                                            referenceNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.transferDate) {
+                                        setFormErrors(prev => ({ ...prev, transferDate: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.transferDate ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  {formErrors.transferDate && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.transferDate}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Branch Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        bankTransfer: { 
+                                          bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                          branchName: e.target.value,
+                                          accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                          ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                          transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date(),
+                                          accountHolderName: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || '',
+                                          referenceNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter branch name"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Holder Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        bankTransfer: { 
+                                          bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                          branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
+                                          accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                          ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                          transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date(),
+                                          accountHolderName: e.target.value,
+                                          referenceNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter account holder name"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Reference Number</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        bankTransfer: { 
+                                          bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                          branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
+                                          accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                          ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                          transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date(),
+                                          accountHolderName: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || '',
+                                          referenceNumber: e.target.value
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter reference number"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {paymentUpdate.paymentMethod === 'upi' && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">UPI ID *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.upi?.upiId || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          upi: { 
+                                            upiId: e.target.value,
+                                            transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
+                                            transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
+                                            payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
+                                            payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.upiId) {
+                                        setFormErrors(prev => ({ ...prev, upiId: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.upiId ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter UPI ID"
+                                  />
+                                  {formErrors.upiId && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.upiId}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.upi?.transactionId || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          upi: { 
+                                            upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
+                                            transactionId: e.target.value,
+                                            transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
+                                            payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
+                                            payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.transactionId) {
+                                        setFormErrors(prev => ({ ...prev, transactionId: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter transaction ID"
+                                  />
+                                  {formErrors.transactionId && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction Reference</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.upi?.transactionReference || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        upi: { 
+                                          upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
+                                          transactionReference: e.target.value,
+                                          payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
+                                          payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter transaction reference"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Payer Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.upi?.payerName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        upi: { 
+                                          upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
+                                          transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
+                                          payerName: e.target.value,
+                                          payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter payer name"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Payer Phone</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      upi: { 
+                                        upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
+                                        transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
+                                        transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
+                                        payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
+                                        payerPhone: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Enter payer phone"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {paymentUpdate.paymentMethod === 'card' && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Card Type *</label>
+                                  <select
+                                    value={paymentUpdate.paymentMethodDetails?.card?.cardType || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          card: { 
+                                            cardType: e.target.value as 'credit' | 'debit' | 'prepaid',
+                                            cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
+                                            lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
+                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
+                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.cardType) {
+                                        setFormErrors(prev => ({ ...prev, cardType: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.cardType ? 'border-red-500' : 'border-gray-300'}`}
+                                  >
+                                    <option value="">Select card type</option>
+                                    <option value="credit">Credit Card</option>
+                                    <option value="debit">Debit Card</option>
+                                    <option value="prepaid">Prepaid Card</option>
+                                  </select>
+                                  {formErrors.cardType && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.cardType}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Card Network *</label>
+                                  <select
+                                    value={paymentUpdate.paymentMethodDetails?.card?.cardNetwork || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          card: { 
+                                            cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
+                                            cardNetwork: e.target.value as 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other',
+                                            lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
+                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
+                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.cardNetwork) {
+                                        setFormErrors(prev => ({ ...prev, cardNetwork: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.cardNetwork ? 'border-red-500' : 'border-gray-300'}`}
+                                  >
+                                    <option value="">Select network</option>
+                                    <option value="visa">Visa</option>
+                                    <option value="mastercard">Mastercard</option>
+                                    <option value="amex">American Express</option>
+                                    <option value="rupay">RuPay</option>
+                                    <option value="other">Other</option>
+                                  </select>
+                                  {formErrors.cardNetwork && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.cardNetwork}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Last 4 Digits *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          card: { 
+                                            cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
+                                            cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
+                                            lastFourDigits: e.target.value,
+                                            transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
+                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
+                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.lastFourDigits) {
+                                        setFormErrors(prev => ({ ...prev, lastFourDigits: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.lastFourDigits ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter last 4 digits"
+                                    maxLength={4}
+                                  />
+                                  {formErrors.lastFourDigits && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.lastFourDigits}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.card?.transactionId || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          card: { 
+                                            cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
+                                            cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
+                                            lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                            transactionId: e.target.value,
+                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
+                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.transactionId) {
+                                        setFormErrors(prev => ({ ...prev, transactionId: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter transaction ID"
+                                  />
+                                  {formErrors.transactionId && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Card Holder Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        card: { 
+                                          cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
+                                          cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
+                                          lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
+                                          authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
+                                          cardHolderName: e.target.value
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter card holder name"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Authorization Code</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.card?.authorizationCode || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        card: { 
+                                          cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
+                                          cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
+                                          lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
+                                          authorizationCode: e.target.value,
+                                          cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter authorization code"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {paymentUpdate.paymentMethod === 'other' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Method Name *</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.other?.methodName || ''}
+                                  onChange={(e) => {
+                                    setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        other: { ...paymentUpdate.paymentMethodDetails?.other, methodName: e.target.value }
+                                      }
+                                    });
+                                    if (formErrors.methodName) {
+                                      setFormErrors(prev => ({ ...prev, methodName: '' }));
+                                    }
+                                  }}
+                                  className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.methodName ? 'border-red-500' : 'border-gray-300'}`}
+                                  placeholder="Enter payment method name"
+                                />
+                                {formErrors.methodName && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.methodName}</p>
+                                )}
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Reference Number</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.other?.referenceNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                        other: { 
+                                          methodName: paymentUpdate.paymentMethodDetails?.other?.methodName || '',
+                                          referenceNumber: e.target.value,
+                                          additionalDetails: paymentUpdate.paymentMethodDetails?.other?.additionalDetails || {}
+                                        }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Enter reference number"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Payment Date */}
                       <div>
@@ -7773,6 +9208,24 @@ const InvoiceManagement: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Payment History */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Payment History</h3>
+                  <button
+                    onClick={() => fetchQuotationPaymentHistory(selectedQuotation._id)}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                    disabled={loadingQuotationPayments}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingQuotationPayments ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  {renderQuotationPaymentHistory()}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -7801,22 +9254,27 @@ const InvoiceManagement: React.FC = () => {
         onSubmit={async (paymentData) => {
           try {
             setSubmitting(true);
-            const response = await apiClient.quotations.updatePayment(selectedQuotationForPayment!._id, {
-              paidAmount: paymentData.paidAmount,
+            const response = await apiClient.quotationPayments.create({
+              quotationId: selectedQuotationForPayment!._id,
+              quotationNumber: selectedQuotationForPayment!.quotationNumber,
+              customerId: selectedQuotationForPayment!.customer._id || selectedQuotationForPayment!.customer,
+              amount: paymentData.paidAmount,
+              currency: 'INR',
               paymentMethod: paymentData.paymentMethod,
+              paymentMethodDetails: paymentData.paymentMethodDetails,
               paymentDate: paymentData.paymentDate,
               notes: paymentData.notes
             });
 
             if (response.success) {
-              toast.success('Payment updated successfully');
+              toast.success('Payment recorded successfully');
               setShowAdvancePaymentModal(false);
               setSelectedQuotationForPayment(null);
               fetchQuotations();
             }
           } catch (error: any) {
-            console.error('Error updating payment:', error);
-            toast.error('Failed to update payment');
+            console.error('Error recording payment:', error);
+            toast.error('Failed to record payment');
           } finally {
             setSubmitting(false);
           }

@@ -120,21 +120,24 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
     }
   }, [isOpen, initialData, generalSettings, customers, locations]);
 
-  // Calculate totals whenever items change
+  // Calculate totals whenever items, service charges, battery buy back, or overall discount change
   useEffect(() => {
-    if (formData.items && formData.items.length > 0) {
-      const calculationResult = calculateQuotationTotals(formData.items);
-      setFormData(prev => ({
-        ...prev,
-        subtotal: calculationResult.subtotal,
-        totalDiscount: calculationResult.totalDiscount,
-        totalTax: calculationResult.totalTax,
-        grandTotal: calculationResult.grandTotal,
-        roundOff: calculationResult.roundOff
-        // Do NOT update items here to avoid infinite update loop
-      }));
-    }
-  }, [formData.items]);
+    const calculationResult = calculateQuotationTotals(
+      formData.items || [], 
+      formData.serviceCharges || [], 
+      formData.batteryBuyBack || null,
+      formData.overallDiscount || 0
+    );
+    setFormData(prev => ({
+      ...prev,
+      subtotal: calculationResult.subtotal,
+      totalDiscount: calculationResult.totalDiscount,
+      totalTax: calculationResult.totalTax,
+      grandTotal: calculationResult.grandTotal,
+      roundOff: calculationResult.roundOff
+      // Do NOT update items here to avoid infinite update loop
+    }));
+  }, [formData.items, formData.serviceCharges, formData.batteryBuyBack, formData.overallDiscount]);
 
   //   useEffect(() => {
   //     const handleClickOutside = (event: MouseEvent) => {
@@ -920,6 +923,697 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
             <p className="mt-1 text-sm text-red-600">{getFieldError('items.product')}</p>
           )}
 
+          {/* Service Charges Section */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-medium text-gray-900">Service Charges</h3>
+              <button
+                onClick={() => {
+                  setFormData(prev => {
+                    const newServiceCharges = [
+                      ...(prev.serviceCharges || []),
+                      {
+                        description: 'Service Charge',
+                        hsnNumber: '',
+                        quantity: 1,
+                        unitPrice: 0,
+                        discount: 0,
+                        discountedAmount: 0,
+                        taxRate: 18,
+                        taxAmount: 0,
+                        totalPrice: 0,
+                        uom: 'nos'
+                      }
+                    ];
+
+                    // Recalculate totals including new service charge
+                    const calculationResult = calculateQuotationTotals(
+                      prev.items || [],
+                      newServiceCharges,
+                      prev.batteryBuyBack || null,
+                      prev.overallDiscount || 0
+                    );
+
+                    return {
+                      ...prev,
+                      serviceCharges: newServiceCharges,
+                      subtotal: calculationResult.subtotal,
+                      totalDiscount: calculationResult.totalDiscount,
+                      totalTax: calculationResult.totalTax,
+                      grandTotal: calculationResult.grandTotal
+                    };
+                  });
+                }}
+                type="button"
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Service Charge</span>
+              </button>
+            </div>
+
+            {/* Service Charges Table */}
+            <div className="border border-gray-300 rounded-lg bg-white shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
+                  <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                    style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSN</div>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
+                    <div className="p-3 border-r border-gray-300 bg-gray-200">GST %</div>
+                    <div className="p-3 text-center bg-gray-200">Total</div>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-gray-200 min-w-[1200px]">
+                  {(formData.serviceCharges || []).map((service, index) => (
+                    <div key={index} className="grid group hover:bg-blue-50 transition-colors bg-white"
+                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
+
+                      {/* Description */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="text"
+                          value={service.description}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            newServiceCharges[index].description = e.target.value;
+                            setFormData(prev => {
+                              const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                newServiceCharges,
+                                updatedData.batteryBuyBack || null,
+                                updatedData.overallDiscount || 0
+                              );
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                          placeholder="Service description..."
+                        />
+                      </div>
+
+                      {/* HSN */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="text"
+                          value={service.hsnNumber || ''}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            newServiceCharges[index].hsnNumber = e.target.value;
+                            setFormData(prev => ({ ...prev, serviceCharges: newServiceCharges }));
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                          placeholder="HSN Code"
+                        />
+                      </div>
+
+                      {/* Quantity */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={service.quantity}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            const quantity = parseFloat(e.target.value) || 0;
+                            const unitPrice = newServiceCharges[index].unitPrice || 0;
+                            const discount = newServiceCharges[index].discount || 0;
+                            const taxRate = newServiceCharges[index].taxRate || 18;
+
+                            const itemSubtotal = quantity * unitPrice;
+                            const discountAmount = (discount / 100) * itemSubtotal;
+                            const discountedAmount = itemSubtotal - discountAmount;
+                            const taxAmount = (taxRate / 100) * discountedAmount;
+                            const totalPrice = discountedAmount + taxAmount;
+
+                            newServiceCharges[index] = {
+                              ...newServiceCharges[index],
+                              quantity,
+                              discountedAmount: Math.round(discountAmount * 100) / 100,
+                              taxAmount: Math.round(taxAmount * 100) / 100,
+                              totalPrice: Math.round(totalPrice * 100) / 100
+                            };
+
+                            setFormData(prev => {
+                              const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                newServiceCharges,
+                                updatedData.batteryBuyBack || null,
+                                updatedData.overallDiscount || 0
+                              );
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                          placeholder="1"
+                        />
+                      </div>
+
+                      {/* Unit Price */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={service.unitPrice}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            const unitPrice = parseFloat(e.target.value) || 0;
+                            const quantity = newServiceCharges[index].quantity || 0;
+                            const discount = newServiceCharges[index].discount || 0;
+                            const taxRate = newServiceCharges[index].taxRate || 18;
+
+                            const itemSubtotal = quantity * unitPrice;
+                            const discountAmount = (discount / 100) * itemSubtotal;
+                            const discountedAmount = itemSubtotal - discountAmount;
+                            const taxAmount = (taxRate / 100) * discountedAmount;
+                            const totalPrice = discountedAmount + taxAmount;
+
+                            newServiceCharges[index] = {
+                              ...newServiceCharges[index],
+                              unitPrice,
+                              discountedAmount: Math.round(discountAmount * 100) / 100,
+                              taxAmount: Math.round(taxAmount * 100) / 100,
+                              totalPrice: Math.round(totalPrice * 100) / 100
+                            };
+
+                            setFormData(prev => {
+                              const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                newServiceCharges,
+                                updatedData.batteryBuyBack || null,
+                                updatedData.overallDiscount || 0
+                              );
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                          placeholder="0.00"
+                        />
+                      </div>
+
+                      {/* Discount */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={service.discount}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            const discount = parseFloat(e.target.value) || 0;
+                            const quantity = newServiceCharges[index].quantity || 0;
+                            const unitPrice = newServiceCharges[index].unitPrice || 0;
+                            const taxRate = newServiceCharges[index].taxRate || 18;
+
+                            const itemSubtotal = quantity * unitPrice;
+                            const discountAmount = (discount / 100) * itemSubtotal;
+                            const discountedAmount = itemSubtotal - discountAmount;
+                            const taxAmount = (taxRate / 100) * discountedAmount;
+                            const totalPrice = discountedAmount + taxAmount;
+
+                            newServiceCharges[index] = {
+                              ...newServiceCharges[index],
+                              discount,
+                              discountedAmount: Math.round(discountAmount * 100) / 100,
+                              taxAmount: Math.round(taxAmount * 100) / 100,
+                              totalPrice: Math.round(totalPrice * 100) / 100
+                            };
+
+                            setFormData(prev => {
+                              const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                newServiceCharges,
+                                updatedData.batteryBuyBack || null,
+                                updatedData.overallDiscount || 0
+                              );
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                          placeholder="0.00"
+                        />
+                      </div>
+
+                      {/* GST */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={service.taxRate}
+                          onChange={(e) => {
+                            const newServiceCharges = [...(formData.serviceCharges || [])];
+                            const taxRate = parseFloat(e.target.value) || 0;
+                            const quantity = newServiceCharges[index].quantity || 0;
+                            const unitPrice = newServiceCharges[index].unitPrice || 0;
+                            const discount = newServiceCharges[index].discount || 0;
+
+                            const itemSubtotal = quantity * unitPrice;
+                            const discountAmount = (discount / 100) * itemSubtotal;
+                            const discountedAmount = itemSubtotal - discountAmount;
+                            const taxAmount = (taxRate / 100) * discountedAmount;
+                            const totalPrice = discountedAmount + taxAmount;
+
+                            newServiceCharges[index] = {
+                              ...newServiceCharges[index],
+                              taxRate,
+                              discountedAmount: Math.round(discountAmount * 100) / 100,
+                              taxAmount: Math.round(taxAmount * 100) / 100,
+                              totalPrice: Math.round(totalPrice * 100) / 100
+                            };
+
+                            setFormData(prev => {
+                              const updatedData = { ...prev, serviceCharges: newServiceCharges };
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                newServiceCharges,
+                                updatedData.batteryBuyBack || null,
+                                updatedData.overallDiscount || 0
+                              );
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                          placeholder="18.00"
+                        />
+                      </div>
+
+                      {/* Total */}
+                      <div className="p-2 text-center">
+                        <div className="text-sm font-bold text-blue-600">
+                          ₹{((service.quantity * service.unitPrice) * (1 - service.discount / 100) * (1 + service.taxRate / 100)).toFixed(2)}
+                        </div>
+                        <button
+                          onClick={() => {
+                            const newServiceCharges = (formData.serviceCharges || []).filter((_, i) => i !== index);
+                            setFormData(prev => {
+                              const calculationResult = calculateQuotationTotals(
+                                prev.items || [],
+                                newServiceCharges,
+                                prev.batteryBuyBack || null,
+                                prev.overallDiscount || 0
+                              );
+
+                              return {
+                                ...prev,
+                                serviceCharges: newServiceCharges,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="mt-1 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Remove this service charge"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Battery Buy Back Section */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-medium text-gray-900">Battery Buy Back (Deduction from Total)</h3>
+              <button
+                onClick={() => {
+                  setFormData(prev => {
+                    const newBatteryBuyBack = {
+                      description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                      hsnNumber: prev.batteryBuyBack?.hsnNumber || '',
+                      quantity: 1,
+                      unitPrice: 0,
+                      discount: 0,
+                      discountedAmount: 0,
+                      taxRate: 0, // No GST for battery buy back
+                      taxAmount: 0,
+                      totalPrice: 0,
+                      uom: 'nos'
+                    };
+                    
+                    // Recalculate totals including battery buy back
+                    const calculationResult = calculateQuotationTotals(
+                      prev.items || [],
+                      prev.serviceCharges || [],
+                      newBatteryBuyBack,
+                      prev.overallDiscount || 0
+                    );
+                    
+                    return {
+                      ...prev,
+                      batteryBuyBack: newBatteryBuyBack,
+                      subtotal: calculationResult.subtotal,
+                      totalDiscount: calculationResult.totalDiscount,
+                      totalTax: calculationResult.totalTax,
+                      grandTotal: calculationResult.grandTotal
+                    };
+                  });
+                }}
+                type="button"
+                className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors text-sm flex items-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Add Battery Buy Back</span>
+              </button>
+            </div>
+
+            {/* Battery Buy Back Table */}
+            {formData.batteryBuyBack && (
+              <div className="border border-gray-300 rounded-lg bg-white shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
+                    <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
+                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">HSN</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
+                      <div className="p-3 border-r border-gray-300 bg-gray-200">GST %</div>
+                      <div className="p-3 text-center bg-gray-200">Total</div>
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-gray-200 min-w-[1200px]">
+                    <div className="grid group hover:bg-blue-50 transition-colors bg-white"
+                      style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
+
+                      {/* Description */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="text"
+                          value={formData.batteryBuyBack.description}
+                          onChange={(e) => {
+                            setFormData(prev => {
+                              const updatedData = {
+                                ...prev,
+                                batteryBuyBack: {
+                                  description: e.target.value,
+                                  hsnNumber: prev.batteryBuyBack?.hsnNumber || '',
+                                  quantity: prev.batteryBuyBack?.quantity || 0,
+                                  unitPrice: prev.batteryBuyBack?.unitPrice || 0,
+                                  discount: prev.batteryBuyBack?.discount || 0,
+                                  discountedAmount: 0,
+                                  taxRate: 0,
+                                  taxAmount: 0,
+                                  totalPrice: 0,
+                                  uom: 'nos'
+                                }
+                              };
+
+                              // Recalculate totals including battery buy back
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                updatedData.serviceCharges || [],
+                                updatedData.batteryBuyBack,
+                                updatedData.overallDiscount || 0
+                              );
+
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                          placeholder="Battery Buy Back"
+                        />
+                      </div>
+
+                      {/* HSN */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="text"
+                          value={formData.batteryBuyBack.hsnNumber || ''}
+                          onChange={(e) => {
+                            setFormData(prev => ({
+                              ...prev,
+                              batteryBuyBack: {
+                                ...prev.batteryBuyBack!,
+                                hsnNumber: e.target.value
+                              }
+                            }));
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50 focus:ring-1 focus:ring-blue-500"
+                          placeholder="HSN Code"
+                        />
+                      </div>
+
+                      {/* Quantity */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={formData.batteryBuyBack.quantity}
+                          onChange={(e) => {
+                            const quantity = parseFloat(e.target.value) || 0;
+                            const unitPrice = formData.batteryBuyBack?.unitPrice || 0;
+                            const discount = formData.batteryBuyBack?.discount || 0;
+
+                            setFormData(prev => {
+                              const updatedData = {
+                                ...prev,
+                                batteryBuyBack: {
+                                  description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                                  hsnNumber: prev.batteryBuyBack?.hsnNumber || '',
+                                  quantity,
+                                  unitPrice,
+                                  discount,
+                                  discountedAmount: 0,
+                                  taxRate: 0,
+                                  taxAmount: 0,
+                                  totalPrice: 0,
+                                  uom: 'nos'
+                                }
+                              };
+
+                              // Recalculate totals including battery buy back
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                updatedData.serviceCharges || [],
+                                updatedData.batteryBuyBack,
+                                updatedData.overallDiscount || 0
+                              );
+
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                          placeholder="1"
+                        />
+                      </div>
+
+                      {/* Unit Price */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={formData.batteryBuyBack.unitPrice}
+                          onChange={(e) => {
+                            const unitPrice = parseFloat(e.target.value) || 0;
+                            const quantity = formData.batteryBuyBack?.quantity || 0;
+                            const discount = formData.batteryBuyBack?.discount || 0;
+
+                            setFormData(prev => {
+                              const updatedData = {
+                                ...prev,
+                                batteryBuyBack: {
+                                  description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                                  hsnNumber: prev.batteryBuyBack?.hsnNumber || '',
+                                  quantity,
+                                  unitPrice,
+                                  discount,
+                                  discountedAmount: 0,
+                                  taxRate: 0,
+                                  taxAmount: 0,
+                                  totalPrice: 0,
+                                  uom: 'nos'
+                                }
+                              };
+
+                              // Recalculate totals including battery buy back
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                updatedData.serviceCharges || [],
+                                updatedData.batteryBuyBack,
+                                updatedData.overallDiscount || 0
+                              );
+
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                          placeholder="0.00"
+                        />
+                      </div>
+
+                      {/* Discount */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          step="1"
+                          value={formData.batteryBuyBack.discount}
+                          onChange={(e) => {
+                            const discount = parseFloat(e.target.value) || 0;
+                            const unitPrice = formData.batteryBuyBack?.unitPrice || 0;
+                            const quantity = formData.batteryBuyBack?.quantity || 0;
+
+                            setFormData(prev => {
+                              const updatedData = {
+                                ...prev,
+                                batteryBuyBack: {
+                                  description: prev.batteryBuyBack?.description || 'Battery Buy Back',
+                                  hsnNumber: prev.batteryBuyBack?.hsnNumber || '',
+                                  quantity,
+                                  unitPrice,
+                                  discount,
+                                  discountedAmount: 0,
+                                  taxRate: 0,
+                                  taxAmount: 0,
+                                  totalPrice: 0,
+                                  uom: 'nos'
+                                }
+                              };
+
+                              // Recalculate totals including battery buy back
+                              const calculationResult = calculateQuotationTotals(
+                                updatedData.items || [],
+                                updatedData.serviceCharges || [],
+                                updatedData.batteryBuyBack,
+                                updatedData.overallDiscount || 0
+                              );
+
+                              return {
+                                ...updatedData,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
+                          placeholder="0.00"
+                        />
+                      </div>
+
+                      {/* GST (Always 0 for battery buy back) */}
+                      <div className="p-2 border-r border-gray-200">
+                        <input
+                          type="number"
+                          value="0"
+                          disabled
+                          className="w-full p-2 border-0 bg-gray-100 text-sm text-gray-500 text-right"
+                          placeholder="0.00"
+                        />
+                      </div>
+
+                      {/* Total */}
+                      <div className="p-2 text-center">
+                        <div className="text-sm font-bold text-red-600">
+                          -₹{((formData.batteryBuyBack.quantity * formData.batteryBuyBack.unitPrice) * (1 - formData.batteryBuyBack.discount / 100)).toFixed(2)}
+                        </div>
+                        <button
+                          onClick={() => {
+                            setFormData(prev => {
+                              // Recalculate totals after removing battery buy back
+                              const calculationResult = calculateQuotationTotals(
+                                prev.items || [],
+                                prev.serviceCharges || [],
+                                null,
+                                prev.overallDiscount || 0
+                              );
+
+                              return {
+                                ...prev,
+                                batteryBuyBack: undefined,
+                                subtotal: calculationResult.subtotal,
+                                totalDiscount: calculationResult.totalDiscount,
+                                totalTax: calculationResult.totalTax,
+                                grandTotal: calculationResult.grandTotal
+                              };
+                            });
+                          }}
+                          className="mt-1 p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Remove battery buy back"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Notes */}
             <div>
@@ -953,23 +1647,29 @@ const QuotationForm: React.FC<QuotationFormProps> = ({
           <div className="">
             <div className="flex justify-end">
               <div className="w-80 space-y-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Subtotal:</span>
-                  <span className="font-medium">₹{calculateQuotationTotals(formData.items || []).subtotal.toLocaleString() || 0}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Total Tax:</span>
-                  <span className="font-medium">₹{calculateQuotationTotals(formData.items || []).totalTax.toLocaleString() || 0}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Total Discount:</span>
-                  <span className="font-medium text-green-600">-₹{calculateQuotationTotals(formData.items || []).totalDiscount.toLocaleString() || 0}</span>
-                </div>
-                <div className="flex justify-between font-bold text-lg border-t pt-3">
-                  <span>Grand Total:</span>
-                  <span className="text-blue-600">₹{formData.grandTotal?.toFixed(2)}</span>
-                </div>
+                {(() => {
+                  const totals = calculateQuotationTotals(formData.items || [], formData.serviceCharges || [], formData.batteryBuyBack || null, formData.overallDiscount || 0);
+                  return (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Subtotal:</span>
+                        <span className="font-medium">₹{totals.subtotal.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total Tax:</span>
+                        <span className="font-medium">₹{totals.totalTax.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Total Discount:</span>
+                        <span className="font-medium text-green-600">-₹{totals.totalDiscount.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-lg border-t pt-3">
+                        <span>Grand Total:</span>
+                        <span className="text-blue-600">₹{totals.grandTotal.toFixed(2)}</span>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>

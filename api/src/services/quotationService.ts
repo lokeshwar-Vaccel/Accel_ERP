@@ -132,22 +132,10 @@ export class QuotationService {
     let totalDiscount = 0;
     let totalTax = 0;
 
-    if (!items) {
-      return {
-        subtotal: 0,
-        totalDiscount: 0,
-        overallDiscount: 0,
-        overallDiscountAmount: 0,
-        totalTax: 0,
-        grandTotal: 0,
-        roundOff: 0,
-        items: [],
-        serviceCharges: serviceCharges || [],
-        batteryBuyBack: batteryBuyBack || undefined
-      };
-    }
+    // Initialize items array if not provided
+    const itemsArray = items || [];
 
-    const calculatedItems = items.map(item => {
+    const calculatedItems = itemsArray.map(item => {
       // Ensure all values are numbers
       const quantity = Number(item.quantity) || 0;
       const unitPrice = Number(item.unitPrice) || 0;
@@ -175,63 +163,57 @@ export class QuotationService {
     });
 
     // Calculate service charges
-    if (serviceCharges && serviceCharges.length > 0) {
-      serviceCharges.forEach(service => {
-        const quantity = Number(service.quantity) || 0;
-        const unitPrice = Number(service.unitPrice) || 0;
-        const discountRate = Number(service.discount) || 0;
-        const taxRate = Number(service.taxRate) || 0;
-
-        const itemSubtotal = quantity * unitPrice;
-        const discountAmount = (discountRate / 100) * itemSubtotal;
-        const discountedAmount = itemSubtotal - discountAmount;
-        const taxAmount = (taxRate / 100) * discountedAmount;
-
-        // Accumulate totals
-        subtotal += itemSubtotal;
-        totalDiscount += discountAmount;
-        totalTax += taxAmount;
-      });
-    }
-
-    // Calculate battery buy back (deduction from total)
-    if (batteryBuyBack) {
-      const quantity = Number(batteryBuyBack.quantity) || 0;
-      const unitPrice = Number(batteryBuyBack.unitPrice) || 0;
-      const discountRate = Number(batteryBuyBack.discount) || 0;
-      const taxRate = Number(batteryBuyBack.taxRate) || 0;
+    const calculatedServiceCharges = serviceCharges && serviceCharges.length > 0 ? serviceCharges.map(service => {
+      const quantity = Number(service.quantity) || 0;
+      const unitPrice = Number(service.unitPrice) || 0;
+      const discountRate = Number(service.discount) || 0;
+      const taxRate = Number(service.taxRate) || 0;
 
       const itemSubtotal = quantity * unitPrice;
       const discountAmount = (discountRate / 100) * itemSubtotal;
       const discountedAmount = itemSubtotal - discountAmount;
       const taxAmount = (taxRate / 100) * discountedAmount;
+      const totalPrice = discountedAmount + taxAmount;
+
+      // Accumulate totals
+      subtotal += itemSubtotal;
+      totalDiscount += discountAmount;
+      totalTax += taxAmount;
+
+      return {
+        ...service,
+        discountedAmount: this.roundTo2Decimals(discountAmount),
+        taxAmount: this.roundTo2Decimals(taxAmount),
+        totalPrice: this.roundTo2Decimals(totalPrice)
+      };
+    }) : [];
+
+    // Calculate battery buy back (deduction from total)
+    let calculatedBatteryBuyBack = null;
+    if (batteryBuyBack) {
+      const quantity = Number(batteryBuyBack.quantity) || 0;
+      const unitPrice = Number(batteryBuyBack.unitPrice) || 0;
+      const discountRate = Number(batteryBuyBack.discount) || 0;
+      const taxRate = 0; // No GST for battery buy back
+
+      const itemSubtotal = quantity * unitPrice;
+      const discountAmount = (discountRate / 100) * itemSubtotal;
+      const discountedAmount = itemSubtotal - discountAmount;
+      const taxAmount = 0; // No GST for battery buy back
+      const totalPrice = discountedAmount; // No GST added
 
       // For battery buy back, we DON'T add to subtotal since it's a deduction
       // We'll subtract it from the final grand total instead
-      // We still need to track the discount and tax for the battery buy back itself
+      calculatedBatteryBuyBack = {
+        ...batteryBuyBack,
+        discountedAmount: this.roundTo2Decimals(discountAmount),
+        taxAmount: 0, // No GST for battery buy back
+        totalPrice: this.roundTo2Decimals(totalPrice)
+      };
     }
 
     // Calculate grand total before overall discount and battery buy back
-    // Include service charges in the calculation
     let grandTotalBeforeOverallDiscount = subtotal - totalDiscount + totalTax;
-    
-    // Add service charges to the total before overall discount
-    if (serviceCharges && serviceCharges.length > 0) {
-      serviceCharges.forEach(service => {
-        const quantity = Number(service.quantity) || 0;
-        const unitPrice = Number(service.unitPrice) || 0;
-        const discountRate = Number(service.discount) || 0;
-        const taxRate = Number(service.taxRate) || 0;
-
-        const itemSubtotal = quantity * unitPrice;
-        const discountAmount = (discountRate / 100) * itemSubtotal;
-        const discountedAmount = itemSubtotal - discountAmount;
-        const taxAmount = (taxRate / 100) * discountedAmount;
-        const totalPrice = discountedAmount + taxAmount;
-        
-        grandTotalBeforeOverallDiscount += totalPrice;
-      });
-    }
     
     // Calculate overall discount amount as percentage of grand total
     const overallDiscountAmount = (overallDiscount / 100) * grandTotalBeforeOverallDiscount;
@@ -240,19 +222,8 @@ export class QuotationService {
     let grandTotal = grandTotalBeforeOverallDiscount - overallDiscountAmount;
     
     // Subtract battery buy back amount from grand total (it's a deduction)
-    if (batteryBuyBack) {
-      const quantity = Number(batteryBuyBack.quantity) || 0;
-      const unitPrice = Number(batteryBuyBack.unitPrice) || 0;
-      const discountRate = Number(batteryBuyBack.discount) || 0;
-      const taxRate = Number(batteryBuyBack.taxRate) || 0;
-
-      const itemSubtotal = quantity * unitPrice;
-      const discountAmount = (discountRate / 100) * itemSubtotal;
-      const discountedAmount = itemSubtotal - discountAmount;
-      const taxAmount = (taxRate / 100) * discountedAmount;
-      const totalPrice = discountedAmount + taxAmount;
-      
-      grandTotal -= totalPrice;
+    if (calculatedBatteryBuyBack) {
+      grandTotal -= calculatedBatteryBuyBack.totalPrice;
     }
     const roundOff = 0; // No rounding for now
 
@@ -265,8 +236,8 @@ export class QuotationService {
       grandTotal: this.roundTo2Decimals(grandTotal),
       roundOff,
       items: calculatedItems || [],
-      serviceCharges: serviceCharges || [],
-      batteryBuyBack: batteryBuyBack || undefined
+      serviceCharges: calculatedServiceCharges || [],
+      batteryBuyBack: calculatedBatteryBuyBack || undefined
     };
   }
 
@@ -321,7 +292,7 @@ export class QuotationService {
         unitPrice: Number(data.batteryBuyBack.unitPrice) || 0,
         discount: Number(data.batteryBuyBack.discount) || 0,
         discountedAmount: Number(data.batteryBuyBack.discountedAmount) || 0,
-        taxRate: Number(data.batteryBuyBack.taxRate) || 28,
+        taxRate: 0, // No GST for battery buy back
         taxAmount: Number(data.batteryBuyBack.taxAmount) || 0,
         totalPrice: Number(data.batteryBuyBack.totalPrice) || 0
       } : undefined,

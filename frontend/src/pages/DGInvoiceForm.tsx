@@ -2954,12 +2954,12 @@ const DGInvoiceFormPage: React.FC = () => {
                   <span className="text-gray-600">Total Discount:</span>
                   <span className="font-medium text-green-600">-₹{formData.totalDiscount?.toFixed(2) || '0.00'}</span>
                 </div>
-                {isSalesInvoice && (
+                {/* {isSalesInvoice && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Overall Discount:</span>
                     <span className="font-medium text-green-600">-{formData.overallDiscount || 0}% (-₹{formData.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
                   </div>
-                )}
+                )} */}
                 <div className="flex justify-between font-bold text-lg border-t pt-3">
                   <span>Grand Total:</span>
                   <span className="text-blue-600">₹{formData.grandTotal?.toFixed(2) || '0.00'}</span>

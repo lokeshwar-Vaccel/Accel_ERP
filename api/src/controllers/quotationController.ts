@@ -474,7 +474,12 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
     }
 
     // Step 5: Calculate financial details
-    const calculationResult = calculateQuotationTotals(sanitizedData.items, sanitizedData.overallDiscount || 0);
+    const calculationResult = QuotationService.calculateQuotationTotals(
+      sanitizedData.items, 
+      sanitizedData.serviceCharges || [], 
+      sanitizedData.batteryBuyBack || undefined,
+      sanitizedData.overallDiscount || 0
+    );
 
     console.log("Calculation result:", calculationResult);
     
@@ -498,9 +503,11 @@ export const createQuotation = async (req: Request, res: Response, next: NextFun
       grandTotal: calculationResult.grandTotal,
       roundOff: calculationResult.roundOff,
       items: calculationResult.items,
+      serviceCharges: calculationResult.serviceCharges,
+      batteryBuyBack: calculationResult.batteryBuyBack,
       // Set default payment values
       paidAmount: sanitizedData.paidAmount || 0,
-      remainingAmount: calculationResult.remainingAmount,
+      remainingAmount: calculationResult.grandTotal - (sanitizedData.paidAmount || 0),
       paymentStatus: sanitizedData.paidAmount && sanitizedData.paidAmount > 0 ? 'partial' : 'pending',
       status: sanitizedData.status || 'draft'
     };
@@ -666,6 +673,26 @@ const sanitizeQuotationData = (data: any): any => {
       discount: Number(item.discount) || 0,
       taxRate: Number(item.taxRate) || 0
     })) : [],
+    // Service charges sanitization
+    serviceCharges: Array.isArray(data.serviceCharges) ? data.serviceCharges.map((service: any) => ({
+      description: String(service.description || '').trim(),
+      hsnNumber: String(service.hsnNumber || '').trim(),
+      quantity: Number(service.quantity) || 1,
+      unitPrice: Number(service.unitPrice) || 0,
+      discount: Number(service.discount) || 0,
+      taxRate: Number(service.taxRate) || 18,
+      uom: String(service.uom || 'nos').trim()
+    })) : [],
+    // Battery buy back sanitization
+    batteryBuyBack: data.batteryBuyBack ? {
+      description: String(data.batteryBuyBack.description || 'Battery Buy Back').trim(),
+      hsnNumber: String(data.batteryBuyBack.hsnNumber || '').trim(),
+      quantity: Number(data.batteryBuyBack.quantity) || 0,
+      unitPrice: Number(data.batteryBuyBack.unitPrice) || 0,
+      discount: Number(data.batteryBuyBack.discount) || 0,
+      taxRate: Number(data.batteryBuyBack.taxRate) || 0,
+      uom: String(data.batteryBuyBack.uom || 'nos').trim()
+    } : undefined,
     notes: String(data.notes || '').trim(),
     terms: String(data.terms || '').trim(),
     assignedEngineer: data.assignedEngineer || undefined,
@@ -769,61 +796,6 @@ const validateQuotationData = (data: any): { isValid: boolean; errors: any[] } =
   };
 };
 
-const calculateQuotationTotals = (items: any[], overallDiscount: number = 0): any => {
-  let subtotal = 0;
-  let totalDiscount = 0;
-  let totalTax = 0;
-
-  const calculatedItems = items.map((item: any) => {
-    // Ensure all values are numbers
-    const quantity = Number(item.quantity) || 0;
-    const unitPrice = Number(item.unitPrice) || 0;
-    const discountRate = Number(item.discount) || 0;
-    const taxRate = Number(item.taxRate) || 0;
-
-    // Calculate item totals
-    const itemSubtotal = quantity * unitPrice;
-    const discountAmount = (discountRate / 100) * itemSubtotal;
-    const discountedAmount = itemSubtotal - discountAmount;
-    const taxAmount = (taxRate / 100) * discountedAmount;
-    const totalPrice = discountedAmount + taxAmount;
-
-    // Accumulate totals
-    subtotal += itemSubtotal;
-    totalDiscount += discountAmount;
-    totalTax += taxAmount;
-
-    return {
-      ...item,
-      discountedAmount: roundTo2Decimals(discountAmount),
-      taxAmount: roundTo2Decimals(taxAmount),
-      totalPrice: roundTo2Decimals(totalPrice)
-    };
-  });
-
-  // Calculate grand total before overall discount
-  const grandTotalBeforeOverallDiscount = subtotal - totalDiscount + totalTax;
-  
-  // Calculate overall discount amount as percentage of grand total
-  const overallDiscountAmount = (overallDiscount / 100) * grandTotalBeforeOverallDiscount;
-  
-  // Apply overall discount to grand total
-  const grandTotal = grandTotalBeforeOverallDiscount - overallDiscountAmount;
-  const remainingAmount = grandTotal;
-  const roundOff = 0; // No rounding for now
-
-  return {
-    subtotal: roundTo2Decimals(subtotal),
-    totalDiscount: roundTo2Decimals(totalDiscount),
-    overallDiscount: roundTo2Decimals(overallDiscount),
-    overallDiscountAmount: roundTo2Decimals(overallDiscountAmount),
-    totalTax: roundTo2Decimals(totalTax),
-    grandTotal: roundTo2Decimals(grandTotal),
-    remainingAmount: roundTo2Decimals(remainingAmount),
-    roundOff,
-    items: calculatedItems
-  };
-};
 
 // Validation helper functions
 const isValidEmail = (email: string): boolean => {
@@ -893,7 +865,12 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
 
     // Calculate totals if items are provided (only for full updates)
     if (!isStatusOnlyUpdate && sanitizedData.items && sanitizedData.items.length > 0) {
-      const calculationResult = calculateQuotationTotals(sanitizedData.items, sanitizedData.overallDiscount || 0);
+      const calculationResult = QuotationService.calculateQuotationTotals(
+        sanitizedData.items, 
+        sanitizedData.serviceCharges || [], 
+        sanitizedData.batteryBuyBack || undefined,
+        sanitizedData.overallDiscount || 0
+      );
       sanitizedData.subtotal = calculationResult.subtotal;
       sanitizedData.totalDiscount = calculationResult.totalDiscount;
       sanitizedData.overallDiscount = sanitizedData.overallDiscount || 0;
@@ -902,6 +879,8 @@ export const updateQuotation = async (req: Request, res: Response, next: NextFun
       sanitizedData.grandTotal = calculationResult.grandTotal;
       sanitizedData.roundOff = calculationResult.roundOff;
       sanitizedData.items = calculationResult.items;
+      sanitizedData.serviceCharges = calculationResult.serviceCharges;
+      sanitizedData.batteryBuyBack = calculationResult.batteryBuyBack;
     }
 
     // Handle advance payment calculations if advance amount is provided (only for full updates)
@@ -984,6 +963,7 @@ export const updateQuotationPayment = async (req: Request, res: Response, next: 
     const { 
       paidAmount, 
       paymentMethod, 
+      paymentMethodDetails,
       paymentDate, 
       notes 
     } = req.body;
@@ -991,6 +971,18 @@ export const updateQuotationPayment = async (req: Request, res: Response, next: 
     // Validate required fields
     if (paidAmount === undefined || paidAmount < 0) {
       return next(new AppError('Valid payment amount is required', 400));
+    }
+
+    if (!paymentMethod) {
+      return next(new AppError('Payment method is required', 400));
+    }
+
+    // Validate payment method details if provided
+    if (paymentMethodDetails) {
+      const validationError = validatePaymentMethodDetails(paymentMethod, paymentMethodDetails);
+      if (validationError) {
+        return next(new AppError(validationError, 400));
+      }
     }
 
     // Find the quotation
@@ -1017,18 +1009,26 @@ export const updateQuotationPayment = async (req: Request, res: Response, next: 
       newPaymentStatus = 'partial';
     }
 
+    // Prepare update data
+    const updateData: any = {
+      paidAmount: newTotalPaidAmount,
+      remainingAmount: newRemainingAmount,
+      paymentStatus: newPaymentStatus,
+      paymentDate: paymentDate ? new Date(paymentDate) : undefined,
+      paymentMethod,
+      notes: notes || quotation.notes,
+      ...(quotation.status === 'draft' && newTotalPaidAmount > 0 && { status: 'sent' })
+    };
+
+    // Add payment method details if provided
+    if (paymentMethodDetails) {
+      updateData.paymentMethodDetails = paymentMethodDetails;
+    }
+
     // Update the quotation
     const updatedQuotation = await Quotation.findByIdAndUpdate(
       id,
-      {
-        paidAmount: newTotalPaidAmount,
-        remainingAmount: newRemainingAmount,
-        paymentStatus: newPaymentStatus,
-        paymentDate: paymentDate ? new Date(paymentDate) : undefined,
-        paymentMethod,
-        notes,
-        ...(quotation.status === 'draft' && newTotalPaidAmount > 0 && { status: 'sent' })
-      },
+      updateData,
       { new: true, runValidators: true }
     );
 
@@ -1380,17 +1380,6 @@ export const sendQuotationEmailToCustomer = async (
             </div>
             ` : ''}
 
-            ${quotation.paymentMethod ? `
-            <div class="highlight">
-              <p style="margin: 0;"><strong>Payment Method:</strong> ${quotation.paymentMethod.replace('_', ' ').toUpperCase()}</p>
-            </div>
-            ` : ''}
-
-            ${quotation.paymentDate ? `
-            <div class="highlight">
-              <p style="margin: 0;"><strong>Payment Date:</strong> ${new Date(quotation.paymentDate).toLocaleDateString()}</p>
-            </div>
-            ` : ''}
 
             <div class="footer">
               <h3 style="margin: 0 0 15px 0;">Thank you for your interest in our services!</h3>
@@ -1504,5 +1493,50 @@ export const getQuotationStats = async (
     res.status(200).json(response);
   } catch (error) {
     next(error);
+  }
+};
+
+// Helper function to validate payment method details
+const validatePaymentMethodDetails = (paymentMethod: string, details: any): string | null => {
+  switch (paymentMethod) {
+    case 'cash':
+      // Cash is simple, no required validation
+      return null;
+
+    case 'cheque':
+      if (!details.cheque?.chequeNumber || !details.cheque?.bankName || !details.cheque?.issueDate) {
+        return 'Cheque payment requires cheque number, bank name, and issue date';
+      }
+      return null;
+
+    case 'bank_transfer':
+      if (!details.bankTransfer?.bankName || !details.bankTransfer?.accountNumber || 
+          !details.bankTransfer?.ifscCode || !details.bankTransfer?.transactionId || 
+          !details.bankTransfer?.transferDate) {
+        return 'Bank transfer requires bank name, account number, IFSC code, transaction ID, and transfer date';
+      }
+      return null;
+
+    case 'upi':
+      if (!details.upi?.upiId || !details.upi?.transactionId) {
+        return 'UPI payment requires UPI ID and transaction ID';
+      }
+      return null;
+
+    case 'card':
+      if (!details.card?.cardType || !details.card?.cardNetwork || 
+          !details.card?.lastFourDigits || !details.card?.transactionId) {
+        return 'Card payment requires card type, network, last 4 digits, and transaction ID';
+      }
+      return null;
+
+    case 'other':
+      if (!details.other?.methodName) {
+        return 'Other payment method requires method name';
+      }
+      return null;
+
+    default:
+      return 'Invalid payment method';
   }
 }; 
