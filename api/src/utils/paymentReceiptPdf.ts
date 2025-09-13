@@ -1,5 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { IPurchaseOrderPayment } from '../models/PurchaseOrderPayment';
+import { IQuotationPayment } from '../models/QuotationPayment';
+import { IInvoicePayment } from '../models/InvoicePayment';
 
 interface PopulatedPayment extends Omit<IPurchaseOrderPayment, 'purchaseOrderId' | 'supplierId' | 'createdBy'> {
   purchaseOrderId: {
@@ -11,6 +13,60 @@ interface PopulatedPayment extends Omit<IPurchaseOrderPayment, 'purchaseOrderId'
     _id: string;
     name: string;
     email: string;
+    addresses?: Array<{
+      address: string;
+      state: string;
+      district: string;
+      pincode: string;
+      gstNumber?: string;
+    }>;
+  };
+  createdBy: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+}
+
+interface PopulatedQuotationPayment extends Omit<IQuotationPayment, 'quotationId' | 'customerId' | 'createdBy'> {
+  quotationId: {
+    _id: string;
+    quotationNumber: string;
+    grandTotal: number;
+  };
+  customerId: {
+    _id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    addresses?: Array<{
+      address: string;
+      state: string;
+      district: string;
+      pincode: string;
+      gstNumber?: string;
+    }>;
+  };
+  createdBy: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
+}
+
+interface PopulatedInvoicePayment extends Omit<IInvoicePayment, 'invoiceId' | 'customerId' | 'createdBy'> {
+  invoiceId: {
+    _id: string;
+    invoiceNumber: string;
+    totalAmount: number;
+  };
+  customerId: {
+    _id: string;
+    name: string;
+    email: string;
+    phone?: string;
     addresses?: Array<{
       address: string;
       state: string;
@@ -280,4 +336,380 @@ const getPaymentMethodDetails = (method: string, details: any): Array<{label: st
   }
   
   return methodDetails;
+};
+
+// Generate PDF for invoice payments
+export const generateInvoicePaymentReceiptPDF = (payment: PopulatedInvoicePayment): Promise<Buffer> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ 
+        size: 'A4', 
+        margin: 40,
+        bufferPages: true
+      });
+      
+      const buffers: Buffer[] = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => {
+        const pdfBuffer = Buffer.concat(buffers);
+        resolve(pdfBuffer);
+      });
+
+      // Page dimensions
+      const pageWidth = doc.page.width;
+      const pageHeight = doc.page.height;
+      const margin = 40;
+      const contentWidth = pageWidth - (margin * 2);
+
+      // Header with border
+      doc.rect(margin, margin, contentWidth, 80)
+         .stroke('#E5E7EB');
+      
+      // Company logo area (placeholder)
+      doc.rect(margin + 10, margin + 10, 60, 60)
+         .fill('#F3F4F6');
+      
+      doc.fontSize(8).font('Helvetica').fill('#6B7280');
+      doc.text('LOGO', margin + 25, margin + 35, { align: 'center', width: 30 });
+
+      // Company name and details
+      doc.fontSize(18).font('Helvetica-Bold').fill('#1F2937');
+      doc.text('SUN POWER SERVICES', margin + 80, margin + 15);
+      
+      doc.fontSize(9).font('Helvetica').fill('#4B5563');
+      const companyInfo = [
+        'D No.53, Plot No.4, 4th Street, Phase-1 Extension',
+        'Kamaraj Nagar, Thiruvanmiyur, Chennai - 600041, Tamil Nadu, India',
+        'GST: 33AABCS1234F1Z5 | Phone: +91 9876543210 | Email: info@sunpowerservices.com'
+      ];
+      
+      let companyY = margin + 35;
+      companyInfo.forEach(line => {
+        doc.text(line, margin + 80, companyY);
+        companyY += 12;
+      });
+
+      // Receipt title
+      const titleY = margin + 100;
+      doc.fontSize(24).font('Helvetica-Bold').fill('#1F2937');
+      doc.text('PAYMENT RECEIPT', 0, titleY, { align: 'center', width: pageWidth });
+
+      // Receipt details header
+      const receiptHeaderY = titleY + 50;
+      doc.rect(margin, receiptHeaderY, contentWidth, 30)
+         .fill('#F9FAFB');
+      
+      doc.fontSize(10).font('Helvetica-Bold').fill('#374151');
+      doc.text('Receipt Number:', margin + 15, receiptHeaderY + 10);
+      doc.text('Date:', margin + 15, receiptHeaderY + 20);
+      
+      doc.font('Helvetica').fill('#1F2937');
+      doc.text(String(payment._id), margin + 100, receiptHeaderY + 10);
+      doc.text(new Date(payment.paymentDate).toLocaleDateString('en-IN'), margin + 100, receiptHeaderY + 20);
+
+      // Payment details section
+      const paymentSectionY = receiptHeaderY + 50;
+      doc.fontSize(14).font('Helvetica-Bold').fill('#1F2937');
+      doc.text('Payment Information', margin, paymentSectionY);
+
+      // Payment details table with borders
+      const tableY = paymentSectionY + 25;
+      const tableWidth = contentWidth;
+      const rowHeight = 25;
+      const labelWidth = 150;
+      const valueWidth = tableWidth - labelWidth;
+
+      // Table header
+      doc.rect(margin, tableY, tableWidth, rowHeight)
+         .fill('#F3F4F6');
+      
+      doc.fontSize(10).font('Helvetica-Bold').fill('#374151');
+      doc.text('Description', margin + 10, tableY + 8);
+      doc.text('Details', margin + labelWidth + 10, tableY + 8);
+
+      // Table rows
+      const paymentDetails = [
+        { label: 'Payment Amount', value: `₹${payment.amount.toLocaleString('en-IN')}` },
+        { label: 'Payment Method', value: getPaymentMethodLabel(payment.paymentMethod) },
+        { label: 'Payment Status', value: payment.paymentStatus.toUpperCase() },
+        { label: 'Currency', value: payment.currency },
+        { label: 'Invoice Number', value: payment.invoiceNumber },
+        { label: 'Customer', value: payment.customerId.name },
+      ];
+
+      paymentDetails.forEach((detail, index) => {
+        const rowY = tableY + (index + 1) * rowHeight;
+        
+        // Alternate row colors
+        if (index % 2 === 0) {
+          doc.rect(margin, rowY, tableWidth, rowHeight)
+             .fill('#FFFFFF');
+        } else {
+          doc.rect(margin, rowY, tableWidth, rowHeight)
+             .fill('#F9FAFB');
+        }
+        
+        // Row border
+        doc.rect(margin, rowY, tableWidth, rowHeight)
+           .stroke('#E5E7EB');
+        
+        // Vertical separator
+        doc.moveTo(margin + labelWidth, rowY)
+           .lineTo(margin + labelWidth, rowY + rowHeight)
+           .stroke('#E5E7EB');
+        
+        // Text content
+        doc.fontSize(9).font('Helvetica').fill('#374151');
+        doc.text(detail.label, margin + 10, rowY + 8);
+        doc.font('Helvetica-Bold').fill('#1F2937');
+        doc.text(detail.value, margin + labelWidth + 10, rowY + 8);
+      });
+
+      // Payment method specific details
+      const methodDetailsStartY = tableY + ((paymentDetails.length + 1) * rowHeight) + 20;
+      if (payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0) {
+        doc.fontSize(12).font('Helvetica-Bold').fill('#1F2937');
+        doc.text('Payment Method Details', margin, methodDetailsStartY);
+        
+        const methodDetails = getPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails);
+        let methodCurrentY = methodDetailsStartY + 20;
+        
+        methodDetails.forEach((detail, index) => {
+          const detailY = methodCurrentY + (index * 20);
+          
+          // Background for each detail
+          doc.rect(margin, detailY - 5, contentWidth, 20)
+             .fill(index % 2 === 0 ? '#FFFFFF' : '#F9FAFB');
+          
+          doc.fontSize(9).font('Helvetica').fill('#374151');
+          doc.text(`${detail.label}:`, margin + 10, detailY);
+          doc.font('Helvetica-Bold').fill('#1F2937');
+          doc.text(detail.value, margin + 150, detailY);
+        });
+      }
+
+      // Notes section
+      if (payment.notes) {
+        const notesStartY = methodDetailsStartY + (payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0 ? 
+          (getPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails).length * 20) + 40 : 40);
+        
+        doc.fontSize(12).font('Helvetica-Bold').fill('#1F2937');
+        doc.text('Notes', margin, notesStartY);
+        
+        doc.rect(margin, notesStartY + 15, contentWidth, 60)
+           .fill('#F9FAFB')
+           .stroke('#E5E7EB');
+        
+        doc.fontSize(9).font('Helvetica').fill('#374151');
+        doc.text(payment.notes, margin + 10, notesStartY + 25, { 
+          width: contentWidth - 20,
+          align: 'left'
+        });
+      }
+
+      // Footer section
+      const footerY = pageHeight - 80;
+      doc.rect(margin, footerY, contentWidth, 40)
+         .fill('#F3F4F6')
+         .stroke('#E5E7EB');
+      
+      doc.fontSize(8).font('Helvetica').fill('#6B7280');
+      doc.text('This is a computer generated receipt and does not require a signature.', 
+               margin + 10, footerY + 10, { align: 'center', width: contentWidth - 20 });
+      doc.text(`Generated on: ${new Date().toLocaleString('en-IN')}`, 
+               margin + 10, footerY + 25, { align: 'center', width: contentWidth - 20 });
+
+      doc.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
+};
+
+// Generate PDF for quotation payments
+export const generateQuotationPaymentReceiptPDF = (payment: PopulatedQuotationPayment): Promise<Buffer> => {
+  return new Promise((resolve, reject) => {
+    try {
+      const doc = new PDFDocument({ 
+        size: 'A4', 
+        margin: 40,
+        bufferPages: true
+      });
+      
+      const buffers: Buffer[] = [];
+      doc.on('data', buffers.push.bind(buffers));
+      doc.on('end', () => {
+        const pdfBuffer = Buffer.concat(buffers);
+        resolve(pdfBuffer);
+      });
+
+      // Page dimensions
+      const pageWidth = doc.page.width;
+      const pageHeight = doc.page.height;
+      const margin = 40;
+      const contentWidth = pageWidth - (margin * 2);
+
+      // Header with border
+      doc.rect(margin, margin, contentWidth, 80)
+         .stroke('#E5E7EB');
+      
+      // Company logo area (placeholder)
+      doc.rect(margin + 10, margin + 10, 60, 60)
+         .fill('#F3F4F6');
+      
+      doc.fontSize(8).font('Helvetica').fill('#6B7280');
+      doc.text('LOGO', margin + 25, margin + 35, { align: 'center', width: 30 });
+
+      // Company name and details
+      doc.fontSize(18).font('Helvetica-Bold').fill('#1F2937');
+      doc.text('SUN POWER SERVICES', margin + 80, margin + 15);
+      
+      doc.fontSize(9).font('Helvetica').fill('#4B5563');
+      const companyInfo = [
+        'D No.53, Plot No.4, 4th Street, Phase-1 Extension',
+        'Kamaraj Nagar, Thiruvanmiyur, Chennai - 600041, Tamil Nadu, India',
+        'GST: 33AABCS1234F1Z5 | Phone: +91 9876543210 | Email: info@sunpowerservices.com'
+      ];
+      
+      let companyY = margin + 35;
+      companyInfo.forEach(line => {
+        doc.text(line, margin + 80, companyY);
+        companyY += 12;
+      });
+
+      // Receipt title
+      const titleY = margin + 100;
+      doc.fontSize(24).font('Helvetica-Bold').fill('#1F2937');
+      doc.text('PAYMENT RECEIPT', 0, titleY, { align: 'center', width: pageWidth });
+
+      // Receipt details header
+      const receiptHeaderY = titleY + 50;
+      doc.rect(margin, receiptHeaderY, contentWidth, 30)
+         .fill('#F9FAFB');
+      
+      doc.fontSize(10).font('Helvetica-Bold').fill('#374151');
+      doc.text('Receipt Number:', margin + 15, receiptHeaderY + 10);
+      doc.text('Date:', margin + 15, receiptHeaderY + 20);
+      
+      doc.font('Helvetica').fill('#1F2937');
+      doc.text(String(payment._id), margin + 100, receiptHeaderY + 10);
+      doc.text(new Date(payment.paymentDate).toLocaleDateString('en-IN'), margin + 100, receiptHeaderY + 20);
+
+      // Payment details section
+      const paymentSectionY = receiptHeaderY + 50;
+      doc.fontSize(14).font('Helvetica-Bold').fill('#1F2937');
+      doc.text('Payment Information', margin, paymentSectionY);
+
+      // Payment details table with borders
+      const tableY = paymentSectionY + 25;
+      const tableWidth = contentWidth;
+      const rowHeight = 25;
+      const labelWidth = 150;
+      const valueWidth = tableWidth - labelWidth;
+
+      // Table header
+      doc.rect(margin, tableY, tableWidth, rowHeight)
+         .fill('#F3F4F6');
+      
+      doc.fontSize(10).font('Helvetica-Bold').fill('#374151');
+      doc.text('Description', margin + 10, tableY + 8);
+      doc.text('Details', margin + labelWidth + 10, tableY + 8);
+
+      // Table rows
+      const paymentDetails = [
+        { label: 'Payment Amount', value: `₹${payment.amount.toLocaleString('en-IN')}` },
+        { label: 'Payment Method', value: getPaymentMethodLabel(payment.paymentMethod) },
+        { label: 'Payment Status', value: payment.paymentStatus.toUpperCase() },
+        { label: 'Currency', value: payment.currency },
+        { label: 'Quotation Number', value: payment.quotationNumber },
+        { label: 'Customer', value: payment.customerId.name },
+      ];
+
+      paymentDetails.forEach((detail, index) => {
+        const rowY = tableY + (index + 1) * rowHeight;
+        
+        // Alternate row colors
+        if (index % 2 === 0) {
+          doc.rect(margin, rowY, tableWidth, rowHeight)
+             .fill('#FFFFFF');
+        } else {
+          doc.rect(margin, rowY, tableWidth, rowHeight)
+             .fill('#F9FAFB');
+        }
+        
+        // Row border
+        doc.rect(margin, rowY, tableWidth, rowHeight)
+           .stroke('#E5E7EB');
+        
+        // Vertical separator
+        doc.moveTo(margin + labelWidth, rowY)
+           .lineTo(margin + labelWidth, rowY + rowHeight)
+           .stroke('#E5E7EB');
+        
+        // Text content
+        doc.fontSize(9).font('Helvetica').fill('#374151');
+        doc.text(detail.label, margin + 10, rowY + 8);
+        doc.font('Helvetica-Bold').fill('#1F2937');
+        doc.text(detail.value, margin + labelWidth + 10, rowY + 8);
+      });
+
+      // Payment method specific details
+      const methodDetailsStartY = tableY + ((paymentDetails.length + 1) * rowHeight) + 20;
+      if (payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0) {
+        doc.fontSize(12).font('Helvetica-Bold').fill('#1F2937');
+        doc.text('Payment Method Details', margin, methodDetailsStartY);
+        
+        const methodDetails = getPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails);
+        let methodCurrentY = methodDetailsStartY + 20;
+        
+        methodDetails.forEach((detail, index) => {
+          const detailY = methodCurrentY + (index * 20);
+          
+          // Background for each detail
+          doc.rect(margin, detailY - 5, contentWidth, 20)
+             .fill(index % 2 === 0 ? '#FFFFFF' : '#F9FAFB');
+          
+          doc.fontSize(9).font('Helvetica').fill('#374151');
+          doc.text(`${detail.label}:`, margin + 10, detailY);
+          doc.font('Helvetica-Bold').fill('#1F2937');
+          doc.text(detail.value, margin + 150, detailY);
+        });
+      }
+
+      // Notes section
+      if (payment.notes) {
+        const notesStartY = methodDetailsStartY + (payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0 ? 
+          (getPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails).length * 20) + 40 : 40);
+        
+        doc.fontSize(12).font('Helvetica-Bold').fill('#1F2937');
+        doc.text('Notes', margin, notesStartY);
+        
+        doc.rect(margin, notesStartY + 15, contentWidth, 60)
+           .fill('#F9FAFB')
+           .stroke('#E5E7EB');
+        
+        doc.fontSize(9).font('Helvetica').fill('#374151');
+        doc.text(payment.notes, margin + 10, notesStartY + 25, { 
+          width: contentWidth - 20,
+          align: 'left'
+        });
+      }
+
+      // Footer section
+      const footerY = pageHeight - 80;
+      doc.rect(margin, footerY, contentWidth, 40)
+         .fill('#F3F4F6')
+         .stroke('#E5E7EB');
+      
+      doc.fontSize(8).font('Helvetica').fill('#6B7280');
+      doc.text('This is a computer generated receipt and does not require a signature.', 
+               margin + 10, footerY + 10, { align: 'center', width: contentWidth - 20 });
+      doc.text(`Generated on: ${new Date().toLocaleString('en-IN')}`, 
+               margin + 10, footerY + 25, { align: 'center', width: contentWidth - 20 });
+
+      doc.end();
+    } catch (error) {
+      reject(error);
+    }
+  });
 };

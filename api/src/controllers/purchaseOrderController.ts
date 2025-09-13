@@ -100,7 +100,7 @@ export const getPurchaseOrders = async (
 
     // Execute query with pagination
     const orders = await PurchaseOrder.find(query)
-      .populate('items.product', 'name category brand modelNumber partNo price gst')
+      .populate('items.product', 'name category brand modelNumber partNo price gst hsnNumber')
       .populate('createdBy', 'firstName lastName email')
       .populate('supplier', 'name email addresses')
       .sort(sort as string)
@@ -195,14 +195,27 @@ export const createPurchaseOrder = async (
       supplierEmail = supplierResolved.email || req.body.supplierEmail;
     }
 
-    // Calculate total amount from items (including taxRate)
+    // Calculate total amount from items (including discount and taxRate)
     let totalAmount = 0;
     if (req.body.items && Array.isArray(req.body.items)) {
       for (const item of req.body.items) {
         const quantity = item.quantity || 0;
         const unitPrice = item.unitPrice || 0;
+        const discountRate = item.discountRate || 0;
         const taxRate = item.taxRate || 0;
-        const itemTotal = quantity * unitPrice * (1 + taxRate / 100);
+        const subtotal = quantity * unitPrice;
+        
+        // ✅ GST inclusive price (base + GST)
+        const gstInclusiveSubtotal = subtotal * (1 + taxRate / 100);
+        
+        // ✅ Calculate discount on GST-inclusive subtotal
+        const calculatedDiscountAmount = Math.round((gstInclusiveSubtotal * discountRate) / 100);
+        
+        // Use provided discount amount or calculated amount
+        const discountAmount = item.discountAmount ? Math.round(item.discountAmount) : calculatedDiscountAmount;
+        
+        // ✅ Final total after discount (discount applied after GST)
+        const itemTotal = Math.round(gstInclusiveSubtotal - discountAmount);
         totalAmount += itemTotal;
       }
     }
@@ -292,8 +305,21 @@ export const updatePurchaseOrder = async (
       for (const item of req.body.items) {
         const quantity = item.quantity || 0;
         const unitPrice = item.unitPrice || 0;
+        const discountRate = item.discountRate || 0;
         const taxRate = item.taxRate || 0;
-        const itemTotal = quantity * unitPrice * (1 + taxRate / 100);
+        const subtotal = quantity * unitPrice;
+        
+        // ✅ GST inclusive price (base + GST)
+        const gstInclusiveSubtotal = subtotal * (1 + taxRate / 100);
+        
+        // ✅ Calculate discount on GST-inclusive subtotal
+        const calculatedDiscountAmount = Math.round((gstInclusiveSubtotal * discountRate) / 100);
+        
+        // Use provided discount amount or calculated amount
+        const discountAmount = item.discountAmount ? Math.round(item.discountAmount) : calculatedDiscountAmount;
+        
+        // ✅ Final total after discount (discount applied after GST)
+        const itemTotal = Math.round(gstInclusiveSubtotal - discountAmount);
         totalAmount += itemTotal;
       }
       req.body.totalAmount = totalAmount;
@@ -453,7 +479,7 @@ export const receiveItems = async (
     } = req.body;
 
     const order = await PurchaseOrder.findById(req.params.id)
-    .populate('items.product', 'name category brand partNo')
+    .populate('items.product', 'name category brand partNo hsnNumber')
     .populate('createdBy', 'firstName lastName email')
     .populate('supplier', 'name email addresses');
 
@@ -676,7 +702,7 @@ export const receiveItems = async (
 
     // Populate the order with product details for frontend
     const populatedOrder = await PurchaseOrder.findById(order._id)
-      .populate('items.product', 'name category brand modelNumber partNo price gst description ')
+      .populate('items.product', 'name category brand modelNumber partNo price gst description hsnNumber')
       .populate('createdBy', 'firstName lastName email')
       .populate('supplier', 'name email addresses');
 
@@ -1383,7 +1409,7 @@ const createInvoiceFromPO = async ({
     remainingAmount: remainingAmount,
     status: 'sent',
     paymentStatus: paymentStatus,
-    notes: notes ? `${notes}\n\nCreated from PO: ${poNumber}` : `Created from PO: ${poNumber}`,
+    notes: notes,
     terms,
     invoiceType: invoiceType || 'purchase',
     location,

@@ -46,7 +46,8 @@ import {
   Archive,
   Star,
   Edit,
-  Trash2
+  Trash2,
+  ViewIcon
 } from 'lucide-react';
 import apiClient from '../utils/api';
 import { toast } from 'react-hot-toast';
@@ -923,16 +924,21 @@ export default function DGSales() {
                             >
                               Edit
                             </Button>
-                              <Button 
-                                size="sm"
-                                onClick={() => {
-                                  navigate('/dg-quotation/create', { 
-                                    state: { enquiry } 
-                                  });
-                                }}
-                              >
-                                Create DG Quotation
-                              </Button>
+                            <Button 
+                              size="sm"
+                              disabled={enquiry.customer?.status !== 'converted'}
+                              onClick={() => {
+                                navigate('/dg-quotation/create', { 
+                                  state: { enquiry } 
+                                });
+                              }}
+                              title={enquiry.customer?.status !== 'converted' ? 'Customer must be converted to create quotation' : 'Create DG Quotation'}
+                            >
+                              Create DG Quotation
+                            </Button>
+                            {/* <span className="text-sm text-gray-500">
+                              {enquiry.customer?.status !== 'converted' ? 'Customer must be converted to create quotation' : 'Create DG Quotation'}
+                            </span> */}
                           </div>
                         )
                       };
@@ -949,6 +955,36 @@ export default function DGSales() {
                 );
               })()}
             </div>
+            
+            {/* Information Message - Only show if there are disabled buttons */}
+            {(() => {
+              const hasDisabledButtons = enquiries.some(enquiry => enquiry.customer?.status !== 'converted');
+              return hasDisabledButtons ? (
+                <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                      <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                      </svg>
+                    </div>
+                    <div className="ml-3">
+                      <h3 className="text-sm font-medium text-blue-800">
+                        Create DG Quotation Button
+                      </h3>
+                      <div className="mt-2 text-sm text-blue-700">
+                        <p>
+                          The "Create DG Quotation" button is only enabled when the customer status is <strong>Converted</strong>. 
+                          This ensures that quotations are only created for qualified customers who have been successfully converted from enquiries.
+                        </p>
+                        <p className="mt-1">
+                          To enable the button, first convert the customer by clicking the "Qualify Customer" button in the View modal.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null;
+            })()}
           </div>
         );
 
@@ -966,10 +1002,10 @@ export default function DGSales() {
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="w-64"
                     />
-                    <Button variant="outline">
+                    {/* <Button variant="outline">
                       <Filter className="h-4 w-4 mr-2" />
                       Filter
-                    </Button>
+                    </Button> */}
                     <Button onClick={() => setShowDGQuotationForm(true)}>
                       <Plus className="h-4 w-4 mr-2" />
                       New DG Quotation
@@ -978,20 +1014,161 @@ export default function DGSales() {
                 </div>
               </div>
 
-              <Table
-                columns={[
-                  { key: 'quotationNumber', title: 'Quotation Number', sortable: true },
-                  { key: 'customerName', title: 'Customer' },
-                  { key: 'date', title: 'Date', sortable: true },
-                  { key: 'amount', title: 'Amount', sortable: true },
-                  { key: 'status', title: 'Status' },
-                  { key: 'actions', title: 'Actions' }
-                ]}
+              <div className="overflow-x-auto">
+                <Table
+                  columns={[
+                    { key: 'quotationNumber', title: 'Quotation No.', sortable: true, width: '120px' },
+                    // { key: 'revisionNo', title: 'Rev.', width: '60px' },
+                    { key: 'customerInfo', title: 'Customer Details', width: '200px' },
+                    { key: 'dgSpecs', title: 'DG Specifications', width: '150px' },
+                    { key: 'salesEngineer', title: 'Sales Engineer', width: '150px' },
+                    { key: 'enquiryInfo', title: 'Enquiry Details', width: '150px' },
+                    { key: 'dates', title: 'Dates', width: '120px' },
+                    { key: 'financial', title: 'Financial', width: '150px' },
+                    { key: 'terms', title: 'Terms', width: '120px' },
+                    { key: 'status', title: 'Status', width: '100px' },
+                    { key: 'actions', title: 'Actions', width: '120px' }
+                  ]}
                 data={dgQuotations.map((quotation: any) => ({
-                  quotationNumber: quotation.quotationNumber || '',
-                  customerName: quotation.customer?.name || '',
-                  date: quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : '',
-                  amount: quotation.grandTotal ? `₹${quotation.grandTotal.toLocaleString()}` : '',
+                  quotationNumber: (
+                    <div className="font-medium text-blue-600">
+                      {quotation.quotationNumber || 'N/A'}
+                    </div>
+                  ),
+                  // revisionNo: (
+                  //   <div className="text-sm text-gray-600">
+                  //     {quotation.quotationRevisionNo || '01'}
+                  //   </div>
+                  // ),
+                  customerInfo: (
+                    <div className="space-y-1">
+                      <div className="font-medium text-gray-900">
+                        {quotation.customer?.name || 'N/A'}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {quotation.customer?.email || 'No email'}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {quotation.customer?.phone || 'No phone'}
+                      </div>
+                      {quotation.customer?.pan && (
+                        <div className="text-xs text-gray-500">
+                          PAN: {quotation.customer.pan}
+                        </div>
+                      )}
+                    </div>
+                  ),
+                  dgSpecs: (
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">
+                        {quotation.dgSpecifications?.kva || 'N/A'} KVA
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {quotation.dgSpecifications?.phase || 'N/A'} 
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        Qty: {quotation.dgSpecifications?.quantity || 'N/A'}
+                      </div>
+                      {/* {quotation.dgModel && (
+                        <div className="text-xs text-gray-500">
+                          {quotation.dgModel}
+                        </div>
+                      )} */}
+                    </div>
+                  ),
+                  salesEngineer: (
+                    <div className="space-y-1">
+                      {quotation.salesEngineer ? (
+                        <>
+                          <div className="text-sm font-medium">
+                            {quotation.salesEngineer.fullName || 
+                             `${quotation.salesEngineer.firstName || ''} ${quotation.salesEngineer.lastName || ''}`.trim()}
+                          </div>
+                          {/* <div className="text-xs text-gray-600">
+                            {quotation.salesEngineer.salesEmployeeCode || 'N/A'}
+                          </div> */}
+                          <div className="text-xs text-gray-500">
+                            {quotation.salesEngineer.phone || 'No phone'}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm text-gray-500">Not assigned</div>
+                      )}
+                    </div>
+                  ),
+                  enquiryInfo: (
+                    <div className="space-y-1">
+                      {quotation.enquiryDetails ? (
+                        <>
+                          <div className="text-sm font-medium">
+                            Enquiry No: {quotation.enquiryDetails.enquiryNo || 'N/A'}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            {quotation.enquiryDetails.enquiryType || 'N/A'}
+                          </div>
+                          <div className="text-xs">
+                            <Badge 
+                              variant={
+                                quotation.enquiryDetails.enquiryStatus === 'Active' ? 'success' :
+                                quotation.enquiryDetails.enquiryStatus === 'Closed' ? 'danger' : 'info'
+                              }
+                              size="sm"
+                            >
+                              {quotation.enquiryDetails.enquiryStatus || 'N/A'}
+                            </Badge>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm text-gray-500">No enquiry</div>
+                      )}
+                    </div>
+                  ),
+                  dates: (
+                    <div className="space-y-1">
+                      <div className="text-sm">
+                        <span className="text-gray-600">Issue:</span><br/>
+                        {quotation.issueDate ? new Date(quotation.issueDate).toLocaleDateString() : 'N/A'}
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-gray-600">Valid Until:</span><br/>
+                        {quotation.validUntil ? new Date(quotation.validUntil).toLocaleDateString() : 'N/A'}
+                      </div>
+                    </div>
+                  ),
+                  financial: (
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium text-green-600">
+                        ₹{quotation.grandTotal ? quotation.grandTotal.toLocaleString() : '0'}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        Subtotal: ₹{quotation.subtotal ? quotation.subtotal.toLocaleString() : '0'}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        Tax: ₹{quotation.totalTax ? quotation.totalTax.toLocaleString() : '0'}
+                      </div>
+                      {quotation.totalDiscount > 0 && (
+                        <div className="text-xs text-red-600">
+                          Discount: ₹{quotation.totalDiscount.toLocaleString()}
+                        </div>
+                      )}
+                    </div>
+                  ),
+                  terms: (
+                    <div className="space-y-1">
+                      {/* <div className="text-xs">
+                        <span className="text-gray-600">Delivery:</span><br/>
+                        {quotation.deliveryPeriod || quotation.deliveryTerms || 'N/A'}
+                      </div>
+                      <div className="text-xs">
+                        <span className="text-gray-600">Payment:</span><br/>
+                        {quotation.paymentTerms || 'N/A'}
+                      </div> */}
+                      <div className="text-xs">
+                        <span className="text-gray-600">Validity:</span><br/>
+                        {quotation.validityDays || quotation.validity || '30'} days
+                      </div>
+                    </div>
+                  ),
                   status: (() => {
                     const status = quotation.status || 'Draft';
                     switch (status.toLowerCase()) {
@@ -1019,7 +1196,7 @@ export default function DGSales() {
                           setShowDGQuotationViewModal(true);
                         }}
                       >
-                        View
+                        <ViewIcon className="w-4 h-4" />
                       </Button>
                       <Button 
                         size="sm" 
@@ -1030,9 +1207,8 @@ export default function DGSales() {
                           setShowDGQuotationForm(true);
                         }}
                       >
-                        Edit
+                        <Edit className="w-4 h-4" />
                       </Button>
-                      {/* <Button size="sm">Convert to PO</Button> */}
                     </div>
                   )
                 }))}
@@ -1045,6 +1221,7 @@ export default function DGSales() {
                 }}
                 onPageChange={setCurrentPage}
               />
+              </div>
             </div>
           </div>
         );

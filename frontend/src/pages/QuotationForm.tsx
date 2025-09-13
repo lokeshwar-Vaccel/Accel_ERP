@@ -120,7 +120,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
     // Form states
     const [formData, setFormData] = useState<Partial<QuotationData>>(getDefaultQuotationData());
     const [errors, setErrors] = useState<ValidationError[]>([]);
-
+    console.log('Initial form data12:', formData);
     // Debug: Log initial form data
     useEffect(() => {
         console.log('Initial form data:', formData);
@@ -462,6 +462,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                 // New fields for service charges and battery buy back
                 serviceCharges: (quotation.serviceCharges || []).map((service: any) => ({
                     description: service.description || '',
+                    hsnNumber: service.hsnNumber || '',
                     quantity: service.quantity || 0,
                     unitPrice: service.unitPrice || 0,
                     discount: service.discount || 0,
@@ -4348,9 +4349,9 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                                     type="number"
                                                     min="0"
                                                     step="1"
-                                                    value={item.quantity}
+                                                    value={item.quantity || ''}
                                                     onChange={(e) => {
-                                                        let newQuantity = parseFloat(e.target.value) || 1;
+                                                        let newQuantity = parseFloat(e.target.value) || '';
                                                         updateQuotationItem(index, 'quantity', newQuantity);
                                                     }}
                                                     onKeyDown={(e) => handleQuantityKeyDown(e, index)}
@@ -4716,7 +4717,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                 <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
                                     style={{ gridTemplateColumns: '1fr 120px 100px 120px 80px 100px 80px' }}>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Description</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSN</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSN/SAC</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Unit Price</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
@@ -4782,7 +4783,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                                 type="number"
                                                 min="0"
                                                 step="1"
-                                                value={service.quantity}
+                                                value={service.quantity || ''}
                                                 onChange={(e) => {
                                                     const newServiceCharges = [...(formData.serviceCharges || [])];
                                                     const quantity = parseFloat(e.target.value) || 0;
@@ -4824,7 +4825,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                                     });
                                                 }}
                                                 className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right"
-                                                placeholder="1"
+                                                placeholder="0"
                                             />
                                         </div>
 
@@ -4834,7 +4835,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                                 type="number"
                                                 min="0"
                                                 step="1"
-                                                value={service.unitPrice}
+                                                value={service.unitPrice || ''}
                                                 onChange={(e) => {
                                                     const newServiceCharges = [...(formData.serviceCharges || [])];
                                                     const unitPrice = parseFloat(e.target.value) || 0;
@@ -4887,7 +4888,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                                 min="0"
                                                 max="100"
                                                 step="1"
-                                                value={service.discount}
+                                                value={service.discount || ''}
                                                 onChange={(e) => {
                                                     const newServiceCharges = [...(formData.serviceCharges || [])];
                                                     const discount = parseFloat(e.target.value) || 0;
@@ -4940,7 +4941,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                                 min="0"
                                                 max="100"
                                                 step="1"
-                                                value={service.taxRate}
+                                                value={service.taxRate || ''}
                                                 onChange={(e) => {
                                                     const newServiceCharges = [...(formData.serviceCharges || [])];
                                                     const taxRate = parseFloat(e.target.value) || 0;
@@ -5117,7 +5118,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                             type="number"
                                             min="0"
                                             step="1"
-                                            value={formData.batteryBuyBack?.quantity || 0}
+                                            value={formData.batteryBuyBack?.quantity || ''}
                                             onChange={(e) => {
                                                 const quantity = parseFloat(e.target.value) || 0;
                                                 const unitPrice = formData.batteryBuyBack?.unitPrice || 0;
@@ -5166,7 +5167,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                         <input
                                             type="number"
                                             step="1"
-                                            value={formData.batteryBuyBack?.unitPrice || 0}
+                                            value={formData.batteryBuyBack?.unitPrice || ''}
                                             onChange={(e) => {
                                                 const unitPrice = parseFloat(e.target.value) || 0;
                                                 const quantity = formData.batteryBuyBack?.quantity || 0;
@@ -5205,7 +5206,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                                     };
                                                 });
                                             }}
-                                            className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-500 focus:ring-1 focus:ring-blue-500 text-right"
+                                            className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none text-right"
                                             placeholder="0.00"
                                         />
                                     </div>
@@ -5217,7 +5218,7 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                             // min="0"
                                             max="100"
                                             step="1"
-                                            value={formData.batteryBuyBack?.discount || 0}
+                                            value={formData.batteryBuyBack?.discount || ''}
                                             onChange={(e) => {
                                                 const discount = parseFloat(e.target.value) || 0;
                                                 const quantity = formData.batteryBuyBack?.quantity || 0;
@@ -5416,10 +5417,10 @@ const QuotationFormPage: React.FC<QuotationFormPageProps> = ({ showHeader = true
                                 <span className="text-gray-600">Total Discount:</span>
                                 <span className="font-medium text-green-600">-₹{formData.totalDiscount?.toFixed(2) || '0.00'}</span>
                             </div>
-                            <div className="flex justify-between text-sm">
+                            {/* <div className="flex justify-between text-sm">
                                 <span className="text-gray-600">Overall Discount:</span>
                                 <span className="font-medium text-green-600">-{formData.overallDiscount || 0}% (-₹{formData.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
-                            </div>
+                            </div> */}
 
                             {/* Battery Buy Back Breakdown */}
                             {formData.batteryBuyBack && formData.batteryBuyBack.totalPrice > 0 && (

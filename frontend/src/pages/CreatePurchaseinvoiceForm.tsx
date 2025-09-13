@@ -2136,28 +2136,57 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                 Select Supplier *
               </label>
               <div className="relative dropdown-container">
-                <input
-                  ref={supplierInputRef}
-                  type="text"
-                  value={supplierSearchTerm || getSupplierName(formData.supplier)}
-                  onChange={(e) => {
-                    setSupplierSearchTerm(e.target.value);
-                    if (!showSupplierDropdown) setShowSupplierDropdown(true);
-                    setHighlightedSupplierIndex(-1);
-                  }}
-                  onFocus={() => {
-                    setShowSupplierDropdown(true);
-                    setHighlightedSupplierIndex(-1);
-                    // Don't clear search term in edit mode
-                    if (!supplierSearchTerm && formData.supplier && !isEditMode) {
-                      setSupplierSearchTerm('');
-                    }
-                  }}
-                  onKeyDown={handleSupplierKeyDown}
-                  placeholder="Search supplier or press ↓ to open"
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  data-field="supplier"
-                />
+                <div className="relative">
+                  <input
+                    ref={supplierInputRef}
+                    type="text"
+                    value={supplierSearchTerm || getSupplierName(formData.supplier)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSupplierSearchTerm(value);
+                      if (!value) { // If input is cleared, clear the supplier selection
+                        setFormData(prev => ({
+                          ...prev,
+                          supplier: '',
+                          supplierEmail: '',
+                          supplierAddress: undefined
+                        }));
+                      }
+                      if (!showSupplierDropdown) setShowSupplierDropdown(true);
+                      setHighlightedSupplierIndex(-1);
+                    }}
+                    onFocus={() => {
+                      setShowSupplierDropdown(true);
+                      setHighlightedSupplierIndex(-1);
+                      // Don't clear search term in edit mode
+                      if (!supplierSearchTerm && formData.supplier && !isEditMode) {
+                        setSupplierSearchTerm('');
+                      }
+                    }}
+                    onKeyDown={handleSupplierKeyDown}
+                    placeholder="Search supplier or press ↓ to open"
+                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    data-field="supplier"
+                    autoComplete="off"
+                  />
+                  {formData.supplier && !supplierSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          supplier: '',
+                          supplierEmail: '',
+                          supplierAddress: undefined
+                        }));
+                        setSupplierSearchTerm('');
+                      }}
+                      className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showSupplierDropdown ? 'rotate-180' : ''}`} />
                 </div>
@@ -2201,34 +2230,59 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                 Supplier Address *
               </label>
               <div className="relative dropdown-container">
-                <input
-                  ref={addressInputRef}
-                  type="text"
-                  value={addressSearchTerm || (formData.supplier ? (formData.supplierAddress ? `${formData.supplierAddress.address}, ${formData.supplierAddress.district}, ${formData.supplierAddress.state} - ${formData.supplierAddress.pincode}` : '') : '')}
-                  onChange={(e) => {
-                    setAddressSearchTerm(e.target.value);
-                    if (!showAddressDropdown) setShowAddressDropdown(true);
-                    setHighlightedAddressIndex(-1);
-                  }}
-                  onFocus={() => {
-                    if (!formData.supplier) {
-                      toast.error('Please select a supplier first');
-                      return;
-                    }
-                    setShowAddressDropdown(true);
-                    setHighlightedAddressIndex(-1);
-                    // Don't clear search term in edit mode
-                    if (!addressSearchTerm && formData.supplierAddress && !isEditMode) {
-                      setAddressSearchTerm('');
-                    }
-                  }}
-                  onKeyDown={handleAddressKeyDown}
-                  disabled={!formData.supplier}
-                  placeholder={!formData.supplier ? 'Select supplier first' : 'Search address or press ↓ to open'}
-                  className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${!formData.supplier ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300'
-                    }`}
-                  data-field="address"
-                />
+                <div className="relative">
+                  <input
+                    ref={addressInputRef}
+                    type="text"
+                    value={addressSearchTerm || (formData.supplier ? (formData.supplierAddress ? `${formData.supplierAddress.address}, ${formData.supplierAddress.district}, ${formData.supplierAddress.state} - ${formData.supplierAddress.pincode}` : '') : '')}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setAddressSearchTerm(value);
+                      if (!value) { // If input is cleared, clear the address selection
+                        setFormData(prev => ({
+                          ...prev,
+                          supplierAddress: undefined
+                        }));
+                      }
+                      if (!showAddressDropdown) setShowAddressDropdown(true);
+                      setHighlightedAddressIndex(-1);
+                    }}
+                    onFocus={() => {
+                      if (!formData.supplier) {
+                        toast.error('Please select a supplier first');
+                        return;
+                      }
+                      setShowAddressDropdown(true);
+                      setHighlightedAddressIndex(-1);
+                      // Don't clear search term in edit mode
+                      if (!addressSearchTerm && formData.supplierAddress && !isEditMode) {
+                        setAddressSearchTerm('');
+                      }
+                    }}
+                    onKeyDown={handleAddressKeyDown}
+                    disabled={!formData.supplier}
+                    placeholder={!formData.supplier ? 'Select supplier first' : 'Search address or press ↓ to open'}
+                    className={`w-full px-3 py-2 pr-8 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${!formData.supplier ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300'
+                      }`}
+                    data-field="address"
+                    autoComplete="off"
+                  />
+                  {formData.supplierAddress && !addressSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          supplierAddress: undefined
+                        }));
+                        setAddressSearchTerm('');
+                      }}
+                      className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAddressDropdown ? 'rotate-180' : ''}`} />
                 </div>
@@ -2282,28 +2336,52 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                 To Address *
               </label>
               <div className="relative dropdown-container">
-                <input
-                  ref={locationInputRef}
-                  type="text"
-                  value={locationSearchTerm || getLocationLabel(formData.location || '')}
-                  onChange={(e) => {
-                    setLocationSearchTerm(e.target.value);
-                    if (!showLocationDropdown) setShowLocationDropdown(true);
-                    setHighlightedLocationIndex(-1);
-                  }}
-                  onFocus={() => {
-                    setShowLocationDropdown(true);
-                    setHighlightedLocationIndex(-1);
-                    if (!locationSearchTerm && formData.location) {
-                      setLocationSearchTerm('');
-                    }
-                  }}
-                  autoComplete="off"
-                  onKeyDown={handleLocationKeyDown}
-                  placeholder="Search location or press ↓ to open"
-                  data-field="location"
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                />
+                <div className="relative">
+                  <input
+                    ref={locationInputRef}
+                    type="text"
+                    value={locationSearchTerm || getLocationLabel(formData.location || '')}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setLocationSearchTerm(value);
+                      if (!value) { // If input is cleared, clear the location selection
+                        setFormData(prev => ({
+                          ...prev,
+                          location: ''
+                        }));
+                      }
+                      if (!showLocationDropdown) setShowLocationDropdown(true);
+                      setHighlightedLocationIndex(-1);
+                    }}
+                    onFocus={() => {
+                      setShowLocationDropdown(true);
+                      setHighlightedLocationIndex(-1);
+                      if (!locationSearchTerm && formData.location) {
+                        setLocationSearchTerm('');
+                      }
+                    }}
+                    autoComplete="off"
+                    onKeyDown={handleLocationKeyDown}
+                    placeholder="Search location or press ↓ to open"
+                    data-field="location"
+                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                  />
+                  {formData.location && !locationSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          location: ''
+                        }));
+                        setLocationSearchTerm('');
+                      }}
+                      className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
                 </div>
@@ -2419,27 +2497,52 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                 Department
               </label>
               <div className="relative dropdown-container">
-                <input
-                  ref={departmentSelectRef}
-                  type="text"
-                  value={departmentSearchTerm || getDepartmentLabel(formData.department || '')}
-                  onChange={(e) => {
-                    setDepartmentSearchTerm(e.target.value);
-                    if (!showDepartmentDropdown) setShowDepartmentDropdown(true);
-                    setHighlightedDepartmentIndex(-1);
-                  }}
-                  onFocus={() => {
-                    setShowDepartmentDropdown(true);
-                    setHighlightedDepartmentIndex(-1);
-                    if (!departmentSearchTerm && formData.department) {
-                      setDepartmentSearchTerm('');
-                    }
-                  }}
-                  onKeyDown={handleDepartmentKeyDown}
-                  placeholder="Search department or press ↓ to open"
-                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                  data-field="department"
-                />
+                <div className="relative">
+                  <input
+                    ref={departmentSelectRef}
+                    type="text"
+                    value={departmentSearchTerm || getDepartmentLabel(formData.department || '')}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setDepartmentSearchTerm(value);
+                      if (!value) { // If input is cleared, clear the department selection
+                        setFormData(prev => ({
+                          ...prev,
+                          department: 'retail' // Reset to default
+                        }));
+                      }
+                      if (!showDepartmentDropdown) setShowDepartmentDropdown(true);
+                      setHighlightedDepartmentIndex(-1);
+                    }}
+                    onFocus={() => {
+                      setShowDepartmentDropdown(true);
+                      setHighlightedDepartmentIndex(-1);
+                      if (!departmentSearchTerm && formData.department) {
+                        setDepartmentSearchTerm('');
+                      }
+                    }}
+                    onKeyDown={handleDepartmentKeyDown}
+                    placeholder="Search department or press ↓ to open"
+                    className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                    data-field="department"
+                    autoComplete="off"
+                  />
+                  {formData.department && formData.department !== 'retail' && !departmentSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          department: 'retail' // Reset to default
+                        }));
+                        setDepartmentSearchTerm('');
+                      }}
+                      className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showDepartmentDropdown ? 'rotate-180' : ''}`} />
                 </div>
@@ -2493,7 +2596,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                   <div className="p-3 border-r border-gray-300 bg-gray-200">Part No</div>
                   <div className="p-3 border-r border-gray-300 bg-gray-200">Product Name</div>
                   <div className="p-3 border-r border-gray-300 bg-gray-200">Category</div>
-                  <div className="p-3 border-r border-gray-300 bg-gray-200">HSC/SAC</div>
+                  <div className="p-3 border-r border-gray-300 bg-gray-200">HSN/SAC</div>
                   <div className="p-3 border-r border-gray-300 bg-gray-200">GST(%)</div>
                   <div className="p-3 border-r border-gray-300 bg-gray-200">UOM</div>
                   <div className="p-3 border-r border-gray-300 bg-gray-200">GNDP Price</div>
@@ -2538,44 +2641,78 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                           required
                         />
                       ) : (
-                        <input
-                          type="text"
-                          value={productSearchTerms[index] || getProductPartNo(item.product)}
-                          onChange={(e) => {
-                            updateProductSearchTerm(index, e.target.value);
-                            setShowProductDropdowns({
-                              ...showProductDropdowns,
-                              [index]: true
-                            });
-                            setHighlightedProductIndex({
-                              ...highlightedProductIndex,
-                              [index]: -1
-                            });
-                          }}
-                          onFocus={() => {
-                            if (!productSearchTerms[index] && !item.product) {
-                              updateProductSearchTerm(index, '');
-                            }
-                            setShowProductDropdowns({
-                              ...showProductDropdowns,
-                              [index]: true
-                            });
-                          }}
-                          onBlur={() => {
-                            setTimeout(() => {
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={productSearchTerms[index] || getProductPartNo(item.product)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              updateProductSearchTerm(index, value);
+                              if (!value) { // If input is cleared, clear the product selection
+                                updateItem(index, 'product', '');
+                                updateItem(index, 'name', '');
+                                updateItem(index, 'partNo', '');
+                                updateItem(index, 'gndp', 0);
+                                updateItem(index, 'taxRate', 0);
+                                updateItem(index, 'totalPrice', 0);
+                                updateItem(index, 'hsnNumber', '');
+                                updateItem(index, 'uom', 'nos');
+                                updateItem(index, 'description', '');
+                              }
                               setShowProductDropdowns({
                                 ...showProductDropdowns,
-                                [index]: false
+                                [index]: true
                               });
-                            }, 200);
-                          }}
-                          onKeyDown={(e) => handleProductKeyDown(e, index)}
-                          data-row={index}
-                          data-field="partNo"
-                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-blue-50"
-                          placeholder="Type to search..."
-                          autoComplete="off"
-                        />
+                              setHighlightedProductIndex({
+                                ...highlightedProductIndex,
+                                [index]: -1
+                              });
+                            }}
+                            onFocus={() => {
+                              if (!productSearchTerms[index] && !item.product) {
+                                updateProductSearchTerm(index, '');
+                              }
+                              setShowProductDropdowns({
+                                ...showProductDropdowns,
+                                [index]: true
+                              });
+                            }}
+                            onBlur={() => {
+                              setTimeout(() => {
+                                setShowProductDropdowns({
+                                  ...showProductDropdowns,
+                                  [index]: false
+                                });
+                              }, 200);
+                            }}
+                            onKeyDown={(e) => handleProductKeyDown(e, index)}
+                            data-row={index}
+                            data-field="partNo"
+                            className="w-full p-2 pr-8 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:bg-blue-50"
+                            placeholder="Type to search..."
+                            autoComplete="off"
+                          />
+                          {item.product && !productSearchTerms[index] && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateItem(index, 'product', '');
+                                updateItem(index, 'name', '');
+                                updateItem(index, 'partNo', '');
+                                updateItem(index, 'gndp', 0);
+                                updateItem(index, 'taxRate', 0);
+                                updateItem(index, 'totalPrice', 0);
+                                updateItem(index, 'hsnNumber', '');
+                                updateItem(index, 'uom', 'nos');
+                                updateItem(index, 'description', '');
+                                updateProductSearchTerm(index, '');
+                              }}
+                              className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                       )}
                       {showProductDropdowns[index] && !item.isNewProduct && (
                         <div
@@ -2702,46 +2839,64 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                     <div className="p-1 border-r border-gray-200 relative">
                       {item.isNewProduct ? (
                         <>
-                          <input
-                            type="text"
-                            value={categorySearchTerms[index] || getCategoryLabel(item.category || 'spare_part')}
-                            onChange={(e) => {
-                              updateCategorySearchTerm(index, e.target.value);
-                              setShowCategoryDropdowns({
-                                ...showCategoryDropdowns,
-                                [index]: true
-                              });
-                              setHighlightedCategoryIndex({
-                                ...highlightedCategoryIndex,
-                                [index]: -1
-                              });
-                            }}
-                            onFocus={() => {
-                              setShowCategoryDropdowns({
-                                ...showCategoryDropdowns,
-                                [index]: true
-                              });
-                              setHighlightedCategoryIndex({
-                                ...highlightedCategoryIndex,
-                                [index]: -1
-                              });
-                            }}
-                            onBlur={() => {
-                              setTimeout(() => {
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={categorySearchTerms[index] || getCategoryLabel(item.category || 'spare_part')}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                updateCategorySearchTerm(index, value);
+                                if (!value) { // If input is cleared, clear the category selection
+                                  updateItem(index, 'category', 'spare_part'); // Reset to default
+                                }
                                 setShowCategoryDropdowns({
                                   ...showCategoryDropdowns,
-                                  [index]: false
+                                  [index]: true
                                 });
-                              }, 200);
-                            }}
-                            onKeyDown={(e) => handleCategoryKeyDown(e, index)}
-                            data-row={index}
-                            data-field="category"
-                            className="w-full p-2 border border-green-300 bg-green-50 text-sm focus:outline-none focus:bg-green-100 focus:ring-1 focus:ring-green-500 rounded"
-                            placeholder="Search category..."
-                            autoComplete="off"
-                            required
-                          />
+                                setHighlightedCategoryIndex({
+                                  ...highlightedCategoryIndex,
+                                  [index]: -1
+                                });
+                              }}
+                              onFocus={() => {
+                                setShowCategoryDropdowns({
+                                  ...showCategoryDropdowns,
+                                  [index]: true
+                                });
+                                setHighlightedCategoryIndex({
+                                  ...highlightedCategoryIndex,
+                                  [index]: -1
+                                });
+                              }}
+                              onBlur={() => {
+                                setTimeout(() => {
+                                  setShowCategoryDropdowns({
+                                    ...showCategoryDropdowns,
+                                    [index]: false
+                                  });
+                                }, 200);
+                              }}
+                              onKeyDown={(e) => handleCategoryKeyDown(e, index)}
+                              data-row={index}
+                              data-field="category"
+                              className="w-full p-2 pr-8 border border-green-300 bg-green-50 text-sm focus:outline-none focus:bg-green-100 focus:ring-1 focus:ring-green-500 rounded"
+                              placeholder="Search category..."
+                              autoComplete="off"
+                              required
+                            />
+                            {item.category && item.category !== 'spare_part' && !categorySearchTerms[index] && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateItem(index, 'category', 'spare_part'); // Reset to default
+                                  updateCategorySearchTerm(index, '');
+                                }}
+                                className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                           {showCategoryDropdowns[index] && (
                             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
 
@@ -2840,46 +2995,64 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                     <div className="p-1 border-r border-gray-200 relative">
                       {item.isNewProduct ? (
                         <>
-                          <input
-                            type="text"
-                            value={uomSearchTerms[index] || getUomLabel(item.uom || 'nos')}
-                            onChange={(e) => {
-                              updateUomSearchTerm(index, e.target.value);
-                              setShowUomDropdowns({
-                                ...showUomDropdowns,
-                                [index]: true
-                              });
-                              setHighlightedUomIndex({
-                                ...highlightedUomIndex,
-                                [index]: -1
-                              });
-                            }}
-                            onFocus={() => {
-                              setShowUomDropdowns({
-                                ...showUomDropdowns,
-                                [index]: true
-                              });
-                              setHighlightedUomIndex({
-                                ...highlightedUomIndex,
-                                [index]: -1
-                              });
-                            }}
-                            onBlur={() => {
-                              setTimeout(() => {
+                          <div className="relative">
+                            <input
+                              type="text"
+                              value={uomSearchTerms[index] || getUomLabel(item.uom || 'nos')}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                updateUomSearchTerm(index, value);
+                                if (!value) { // If input is cleared, clear the UOM selection
+                                  updateItem(index, 'uom', 'nos'); // Reset to default
+                                }
                                 setShowUomDropdowns({
                                   ...showUomDropdowns,
-                                  [index]: false
+                                  [index]: true
                                 });
-                              }, 200);
-                            }}
-                            onKeyDown={(e) => handleUomKeyDown(e, index)}
-                            data-row={index}
-                            data-field="uom"
-                            className="w-full p-2 border border-green-300 bg-green-50 text-sm focus:outline-none focus:bg-green-100 focus:ring-1 focus:ring-green-500 rounded"
-                            placeholder="Search UOM..."
-                            autoComplete="off"
-                            required
-                          />
+                                setHighlightedUomIndex({
+                                  ...highlightedUomIndex,
+                                  [index]: -1
+                                });
+                              }}
+                              onFocus={() => {
+                                setShowUomDropdowns({
+                                  ...showUomDropdowns,
+                                  [index]: true
+                                });
+                                setHighlightedUomIndex({
+                                  ...highlightedUomIndex,
+                                  [index]: -1
+                                });
+                              }}
+                              onBlur={() => {
+                                setTimeout(() => {
+                                  setShowUomDropdowns({
+                                    ...showUomDropdowns,
+                                    [index]: false
+                                  });
+                                }, 200);
+                              }}
+                              onKeyDown={(e) => handleUomKeyDown(e, index)}
+                              data-row={index}
+                              data-field="uom"
+                              className="w-full p-2 pr-8 border border-green-300 bg-green-50 text-sm focus:outline-none focus:bg-green-100 focus:ring-1 focus:ring-green-500 rounded"
+                              placeholder="Search UOM..."
+                              autoComplete="off"
+                              required
+                            />
+                            {item.uom && item.uom !== 'nos' && !uomSearchTerms[index] && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  updateItem(index, 'uom', 'nos'); // Reset to default
+                                  updateUomSearchTerm(index, '');
+                                }}
+                                className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
                           {showUomDropdowns[index] && (
                             <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
 
@@ -2949,8 +3122,8 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                         type="number"
                         min="0"
                         step="1"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 1)}
+                        value={item.quantity || ''}
+                        onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
                         onKeyDown={(e) => handleQuantityKeyDown(e, index)}
                         data-row={index}
                         data-field="quantity"
@@ -2958,7 +3131,7 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                           ? 'bg-green-50 focus:bg-green-100 focus:ring-green-500'
                           : 'focus:bg-blue-50'
                           }`}
-                        placeholder="1.00"
+                        placeholder="0"
                       />
                     </div>
 
@@ -3053,33 +3226,67 @@ const CreatePurchaseInvoiceForm: React.FC = () => {
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">Product</label>
                       <div className="relative">
-                        <input
-                          type="text"
-                          value={productSearchTerms[index] || getProductPartNo(item.product)}
-                          onChange={(e) => {
-                            updateProductSearchTerm(index, e.target.value);
-                            setShowProductDropdowns({
-                              ...showProductDropdowns,
-                              [index]: true
-                            });
-                            setHighlightedProductIndex({
-                              ...highlightedProductIndex,
-                              [index]: -1
-                            });
-                          }}
-                          onFocus={() => {
-                            if (!productSearchTerms[index] && !item.product) {
-                              updateProductSearchTerm(index, '');
-                            }
-                            setShowProductDropdowns({
-                              ...showProductDropdowns,
-                              [index]: true
-                            });
-                          }}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Search product..."
-                          autoComplete="off"
-                        />
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={productSearchTerms[index] || getProductPartNo(item.product)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              updateProductSearchTerm(index, value);
+                              if (!value) { // If input is cleared, clear the product selection
+                                updateItem(index, 'product', '');
+                                updateItem(index, 'name', '');
+                                updateItem(index, 'partNo', '');
+                                updateItem(index, 'gndp', 0);
+                                updateItem(index, 'taxRate', 0);
+                                updateItem(index, 'totalPrice', 0);
+                                updateItem(index, 'hsnNumber', '');
+                                updateItem(index, 'uom', 'nos');
+                                updateItem(index, 'description', '');
+                              }
+                              setShowProductDropdowns({
+                                ...showProductDropdowns,
+                                [index]: true
+                              });
+                              setHighlightedProductIndex({
+                                ...highlightedProductIndex,
+                                [index]: -1
+                              });
+                            }}
+                            onFocus={() => {
+                              if (!productSearchTerms[index] && !item.product) {
+                                updateProductSearchTerm(index, '');
+                              }
+                              setShowProductDropdowns({
+                                ...showProductDropdowns,
+                                [index]: true
+                              });
+                            }}
+                            className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Search product..."
+                            autoComplete="off"
+                          />
+                          {item.product && !productSearchTerms[index] && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateItem(index, 'product', '');
+                                updateItem(index, 'name', '');
+                                updateItem(index, 'partNo', '');
+                                updateItem(index, 'gndp', 0);
+                                updateItem(index, 'taxRate', 0);
+                                updateItem(index, 'totalPrice', 0);
+                                updateItem(index, 'hsnNumber', '');
+                                updateItem(index, 'uom', 'nos');
+                                updateItem(index, 'description', '');
+                                updateProductSearchTerm(index, '');
+                              }}
+                              className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                         {showProductDropdowns[index] && (
                           <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
                             {getFilteredProducts(productSearchTerms[index] || '').map((product, productIndex) => (

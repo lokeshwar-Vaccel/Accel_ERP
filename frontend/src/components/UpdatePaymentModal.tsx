@@ -17,6 +17,52 @@ interface PaymentData {
   paidAmount: number;
   notes: string;
   useRazorpay: boolean;
+  paymentMethodDetails?: {
+    cash?: {
+      receivedBy?: string;
+      receiptNumber?: string;
+    };
+    cheque?: {
+      chequeNumber: string;
+      bankName: string;
+      branchName?: string;
+      issueDate: string;
+      clearanceDate?: string;
+      accountHolderName?: string;
+      accountNumber?: string;
+      ifscCode?: string;
+    };
+    bankTransfer?: {
+      bankName: string;
+      branchName?: string;
+      accountNumber: string;
+      ifscCode: string;
+      transactionId: string;
+      transferDate: string;
+      accountHolderName?: string;
+      referenceNumber?: string;
+    };
+    upi?: {
+      upiId: string;
+      transactionId: string;
+      transactionReference?: string;
+      payerName?: string;
+      payerPhone?: string;
+    };
+    card?: {
+      cardType: 'credit' | 'debit' | 'prepaid';
+      cardNetwork: 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other';
+      lastFourDigits: string;
+      transactionId: string;
+      authorizationCode?: string;
+      cardHolderName?: string;
+    };
+    other?: {
+      methodName: string;
+      referenceNumber?: string;
+      additionalDetails?: Record<string, any>;
+    };
+  };
 }
 
 const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
@@ -33,37 +79,27 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
     paymentDate: new Date().toISOString().split('T')[0],
     paidAmount: 0,
     notes: '',
-    useRazorpay: false
+    useRazorpay: false,
+    paymentMethodDetails: {}
   });
 
   const [showPaymentStatusDropdown, setShowPaymentStatusDropdown] = useState(false);
   const [showPaymentMethodDropdown, setShowPaymentMethodDropdown] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  // Initialize payment data based on item type
+  // Initialize payment data - always start with a clean form for new payments
   useEffect(() => {
     if (item) {
-      if (itemType === 'quotation') {
-        // For quotations, use payment fields (same as invoices now)
-        setPaymentData({
-          paymentStatus: item.paymentStatus || 'pending',
-          paymentMethod: item.paymentMethod || '',
-          paymentDate: item.paymentDate ? new Date(item.paymentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          paidAmount: item.paidAmount || 0,
-          notes: item.notes || '',
-          useRazorpay: false
-        });
-      } else {
-        // For invoices, use payment fields
-        setPaymentData({
-          paymentStatus: item.paymentStatus || 'pending',
-          paymentMethod: item.paymentMethod || '',
-          paymentDate: item.paymentDate ? new Date(item.paymentDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
-          paidAmount: item.paidAmount || 0,
-          notes: item.notes || '',
-          useRazorpay: false
-        });
-      }
+      // Always start with a clean payment form for new payments
+      setPaymentData({
+        paymentStatus: 'pending',
+        paymentMethod: '',
+        paymentDate: new Date().toISOString().split('T')[0],
+        paidAmount: 0,
+        notes: '',
+        useRazorpay: false,
+        paymentMethodDetails: {}
+      });
     }
   }, [item, itemType]);
 
@@ -170,6 +206,20 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
     }
   };
 
+  // Helper function to update payment method details
+  const updatePaymentMethodDetails = (method: string, field: string, value: string) => {
+    setPaymentData(prev => ({
+      ...prev,
+      paymentMethodDetails: {
+        ...prev.paymentMethodDetails,
+        [method]: {
+          ...prev.paymentMethodDetails?.[method as keyof typeof prev.paymentMethodDetails],
+          [field]: value
+        }
+      }
+    }));
+  };
+
   const validateForm = () => {
     const errors: Record<string, string> = {};
 
@@ -187,6 +237,72 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
 
     if (!paymentData.paymentDate) {
       errors.paymentDate = 'Payment date is required';
+    }
+
+    // Validate payment method details
+    if (paymentData.paymentMethod && paymentData.paymentMethodDetails) {
+      switch (paymentData.paymentMethod) {
+        case 'cheque':
+          const chequeDetails = paymentData.paymentMethodDetails.cheque;
+          if (!chequeDetails?.chequeNumber) {
+            errors.chequeNumber = 'Cheque number is required';
+          }
+          if (!chequeDetails?.bankName) {
+            errors.bankName = 'Bank name is required';
+          }
+          if (!chequeDetails?.issueDate) {
+            errors.issueDate = 'Issue date is required';
+          }
+          break;
+        case 'bank_transfer':
+          const bankTransferDetails = paymentData.paymentMethodDetails.bankTransfer;
+          if (!bankTransferDetails?.bankName) {
+            errors.bankName = 'Bank name is required';
+          }
+          if (!bankTransferDetails?.accountNumber) {
+            errors.accountNumber = 'Account number is required';
+          }
+          if (!bankTransferDetails?.ifscCode) {
+            errors.ifscCode = 'IFSC code is required';
+          }
+          if (!bankTransferDetails?.transactionId) {
+            errors.transactionId = 'Transaction ID is required';
+          }
+          if (!bankTransferDetails?.transferDate) {
+            errors.transferDate = 'Transfer date is required';
+          }
+          break;
+        case 'upi':
+          const upiDetails = paymentData.paymentMethodDetails.upi;
+          if (!upiDetails?.upiId) {
+            errors.upiId = 'UPI ID is required';
+          }
+          if (!upiDetails?.transactionId) {
+            errors.transactionId = 'Transaction ID is required';
+          }
+          break;
+        case 'card':
+          const cardDetails = paymentData.paymentMethodDetails.card;
+          if (!cardDetails?.cardType) {
+            errors.cardType = 'Card type is required';
+          }
+          if (!cardDetails?.cardNetwork) {
+            errors.cardNetwork = 'Card network is required';
+          }
+          if (!cardDetails?.lastFourDigits) {
+            errors.lastFourDigits = 'Last 4 digits are required';
+          }
+          if (!cardDetails?.transactionId) {
+            errors.transactionId = 'Transaction ID is required';
+          }
+          break;
+        case 'other':
+          const otherDetails = paymentData.paymentMethodDetails.other;
+          if (!otherDetails?.methodName) {
+            errors.methodName = 'Method name is required';
+          }
+          break;
+      }
     }
 
     return errors;
@@ -238,7 +354,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Update Payment</h2>
             <p className="text-sm text-gray-600 mt-1">
-              Process payment for {itemType === 'quotation' ? 'quotation' : 'invoice'} #{itemType === 'quotation' ? item.quotationNumber : item.invoiceNumber}
+              Record a new payment for {itemType === 'quotation' ? 'quotation' : 'invoice'} #{itemType === 'quotation' ? item.quotationNumber : item.invoiceNumber}
             </p>
           </div>
           <button
@@ -413,7 +529,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
 
                     <div className="border-t border-yellow-200 pt-3">
                       <div className="flex justify-between">
-                        <span className="text-yellow-800 font-semibold">Total Paid:</span>
+                        <span className="text-yellow-800 font-semibold">Total After This Payment:</span>
                         <span className="font-bold text-yellow-800">₹{(getPaidAmount() + paymentData.paidAmount).toLocaleString()}</span>
                       </div>
                     </div>
@@ -421,7 +537,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                     {paymentData.paidAmount < getRemainingPayableAmount() && (
                       <div className="border-t border-yellow-200 pt-3">
                         <div className="flex justify-between">
-                          <span className="text-yellow-700">Remaining Balance:</span>
+                          <span className="text-yellow-700">Remaining After This Payment:</span>
                           <span className="font-semibold text-red-600">₹{(getRemainingPayableAmount() - paymentData.paidAmount).toLocaleString()}</span>
                         </div>
                       </div>
@@ -476,7 +592,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                       min="0"
                       max={getRemainingPayableAmount()}
                       step="1"
-                      value={paymentData.paidAmount}
+                      value={paymentData.paidAmount ||''}
                       onChange={(e) => handleAmountChange(parseFloat(e.target.value) || 0)}
                       className={`w-full pl-8 pr-3 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-lg font-semibold ${formErrors.paidAmount ? 'border-red-500' : 'border-gray-300'}`}
                       placeholder="0"
@@ -492,45 +608,22 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
 
                 {/* Quick Amount Buttons */}
                 <div className="grid grid-cols-2 gap-3">
-                  {getPaidAmount() > 0 ? (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => handleAmountChange(Math.round(getRemainingPayableAmount() * 0.5))}
-                        className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
-                      >
-                        Half Remaining
-                        <div className="text-xs">₹{Math.round(getRemainingPayableAmount() * 0.5).toLocaleString()}</div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleAmountChange(getRemainingPayableAmount())}
-                        className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
-                      >
-                        Full Remaining
-                        <div className="text-xs">₹{getRemainingPayableAmount().toLocaleString()}</div>
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => handleAmountChange(Math.round(getRemainingPayableAmount() * 0.5))}
-                        className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
-                      >
-                        50% Payment
-                        <div className="text-xs">₹{Math.round(getRemainingPayableAmount() * 0.5).toLocaleString()}</div>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleAmountChange(getRemainingPayableAmount())}
-                        className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
-                      >
-                        Full Amount
-                        <div className="text-xs">₹{getRemainingPayableAmount().toLocaleString()}</div>
-                      </button>
-                    </>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleAmountChange(Math.round(getRemainingPayableAmount() * 0.5))}
+                    className="px-4 py-2 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200 transition-colors text-sm font-medium"
+                  >
+                    Half Remaining
+                    <div className="text-xs">₹{Math.round(getRemainingPayableAmount() * 0.5).toLocaleString()}</div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAmountChange(getRemainingPayableAmount())}
+                    className="px-4 py-2 bg-green-100 text-green-700 rounded-lg hover:bg-green-200 transition-colors text-sm font-medium"
+                  >
+                    Full Remaining
+                    <div className="text-xs">₹{getRemainingPayableAmount().toLocaleString()}</div>
+                  </button>
                 </div>
               </div>
 
@@ -670,6 +763,508 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                     )}
                   </div>
 
+                  {/* Dynamic Payment Method Details */}
+                  {paymentData.paymentMethod && paymentData.paymentMethod !== '' && (
+                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <h4 className="text-sm font-medium text-gray-900 mb-4 flex items-center">
+                        <svg className="w-4 h-4 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Payment Method Details - {getPaymentMethodLabel(paymentData.paymentMethod)}
+                      </h4>
+
+                      {/* Cash Payment Details */}
+                      {paymentData.paymentMethod === 'cash' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Received By
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.cash?.receivedBy || ''}
+                              onChange={(e) => updatePaymentMethodDetails('cash', 'receivedBy', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Who received the cash?"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Receipt Number
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.cash?.receiptNumber || ''}
+                              onChange={(e) => updatePaymentMethodDetails('cash', 'receiptNumber', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Receipt number (optional)"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Cheque Payment Details */}
+                      {paymentData.paymentMethod === 'cheque' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Cheque Number <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.cheque?.chequeNumber || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('cheque', 'chequeNumber', e.target.value);
+                                if (formErrors.chequeNumber) {
+                                  setFormErrors(prev => ({ ...prev, chequeNumber: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.chequeNumber ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter cheque number"
+                              required
+                            />
+                            {formErrors.chequeNumber && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.chequeNumber}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Bank Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.cheque?.bankName || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('cheque', 'bankName', e.target.value);
+                                if (formErrors.bankName) {
+                                  setFormErrors(prev => ({ ...prev, bankName: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.bankName ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter bank name"
+                              required
+                            />
+                            {formErrors.bankName && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.bankName}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Branch Name
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.cheque?.branchName || ''}
+                              onChange={(e) => updatePaymentMethodDetails('cheque', 'branchName', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Enter branch name"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Issue Date <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              value={paymentData.paymentMethodDetails?.cheque?.issueDate || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('cheque', 'issueDate', e.target.value);
+                                if (formErrors.issueDate) {
+                                  setFormErrors(prev => ({ ...prev, issueDate: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.issueDate ? 'border-red-500' : 'border-gray-300'}`}
+                              required
+                            />
+                            {formErrors.issueDate && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.issueDate}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Account Holder Name
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.cheque?.accountHolderName || ''}
+                              onChange={(e) => updatePaymentMethodDetails('cheque', 'accountHolderName', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Enter account holder name"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Account Number
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.cheque?.accountNumber || ''}
+                              onChange={(e) => updatePaymentMethodDetails('cheque', 'accountNumber', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Enter account number"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Bank Transfer Details */}
+                      {paymentData.paymentMethod === 'bank_transfer' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Bank Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.bankTransfer?.bankName || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('bankTransfer', 'bankName', e.target.value);
+                                if (formErrors.bankName) {
+                                  setFormErrors(prev => ({ ...prev, bankName: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.bankName ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter bank name"
+                              required
+                            />
+                            {formErrors.bankName && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.bankName}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Account Number <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.bankTransfer?.accountNumber || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('bankTransfer', 'accountNumber', e.target.value);
+                                if (formErrors.accountNumber) {
+                                  setFormErrors(prev => ({ ...prev, accountNumber: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.accountNumber ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter account number"
+                              required
+                            />
+                            {formErrors.accountNumber && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.accountNumber}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              IFSC Code <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.bankTransfer?.ifscCode || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('bankTransfer', 'ifscCode', e.target.value);
+                                if (formErrors.ifscCode) {
+                                  setFormErrors(prev => ({ ...prev, ifscCode: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.ifscCode ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter IFSC code"
+                              required
+                            />
+                            {formErrors.ifscCode && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.ifscCode}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Transaction ID <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.bankTransfer?.transactionId || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('bankTransfer', 'transactionId', e.target.value);
+                                if (formErrors.transactionId) {
+                                  setFormErrors(prev => ({ ...prev, transactionId: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter transaction ID"
+                              required
+                            />
+                            {formErrors.transactionId && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Transfer Date <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              value={paymentData.paymentMethodDetails?.bankTransfer?.transferDate || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('bankTransfer', 'transferDate', e.target.value);
+                                if (formErrors.transferDate) {
+                                  setFormErrors(prev => ({ ...prev, transferDate: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transferDate ? 'border-red-500' : 'border-gray-300'}`}
+                              required
+                            />
+                            {formErrors.transferDate && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.transferDate}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Reference Number
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.bankTransfer?.referenceNumber || ''}
+                              onChange={(e) => updatePaymentMethodDetails('bankTransfer', 'referenceNumber', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Enter reference number"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* UPI Payment Details */}
+                      {paymentData.paymentMethod === 'upi' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              UPI ID <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.upi?.upiId || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('upi', 'upiId', e.target.value);
+                                if (formErrors.upiId) {
+                                  setFormErrors(prev => ({ ...prev, upiId: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.upiId ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter UPI ID"
+                              required
+                            />
+                            {formErrors.upiId && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.upiId}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Transaction ID <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.upi?.transactionId || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('upi', 'transactionId', e.target.value);
+                                if (formErrors.transactionId) {
+                                  setFormErrors(prev => ({ ...prev, transactionId: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter transaction ID"
+                              required
+                            />
+                            {formErrors.transactionId && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Payer Name
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.upi?.payerName || ''}
+                              onChange={(e) => updatePaymentMethodDetails('upi', 'payerName', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Enter payer name"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Payer Phone
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.upi?.payerPhone || ''}
+                              onChange={(e) => updatePaymentMethodDetails('upi', 'payerPhone', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Enter payer phone"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Card Payment Details */}
+                      {paymentData.paymentMethod === 'card' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Card Type <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={paymentData.paymentMethodDetails?.card?.cardType || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('card', 'cardType', e.target.value);
+                                if (formErrors.cardType) {
+                                  setFormErrors(prev => ({ ...prev, cardType: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.cardType ? 'border-red-500' : 'border-gray-300'}`}
+                              required
+                            >
+                              <option value="">Select card type</option>
+                              <option value="credit">Credit Card</option>
+                              <option value="debit">Debit Card</option>
+                              <option value="prepaid">Prepaid Card</option>
+                            </select>
+                            {formErrors.cardType && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.cardType}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Card Network <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={paymentData.paymentMethodDetails?.card?.cardNetwork || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('card', 'cardNetwork', e.target.value);
+                                if (formErrors.cardNetwork) {
+                                  setFormErrors(prev => ({ ...prev, cardNetwork: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.cardNetwork ? 'border-red-500' : 'border-gray-300'}`}
+                              required
+                            >
+                              <option value="">Select card network</option>
+                              <option value="visa">Visa</option>
+                              <option value="mastercard">Mastercard</option>
+                              <option value="amex">American Express</option>
+                              <option value="rupay">RuPay</option>
+                              <option value="other">Other</option>
+                            </select>
+                            {formErrors.cardNetwork && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.cardNetwork}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Last 4 Digits <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              maxLength={4}
+                              value={paymentData.paymentMethodDetails?.card?.lastFourDigits || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('card', 'lastFourDigits', e.target.value);
+                                if (formErrors.lastFourDigits) {
+                                  setFormErrors(prev => ({ ...prev, lastFourDigits: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.lastFourDigits ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Last 4 digits"
+                              required
+                            />
+                            {formErrors.lastFourDigits && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.lastFourDigits}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Transaction ID <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.card?.transactionId || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('card', 'transactionId', e.target.value);
+                                if (formErrors.transactionId) {
+                                  setFormErrors(prev => ({ ...prev, transactionId: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter transaction ID"
+                              required
+                            />
+                            {formErrors.transactionId && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Card Holder Name
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.card?.cardHolderName || ''}
+                              onChange={(e) => updatePaymentMethodDetails('card', 'cardHolderName', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Enter card holder name"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Authorization Code
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.card?.authorizationCode || ''}
+                              onChange={(e) => updatePaymentMethodDetails('card', 'authorizationCode', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Enter authorization code"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Other Payment Method Details */}
+                      {paymentData.paymentMethod === 'other' && (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Method Name <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.other?.methodName || ''}
+                              onChange={(e) => {
+                                updatePaymentMethodDetails('other', 'methodName', e.target.value);
+                                if (formErrors.methodName) {
+                                  setFormErrors(prev => ({ ...prev, methodName: '' }));
+                                }
+                              }}
+                              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${formErrors.methodName ? 'border-red-500' : 'border-gray-300'}`}
+                              placeholder="Enter payment method name"
+                              required
+                            />
+                            {formErrors.methodName && (
+                              <p className="text-red-500 text-xs mt-1">{formErrors.methodName}</p>
+                            )}
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Reference Number
+                            </label>
+                            <input
+                              type="text"
+                              value={paymentData.paymentMethodDetails?.other?.referenceNumber || ''}
+                              onChange={(e) => updatePaymentMethodDetails('other', 'referenceNumber', e.target.value)}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                              placeholder="Enter reference number"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Payment Notes */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -717,7 +1312,7 @@ const UpdatePaymentModal: React.FC<UpdatePaymentModalProps> = ({
                   Processing...
                 </div>
               ) : (
-                paymentData.useRazorpay ? 'Proceed to Payment' : 'Update Payment'
+                paymentData.useRazorpay ? 'Proceed to Payment' : 'Add Payment'
               )}
             </button>
           </div>

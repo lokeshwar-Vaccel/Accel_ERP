@@ -191,10 +191,7 @@ export const verifyRazorpayPayment = async (
         invoice.paymentStatus = 'partial';
       }
 
-      // Add payment method if not set
-      if (!invoice.paymentMethod) {
-        invoice.paymentMethod = 'razorpay';
-      }
+      // Payment method is now handled in separate InvoicePayment records
 
       await invoice.save();
     }
@@ -305,15 +302,7 @@ export const processManualPayment = async (
       invoice.paymentStatus = 'partial';
     }
 
-    // Add payment method if not set
-    if (!invoice.paymentMethod) {
-      invoice.paymentMethod = paymentMethod;
-    }
-
-    // Add payment date if not set
-    if (!invoice.paymentDate) {
-      invoice.paymentDate = payment.transactionDate;
-    }
+    // Payment method and date are now handled in separate InvoicePayment records
 
     await invoice.save();
 
@@ -489,9 +478,7 @@ async function updateInvoiceFromPayment(payment: IPayment) {
       invoice.paymentStatus = 'partial';
     }
 
-    if (!invoice.paymentMethod) {
-      invoice.paymentMethod = payment.paymentMethod;
-    }
+    // Payment method is now handled in separate InvoicePayment records
 
     await invoice.save();
   }

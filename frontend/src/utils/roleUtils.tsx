@@ -16,6 +16,7 @@ export const getRoleColor = (role: UserRole): string => {
     manager: 'bg-green-100 text-green-800 border-green-200',
     hr: 'bg-orange-100 text-orange-800 border-orange-200',
     field_engineer: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+    sales_engineer: 'bg-cyan-100 text-cyan-800 border-cyan-200',
     viewer: 'bg-gray-100 text-gray-800 border-gray-200'
   };
   return colors[role];

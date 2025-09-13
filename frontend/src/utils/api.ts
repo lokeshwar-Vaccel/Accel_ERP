@@ -171,6 +171,9 @@ class ApiClient {
 
     getFieldEngineers: () =>
       this.makeRequest<{ success: boolean; data: { fieldEngineers: any[] } }>('/users/field-engineers'),
+
+    getSalesEngineers: () =>
+      this.makeRequest<{ success: boolean; data: { salesEngineers: any[] } }>('/users/sales-engineers'),
   };
 
   // Lead Management APIs
@@ -1453,6 +1456,68 @@ class ApiClient {
 
     getStats: () =>
       this.makeRequest<{ success: boolean; data: any }>('/quotations/stats'),
+  };
+
+  quotationPayments = {
+    create: (paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any; message: string }>('/quotation-payments', {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      }),
+
+    getByQuotation: (quotationId: string) =>
+      this.makeRequest<{ success: boolean; data: { payments: any[] } }>(`/quotation-payments/quotation/${quotationId}`),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: { payment: any } }>(`/quotation-payments/${id}`),
+
+    update: (id: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: { payment: any } }>(`/quotation-payments/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(paymentData),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/quotation-payments/${id}`, {
+        method: 'DELETE',
+      }),
+
+    generatePDF: (id: string) =>
+      this.makeRequest<Blob>(`/quotation-payments/${id}/pdf`, {
+        method: 'GET',
+        responseType: 'blob',
+      })
+  };
+
+  invoicePayments = {
+    create: (paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any; message: string }>('/invoice-payments', {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      }),
+
+    getByInvoice: (invoiceId: string) =>
+      this.makeRequest<{ success: boolean; data: { payments: any[] } }>(`/invoice-payments/invoice/${invoiceId}`),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: { payment: any } }>(`/invoice-payments/${id}`),
+
+    update: (id: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: { payment: any } }>(`/invoice-payments/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(paymentData),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/invoice-payments/${id}`, {
+        method: 'DELETE',
+      }),
+
+    generatePDF: (id: string) =>
+      this.makeRequest<Blob>(`/invoice-payments/${id}/pdf`, {
+        method: 'GET',
+        responseType: 'blob',
+      })
   };
 
   // Delivery Challans

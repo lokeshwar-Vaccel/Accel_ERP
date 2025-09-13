@@ -205,6 +205,10 @@ const InvoiceFormPage: React.FC = () => {
   // Search states
   const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
   const [uomSearchTerms, setUomSearchTerms] = useState<Record<number, string>>({});
+  
+  // Address search terms
+  const [billToAddressSearchTerm, setBillToAddressSearchTerm] = useState('');
+  const [shipToAddressSearchTerm, setShipToAddressSearchTerm] = useState('');
 
   // Stock validation states
   const [stockValidation, setStockValidation] = useState<Record<number, {
@@ -2435,10 +2439,17 @@ const InvoiceFormPage: React.FC = () => {
               <div className="relative dropdown-container">
                 <input
                   type="text"
-                  value={locationSearchTerm || getLocationLabel(formData.location || '')}
+                  value={locationSearchTerm || (formData.location ? getLocationLabel(formData.location) : '')}
                   onChange={(e) => {
                     if (isFromQuotation) return; // Disable editing when from quotation
-                    setLocationSearchTerm(e.target.value);
+                    const value = e.target.value;
+                    setLocationSearchTerm(value);
+                    
+                    // If input is cleared, clear the location selection
+                    if (!value) {
+                      setFormData(prev => ({ ...prev, location: '' }));
+                    }
+                    
                     if (!showLocationDropdown) setShowLocationDropdown(true);
                     setHighlightedLocationIndex(-1);
                   }}
@@ -2458,7 +2469,19 @@ const InvoiceFormPage: React.FC = () => {
                       : 'focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                   }`}
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  {formData.location && !locationSearchTerm && !isFromQuotation && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, location: '' }));
+                        setLocationSearchTerm('');
+                      }}
+                      className="text-gray-400 hover:text-gray-600 mr-2"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showLocationDropdown ? 'rotate-180' : ''}`} />
                 </div>
                 {showLocationDropdown && !isFromQuotation && (
@@ -2529,15 +2552,14 @@ const InvoiceFormPage: React.FC = () => {
               <div className="relative dropdown-container">
                 <input
                   type="text"
-                  value={customerSearchTerm !== undefined ? customerSearchTerm : getCustomerLabel((formData.customer?._id || formData?.customer || '') as string)}
+                  value={customerSearchTerm !== undefined ? customerSearchTerm : (formData.customer?._id ? getCustomerLabel(formData.customer._id) : '')}
                   onChange={(e) => {
                     if (isFromQuotation) return; // Disable editing when from quotation
-                    setCustomerSearchTerm(e.target.value);
-                    if (!showCustomerDropdown) setShowCustomerDropdown(true);
-                    setHighlightedCustomerIndex(-1);
-
-                    // Clear the selected customer when user starts typing
-                    if (formData.customer?._id) {
+                    const value = e.target.value;
+                    setCustomerSearchTerm(value);
+                    
+                    // If input is cleared, clear the customer selection
+                    if (!value) {
                       setFormData(prev => ({
                         ...prev,
                         customer: { _id: '', name: '', email: '', phone: '', pan: '' },
@@ -2546,6 +2568,9 @@ const InvoiceFormPage: React.FC = () => {
                       }));
                       setAddresses([]);
                     }
+                    
+                    if (!showCustomerDropdown) setShowCustomerDropdown(true);
+                    setHighlightedCustomerIndex(-1);
                   }}
                   onFocus={() => {
                     if (isFromQuotation) return; // Disable dropdown when from quotation
@@ -2584,8 +2609,8 @@ const InvoiceFormPage: React.FC = () => {
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showCustomerDropdown ? 'rotate-180' : ''}`} />
                 </div>
 
-                {/* Clear button - only show when there's a search term or selected customer */}
-                {(customerSearchTerm || formData.customer?._id) && !isFromQuotation && (
+                {/* Clear button - only show when there's a selected customer and no search term */}
+                {formData.customer?._id && !customerSearchTerm && !isFromQuotation && (
                   <button
                     type="button"
                     onClick={(e) => {
@@ -2675,24 +2700,54 @@ const InvoiceFormPage: React.FC = () => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={getAddressLabel((formData.billToAddress as any)?.addressId?.toString(), 'billTo')}
-                    readOnly
-                    disabled={!formData.customer?._id || !formData?.customer}
+                    value={billToAddressSearchTerm || (formData.billToAddress?.address ? getAddressLabel((formData.billToAddress as any)?.addressId?.toString(), 'billTo') : '')}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setBillToAddressSearchTerm(value);
+                      
+                      // If input is cleared, clear the address selection
+                      if (!value) {
+                        setFormData(prev => ({
+                          ...prev,
+                          billToAddress: { address: '', state: '', district: '', pincode: '' }
+                        }));
+                      }
+                      
+                      if (!showBillToAddressDropdown) setShowBillToAddressDropdown(true);
+                      setHighlightedBillToAddressIndex(-1);
+                    }}
                     onFocus={() => {
                       if (formData.customer?._id) {
                         setShowBillToAddressDropdown(true);
                         setHighlightedBillToAddressIndex(-1);
                       }
                     }}
+                    autoComplete="off"
                     onKeyDown={handleBillToAddressKeyDown}
-                    placeholder={!formData.customer?._id ? (isPurchaseInvoice ? "Select supplier first" : "Select customer first") : "Press ↓ to open address list"}
+                    disabled={!formData.customer?._id || !formData?.customer}
+                    placeholder={!formData.customer?._id ? (isPurchaseInvoice ? "Select supplier first" : "Select customer first") : "Search address or press ↓ to open"}
                     data-field="bill-to-address"
                     className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                       }`}
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.billToAddress?.address && !billToAddressSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            billToAddress: { address: '', state: '', district: '', pincode: '' }
+                          }));
+                          setBillToAddressSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showBillToAddressDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showBillToAddressDropdown && formData.customer?._id && (
@@ -2716,7 +2771,15 @@ const InvoiceFormPage: React.FC = () => {
                         {isPurchaseInvoice ? 'Select supplier address' : 'Select bill to address'}
                       </button>
 
-                      {addresses.map((address, index) => (
+                      {addresses
+                        .filter(address =>
+                          !billToAddressSearchTerm ||
+                          address.address.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                          address.district.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                          address.state.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                          address.pincode.includes(billToAddressSearchTerm)
+                        )
+                        .map((address, index) => (
                         <button
                           key={address.id}
                           data-address-index={index}
@@ -2734,6 +2797,7 @@ const InvoiceFormPage: React.FC = () => {
                             });
                             setShowBillToAddressDropdown(false);
                             setHighlightedBillToAddressIndex(-1);
+                            setBillToAddressSearchTerm('');
                           }}
                           className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.billToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
                             highlightedBillToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
@@ -2767,24 +2831,54 @@ const InvoiceFormPage: React.FC = () => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={getAddressLabel((formData.shipToAddress as any)?.addressId?.toString(), 'shipTo')}
-                    readOnly
-                    disabled={!formData.customer?._id}
+                    value={shipToAddressSearchTerm || (formData.shipToAddress?.address ? getAddressLabel((formData.shipToAddress as any)?.addressId?.toString(), 'shipTo') : '')}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setShipToAddressSearchTerm(value);
+                      
+                      // If input is cleared, clear the address selection
+                      if (!value) {
+                        setFormData(prev => ({
+                          ...prev,
+                          shipToAddress: { address: '', state: '', district: '', pincode: '' }
+                        }));
+                      }
+                      
+                      if (!showShipToAddressDropdown) setShowShipToAddressDropdown(true);
+                      setHighlightedShipToAddressIndex(-1);
+                    }}
                     onFocus={() => {
                       if (formData.customer?._id) {
                         setShowShipToAddressDropdown(true);
                         setHighlightedShipToAddressIndex(-1);
                       }
                     }}
+                    autoComplete="off"
                     onKeyDown={handleShipToAddressKeyDown}
-                    placeholder={!formData.customer?._id ? (isPurchaseInvoice ? "Select supplier first" : "Select customer first") : "Press ↓ to open address list"}
+                    disabled={!formData.customer?._id}
+                    placeholder={!formData.customer?._id ? (isPurchaseInvoice ? "Select supplier first" : "Select customer first") : "Search address or press ↓ to open"}
                     data-field="ship-to-address"
                     className={`w-full px-3 py-2 pr-10 border rounded-lg transition-colors ${!formData.customer?._id
                       ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       : 'border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500'
                       }`}
                   />
-                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                    {formData.shipToAddress?.address && !shipToAddressSearchTerm && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => ({
+                            ...prev,
+                            shipToAddress: { address: '', state: '', district: '', pincode: '' }
+                          }));
+                          setShipToAddressSearchTerm('');
+                        }}
+                        className="text-gray-400 hover:text-gray-600 mr-2"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showShipToAddressDropdown ? 'rotate-180' : ''}`} />
                   </div>
                   {showShipToAddressDropdown && formData.customer?._id && (
@@ -2808,7 +2902,15 @@ const InvoiceFormPage: React.FC = () => {
                         {isPurchaseInvoice ? 'Select company address' : 'Select ship to address'}
                       </button>
 
-                      {addresses.map((address, index) => (
+                      {addresses
+                        .filter(address =>
+                          !shipToAddressSearchTerm ||
+                          address.address.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                          address.district.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                          address.state.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                          address.pincode.includes(shipToAddressSearchTerm)
+                        )
+                        .map((address, index) => (
                         <button
                           key={address.id}
                           data-address-index={index}
@@ -2826,6 +2928,7 @@ const InvoiceFormPage: React.FC = () => {
                             });
                             setShowShipToAddressDropdown(false);
                             setHighlightedShipToAddressIndex(-1);
+                            setShipToAddressSearchTerm('');
                           }}
                           className={`w-full px-3 py-2 text-left transition-colors text-sm ${(formData.shipToAddress as any)?.addressId === address.id ? 'bg-blue-100 text-blue-800' :
                             highlightedShipToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
@@ -2939,19 +3042,21 @@ const InvoiceFormPage: React.FC = () => {
                 <div className="relative dropdown-container">
                   <input
                     type="text"
-                    value={engineerSearchTerm || getEngineerLabel(formData.assignedEngineer || '')}
+                    value={engineerSearchTerm || (formData.assignedEngineer ? getEngineerLabel(formData.assignedEngineer) : '')}
                     onChange={(e) => {
-                      setEngineerSearchTerm(e.target.value);
-                      if (!showEngineerDropdown) setShowEngineerDropdown(true);
-                      setHighlightedEngineerIndex(-1);
-
-                      // Clear the selected engineer when user starts typing
-                      if (formData.assignedEngineer) {
+                      const value = e.target.value;
+                      setEngineerSearchTerm(value);
+                      
+                      // If input is cleared, clear the engineer selection
+                      if (!value) {
                         setFormData(prev => ({
                           ...prev,
                           assignedEngineer: ''
                         }));
                       }
+                      
+                      if (!showEngineerDropdown) setShowEngineerDropdown(true);
+                      setHighlightedEngineerIndex(-1);
                     }}
                     onFocus={() => {
                       setShowEngineerDropdown(true);
@@ -3062,8 +3167,8 @@ const InvoiceFormPage: React.FC = () => {
                     <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEngineerDropdown ? 'rotate-180' : ''}`} />
                   </div>
 
-                  {/* Clear button - only show when there's a search term or selected engineer */}
-                  {(engineerSearchTerm || formData.assignedEngineer) && (
+                  {/* Clear button - only show when there's a selected engineer and no search term */}
+                  {formData.assignedEngineer && !engineerSearchTerm && (
                     <button
                       type="button"
                       onClick={(e) => {
@@ -3178,9 +3283,22 @@ const InvoiceFormPage: React.FC = () => {
               <div className="relative dropdown-container">
                 <input
                   type="text"
-                  value={engineSerialSearchTerm || formData.engineSerialNumber || ''}
+                  value={engineSerialSearchTerm || (formData.engineSerialNumber ? formData.engineSerialNumber : '')}
                   onChange={(e) => {
-                    setEngineSerialSearchTerm(e.target.value);
+                    const value = e.target.value;
+                    setEngineSerialSearchTerm(value);
+                    
+                    // If input is cleared, clear the engine serial number selection
+                    if (!value) {
+                      setFormData(prev => ({
+                        ...prev,
+                        engineSerialNumber: '',
+                        kva: '',
+                        hourMeterReading: '',
+                        serviceRequestDate: undefined
+                      }));
+                    }
+                    
                     if (!showEngineSerialDropdown) setShowEngineSerialDropdown(true);
                     setHighlightedEngineSerialIndex(-1);
                   }}
@@ -3232,7 +3350,25 @@ const InvoiceFormPage: React.FC = () => {
                   placeholder="Select engine serial number"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                 />
-                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  {formData.engineSerialNumber && !engineSerialSearchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          engineSerialNumber: '',
+                          kva: '',
+                          hourMeterReading: '',
+                          serviceRequestDate: undefined
+                        }));
+                        setEngineSerialSearchTerm('');
+                      }}
+                      className="text-gray-400 hover:text-gray-600 mr-2"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
                   <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEngineSerialDropdown ? 'rotate-180' : ''}`} />
                 </div>
                 {showEngineSerialDropdown && dgDetailsWithServiceData.length > 0 && (
@@ -3573,54 +3709,93 @@ const InvoiceFormPage: React.FC = () => {
 
                       {/* Product */}
                       <div className="p-1 border-r border-gray-200 relative">
-                        <input
-                          type="text"
-                          value={productSearchTerms[index] || getProductPartNo(item.product)}
-                          onChange={(e) => {
-                            updateProductSearchTerm(index, e.target.value);
-                            setShowProductDropdowns({
-                              ...showProductDropdowns,
-                              [index]: true
-                            });
-                            setHighlightedProductIndex({
-                              ...highlightedProductIndex,
-                              [index]: -1
-                            });
-
-                            // Load all stock for location if not already loaded
-                            if (formData.location && Object.keys(productStockCache).length === 0) {
-                              loadAllStockForLocation();
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={productSearchTerms[index] || (item.product ? getProductPartNo(item.product) : '')}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              updateProductSearchTerm(index, value);
+                              
+                            // If input is cleared, clear all fields in this row
+                            if (!value) {
+                              updateInvoiceItem(index, 'product', '');
+                              updateInvoiceItem(index, 'partNo', '');
+                              updateInvoiceItem(index, 'quantity', 0);
+                              updateInvoiceItem(index, 'unitPrice', 0);
+                              updateInvoiceItem(index, 'uom', 'nos');
+                              updateInvoiceItem(index, 'description', '');
+                              updateInvoiceItem(index, 'hsnNumber', '');
+                              updateInvoiceItem(index, 'discount', 0);
+                              updateInvoiceItem(index, 'taxRate', 0);
+                              updateInvoiceItem(index, 'totalPrice', 0);
                             }
-                          }}
-                          onFocus={() => {
-                            if (!productSearchTerms[index] && !item.product) {
-                              updateProductSearchTerm(index, '');
-                            }
-                            setShowProductDropdowns({
-                              ...showProductDropdowns,
-                              [index]: true
-                            });
-
-                            // Load all stock for location if not already loaded
-                            if (formData.location && Object.keys(productStockCache).length === 0) {
-                              loadAllStockForLocation();
-                            }
-                          }}
-                          onBlur={() => {
-                            setTimeout(() => {
+                              
                               setShowProductDropdowns({
                                 ...showProductDropdowns,
-                                [index]: false
+                                [index]: true
                               });
-                            }, 200);
-                          }}
-                          onKeyDown={(e) => handleProductKeyDown(e, index)}
-                          data-row={index}
-                          data-field="product"
-                          className="w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50"
-                          placeholder="Type to search..."
-                          autoComplete="off"
-                        />
+                              setHighlightedProductIndex({
+                                ...highlightedProductIndex,
+                                [index]: -1
+                              });
+
+                              // Load all stock for location if not already loaded
+                              if (formData.location && Object.keys(productStockCache).length === 0) {
+                                loadAllStockForLocation();
+                              }
+                            }}
+                            onFocus={() => {
+                              if (!productSearchTerms[index] && !item.product) {
+                                updateProductSearchTerm(index, '');
+                              }
+                              setShowProductDropdowns({
+                                ...showProductDropdowns,
+                                [index]: true
+                              });
+
+                              // Load all stock for location if not already loaded
+                              if (formData.location && Object.keys(productStockCache).length === 0) {
+                                loadAllStockForLocation();
+                              }
+                            }}
+                            onBlur={() => {
+                              setTimeout(() => {
+                                setShowProductDropdowns({
+                                  ...showProductDropdowns,
+                                  [index]: false
+                                });
+                              }, 200);
+                            }}
+                            onKeyDown={(e) => handleProductKeyDown(e, index)}
+                            data-row={index}
+                            data-field="product"
+                            className="w-full p-2 pr-8 border-0 bg-transparent text-sm focus:outline-none focus:bg-blue-50"
+                            placeholder="Type to search..."
+                            autoComplete="off"
+                          />
+                          {item.product && !productSearchTerms[index] && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                updateInvoiceItem(index, 'product', '');
+                                updateInvoiceItem(index, 'partNo', '');
+                                updateInvoiceItem(index, 'quantity', 0);
+                                updateInvoiceItem(index, 'unitPrice', 0);
+                                updateInvoiceItem(index, 'uom', 'nos');
+                                updateInvoiceItem(index, 'description', '');
+                                updateInvoiceItem(index, 'hsnNumber', '');
+                                updateInvoiceItem(index, 'discount', 0);
+                                updateInvoiceItem(index, 'taxRate', 0);
+                                updateInvoiceItem(index, 'totalPrice', 0);
+                                updateProductSearchTerm(index, '');
+                              }}
+                              className="absolute right-1 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                              <X className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
                         {showProductDropdowns[index] && (
                           <div
                             className="absolute top-full left-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-[400px] overflow-hidden"
@@ -3799,9 +3974,9 @@ const InvoiceFormPage: React.FC = () => {
                           type="number"
                           min="0"
                           step="1"
-                          value={item.quantity}
+                          value={item.quantity || ''}
                           onChange={(e) => {
-                            let newQuantity = parseFloat(e.target.value) || 0;
+                            let newQuantity = parseFloat(e.target.value) || '' || 0;
 
                             if (item.product && productStockCache[item.product]) {
                               const stockInfo = productStockCache[item.product];
@@ -3842,7 +4017,7 @@ const InvoiceFormPage: React.FC = () => {
                                 : ''
                           ) : ''
                             }`}
-                          placeholder="1.00"
+                          placeholder="0"
                           title={
                             item.product && productStockCache[item.product]?.available === 0
                               ? isDeliveryChallan
@@ -4128,7 +4303,7 @@ const InvoiceFormPage: React.FC = () => {
                           type="number"
                           min="1"
                           step="1"
-                          value={service.quantity}
+                          value={service.quantity || ''}
                           onChange={(e) => {
                             const newServiceCharges = [...(formData.serviceCharges || [])];
                             const quantity = parseFloat(e.target.value) || 1;
@@ -4179,7 +4354,7 @@ const InvoiceFormPage: React.FC = () => {
                           type="number"
                           min="0"
                           step="0.01"
-                          value={service.unitPrice}
+                          value={service.unitPrice || ''}
                           onChange={(e) => {
                             const newServiceCharges = [...(formData.serviceCharges || [])];
                             const unitPrice = parseFloat(e.target.value) || 0;
@@ -4231,7 +4406,7 @@ const InvoiceFormPage: React.FC = () => {
                           min="0"
                           max="100"
                           step="0.01"
-                          value={service.discount}
+                          value={service.discount || ''}
                           onChange={(e) => {
                             const newServiceCharges = [...(formData.serviceCharges || [])];
                             const discount = parseFloat(e.target.value) || 0;
@@ -4283,7 +4458,7 @@ const InvoiceFormPage: React.FC = () => {
                           min="0"
                           max="100"
                           step="0.01"
-                          value={service.taxRate}
+                          value={service.taxRate || ''}
                           onChange={(e) => {
                             const newServiceCharges = [...(formData.serviceCharges || [])];
                             const taxRate = parseFloat(e.target.value) || 0;
@@ -4499,7 +4674,7 @@ const InvoiceFormPage: React.FC = () => {
                           type="number"
                           min="1"
                           step="1"
-                          value={formData.batteryBuyBack.quantity}
+                          value={formData.batteryBuyBack.quantity || ''}
                           onChange={(e) => {
                             setFormData(prev => {
                               const quantity = parseFloat(e.target.value) || 1;
@@ -4550,7 +4725,7 @@ const InvoiceFormPage: React.FC = () => {
                           type="number"
                           min="0"
                           step="0.01"
-                          value={formData.batteryBuyBack.unitPrice}
+                          value={formData.batteryBuyBack.unitPrice || ''}
                           onChange={(e) => {
                             setFormData(prev => {
                               const unitPrice = parseFloat(e.target.value) || 0;
@@ -4602,7 +4777,7 @@ const InvoiceFormPage: React.FC = () => {
                           min="0"
                           max="100"
                           step="0.01"
-                          value={formData.batteryBuyBack.discount}
+                          value={formData.batteryBuyBack.discount || ''}
                           onChange={(e) => {
                             setFormData(prev => {
                               const discount = parseFloat(e.target.value) || 0;
@@ -4900,12 +5075,12 @@ const InvoiceFormPage: React.FC = () => {
                   <span className="text-gray-600">Total Discount:</span>
                   <span className="font-medium text-green-600">-₹{formData.totalDiscount?.toFixed(2) || '0.00'}</span>
                 </div>
-                {isSalesInvoice && (
+                {/* {isSalesInvoice && (
                   <div className="flex justify-between text-sm">
                     <span className="text-gray-600">Overall Discount:</span>
                     <span className="font-medium text-green-600">-{formData.overallDiscount || 0}% (-₹{formData.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
                   </div>
-                )}
+                )} */}
                 <div className="flex justify-between font-bold text-lg border-t pt-3">
                   <span>Grand Total:</span>
                   <span className="text-blue-600">₹{formData.grandTotal?.toFixed(2) || '0.00'}</span>

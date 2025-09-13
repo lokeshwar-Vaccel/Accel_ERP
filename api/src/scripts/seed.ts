@@ -119,6 +119,20 @@ const sampleUsers = [
     ]
   },
   {
+    firstName: 'Sarah',
+    lastName: 'Sales',
+    email: 'sarah.sales@sunpowerservices.com',
+    password: 'sales123',
+    role: UserRole.SALES_ENGINEER,
+    status: 'active',
+    moduleAccess: [
+      { module: 'dashboard', access: true, permission: 'read' },
+      { module: 'dg_sales', access: true, permission: 'write' },
+      { module: 'product_management', access: true, permission: 'write' },
+      { module: 'lead_management', access: true, permission: 'write' }
+    ]
+  },
+  {
     firstName: 'Lisa',
     lastName: 'HR',
     email: 'lisa.hr@sunpowerservices.com',

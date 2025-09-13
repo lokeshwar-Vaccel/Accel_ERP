@@ -29,7 +29,8 @@ import {
   Receipt,
   Calculator,
   Battery,
-  Trash2
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 import { Button } from '../components/ui/Botton';
 import { Modal } from '../components/ui/Modal';
@@ -672,6 +673,14 @@ interface PaymentUpdate {
   useRazorpay?: boolean;
   razorpayOrderId?: string;
   paymentId?: string;
+  paymentMethodDetails?: {
+    cash?: { receivedBy?: string; receiptNumber?: string };
+    cheque?: { chequeNumber: string; bankName: string; branchName?: string; issueDate: Date; clearanceDate?: Date; accountHolderName?: string; accountNumber?: string; ifscCode?: string };
+    bankTransfer?: { bankName: string; branchName?: string; accountNumber: string; ifscCode: string; transactionId: string; transferDate: Date; accountHolderName?: string; referenceNumber?: string };
+    upi?: { upiId: string; transactionId: string; transactionReference?: string; payerName?: string; payerPhone?: string };
+    card?: { cardType: 'credit' | 'debit' | 'prepaid'; cardNetwork: 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other'; lastFourDigits: string; transactionId: string; authorizationCode?: string; cardHolderName?: string };
+    other?: { methodName: string; referenceNumber?: string; additionalDetails?: Record<string, any> };
+  };
 }
 
 // Add advance payment fields to the quotation interface
@@ -860,7 +869,15 @@ const InvoiceManagement: React.FC = () => {
     paymentDate: '',
     paidAmount: 0,
     notes: '',
-    useRazorpay: false
+    useRazorpay: false,
+    paymentMethodDetails: {
+      cash: { receivedBy: '', receiptNumber: '' },
+      cheque: { chequeNumber: '', bankName: '', issueDate: new Date() },
+      bankTransfer: { bankName: '', accountNumber: '', ifscCode: '', transactionId: '', transferDate: new Date() },
+      upi: { upiId: '', transactionId: '' },
+      card: { cardType: 'credit', cardNetwork: 'visa', lastFourDigits: '', transactionId: '' },
+      other: { methodName: '' }
+    }
   });
 
   // Form states
@@ -954,6 +971,10 @@ const InvoiceManagement: React.FC = () => {
   // Quotation-specific state
   const [selectedQuotation, setSelectedQuotation] = useState<any | null>(null);
   const [showQuotationViewModal, setShowQuotationViewModal] = useState(false);
+  const [quotationPaymentHistory, setQuotationPaymentHistory] = useState<any[]>([]);
+  const [loadingQuotationPayments, setLoadingQuotationPayments] = useState(false);
+  const [invoicePaymentHistory, setInvoicePaymentHistory] = useState<any[]>([]);
+  const [loadingInvoicePayments, setLoadingInvoicePayments] = useState(false);
   const [showConfirmationModal, setShowConfirmationModal] = useState(false);
   const [confirmationData, setConfirmationData] = useState<{
     title: string;
@@ -961,6 +982,8 @@ const InvoiceManagement: React.FC = () => {
     onConfirm: () => void;
     type: 'danger' | 'warning' | 'info';
   } | null>(null);
+
+  
 
   // Old advance payment states removed - now using unified UpdatePaymentModal
   const [showAdvancePaymentModal, setShowAdvancePaymentModal] = useState(false);
@@ -1243,6 +1266,8 @@ const InvoiceManagement: React.FC = () => {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+
 
   // 🚀 KEYBOARD SHORTCUTS FOR QUICK INVOICE CREATION
   useEffect(() => {
@@ -1735,6 +1760,7 @@ const InvoiceManagement: React.FC = () => {
     setSelectedInvoice(invoice);
     setOriginalInvoiceData(JSON.parse(JSON.stringify(invoice))); // Deep copy for backup
     setShowViewModal(true);
+    fetchInvoicePaymentHistory(invoice._id);
   };
 
   const handleEditInvoice = (invoice: Invoice) => {
@@ -1938,6 +1964,405 @@ const InvoiceManagement: React.FC = () => {
 
     setSelectedQuotation(quotation);
     setShowQuotationViewModal(true);
+    // Fetch payment history when opening quotation view modal
+    fetchQuotationPaymentHistory(quotation._id);
+  };
+
+  // Fetch payment history for a quotation
+  const fetchQuotationPaymentHistory = async (quotationId: string) => {
+    try {
+      setLoadingQuotationPayments(true);
+      const response = await apiClient.quotationPayments.getByQuotation(quotationId);
+      if (response.success) {
+        setQuotationPaymentHistory(response.data.payments || []);
+      }
+    } catch (error) {
+      console.error('Error fetching quotation payment history:', error);
+      toast.error('Failed to fetch payment history');
+    } finally {
+      setLoadingQuotationPayments(false);
+    }
+  };
+
+  // Helper function to handle PDF generation for quotation payments
+  const handleGenerateQuotationPaymentPDF = async (paymentId: string) => {
+    try {
+      const response = await apiClient.quotationPayments.generatePDF(paymentId);
+
+      // Create blob URL and trigger download
+      const blob = new Blob([response], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `quotation-payment-receipt-${paymentId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Payment receipt PDF generated successfully!');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF');
+    }
+  };
+  // Fetch payment history for an invoice
+  const fetchInvoicePaymentHistory = async (invoiceId: string) => {
+    try {
+      setLoadingInvoicePayments(true);
+      const response = await apiClient.invoicePayments.getByInvoice(invoiceId);
+      if (response.success) {
+        setInvoicePaymentHistory(response.data as any || response.data?.payments || []);
+      }
+    } catch (error) {
+      console.error('Error fetching invoice payment history:', error);
+      toast.error('Failed to fetch payment history');
+    } finally {
+      setLoadingInvoicePayments(false);
+    }
+  };
+
+  // Helper function to handle PDF generation for invoice payments
+  const handleGenerateInvoicePaymentPDF = async (paymentId: string) => {
+    try {
+      const response = await apiClient.invoicePayments.generatePDF(paymentId);
+
+      // Create blob URL and trigger download
+      const blob = new Blob([response], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `invoice-payment-receipt-${paymentId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      toast.success('Payment receipt PDF generated successfully!');
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF');
+    }
+  };
+
+  // Helper function to render quotation payment history
+  const renderQuotationPaymentHistory = () => {
+    if (loadingQuotationPayments) {
+      return (
+        <div className="flex items-center justify-center py-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-sm text-gray-600">Loading payment history...</span>
+        </div>
+      );
+    }
+
+    if (quotationPaymentHistory.length === 0) {
+      return (
+        <div className="text-center py-4 text-gray-500">
+          <p className="text-sm">No payment records found</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {quotationPaymentHistory.map((payment, index) => (
+          <div key={payment._id || index} className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-3">
+                <div className={`w-3 h-3 rounded-full ${payment.paymentStatus === 'completed' ? 'bg-green-500' :
+                    payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
+                      payment.paymentStatus === 'failed' ? 'bg-red-500' :
+                        'bg-gray-500'
+                  }`}></div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900">
+                    {getPaymentMethodLabel(payment.paymentMethod)} Payment
+                  </h4>
+                  <p className="text-xs text-gray-500">
+                    {formatDate(payment.paymentDate)} • {payment.paymentStatus}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-green-600">
+                    {formatCurrency(payment.amount)}
+                  </p>
+                  {payment.receiptNumber && (
+                    <p className="text-xs text-gray-500">Receipt: {payment.receiptNumber}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleGenerateQuotationPaymentPDF(payment._id)}
+                  className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
+                  title="Generate PDF Receipt"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>PDF</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Payment Method Details */}
+            {payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {renderQuotationPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails)}
+                </div>
+              </div>
+            )}
+
+            {/* Payment Notes */}
+            {payment.notes && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-gray-600">
+                  <span className="font-medium">Notes:</span> {payment.notes}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Helper function to render invoice payment history
+  const renderInvoicePaymentHistory = () => {
+    if (loadingInvoicePayments) {
+      return (
+        <div className="flex items-center justify-center py-4">
+          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-sm text-gray-600">Loading payment history...</span>
+        </div>
+      );
+    }
+
+    if (invoicePaymentHistory.length === 0) {
+      return (
+        <div className="text-center py-4 text-gray-500">
+          <p className="text-sm">No payment records found</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {invoicePaymentHistory.map((payment, index) => (
+          <div key={payment._id || index} className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center space-x-3">
+                <div className={`w-3 h-3 rounded-full ${payment.paymentStatus === 'completed' ? 'bg-green-500' :
+                    payment.paymentStatus === 'pending' ? 'bg-yellow-500' :
+                      payment.paymentStatus === 'failed' ? 'bg-red-500' :
+                        'bg-gray-500'
+                  }`}></div>
+                <div>
+                  <h4 className="text-sm font-medium text-gray-900">
+                    {getPaymentMethodLabel(payment.paymentMethod)} Payment
+                  </h4>
+                  <p className="text-xs text-gray-500">
+                    {formatDate(payment.paymentDate)} • {payment.paymentStatus}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-3">
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-green-600">
+                    {formatCurrency(payment.amount)}
+                  </p>
+                  {payment.receiptNumber && (
+                    <p className="text-xs text-gray-500">Receipt: {payment.receiptNumber}</p>
+                  )}
+                </div>
+                <button
+                  onClick={() => handleGenerateInvoicePaymentPDF(payment._id)}
+                  className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
+                  title="Generate PDF Receipt"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>PDF</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Payment Method Details */}
+            {payment.paymentMethodDetails && Object.keys(payment.paymentMethodDetails).length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {renderQuotationPaymentMethodDetails(payment.paymentMethod, payment.paymentMethodDetails)}
+                </div>
+              </div>
+            )}
+
+            {/* Payment Notes */}
+            {payment.notes && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-xs text-gray-600">
+                  <span className="font-medium">Notes:</span> {payment.notes}
+                </p>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Helper function to render payment method details for quotations
+  const renderQuotationPaymentMethodDetails = (paymentMethod: string, details: any) => {
+    switch (paymentMethod) {
+      case 'cash':
+        return (
+          <>
+            {details.cash?.receivedBy && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Received By:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cash.receivedBy}</span>
+              </div>
+            )}
+            {details.cash?.receiptNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Receipt Number:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cash.receiptNumber}</span>
+              </div>
+            )}
+          </>
+        );
+      case 'cheque':
+        return (
+          <>
+            {details.cheque?.chequeNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Cheque Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.cheque.chequeNumber}</span>
+              </div>
+            )}
+            {details.cheque?.bankName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Bank Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cheque.bankName}</span>
+              </div>
+            )}
+            {details.cheque?.issueDate && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Issue Date:</span>
+                <span className="ml-2 text-sm text-gray-900">{formatDate(details.cheque.issueDate)}</span>
+              </div>
+            )}
+            {details.cheque?.accountHolderName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Account Holder:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.cheque.accountHolderName}</span>
+              </div>
+            )}
+          </>
+        );
+      case 'bank_transfer':
+        return (
+          <>
+            {details.bankTransfer?.bankName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Bank Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.bankTransfer.bankName}</span>
+              </div>
+            )}
+            {details.bankTransfer?.accountNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Account Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.bankTransfer.accountNumber}</span>
+              </div>
+            )}
+            {details.bankTransfer?.transactionId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transaction ID:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.bankTransfer.transactionId}</span>
+              </div>
+            )}
+            {details.bankTransfer?.transferDate && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transfer Date:</span>
+                <span className="ml-2 text-sm text-gray-900">{formatDate(details.bankTransfer.transferDate)}</span>
+              </div>
+            )}
+          </>
+        );
+      case 'upi':
+        return (
+          <>
+            {details.upi?.upiId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">UPI ID:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.upi.upiId}</span>
+              </div>
+            )}
+            {details.upi?.transactionId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transaction ID:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.upi.transactionId}</span>
+              </div>
+            )}
+            {details.upi?.payerName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Payer Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.upi.payerName}</span>
+              </div>
+            )}
+          </>
+        );
+      case 'card':
+        return (
+          <>
+            {details.card?.cardType && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Card Type:</span>
+                <span className="ml-2 text-sm text-gray-900 capitalize">{details.card.cardType}</span>
+              </div>
+            )}
+            {details.card?.cardNetwork && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Card Network:</span>
+                <span className="ml-2 text-sm text-gray-900 capitalize">{details.card.cardNetwork}</span>
+              </div>
+            )}
+            {details.card?.lastFourDigits && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Last 4 Digits:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">****{details.card.lastFourDigits}</span>
+              </div>
+            )}
+            {details.card?.transactionId && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Transaction ID:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.card.transactionId}</span>
+              </div>
+            )}
+          </>
+        );
+      case 'other':
+        return (
+          <>
+            {details.other?.methodName && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Method Name:</span>
+                <span className="ml-2 text-sm text-gray-900">{details.other.methodName}</span>
+              </div>
+            )}
+            {details.other?.referenceNumber && (
+              <div>
+                <span className="text-sm font-medium text-gray-600">Reference Number:</span>
+                <span className="ml-2 text-sm text-gray-900 font-mono">{details.other.referenceNumber}</span>
+              </div>
+            )}
+          </>
+        );
+      default:
+        return null;
+    }
   };
 
   const handleEditQuotation = (quotation: any) => {
@@ -2350,25 +2775,133 @@ const InvoiceManagement: React.FC = () => {
     }
   };
 
+  // Validate payment method details
+  const validatePaymentMethodDetails = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    if (!paymentUpdate.paymentMethod) {
+      errors.paymentMethod = 'Payment method is required';
+      setFormErrors(prev => ({ ...prev, ...errors }));
+      return false;
+    }
+
+    const methodDetails = paymentUpdate.paymentMethodDetails;
+    
+    switch (paymentUpdate.paymentMethod) {
+      case 'cheque':
+        if (!methodDetails?.cheque?.chequeNumber?.trim()) {
+          errors.chequeNumber = 'Cheque number is required';
+        }
+        if (!methodDetails?.cheque?.bankName?.trim()) {
+          errors.bankName = 'Bank name is required';
+        }
+        if (!methodDetails?.cheque?.issueDate) {
+          errors.issueDate = 'Issue date is required';
+        }
+        break;
+        
+      case 'bank_transfer':
+        if (!methodDetails?.bankTransfer?.bankName?.trim()) {
+          errors.bankName = 'Bank name is required';
+        }
+        if (!methodDetails?.bankTransfer?.accountNumber?.trim()) {
+          errors.accountNumber = 'Account number is required';
+        }
+        if (!methodDetails?.bankTransfer?.ifscCode?.trim()) {
+          errors.ifscCode = 'IFSC code is required';
+        }
+        if (!methodDetails?.bankTransfer?.transactionId?.trim()) {
+          errors.transactionId = 'Transaction ID is required';
+        }
+        if (!methodDetails?.bankTransfer?.transferDate) {
+          errors.transferDate = 'Transfer date is required';
+        }
+        break;
+        
+      case 'upi':
+        if (!methodDetails?.upi?.upiId?.trim()) {
+          errors.upiId = 'UPI ID is required';
+        }
+        if (!methodDetails?.upi?.transactionId?.trim()) {
+          errors.transactionId = 'Transaction ID is required';
+        }
+        break;
+        
+      case 'card':
+        if (!methodDetails?.card?.cardType?.trim()) {
+          errors.cardType = 'Card type is required';
+        }
+        if (!methodDetails?.card?.cardNetwork?.trim()) {
+          errors.cardNetwork = 'Card network is required';
+        }
+        if (!methodDetails?.card?.lastFourDigits?.trim()) {
+          errors.lastFourDigits = 'Last 4 digits are required';
+        }
+        if (!methodDetails?.card?.transactionId?.trim()) {
+          errors.transactionId = 'Transaction ID is required';
+        }
+        break;
+        
+      case 'other':
+        if (!methodDetails?.other?.methodName?.trim()) {
+          errors.methodName = 'Method name is required';
+        }
+        break;
+    }
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(prev => ({ ...prev, ...errors }));
+      return false;
+    }
+    
+    return true;
+  };
+
   // Process manual payment
   const processManualPayment = async () => {
     if (!selectedInvoice) return;
 
+    // Validate payment method details
+    if (!validatePaymentMethodDetails()) {
+      return;
+    }
+
     try {
-      const response = await apiClient.payments.processManualPayment({
+      const paymentData = {
         invoiceId: selectedInvoice._id,
+        invoiceNumber: selectedInvoice.invoiceNumber,
+        customerId: selectedInvoice.customer._id || selectedInvoice.customerId,
         amount: paymentUpdate.paidAmount,
         paymentMethod: paymentUpdate.paymentMethod,
+        paymentMethodDetails: paymentUpdate.paymentMethodDetails || {},
+        paymentStatus: 'completed',
         paymentDate: paymentUpdate.paymentDate,
         notes: paymentUpdate.notes,
         currency: 'INR'
-      });
+      };
+
+      const response = await apiClient.invoicePayments.create(paymentData);
 
       if (response.success) {
         await fetchInvoices();
         await fetchStats();
         setShowPaymentModal(false);
-        setPaymentUpdate({ paymentStatus: '', paymentMethod: '', paymentDate: '', paidAmount: 0, notes: '', useRazorpay: false });
+        setPaymentUpdate({ 
+          paymentStatus: '', 
+          paymentMethod: '', 
+          paymentDate: '', 
+          paidAmount: 0, 
+          notes: '', 
+          useRazorpay: false, 
+          paymentMethodDetails: {
+            cash: { receivedBy: '', receiptNumber: '' },
+            cheque: { chequeNumber: '', bankName: '', issueDate: new Date() },
+            bankTransfer: { bankName: '', accountNumber: '', ifscCode: '', transactionId: '', transferDate: new Date() },
+            upi: { upiId: '', transactionId: '' },
+            card: { cardType: 'credit', cardNetwork: 'visa', lastFourDigits: '', transactionId: '' },
+            other: { methodName: '' }
+          }
+        });
         toast.success('Payment processed successfully!');
       } else {
         throw new Error('Failed to process payment');
@@ -2534,14 +3067,14 @@ const InvoiceManagement: React.FC = () => {
       // }
 
       // Edit Status - Available for all invoices except cancelled
-      if (invoice.status !== 'cancelled') {
-        actions.push({
-          icon: <Edit className="w-4 h-4" />,
-          label: 'Edit Status',
-          action: () => handleUpdateStatus(invoice, invoice.status),
-          color: 'text-purple-600 hover:text-purple-900 hover:bg-purple-50'
-        });
-      }
+      // if (invoice.status !== 'cancelled') {
+      //   actions.push({
+      //     icon: <Edit className="w-4 h-4" />,
+      //     label: 'Edit Status',
+      //     action: () => handleUpdateStatus(invoice, invoice.status),
+      //     color: 'text-purple-600 hover:text-purple-900 hover:bg-purple-50'
+      //   });
+      // }
 
       // Payment Management - Available for invoices that can have payments
       if (invoice.status !== 'cancelled' && invoice.status !== 'draft' || invoice.invoiceType === 'purchase') {
@@ -3412,6 +3945,20 @@ const InvoiceManagement: React.FC = () => {
     return options.find(opt => opt.value === value)?.label || 'Select payment method';
   };
 
+  // Helper functions for payment history
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('en-IN');
+  };
+
   // Add this import at the top of your file
   // import jsPDF from 'jspdf';
   // import 'jspdf-autotable';
@@ -3637,253 +4184,568 @@ const InvoiceManagement: React.FC = () => {
     return result + ' Only';
   }
 
-  // Update printInvoice function
+  // Print invoice function
   const printInvoice = () => {
     if (!selectedInvoice) return;
+    
+    const printWindow = window.open('', '_blank');
+    
     const printContent = `
-    <html>
+      <!DOCTYPE html>
+      <html>
       <head>
         <title>Invoice ${selectedInvoice.invoiceNumber}</title>
         <style>
-          @page { size: A4; margin: 0.5in; }
-          body { font-family: Arial, sans-serif; margin: 0; padding: 0; line-height: 1.4; color: #000; font-size: 12px; }
-          .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 15px; }
-          .header h1 { margin: 0 0 8px 0; font-size: 22px; font-weight: bold; color: #000; }
-          .header div { margin: 3px 0; font-size: 11px; }
-          .invoice-details { margin-bottom: 15px; }
-          .invoice-details h2 { margin: 0 0 10px 0; text-align: center; font-size: 20px; font-weight: bold; border: 2px solid #000; padding: 8px; display: inline-block; width: 200px; margin-left: calc(50% - 100px); }
-          .details-table { width: 100%; border-collapse: collapse; margin-bottom: 15px; }
-          .details-table td { padding: 6px 10px; font-size: 11px; border: 1px solid #000; }
-          .details-table td:first-child { font-weight: bold; background-color: #f5f5f5; width: 20%; }
-          .engineer-date-section { display: flex; gap: 15px; margin-bottom: 15px; }
-          .engineer-box, .date-box { flex: 1; border: 1px solid #000; padding: 8px; background-color: #f9f9f9; }
-          .engineer-box h4, .date-box h4 { margin: 0 0 5px 0; font-size: 12px; font-weight: bold; }
-          .from-to-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 15px; }
-          .from-to-box { flex: 1; min-width: 200px; padding: 10px; border: 1px solid #000; }
-          .from-to-box h3 { margin: 0 0 8px 0; font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; }
-          .from-to-box div { font-size: 10px; line-height: 1.3; }
-          .from-to-box strong { color: #000; }
-          table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 10px; }
-          table.items th, table.items td { border: 1px solid #000; padding: 5px 4px; text-align: center; vertical-align: middle; }
-          table.items th { background: #f0f0f0; font-weight: bold; font-size: 9px; }
-          table.items .description-col { text-align: left; max-width: 150px; }
-          .summary-section { display: flex; justify-content: space-between; margin-bottom: 20px; gap: 20px; }
-          .notes-box { flex: 1; padding: 10px; border: 1px solid #000; min-height: 120px; }
-          .notes-box h4 { margin: 0 0 8px 0; font-size: 12px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 3px; }
-          .notes-box div { font-size: 10px; line-height: 1.3; }
-          .summary-box { flex: 1; padding: 10px; border: 1px solid #000; min-height: 120px; }
-          .summary-table { width: 100%; border-collapse: collapse; }
-          .summary-table td { padding: 5px 8px; font-size: 11px; border-bottom: 1px solid #ccc; }
-          .summary-table td:first-child { font-weight: bold; }
-          .summary-table .total-row { font-weight: bold; background-color: #f0f0f0; border-top: 2px solid #000; font-size: 12px; }
-          .summary-table .amount-words { border-top: 1px solid #000; font-size: 9px; line-height: 1.2; word-wrap: break-word; max-width: 180px; }
-          .footer { margin-top: 30px; text-align: center; font-size: 11px; }
-          .footer div { margin: 8px 0; }
-          @media print { body { margin: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; } .no-print { display: none; } .invoice-details { border: none !important; background: none !important; } }
+          @media print {
+            @page {
+              margin: 0.5in;
+              size: A4;
+            }
+            body {
+              margin: 0;
+              padding: 0;
+            }
+          }
+          
+          body {
+            font-family: Arial, sans-serif;
+            font-size: 12px;
+            line-height: 1.2;
+            margin: 0;
+            padding: 20px;
+            background: white;
+          }
+          
+          .invoice-container {
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto;
+            background: white;
+          }
+          
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 2px solid #000;
+            padding-bottom: 15px;
+          }
+          
+          .invoice-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin: 20px 0;
+            text-align: center;
+          }
+          
+          .info-section {
+            display: table;
+            width: 100%;
+            margin-bottom: 20px;
+          }
+          
+          .info-row {
+            display: table-row;
+          }
+          
+          .info-cell {
+            display: table-cell;
+            padding: 3px 5px;
+            vertical-align: top;
+            border: none;
+          }
+          
+          .info-left {
+            width: 50%;
+            padding-right: 20px;
+          }
+          
+          .info-right {
+            width: 50%;
+            padding-left: 20px;
+          }
+          
+          .from-to-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            gap: 15px;
+          }
+          
+          .from-to-box {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px;
+            border: 1px solid #000;
+          }
+          
+          .from-to-box h3 {
+            margin: 0 0 8px 0;
+            font-size: 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #000;
+            padding-bottom: 3px;
+          }
+          
+          .from-to-box div {
+            font-size: 10px;
+            line-height: 1.3;
+          }
+          
+          .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 11px;
+          }
+          
+          .items-table th,
+          .items-table td {
+            border: 1px solid #333;
+            padding: 4px 6px;
+            text-align: left;
+          }
+          
+          .items-table th {
+            background-color: #f0f0f0;
+            font-weight: bold;
+            text-align: center;
+          }
+          
+          .items-table .number-cell {
+            text-align: right;
+          }
+          
+          .items-table .center-cell {
+            text-align: center;
+          }
+          
+          .totals-row {
+            font-weight: bold;
+            background-color: #f9f9f9;
+          }
+          
+          .grand-total-row {
+            font-weight: bold;
+            background-color: #e9e9e9;
+            font-size: 12px;
+          }
+          
+          .summary-section {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            gap: 20px;
+          }
+          
+          .notes-box {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #000;
+            min-height: 120px;
+          }
+          
+          .notes-box h4 {
+            margin: 0 0 8px 0;
+            font-size: 12px;
+            font-weight: bold;
+            border-bottom: 1px solid #000;
+            padding-bottom: 3px;
+          }
+          
+          .notes-box div {
+            font-size: 10px;
+            line-height: 1.3;
+          }
+          
+          .summary-box {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #000;
+            min-height: 120px;
+          }
+          
+          .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+          }
+          
+          .summary-table td {
+            padding: 5px 8px;
+            font-size: 11px;
+            border-bottom: 1px solid #ccc;
+          }
+          
+          .summary-table td:first-child {
+            font-weight: bold;
+          }
+          
+          .summary-table .total-row {
+            font-weight: bold;
+            background-color: #f0f0f0;
+            border-top: 2px solid #000;
+            font-size: 12px;
+          }
+          
+          .summary-table .amount-words {
+            border-top: 1px solid #000;
+            font-size: 9px;
+            line-height: 1.2;
+            word-wrap: break-word;
+            max-width: 180px;
+          }
+          
+          .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 11px;
+          }
+          
+          .footer div {
+            margin: 8px 0;
+          }
+          
+          .section-title {
+            font-weight: bold;
+            margin: 20px 0 10px 0;
+            font-size: 13px;
+            color: #374151;
+            border-bottom: 1px solid #d1d5db;
+            padding-bottom: 5px;
+          }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</h1>
-          ${selectedInvoice.company?.address || generalSettings?.companyAddress ? `<div>${selectedInvoice.company?.address || generalSettings?.companyAddress || ''}</div>` : ''}
-          ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `<div>Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone || ''} | Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail || ''}</div>` : ''}
-          ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `<div>PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN || ''} | GSTIN: ${selectedInvoice.company?.gstin || generalSettings?.companyGSTIN || ''}</div>` : ''}
-        </div>
-        <div class="invoice-details">
-          <h2>INVOICE</h2>
-          <table class="details-table">
-            <tr>
-              <td>Invoice No:</td>
-              <td>${selectedInvoice.invoiceNumber}</td>
-              <td><strong>Issue Date:</strong></td>
-              <td>${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : ''}</td>
-            </tr>
-            <tr>
-              <td><strong>Due Date:</strong></td>
-              <td>${selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : ''}</td>
-              <td>Status:</td>
-              <td>${selectedInvoice.status ? selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1) : ''}</td>
-            </tr>
+        <div class="invoice-container">
+          <div class="header">
+            <h1>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</h1>
+            ${selectedInvoice.company?.address || generalSettings?.companyAddress ? `<div>${selectedInvoice.company?.address || generalSettings?.companyAddress || ''}</div>` : ''}
+            ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `<div>Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone || ''} | Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail || ''}</div>` : ''}
+            ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `<div>PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN || ''} | GSTIN: ${selectedInvoice.company?.gstin || generalSettings?.companyGSTIN || ''}</div>` : ''}
+          </div>
+          
+          <div class="invoice-title">INVOICE</div>
+          
+          <div class="info-section">
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>Invoice No:</strong> ${selectedInvoice.invoiceNumber || 'N/A'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Issue Date:</strong> ${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : 'N/A'}
+              </div>
+            </div>
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>Due Date:</strong> ${selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : 'N/A'}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Status:</strong> ${selectedInvoice.status ? selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1) : 'N/A'}
+              </div>
+            </div>
             ${selectedInvoice.poNumber ? `
-            <tr>
-              <td>PO Number:</td>
-              <td>${selectedInvoice.poNumber}</td>
-              <td>Payment Status:</td>
-              <td>${selectedInvoice.paymentStatus ? selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1) : ''}</td>
-            </tr>
+            <div class="info-row">
+              <div class="info-cell info-left">
+                <strong>PO Number:</strong> ${selectedInvoice.poNumber}
+              </div>
+              <div class="info-cell info-right">
+                <strong>Payment Status:</strong> ${selectedInvoice.paymentStatus ? selectedInvoice.paymentStatus.charAt(0).toUpperCase() + selectedInvoice.paymentStatus.slice(1) : 'N/A'}
+              </div>
+            </div>
             ` : ''}
+          </div>
+          
+          <div class="from-to-section">
+            <div class="from-to-box">
+              <h3>From:</h3>
+              ${selectedInvoice.invoiceType === 'purchase' ? `
+                <div>
+                  <strong>${selectedInvoice.supplier?.name || 'N/A'}</strong><br>
+                  ${selectedInvoice.supplierEmail ? `Email: ${selectedInvoice.supplierEmail}<br>` : ''}
+                  ${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}<br>${selectedInvoice.supplierAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.supplierAddress.gstNumber}` : ''}` : ''}
+                </div>
+              ` : `
+                <div>
+                  <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
+                  ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
+                  ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
+                  ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
+                  ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
+                </div>
+              `}
+            </div>
+            
+            <div class="from-to-box">
+              <h3>${selectedInvoice.invoiceType === 'purchase' ? 'To' : 'Bill To'}:</h3>
+              ${selectedInvoice.invoiceType === 'purchase' ? `
+                <div>
+                  <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
+                  ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
+                  ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
+                  ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
+                  ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
+                </div>
+              ` : `
+                <div>
+                  <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
+                  ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
+                  ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
+                  ${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}<br>${selectedInvoice.billToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}` : ''}` : ''}
+                </div>
+              `}
+            </div>
+            
+            ${selectedInvoice.invoiceType !== 'purchase' ? `
+            <div class="from-to-box">
+              <h3>Ship To:</h3>
+              <div>
+                <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
+                ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.state || 'N/A'}<br>${selectedInvoice.shipToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}` : ''}` : ''}
+              </div>
+            </div>
+            ` : ''}
+          </div>
+          
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 6%;">Sr.No</th>
+                <th style="width: 25%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 8%;">Part No</th>
+                <th style="width: 10%;">Unit Price</th>
+                ${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
+                <th style="width: 8%;">Total Basic</th>
+                <th style="width: 5%;">GST</th>
+                <th style="width: 8%;">GST Amount</th>
+                <th style="width: 10%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${(selectedInvoice.items || []).map((item: any, idx: number) => {
+                const basicAmount = item.unitPrice || 0;
+                const discountPercent = item.discount || 0;
+                const totalBasic = basicAmount * (1 - discountPercent / 100);
+                const gstRate = item.taxRate || 0;
+                const gstAmount = totalBasic * (gstRate / 100);
+                const totalAmount = totalBasic + gstAmount;
+                const showDiscount = (selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0);
+                
+                return `
+                  <tr>
+                    <td class="center-cell">${idx + 1}</td>
+                    <td>${item.description || ''}</td>
+                    <td class="center-cell">${item.hsnNumber || item?.product?.hsnNumber || '-'}</td>
+                    <td class="center-cell">${item.quantity || 0}</td>
+                    <td class="center-cell">${item.uom || 'NOS'}</td>
+                    <td class="center-cell">${item.partNo || item?.product?.partNo || '-'}</td>
+                    <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
+                    ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
+                    <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
+                    <td class="center-cell">${gstRate}%</td>
+                    <td class="number-cell">₹${gstAmount.toFixed(2)}</td>
+                    <td class="number-cell">₹${totalAmount.toFixed(2)}</td>
+                  </tr>
+                `;
+              }).join('')}
+              <tr class="totals-row">
+                <td colspan="${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '8' : '7'}" style="text-align: left; font-weight: bold;">Total Amount</td>
+                <td class="number-cell">₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  return sum + (basicAmount * (1 - discountPercent / 100));
+                }, 0).toFixed(2)}</td>
+                <td></td>
+                <td class="number-cell">₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  const totalBasic = basicAmount * (1 - discountPercent / 100);
+                  const gstRate = item.taxRate || 0;
+                  return sum + (totalBasic * (gstRate / 100));
+                }, 0).toFixed(2)}</td>
+                <td class="number-cell">₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => {
+                  const basicAmount = item.unitPrice || 0;
+                  const discountPercent = item.discount || 0;
+                  const totalBasic = basicAmount * (1 - discountPercent / 100);
+                  const gstRate = item.taxRate || 0;
+                  const gstAmount = totalBasic * (gstRate / 100);
+                  return sum + (totalBasic + gstAmount);
+                }, 0).toFixed(2)}</td>
+              </tr>
+            </tbody>
           </table>
-        </div>
-        <div class="engineer-date-section">
-          <div class="engineer-box">
-            <h4>Assigned Engineer:</h4>
-            <div>
-              <strong>Name:</strong> ${selectedInvoice.assignedEngineer ? `${selectedInvoice.assignedEngineer.firstName || ''} ${selectedInvoice.assignedEngineer.lastName || ''}`.trim() : 'Not Assigned'}<br>
-              ${selectedInvoice.assignedEngineer?.phone ? `<strong>Phone:</strong> ${selectedInvoice.assignedEngineer.phone}<br>` : ''}
-              ${selectedInvoice.assignedEngineer?.email ? `<strong>Email:</strong> ${selectedInvoice.assignedEngineer.email}` : ''}
+          
+          ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
+          <div class="section-title" style="color: #059669;">SERVICE CHARGES</div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">Sr.No</th>
+                <th style="width: 35%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 10%;">Basic Amount</th>
+                ${(selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0) ? '<th style="width: 8%;">Discount %</th>' : ''}
+                <th style="width: 9%;">Total Basic</th>
+                <th style="width: 5%;">GST</th>
+                <th style="width: 9%;">GST Amount</th>
+                <th style="width: 10%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${selectedInvoice.serviceCharges.map((service: any, idx: number) => {
+                const basicAmount = service.unitPrice || 0;
+                const discountPercent = service.discount || 0;
+                const totalBasic = basicAmount * (1 - discountPercent / 100);
+                const gstRate = service.taxRate || 0;
+                const gstAmount = totalBasic * (gstRate / 100);
+                const totalAmount = totalBasic + gstAmount;
+                const showDiscount = (selectedInvoice.serviceCharges || []).some((service: any) => (service.discount || 0) > 0);
+                
+                return `
+                  <tr>
+                    <td class="center-cell">${idx + 1}</td>
+                    <td>${service.description || ''}</td>
+                    <td class="center-cell">-</td>
+                    <td class="center-cell">NOS</td>
+                    <td class="center-cell">${service.quantity || 0}</td>
+                    <td class="number-cell">₹${basicAmount.toFixed(2)}</td>
+                    ${showDiscount ? `<td class="center-cell">${discountPercent}%</td>` : ''}
+                    <td class="number-cell">₹${totalBasic.toFixed(2)}</td>
+                    <td class="center-cell">${gstRate}%</td>
+                    <td class="number-cell">₹${gstAmount.toFixed(2)}</td>
+                    <td class="number-cell">₹${totalAmount.toFixed(2)}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+          ` : ''}
+          
+          ${selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 ? `
+          <div class="section-title" style="color: #ea580c;">BATTERY BUYBACK CHARGES</div>
+          <table class="items-table">
+            <thead>
+              <tr>
+                <th style="width: 8%;">Sr.No</th>
+                <th style="width: 35%;">Description</th>
+                <th style="width: 8%;">HSN Code</th>
+                <th style="width: 6%;">UOM</th>
+                <th style="width: 5%;">Qty</th>
+                <th style="width: 10%;">Basic Amount</th>
+                ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? '<th style="width: 8%;">Discount %</th>' : ''}
+                <th style="width: 9%;">Total Basic</th>
+                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 5%;">GST</th>' : ''}
+                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? '<th style="width: 9%;">GST Amount</th>' : ''}
+                <th style="width: 10%;">Total Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="center-cell">1</td>
+                <td>${selectedInvoice.batteryBuyBack.description || ''}</td>
+                <td class="center-cell">-</td>
+                <td class="center-cell">NOS</td>
+                <td class="center-cell">${selectedInvoice.batteryBuyBack.quantity || 0}</td>
+                <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.unitPrice || 0).toFixed(2)}</td>
+                ${(selectedInvoice.batteryBuyBack?.discount || 0) > 0 ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.discount}%</td>` : ''}
+                <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.discountedAmount || 0).toFixed(2)}</td>
+                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="center-cell">${selectedInvoice.batteryBuyBack.taxRate || 0}%</td>` : ''}
+                ${(selectedInvoice.batteryBuyBack?.taxRate || 0) > 0 ? `<td class="number-cell">₹${(selectedInvoice.batteryBuyBack.taxAmount || 0).toFixed(2)}</td>` : ''}
+                <td class="number-cell">₹${(selectedInvoice.batteryBuyBack.totalPrice || 0).toFixed(2)}</td>
+              </tr>
+            </tbody>
+          </table>
+          ` : ''}
+          
+          <table class="items-table">
+            <tbody>
+              <tr class="grand-total-row">
+                <td colspan="${(selectedInvoice.items || []).some((item: any) => (item.discount || 0) > 0) ? '11' : '10'}" style="text-align: right; padding-right: 20px;">Grand Total</td>
+                <td class="number-cell">₹${selectedInvoice.totalAmount?.toFixed(2) || '0.00'}</td>
+              </tr>
+            </tbody>
+          </table>
+          
+          <div class="summary-section">
+            ${(selectedInvoice.notes || selectedInvoice.terms) && `
+            <div class="notes-box">
+              ${selectedInvoice.notes ? `
+                <h4>Notes:</h4>
+                <div>${selectedInvoice.notes}</div>
+              ` : ''}
+              ${selectedInvoice.terms ? `
+                <h4 ${selectedInvoice.notes ? 'style="margin-top: 15px;"' : ''}>Terms & Conditions:</h4>
+                <div>${selectedInvoice.terms}</div>
+              ` : ''}
+            </div>
+            `}
+            <div class="summary-box">
+              <table class="summary-table">
+                <tr>
+                  <td>Subtotal:</td>
+                  <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Total Tax:</td>
+                  <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Total Discount:</td>
+                  <td>-₹${(selectedInvoice.discountAmount || 0).toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Overall Discount:</td>
+                  <td>-${selectedInvoice.overallDiscount || 0}% (-₹${selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</td>
+                </tr>
+                ${selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 ? `
+                <tr>
+                  <td>Service Charges:</td>
+                  <td>+₹${(selectedInvoice.serviceCharges || []).reduce((sum: number, service: any) => sum + (service.totalPrice || 0), 0).toFixed(2)}</td>
+                </tr>
+                ` : ''}
+                ${selectedInvoice.batteryBuyBack && selectedInvoice.batteryBuyBack.quantity > 0 ? `
+                <tr>
+                  <td>Battery Buyback:</td>
+                  <td>-₹${(selectedInvoice.batteryBuyBack?.totalPrice || 0).toFixed(2)}</td>
+                </tr>
+                ` : ''}
+                <tr class="total-row">
+                  <td>Grand Total:</td>
+                  <td><strong>₹${selectedInvoice.totalAmount?.toFixed(2) || '0'}</strong></td>
+                </tr>
+                <tr>
+                  <td>Amount in Words:</td>
+                  <td class="amount-words">
+                    ${selectedInvoice.totalAmount ? numberToWords(selectedInvoice.totalAmount) : 'Zero Rupees Only'}
+                  </td>
+                </tr>
+              </table>
             </div>
           </div>
-          <div class="date-box">
-            <h4>Important Dates:</h4>
-            <div>
-              <strong>Issue Date:</strong> ${selectedInvoice.issueDate ? new Date(selectedInvoice.issueDate).toLocaleDateString() : 'Not Set'}<br>
-              <strong>Due Date:</strong> ${selectedInvoice.dueDate ? new Date(selectedInvoice.dueDate).toLocaleDateString() : 'Not Set'}<br>
-              <strong>Status:</strong> ${selectedInvoice.status ? selectedInvoice.status.charAt(0).toUpperCase() + selectedInvoice.status.slice(1) : 'Draft'}
+          
+          <div class="footer">
+            <div><strong>For ${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong></div>
+            <br><br>
+            <div><strong>Authorized Signatory</strong></div>
+            <div style="margin-top: 20px; font-size: 9px; border-top: 1px solid #000; padding-top: 10px;">
+              <strong>Address:</strong> Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116<br>
+              <strong>Mobile:</strong> +91 9176660123 | <strong>GSTIN:</strong> 33BLFPS9951M1ZC | <strong>Email:</strong> 24x7powerolservice@gmail.com
             </div>
-          </div>
-        </div>
-        <div class="from-to-section">
-          <div class="from-to-box">
-            <h3>From:</h3>
-            ${selectedInvoice.invoiceType === 'purchase' ?
-        `<div>
-              <strong>${selectedInvoice.customer?.name ? selectedInvoice.customer?.name : selectedInvoice?.supplier?.name || 'N/A'}</strong><br>
-              ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
-              ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
-              ${selectedInvoice.invoiceType === 'purchase' ?
-          `${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}<br>${selectedInvoice.supplierAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.supplierAddress.gstNumber}<br>` : ''}${selectedInvoice.supplierAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}` :
-          `${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}<br>${selectedInvoice.billToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}<br>` : ''}${selectedInvoice.billToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}`}          
-                </div> `: `
-            <div>
-              <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
-              ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
-              ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
-              ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
-              ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
-            </div>`}
-          </div>
-          <div class="from-to-box">
-          <h3>${selectedInvoice.invoiceType === 'purchase' ? 'To' : 'Bill To'}:</h3>
-          ${selectedInvoice.invoiceType === 'purchase' ? `
-            <div>
-              <strong>${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong><br>
-              ${selectedInvoice.company?.phone || generalSettings?.companyPhone ? `Phone: ${selectedInvoice.company?.phone || generalSettings?.companyPhone}<br>` : ''}
-              ${selectedInvoice.company?.email || generalSettings?.companyEmail ? `Email: ${selectedInvoice.company?.email || generalSettings?.companyEmail}<br>` : ''}
-              ${selectedInvoice.company?.pan || generalSettings?.companyPAN ? `PAN: ${selectedInvoice.company?.pan || generalSettings?.companyPAN}<br>` : ''}
-              ${selectedInvoice.location ? `<br><strong>Address:</strong><br>${selectedInvoice.location.name || 'N/A'}<br>${selectedInvoice.location.address || 'N/A'}` : ''}
-            </div>` : `
-            <div>
-              <strong>${selectedInvoice.customer?.name ? selectedInvoice.customer?.name : selectedInvoice?.supplier?.name || 'N/A'}</strong><br>
-              ${selectedInvoice.customer?.email ? `Email: ${selectedInvoice.customer?.email}<br>` : ''}
-              ${selectedInvoice.customer?.phone ? `Phone: ${selectedInvoice.customer?.phone}<br>` : ''}
-              ${selectedInvoice.invoiceType === 'purchase' ?
-        `${selectedInvoice.supplierAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.supplierAddress.address || 'N/A'}<br>${selectedInvoice.supplierAddress.district && selectedInvoice.supplierAddress.pincode ? `${selectedInvoice.supplierAddress.district}, ${selectedInvoice.supplierAddress.pincode}<br>` : ''}${selectedInvoice.supplierAddress.state || 'N/A'}<br>${selectedInvoice.supplierAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.supplierAddress.gstNumber}<br>` : ''}${selectedInvoice.supplierAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}` :
-        `${selectedInvoice.billToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.billToAddress.address || 'N/A'}<br>${selectedInvoice.billToAddress.district && selectedInvoice.billToAddress.pincode ? `${selectedInvoice.billToAddress.district}, ${selectedInvoice.billToAddress.pincode}<br>` : ''}${selectedInvoice.billToAddress.state || 'N/A'}<br>${selectedInvoice.billToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.billToAddress.gstNumber}<br>` : ''}${selectedInvoice.billToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}`}          
-                </div> `} 
-          </div>
-          ${selectedInvoice.invoiceType === 'purchase' ? '' : `
-          <div class="from-to-box">
-            <h3>Ship To:</h3>
-            <div>
-              <strong>${selectedInvoice.customer?.name || 'N/A'}</strong><br>
-              ${selectedInvoice.shipToAddress ? `<br><strong>Address:</strong><br>${selectedInvoice.shipToAddress.address || 'N/A'}<br>${selectedInvoice.shipToAddress.district && selectedInvoice.shipToAddress.pincode ? `${selectedInvoice.shipToAddress.district}, ${selectedInvoice.shipToAddress.pincode}<br>` : ''}${selectedInvoice.shipToAddress.state || 'N/A'}<br>${selectedInvoice.shipToAddress.gstNumber ? `<strong>GST:</strong> ${selectedInvoice.shipToAddress.gstNumber}<br>` : ''}${selectedInvoice.shipToAddress.isPrimary ? '<strong>Primary Address</strong>' : ''}` : ''}
-            </div>
-          </div>`}
-        </div>
-        <table class="items">
-          <thead>
-            <tr>
-              <th style="width: 30px;">S.No</th>
-              <th class="description-col">Description</th>
-              <th style="width: 80px;">HSN Number</th>
-              <th style="width: 40px;">Qty</th>
-              <th style="width: 40px;">UOM</th>
-              <th style="width: 80px;">Part No</th>
-              <th style="width: 70px;">Unit Price</th>
-              <th style="width: 50px;">Discount</th>
-              <th style="width: 50px;">Tax Rate</th>
-              <th style="width: 80px;">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${(selectedInvoice.items || []).map((item: any, idx: number) => `
-              <tr>
-                <td>${idx + 1}</td>
-                <td class="description-col">${item.description || ''}</td>
-                <td>${item.hsnNumber || item?.product?.hsnNumber || 'N/A'}</td>
-                <td>${item.quantity || 0}</td>
-                <td>${item.uom || 'nos'}</td>
-                <td>${item.partNo || item?.product?.partNo || 'N/A'}</td>
-                <td>₹${item.unitPrice?.toLocaleString() || '0'}</td>
-                <td>${item.discount || 0}%</td>
-                <td>${item.taxRate || 0}%</td>
-                <td>₹${(item.unitPrice * item.quantity * (1 - (item.discount || 0) / 100) * (1 + (item.taxRate || 0) / 100)).toFixed(2)}</td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-        <div class="summary-section">
-          ${(selectedInvoice.notes || selectedInvoice.terms) ? `
-          <div class="notes-box">
-            ${selectedInvoice.notes ? `
-              <h4>Notes:</h4>
-              <div>${selectedInvoice.notes}</div>
-            ` : ''}
-            ${selectedInvoice.terms ? `
-              <h4 ${selectedInvoice.notes ? 'style="margin-top: 15px;"' : ''}>Terms & Conditions:</h4>
-              <div>${selectedInvoice.terms}</div>
-            ` : ''}
-          </div>
-          ` : `
-          <div class="notes-box">
-            <h4>Standard Terms & Conditions:</h4>
-            <div>
-              • Payment: 100% advance payment along with P.O.<br>
-              • Ordering: In Favour of Sun Power Services<br>
-              • Delivery: Within One Month after your P.O.<br>
-              • Prices are subject to change without prior notice<br>
-              • All disputes subject to Chennai jurisdiction
-            </div>
-          </div>
-          `}
-          <div class="summary-box">
-            <table class="summary-table">
-              <tr>
-                <td>Subtotal:</td>
-                <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0)), 0).toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>Total Tax:</td>
-                <td>₹${(selectedInvoice.items || []).reduce((sum: number, item: any) => sum + ((item.quantity ?? 0) * (item.unitPrice ?? 0) * (item.taxRate ?? 0) / 100), 0).toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>Total Discount:</td>
-                <td>-₹${(selectedInvoice.discountAmount || 0).toFixed(2)}</td>
-              </tr>
-              <tr>
-                <td>Overall Discount:</td>
-                <td>-${selectedInvoice.overallDiscount || 0}% (-₹${selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</td>
-              </tr>
-              <tr class="total-row">
-                <td>Grand Total:</td>
-                <td><strong>₹${selectedInvoice.totalAmount?.toFixed(2) || '0'}</strong></td>
-              </tr>
-              <tr>
-                <td>Amount in Words:</td>
-                <td class="amount-words">
-                  ${selectedInvoice.totalAmount ? numberToWords(selectedInvoice.totalAmount) : 'Zero Rupees Only'}
-                </td>
-              </tr>
-            </table>
-          </div>
-        </div>
-        <div class="footer">
-          <div><strong>For ${selectedInvoice.company?.name || generalSettings?.companyName || 'Sun Power Services'}</strong></div>
-          <br><br>
-          <div><strong>Authorized Signatory</strong></div>
-          <div style="margin-top: 20px; font-size: 9px; border-top: 1px solid #000; padding-top: 10px;">
-            <strong>Address:</strong> Plot no 1, Phase 1, 4th Street, Annai velankani nagar, Madhananthapuram, porur, chennai 600116<br>
-            <strong>Mobile:</strong> +91 9176660123 | <strong>GSTIN:</strong> 33BLFPS9951M1ZC | <strong>Email:</strong> 24x7powerolservice@gmail.com
           </div>
         </div>
       </body>
-    </html>
+      </html>
     `;
-    const printWindow = window.open('', '_blank');
+
     if (printWindow) {
       printWindow.document.write(printContent);
       printWindow.document.close();
-      printWindow.onload = function () {
+
+      // Wait for content to load, then print
+      printWindow.onload = () => {
         setTimeout(() => {
           printWindow.print();
         }, 500);
@@ -6221,6 +7083,34 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
+              {/* Notes and Terms Section */}
+              {(selectedInvoice.notes || selectedInvoice.terms) && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Additional Information
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {selectedInvoice.notes && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2">Notes:</h5>
+                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
+                          {selectedInvoice.notes}
+                        </div>
+                      </div>
+                    )}
+                    {selectedInvoice.terms && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2">Terms & Conditions:</h5>
+                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
+                          {selectedInvoice.terms}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Edit Mode Actions */}
               {editMode && (
                 <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
@@ -6272,6 +7162,24 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
+              {/* Payment History */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Payment History</h3>
+                  <button
+                    onClick={() => fetchInvoicePaymentHistory(selectedInvoice._id)}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                    disabled={loadingInvoicePayments}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingInvoicePayments ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  {renderInvoicePaymentHistory()}
+                </div>
+              </div>
+
               {/* Invoice Summary */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-end">
@@ -6288,10 +7196,10 @@ const InvoiceManagement: React.FC = () => {
                       <span className="text-gray-600">Total Discount:</span>
                       <span className="font-medium text-green-600">-₹{(selectedInvoice.discountAmount || 0).toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
+                    {/* <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Overall Discount:</span>
                       <span className="font-medium text-green-600">-{selectedInvoice.overallDiscount || 0}% (-₹{selectedInvoice.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
-                    </div>
+                    </div> */}
                     
                     {/* Service Charges Total */}
                     {selectedInvoice.serviceCharges && selectedInvoice.serviceCharges.length > 0 && (
@@ -6655,7 +7563,7 @@ const InvoiceManagement: React.FC = () => {
                           min="0"
                           max={getSelectedInvoiceRemainingPayableAmount()}
                           step="1"
-                          value={paymentUpdate.paidAmount}
+                            value={paymentUpdate.paidAmount.toFixed(2)}
                           onChange={(e) => {
                             const amount = parseFloat(e.target.value) || 0;
                             const remainingPayableAmount = getSelectedInvoiceRemainingPayableAmount();
@@ -6869,6 +7777,876 @@ const InvoiceManagement: React.FC = () => {
                           )}
                         </div>
                       </div>
+
+                      {/* Payment Method Details */}
+                      {paymentUpdate.paymentMethod && (
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                          <h4 className="text-sm font-medium text-gray-700 mb-3">Payment Method Details</h4>
+                          
+                          {paymentUpdate.paymentMethod === 'cash' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Received By</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cash?.receivedBy || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cash: { ...paymentUpdate.paymentMethodDetails?.cash, receivedBy: e.target.value }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Enter receiver name"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Receipt Number</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.cash?.receiptNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      cash: { ...paymentUpdate.paymentMethodDetails?.cash, receiptNumber: e.target.value }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Enter receipt number"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {paymentUpdate.paymentMethod === 'cheque' && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Cheque Number *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          cheque: { 
+                                            ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                            chequeNumber: e.target.value,
+                                            bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                            issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.chequeNumber) {
+                                        setFormErrors(prev => ({ ...prev, chequeNumber: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.chequeNumber ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter cheque number"
+                                  />
+                                  {formErrors.chequeNumber && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.chequeNumber}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Bank Name *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.bankName || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          cheque: { 
+                                            ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                            bankName: e.target.value,
+                                            chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                            issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.bankName) {
+                                        setFormErrors(prev => ({ ...prev, bankName: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.bankName ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter bank name"
+                                  />
+                                  {formErrors.bankName && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.bankName}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Issue Date *</label>
+                                  <input
+                                    type="date"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.issueDate ? new Date(paymentUpdate.paymentMethodDetails.cheque.issueDate).toISOString().split('T')[0] : ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          cheque: { 
+                                            ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                            issueDate: new Date(e.target.value),
+                                            chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                            bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.issueDate) {
+                                        setFormErrors(prev => ({ ...prev, issueDate: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.issueDate ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  {formErrors.issueDate && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.issueDate}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Branch Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.branchName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        cheque: { 
+                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          branchName: e.target.value,
+                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter branch name"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Holder Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.accountHolderName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        cheque: { 
+                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          accountHolderName: e.target.value,
+                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter account holder name"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Number</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.accountNumber || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        cheque: { 
+                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          accountNumber: e.target.value,
+                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter account number"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">IFSC Code</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.ifscCode || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        cheque: { 
+                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          ifscCode: e.target.value,
+                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter IFSC code"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Clearance Date</label>
+                                  <input
+                                    type="date"
+                                    value={paymentUpdate.paymentMethodDetails?.cheque?.clearanceDate ? new Date(paymentUpdate.paymentMethodDetails.cheque.clearanceDate).toISOString().split('T')[0] : ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        cheque: { 
+                                          ...paymentUpdate.paymentMethodDetails?.cheque, 
+                                          clearanceDate: new Date(e.target.value),
+                                          chequeNumber: paymentUpdate.paymentMethodDetails?.cheque?.chequeNumber || '',
+                                          bankName: paymentUpdate.paymentMethodDetails?.cheque?.bankName || '',
+                                          issueDate: paymentUpdate.paymentMethodDetails?.cheque?.issueDate || new Date()
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {paymentUpdate.paymentMethod === 'bank_transfer' && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Bank Name *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          bankTransfer: { 
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                            bankName: e.target.value,
+                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.bankName) {
+                                        setFormErrors(prev => ({ ...prev, bankName: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.bankName ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter bank name"
+                                  />
+                                  {formErrors.bankName && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.bankName}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Number *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          bankTransfer: { 
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                            accountNumber: e.target.value,
+                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.accountNumber) {
+                                        setFormErrors(prev => ({ ...prev, accountNumber: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.accountNumber ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter account number"
+                                  />
+                                  {formErrors.accountNumber && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.accountNumber}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">IFSC Code *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          bankTransfer: { 
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                            ifscCode: e.target.value,
+                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.ifscCode) {
+                                        setFormErrors(prev => ({ ...prev, ifscCode: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.ifscCode ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter IFSC code"
+                                  />
+                                  {formErrors.ifscCode && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.ifscCode}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          bankTransfer: { 
+                                            ...paymentUpdate.paymentMethodDetails?.bankTransfer, 
+                                            transactionId: e.target.value,
+                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                            transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date()
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.transactionId) {
+                                        setFormErrors(prev => ({ ...prev, transactionId: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter transaction ID"
+                                  />
+                                  {formErrors.transactionId && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transfer Date *</label>
+                                  <input
+                                    type="date"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate ? new Date(paymentUpdate.paymentMethodDetails.bankTransfer.transferDate).toISOString().split('T')[0] : ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          bankTransfer: {
+                                            bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                            branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
+                                            accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                            ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                            transferDate: new Date(e.target.value),
+                                            accountHolderName: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || '',
+                                            referenceNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.transferDate) {
+                                        setFormErrors(prev => ({ ...prev, transferDate: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.transferDate ? 'border-red-500' : 'border-gray-300'}`}
+                                  />
+                                  {formErrors.transferDate && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.transferDate}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Branch Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        bankTransfer: { 
+                                          bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                          branchName: e.target.value,
+                                          accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                          ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                          transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date(),
+                                          accountHolderName: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || '',
+                                          referenceNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter branch name"
+                                  />
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Account Holder Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        bankTransfer: { 
+                                          bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                          branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
+                                          accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                          ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                          transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date(),
+                                          accountHolderName: e.target.value,
+                                          referenceNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter account holder name"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Reference Number</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.bankTransfer?.referenceNumber || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        bankTransfer: { 
+                                          bankName: paymentUpdate.paymentMethodDetails?.bankTransfer?.bankName || '',
+                                          branchName: paymentUpdate.paymentMethodDetails?.bankTransfer?.branchName || '',
+                                          accountNumber: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountNumber || '',
+                                          ifscCode: paymentUpdate.paymentMethodDetails?.bankTransfer?.ifscCode || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.bankTransfer?.transactionId || '',
+                                          transferDate: paymentUpdate.paymentMethodDetails?.bankTransfer?.transferDate || new Date(),
+                                          accountHolderName: paymentUpdate.paymentMethodDetails?.bankTransfer?.accountHolderName || '',
+                                          referenceNumber: e.target.value
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter reference number"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {paymentUpdate.paymentMethod === 'upi' && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">UPI ID *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.upi?.upiId || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          upi: { 
+                                            upiId: e.target.value,
+                                            transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
+                                            transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
+                                            payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
+                                            payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.upiId) {
+                                        setFormErrors(prev => ({ ...prev, upiId: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.upiId ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter UPI ID"
+                                  />
+                                  {formErrors.upiId && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.upiId}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.upi?.transactionId || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          upi: { 
+                                            upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
+                                            transactionId: e.target.value,
+                                            transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
+                                            payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
+                                            payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.transactionId) {
+                                        setFormErrors(prev => ({ ...prev, transactionId: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter transaction ID"
+                                  />
+                                  {formErrors.transactionId && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction Reference</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.upi?.transactionReference || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        upi: { 
+                                          upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
+                                          transactionReference: e.target.value,
+                                          payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
+                                          payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter transaction reference"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Payer Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.upi?.payerName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        upi: { 
+                                          upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
+                                          transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
+                                          payerName: e.target.value,
+                                          payerPhone: paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter payer name"
+                                  />
+                                </div>
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Payer Phone</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.upi?.payerPhone || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                      upi: { 
+                                        upiId: paymentUpdate.paymentMethodDetails?.upi?.upiId || '',
+                                        transactionId: paymentUpdate.paymentMethodDetails?.upi?.transactionId || '',
+                                        transactionReference: paymentUpdate.paymentMethodDetails?.upi?.transactionReference || '',
+                                        payerName: paymentUpdate.paymentMethodDetails?.upi?.payerName || '',
+                                        payerPhone: e.target.value
+                                      }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Enter payer phone"
+                                />
+                              </div>
+                            </div>
+                          )}
+
+                          {paymentUpdate.paymentMethod === 'card' && (
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Card Type *</label>
+                                  <select
+                                    value={paymentUpdate.paymentMethodDetails?.card?.cardType || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          card: { 
+                                            cardType: e.target.value as 'credit' | 'debit' | 'prepaid',
+                                            cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
+                                            lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
+                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
+                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.cardType) {
+                                        setFormErrors(prev => ({ ...prev, cardType: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.cardType ? 'border-red-500' : 'border-gray-300'}`}
+                                  >
+                                    <option value="">Select card type</option>
+                                    <option value="credit">Credit Card</option>
+                                    <option value="debit">Debit Card</option>
+                                    <option value="prepaid">Prepaid Card</option>
+                                  </select>
+                                  {formErrors.cardType && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.cardType}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Card Network *</label>
+                                  <select
+                                    value={paymentUpdate.paymentMethodDetails?.card?.cardNetwork || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          card: { 
+                                            cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
+                                            cardNetwork: e.target.value as 'visa' | 'mastercard' | 'amex' | 'rupay' | 'other',
+                                            lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                            transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
+                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
+                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.cardNetwork) {
+                                        setFormErrors(prev => ({ ...prev, cardNetwork: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.cardNetwork ? 'border-red-500' : 'border-gray-300'}`}
+                                  >
+                                    <option value="">Select network</option>
+                                    <option value="visa">Visa</option>
+                                    <option value="mastercard">Mastercard</option>
+                                    <option value="amex">American Express</option>
+                                    <option value="rupay">RuPay</option>
+                                    <option value="other">Other</option>
+                                  </select>
+                                  {formErrors.cardNetwork && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.cardNetwork}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Last 4 Digits *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          card: { 
+                                            cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
+                                            cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
+                                            lastFourDigits: e.target.value,
+                                            transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
+                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
+                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.lastFourDigits) {
+                                        setFormErrors(prev => ({ ...prev, lastFourDigits: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.lastFourDigits ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter last 4 digits"
+                                    maxLength={4}
+                                  />
+                                  {formErrors.lastFourDigits && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.lastFourDigits}</p>
+                                  )}
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Transaction ID *</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.card?.transactionId || ''}
+                                    onChange={(e) => {
+                                      setPaymentUpdate({
+                                        ...paymentUpdate,
+                                        paymentMethodDetails: {
+                                          ...paymentUpdate.paymentMethodDetails,
+                                          card: { 
+                                            cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
+                                            cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
+                                            lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                            transactionId: e.target.value,
+                                            authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
+                                            cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
+                                          }
+                                        }
+                                      });
+                                      if (formErrors.transactionId) {
+                                        setFormErrors(prev => ({ ...prev, transactionId: '' }));
+                                      }
+                                    }}
+                                    className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.transactionId ? 'border-red-500' : 'border-gray-300'}`}
+                                    placeholder="Enter transaction ID"
+                                  />
+                                  {formErrors.transactionId && (
+                                    <p className="text-red-500 text-xs mt-1">{formErrors.transactionId}</p>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Card Holder Name</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        card: { 
+                                          cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
+                                          cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
+                                          lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
+                                          authorizationCode: paymentUpdate.paymentMethodDetails?.card?.authorizationCode || '',
+                                          cardHolderName: e.target.value
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter card holder name"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Authorization Code</label>
+                                  <input
+                                    type="text"
+                                    value={paymentUpdate.paymentMethodDetails?.card?.authorizationCode || ''}
+                                    onChange={(e) => setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        card: { 
+                                          cardType: paymentUpdate.paymentMethodDetails?.card?.cardType || 'credit',
+                                          cardNetwork: paymentUpdate.paymentMethodDetails?.card?.cardNetwork || 'visa',
+                                          lastFourDigits: paymentUpdate.paymentMethodDetails?.card?.lastFourDigits || '',
+                                          transactionId: paymentUpdate.paymentMethodDetails?.card?.transactionId || '',
+                                          authorizationCode: e.target.value,
+                                          cardHolderName: paymentUpdate.paymentMethodDetails?.card?.cardHolderName || ''
+                                        }
+                                      }
+                                    })}
+                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                    placeholder="Enter authorization code"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {paymentUpdate.paymentMethod === 'other' && (
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Method Name *</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.other?.methodName || ''}
+                                  onChange={(e) => {
+                                    setPaymentUpdate({
+                                      ...paymentUpdate,
+                                      paymentMethodDetails: {
+                                        ...paymentUpdate.paymentMethodDetails,
+                                        other: { ...paymentUpdate.paymentMethodDetails?.other, methodName: e.target.value }
+                                      }
+                                    });
+                                    if (formErrors.methodName) {
+                                      setFormErrors(prev => ({ ...prev, methodName: '' }));
+                                    }
+                                  }}
+                                  className={`w-full px-3 py-2 text-sm border rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 ${formErrors.methodName ? 'border-red-500' : 'border-gray-300'}`}
+                                  placeholder="Enter payment method name"
+                                />
+                                {formErrors.methodName && (
+                                  <p className="text-red-500 text-xs mt-1">{formErrors.methodName}</p>
+                                )}
+                              </div>
+                              <div>
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Reference Number</label>
+                                <input
+                                  type="text"
+                                  value={paymentUpdate.paymentMethodDetails?.other?.referenceNumber || ''}
+                                  onChange={(e) => setPaymentUpdate({
+                                    ...paymentUpdate,
+                                    paymentMethodDetails: {
+                                      ...paymentUpdate.paymentMethodDetails,
+                                        other: { 
+                                          methodName: paymentUpdate.paymentMethodDetails?.other?.methodName || '',
+                                          referenceNumber: e.target.value,
+                                          additionalDetails: paymentUpdate.paymentMethodDetails?.other?.additionalDetails || {}
+                                        }
+                                    }
+                                  })}
+                                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                                  placeholder="Enter reference number"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       {/* Payment Date */}
                       <div>
@@ -7354,6 +9132,34 @@ const InvoiceManagement: React.FC = () => {
                 </div>
               )}
 
+              {/* Notes and Terms Section */}
+              {(selectedQuotation.notes || selectedQuotation.terms) && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                  <h4 className="font-medium text-gray-900 mb-3 flex items-center">
+                    <FileText className="w-4 h-4 mr-2" />
+                    Additional Information
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {selectedQuotation.notes && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2">Notes:</h5>
+                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
+                          {selectedQuotation.notes}
+                        </div>
+                      </div>
+                    )}
+                    {selectedQuotation.terms && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-2">Terms & Conditions:</h5>
+                        <div className="text-sm text-gray-600 bg-white p-3 rounded border border-gray-200">
+                          {selectedQuotation.terms}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Quotation Summary */}
               <div className="border-t border-gray-200 pt-4">
                 <div className="flex justify-end">
@@ -7370,10 +9176,10 @@ const InvoiceManagement: React.FC = () => {
                       <span className="text-gray-600">Total Discount:</span>
                       <span className="font-medium text-green-600">-₹{(selectedQuotation.totalDiscount || 0).toFixed(2)}</span>
                     </div>
-                    <div className="flex justify-between text-sm">
+                    {/* <div className="flex justify-between text-sm">
                       <span className="text-gray-600">Overall Discount:</span>
                       <span className="font-medium text-green-600">-{selectedQuotation.overallDiscount || 0}% (-₹{selectedQuotation.overallDiscountAmount?.toFixed(2) || '0.00'})</span>
-                    </div>
+                    </div> */}
                     
                     {/* Service Charges Total */}
                     {selectedQuotation.serviceCharges && selectedQuotation.serviceCharges.length > 0 && (
@@ -7400,6 +9206,24 @@ const InvoiceManagement: React.FC = () => {
                       <span className="font-medium text-gray-700 max-w-xs text-right">{selectedQuotation?.grandTotal ? numberToWords(selectedQuotation.grandTotal) : 'Zero Rupees Only'}</span>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Payment History */}
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">Payment History</h3>
+                  <button
+                    onClick={() => fetchQuotationPaymentHistory(selectedQuotation._id)}
+                    className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                    disabled={loadingQuotationPayments}
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loadingQuotationPayments ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  {renderQuotationPaymentHistory()}
                 </div>
               </div>
             </div>
@@ -7430,22 +9254,27 @@ const InvoiceManagement: React.FC = () => {
         onSubmit={async (paymentData) => {
           try {
             setSubmitting(true);
-            const response = await apiClient.quotations.updatePayment(selectedQuotationForPayment!._id, {
-              paidAmount: paymentData.paidAmount,
+            const response = await apiClient.quotationPayments.create({
+              quotationId: selectedQuotationForPayment!._id,
+              quotationNumber: selectedQuotationForPayment!.quotationNumber,
+              customerId: selectedQuotationForPayment!.customer._id || selectedQuotationForPayment!.customer,
+              amount: paymentData.paidAmount,
+              currency: 'INR',
               paymentMethod: paymentData.paymentMethod,
+              paymentMethodDetails: paymentData.paymentMethodDetails,
               paymentDate: paymentData.paymentDate,
               notes: paymentData.notes
             });
 
             if (response.success) {
-              toast.success('Payment updated successfully');
+              toast.success('Payment recorded successfully');
               setShowAdvancePaymentModal(false);
               setSelectedQuotationForPayment(null);
               fetchQuotations();
             }
           } catch (error: any) {
-            console.error('Error updating payment:', error);
-            toast.error('Failed to update payment');
+            console.error('Error recording payment:', error);
+            toast.error('Failed to record payment');
           } finally {
             setSubmitting(false);
           }

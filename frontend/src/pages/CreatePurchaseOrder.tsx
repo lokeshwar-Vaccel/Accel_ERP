@@ -31,6 +31,8 @@ interface POItem {
     product: string;
     quantity: number;
     gndp: number;
+    discountRate?: number; // Discount percentage (0-100)
+    discountAmount?: number; // Calculated discount amount
     totalPrice: number;
     taxRate: number;
     notes?: string;
@@ -83,9 +85,9 @@ interface PurchaseOrder {
     supplier: string | Supplier;
     supplierEmail: string | any;
     items: Array<{
-        product: string | { 
-            _id: string; 
-            name: string; 
+        product: string | {
+            _id: string;
+            name: string;
             partNo?: string;
             hsnNumber?: string;
             brand?: string;
@@ -97,6 +99,8 @@ interface PurchaseOrder {
         unitPrice: number;
         totalPrice: number;
         taxRate: number;
+        discountRate?: number; // Discount percentage (0-100)
+        discountAmount?: number; // Calculated discount amount
         receivedQuantity?: number;
         notes?: string;
     }>;
@@ -141,18 +145,18 @@ interface POFormData {
 const CreatePurchaseOrder: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
-    
+
     // Get ID from location state
     const poId = location.state?.poId;
-    
+
     // Check if we're in edit mode
     const isEditMode = Boolean(poId);
-    
+
     // Redirect if trying to edit without PO ID
     useEffect(() => {
-      if (location.pathname === '/purchase-order-management/edit' && !poId) {
-        navigate('/purchase-order-management');
-      }
+        if (location.pathname === '/purchase-order-management/edit' && !poId) {
+            navigate('/purchase-order-management');
+        }
     }, [location.pathname, poId, navigate]);
 
     // State management
@@ -176,6 +180,8 @@ const CreatePurchaseOrder: React.FC = () => {
             product: '',
             quantity: 1,
             gndp: 0,
+            discountRate: 0,
+            discountAmount: 0,
             totalPrice: 0,
             taxRate: 0,
             name: '',
@@ -185,8 +191,8 @@ const CreatePurchaseOrder: React.FC = () => {
         }]
     });
 
-    console.log("formData000:",formData);
-    
+    console.log("formData000:", formData);
+
 
     const [errors, setErrors] = useState<string[]>([]);
     const [submitting, setSubmitting] = useState(false);
@@ -298,11 +304,11 @@ const CreatePurchaseOrder: React.FC = () => {
         fetchAllData();
     }, []);
 
-        // Fetch PO data if in edit mode
+    // Fetch PO data if in edit mode
     useEffect(() => {
-      if (isEditMode && poId) {
-        fetchPOData();
-      }
+        if (isEditMode && poId) {
+            fetchPOData();
+        }
     }, [isEditMode, poId]);
 
     // Keyboard navigation handler
@@ -418,16 +424,16 @@ const CreatePurchaseOrder: React.FC = () => {
 
     const fetchPOData = async () => {
         if (!poId) return;
-        
+
         try {
             setLoading(true);
             const response = await apiClient.purchaseOrders.getById(poId);
-            
+
             if (response.success && response.data?.order) {
                 const po = response.data.order as PurchaseOrder;
                 console.log('Fetched PO data:', response.data);
                 setEditingPO(po);
-                
+
                 // Extract supplier address from the PO
                 let supplierAddress: SupplierAddress | undefined = undefined;
                 if (po.supplierAddress) {
@@ -452,6 +458,8 @@ const CreatePurchaseOrder: React.FC = () => {
                         gndp: item.unitPrice, // Map unitPrice to gndp
                         totalPrice: item.totalPrice,
                         taxRate: item.taxRate,
+                        discountRate: item.discountRate || 0, // Include discount rate
+                        discountAmount: item.discountAmount || 0, // Include discount amount
                         // Map additional product fields if product is populated
                         name: typeof item.product === 'string' ? undefined : item.product.name,
                         hsnNumber: typeof item.product === 'string' ? undefined : item.product.hsnNumber,
@@ -473,15 +481,15 @@ const CreatePurchaseOrder: React.FC = () => {
                         if (supplierResponse.success && supplierResponse.data?.customer) {
                             const supplier = supplierResponse.data.customer;
                             console.log('Fetched supplier data:', supplier);
-                            
+
                             // Set supplier search term
                             setSupplierSearchTerm(supplier.name);
-                            
+
                             // Set addresses for dropdown
                             if (supplier.addresses && Array.isArray(supplier.addresses)) {
                                 setAddresses(supplier.addresses);
                             }
-                            
+
                             // Set address search term if we have supplierAddress
                             if (supplierAddress) {
                                 setAddressSearchTerm(`${supplierAddress.address}, ${supplierAddress.district}, ${supplierAddress.state} - ${supplierAddress.pincode}`);
@@ -553,6 +561,8 @@ const CreatePurchaseOrder: React.FC = () => {
                 product: '',
                 quantity: 1,
                 gndp: 0,
+                discountRate: 0,
+                discountAmount: 0,
                 totalPrice: 0,
                 taxRate: 0,
                 name: '',
@@ -569,7 +579,7 @@ const CreatePurchaseOrder: React.FC = () => {
             ...prev,
             items: prev.items.filter((_, i) => i !== index)
         }));
-        
+
         // If all items are deleted, add a new empty item
         if (formData.items.length === 1) {
             setTimeout(() => {
@@ -589,6 +599,8 @@ const CreatePurchaseOrder: React.FC = () => {
                         name: '',
                         partNo: '',
                         gndp: 0,
+                        discountRate: 0,
+                        discountAmount: 0,
                         taxRate: 0,
                         hsnNumber: '',
                         uom: '',
@@ -621,14 +633,56 @@ const CreatePurchaseOrder: React.FC = () => {
                     }
 
                     // Auto-calculate total price
-                    if (field === 'quantity' || field === 'gndp' || field === 'taxRate' || field === 'product') {
-                        const quantity = Number(field === 'quantity' ? value : (updatedItem.quantity || item.quantity)) || 0;
-                        const gndp = Number(field === 'gndp' ? value : (updatedItem.gndp || item.gndp)) || 0;
-                        const taxRate = Number(field === 'taxRate' ? value : (updatedItem.taxRate || item.taxRate)) || 0;
+                    // Auto-calculate total price
+                    if (
+                        field === "quantity" ||
+                        field === "gndp" ||
+                        field === "taxRate" ||
+                        field === "discountRate" ||
+                        field === "discountAmount" ||
+                        field === "product"
+                    ) {
+                        const quantity = Number(
+                            field === "quantity" ? value : updatedItem.quantity || item.quantity
+                        ) || 0;
+
+                        const gndp = Number(
+                            field === "gndp" ? value : updatedItem.gndp || item.gndp
+                        ) || 0;
+
+                        const taxRate = Number(
+                            field === "taxRate" ? value : updatedItem.taxRate || item.taxRate
+                        ) || 0;
+
                         const subtotal = quantity * gndp;
-                        updatedItem.totalPrice = subtotal * (1 + taxRate / 100);
-                        
+
+                        // ✅ GST inclusive price (base + GST)
+                        const gstInclusiveSubtotal = subtotal * (1 + taxRate / 100);
+
+                        // Discount rate %
+                        const discountRate = Number(
+                            field === "discountRate" ? value : updatedItem.discountRate || item.discountRate
+                        ) || 0;
+
+                        // ✅ Calculate discount on GST-inclusive subtotal
+                        const calculatedDiscountAmount = Math.round(
+                            (gstInclusiveSubtotal * discountRate) / 100
+                        );
+
+                        // Use provided discount amount or calculated amount
+                        const discountAmount =
+                            field === "discountAmount"
+                                ? Math.round(Number(value) || 0)
+                                : calculatedDiscountAmount;
+
+                        // Update both fields
+                        updatedItem.discountRate = discountRate;
+                        updatedItem.discountAmount = discountAmount;
+
+                        // ✅ Final total after discount (discount applied after GST)
+                        updatedItem.totalPrice = Math.round(gstInclusiveSubtotal - discountAmount);
                     }
+
                     return updatedItem;
                 }
                 return item;
@@ -666,20 +720,20 @@ const CreatePurchaseOrder: React.FC = () => {
 
     const getAddressLabel = (addressId?: string) => {
         if (!addressId) return '';
-    
+
         // If in edit mode and formData already has full object
         if (typeof addressId !== 'string' && typeof addressId === 'object') {
             const addr = addressId;
             return formatAddressString(addr);
         }
-    
+
         // Otherwise, find by ID from addresses list
         const address = addresses.find(a => a.id === addressId);
         if (!address) return '';
-    
+
         return formatAddressString(address);
     };
-    
+
     // Small helper to avoid repeating string concatenation
     const formatAddressString = (addr: any) => {
         const parts = [
@@ -688,10 +742,10 @@ const CreatePurchaseOrder: React.FC = () => {
             addr.state && `- ${addr.state}`,
             addr.pincode && `${addr.pincode}`
         ].filter(Boolean);
-    
+
         return parts.join(', ');
     };
-    
+
 
     const validateForm = (): boolean => {
         const newErrors: string[] = [];
@@ -1010,8 +1064,10 @@ const CreatePurchaseOrder: React.FC = () => {
                     unitPrice: item.gndp, // Map gndp to unitPrice
                     totalPrice: item.totalPrice,
                     taxRate: item.taxRate || 0,
+                    discountRate: item.discountRate || 0, // Include discount rate
+                    discountAmount: item.discountAmount || 0, // Include discount amount
                     description: item.name || item.description || '', // Use name as description
-                    receivedQuantity: editingPO ? (editingPO.items.find(poItem => 
+                    receivedQuantity: editingPO ? (editingPO.items.find(poItem =>
                         typeof poItem.product === 'string' ? poItem.product === item.product : poItem.product._id === item.product
                     )?.receivedQuantity || 0) : 0
                 }));
@@ -1073,7 +1129,20 @@ const CreatePurchaseOrder: React.FC = () => {
     };
 
     const calculateTotalDiscount = () => {
-        return 0; // No discount in Purchase Orders
+        return formData.items.reduce((sum, item) => {
+            const subtotal = item.quantity * item.gndp;
+            const taxRate = item.taxRate || 0;
+            const discountRate = item.discountRate || 0;
+            
+            // GST inclusive subtotal
+            const gstInclusiveSubtotal = subtotal * (1 + taxRate / 100);
+            
+            // Calculate discount amount
+            const calculatedDiscountAmount = Math.round((gstInclusiveSubtotal * discountRate) / 100);
+            const discountAmount = item.discountAmount ? Math.round(item.discountAmount) : calculatedDiscountAmount;
+            
+            return sum + discountAmount;
+        }, 0);
     };
 
     const calculateTotalTax = () => {
@@ -1087,8 +1156,19 @@ const CreatePurchaseOrder: React.FC = () => {
     const calculateTotal = () => {
         return formData.items.reduce((sum, item) => {
             const subtotal = item.quantity * item.gndp;
-            const totalWithTax = subtotal * (1 + (item.taxRate || 0) / 100);
-            return sum + totalWithTax;
+            const taxRate = item.taxRate || 0;
+            const discountRate = item.discountRate || 0;
+            
+            // GST inclusive subtotal
+            const gstInclusiveSubtotal = subtotal * (1 + taxRate / 100);
+            
+            // Calculate discount amount
+            const calculatedDiscountAmount = Math.round((gstInclusiveSubtotal * discountRate) / 100);
+            const discountAmount = item.discountAmount ? Math.round(item.discountAmount) : calculatedDiscountAmount;
+            
+            // Final total after discount
+            const finalTotal = Math.round(gstInclusiveSubtotal - discountAmount);
+            return sum + finalTotal;
         }, 0);
     };
 
@@ -1177,7 +1257,7 @@ const CreatePurchaseOrder: React.FC = () => {
                             // Address is enabled, check if it has a value
                             const addressValue = addressInputRef.current?.value?.trim();
                             console.log("addressValue:", addressValue);
-                            
+
                             if (addressValue) {
                                 addressInputRef.current?.focus();
                                 setShowAddressDropdown(true);
@@ -1591,7 +1671,7 @@ const CreatePurchaseOrder: React.FC = () => {
             const currentItem = formData.items[rowIndex];
             const hasUserInteracted = searchTerm.trim() || currentHighlighted >= 0;
             const isProductAlreadySelected = currentItem && currentItem.product && currentItem.product !== `temp-${Date.now()}`;
-            
+
             if (hasUserInteracted && matchingProducts.length > 0) {
                 // User has searched or navigated, update to new selection
                 const selectedProduct = currentHighlighted >= 0 && currentHighlighted < matchingProducts.length
@@ -1641,7 +1721,7 @@ const CreatePurchaseOrder: React.FC = () => {
             const currentItem = formData.items[rowIndex];
             const hasUserInteracted = searchTerm.trim() || currentHighlighted >= 0;
             const isProductAlreadySelected = currentItem && currentItem.product && currentItem.product !== `temp-${Date.now()}`;
-            
+
             if (hasUserInteracted && matchingProducts.length > 0) {
                 // User has searched or navigated, update to new selection
                 const selectedProduct = currentHighlighted >= 0 && currentHighlighted < matchingProducts.length
@@ -1664,7 +1744,7 @@ const CreatePurchaseOrder: React.FC = () => {
                 // No interaction, keep already selected product
                 setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
-                
+
                 // Move directly to quantity field in same row
                 setTimeout(() => {
                     const quantityInput = document.querySelector(`[data-row="${rowIndex}"][data-field="quantity"]`) as HTMLInputElement;
@@ -1693,7 +1773,7 @@ const CreatePurchaseOrder: React.FC = () => {
                 // If no products found, just close dropdown and clear search
                 setShowProductDropdowns({ ...showProductDropdowns, [rowIndex]: false });
                 setHighlightedProductIndex({ ...highlightedProductIndex, [rowIndex]: -1 });
-                
+
                 // If no search term, move to Notes field
                 if (!searchTerm.trim()) {
                     setTimeout(() => {
@@ -1773,7 +1853,7 @@ const CreatePurchaseOrder: React.FC = () => {
                 // Shift+Tab: Move back based on whether it's a new product or existing product
                 const currentItem = formData.items[rowIndex];
                 const isNewProduct = currentItem?.isNewProduct;
-                
+
                 if (isNewProduct) {
                     // For new products: Quantity → GNDP Price
                     setTimeout(() => {
@@ -1821,14 +1901,14 @@ const CreatePurchaseOrder: React.FC = () => {
     const handleCellKeyDown = (e: React.KeyboardEvent, rowIndex: number, field: string) => {
         const currentItem = formData.items[rowIndex];
         const isNewProduct = currentItem?.isNewProduct;
-        
+
         // Define fields based on whether it's a new product or existing product
-        const fields = isNewProduct 
+        const fields = isNewProduct
             ? ['partNo', 'name', 'category', 'hsnNumber', 'taxRate', 'uom', 'gndp', 'quantity']
             : ['partNo', 'quantity']; // For existing products, only Part No and Quantity are editable
-        
+
         const currentFieldIndex = fields.indexOf(field);
-        console.log("currentFieldIndex:",currentFieldIndex,rowIndex,field);
+        console.log("currentFieldIndex:", currentFieldIndex, rowIndex, field);
 
         // Ctrl+Delete or Command+Delete: Remove current row
         if ((e.ctrlKey || e.metaKey) && e.key === 'Delete') {
@@ -1839,15 +1919,15 @@ const CreatePurchaseOrder: React.FC = () => {
 
         if (e.key === 'Tab') {
             e.preventDefault();
-            
+
 
             if (e.shiftKey) {
                 // Shift+Tab: Move to previous field
                 let prevFieldIndex = currentFieldIndex - 1;
                 let targetRow = rowIndex;
 
-                console.log("prevFieldIndex", prevFieldIndex,currentFieldIndex,rowIndex);
-                
+                console.log("prevFieldIndex", prevFieldIndex, currentFieldIndex, rowIndex);
+
 
                 if (prevFieldIndex < 0) {
                     // Move to last field of previous row
@@ -2039,9 +2119,21 @@ const CreatePurchaseOrder: React.FC = () => {
                                 <input
                                     ref={supplierInputRef}
                                     type="text"
-                                    value={supplierSearchTerm || getSupplierName(formData.supplier)}
+                                    value={supplierSearchTerm || (formData.supplier ? getSupplierName(formData.supplier) : '')}
                                     onChange={(e) => {
-                                        setSupplierSearchTerm(e.target.value);
+                                        const value = e.target.value;
+                                        setSupplierSearchTerm(value);
+
+                                        // If input is cleared, clear the supplier selection
+                                        if (value === '') {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                supplier: '',
+                                                supplierEmail: '',
+                                                supplierAddress: undefined
+                                            }));
+                                        }
+
                                         if (!showSupplierDropdown) setShowSupplierDropdown(true);
                                         setHighlightedSupplierIndex(-1);
                                     }}
@@ -2058,8 +2150,29 @@ const CreatePurchaseOrder: React.FC = () => {
                                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                     data-field="supplier"
                                 />
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showSupplierDropdown ? 'rotate-180' : ''}`} />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                    {formData.supplier && !supplierSearchTerm && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    supplier: '',
+                                                    supplierEmail: '',
+                                                    supplierAddress: undefined
+                                                }));
+                                                setSupplierSearchTerm('');
+                                                setShowSupplierDropdown(false);
+                                                setHighlightedSupplierIndex(-1);
+                                                supplierInputRef.current?.focus();
+                                            }}
+                                            className="p-1 hover:bg-gray-100 rounded-full transition-colors mr-1"
+                                            title="Clear supplier"
+                                        >
+                                            <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                                        </button>
+                                    )}
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showSupplierDropdown ? 'rotate-180' : ''} pointer-events-none`} />
                                 </div>
                                 {showSupplierDropdown && (
                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
@@ -2106,7 +2219,17 @@ const CreatePurchaseOrder: React.FC = () => {
                                     type="text"
                                     value={addressSearchTerm || (formData.supplier ? (formData.supplierAddress ? `${formData.supplierAddress.address}, ${formData.supplierAddress.district}, ${formData.supplierAddress.state} - ${formData.supplierAddress.pincode}` : '') : '')}
                                     onChange={(e) => {
-                                        setAddressSearchTerm(e.target.value);
+                                        const value = e.target.value;
+                                        setAddressSearchTerm(value);
+
+                                        // If input is cleared, clear the address selection
+                                        if (value === '') {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                supplierAddress: undefined
+                                            }));
+                                        }
+
                                         if (!showAddressDropdown) setShowAddressDropdown(true);
                                         setHighlightedAddressIndex(-1);
                                     }}
@@ -2129,8 +2252,27 @@ const CreatePurchaseOrder: React.FC = () => {
                                         }`}
                                     data-field="address"
                                 />
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAddressDropdown ? 'rotate-180' : ''}`} />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                    {formData.supplierAddress && !addressSearchTerm && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    supplierAddress: undefined
+                                                }));
+                                                setAddressSearchTerm('');
+                                                setShowAddressDropdown(false);
+                                                setHighlightedAddressIndex(-1);
+                                                addressInputRef.current?.focus();
+                                            }}
+                                            className="p-1 hover:bg-gray-100 rounded-full transition-colors mr-1"
+                                            title="Clear address"
+                                        >
+                                            <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                                        </button>
+                                    )}
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAddressDropdown ? 'rotate-180' : ''} pointer-events-none`} />
                                 </div>
                                 {showAddressDropdown && formData.supplier && (
                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
@@ -2238,7 +2380,17 @@ const CreatePurchaseOrder: React.FC = () => {
                                     type="text"
                                     value={prioritySearchTerm || getPriorityLabel(formData.priority)}
                                     onChange={(e) => {
-                                        setPrioritySearchTerm(e.target.value);
+                                        const value = e.target.value;
+                                        setPrioritySearchTerm(value);
+
+                                        // If input is cleared, clear the priority selection
+                                        if (value === '') {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                priority: 'low'
+                                            }));
+                                        }
+
                                         if (!showPriorityDropdown) setShowPriorityDropdown(true);
                                         setHighlightedPriorityIndex(-1);
                                     }}
@@ -2254,8 +2406,27 @@ const CreatePurchaseOrder: React.FC = () => {
                                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                     data-field="priority"
                                 />
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPriorityDropdown ? 'rotate-180' : ''}`} />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                    {formData.priority && formData.priority !== 'low' && !prioritySearchTerm && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    priority: 'low'
+                                                }));
+                                                setPrioritySearchTerm('');
+                                                setShowPriorityDropdown(false);
+                                                setHighlightedPriorityIndex(-1);
+                                                prioritySelectRef.current?.focus();
+                                            }}
+                                            className="p-1 hover:bg-gray-100 rounded-full transition-colors mr-1"
+                                            title="Clear priority"
+                                        >
+                                            <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                                        </button>
+                                    )}
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPriorityDropdown ? 'rotate-180' : ''} pointer-events-none`} />
                                 </div>
                                 {showPriorityDropdown && (
                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
@@ -2292,7 +2463,17 @@ const CreatePurchaseOrder: React.FC = () => {
                                     type="text"
                                     value={sourceTypeSearchTerm || getSourceTypeLabel(formData.sourceType)}
                                     onChange={(e) => {
-                                        setSourceTypeSearchTerm(e.target.value);
+                                        const value = e.target.value;
+                                        setSourceTypeSearchTerm(value);
+
+                                        // If input is cleared, clear the source type selection
+                                        if (value === '') {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                sourceType: 'manual'
+                                            }));
+                                        }
+
                                         if (!showSourceTypeDropdown) setShowSourceTypeDropdown(true);
                                         setHighlightedSourceTypeIndex(-1);
                                     }}
@@ -2308,8 +2489,27 @@ const CreatePurchaseOrder: React.FC = () => {
                                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                     data-field="source-type"
                                 />
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showSourceTypeDropdown ? 'rotate-180' : ''}`} />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                    {formData.sourceType && formData.sourceType !== 'manual' && !sourceTypeSearchTerm && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    sourceType: 'manual'
+                                                }));
+                                                setSourceTypeSearchTerm('');
+                                                setShowSourceTypeDropdown(false);
+                                                setHighlightedSourceTypeIndex(-1);
+                                                sourceTypeSelectRef.current?.focus();
+                                            }}
+                                            className="p-1 hover:bg-gray-100 rounded-full transition-colors mr-1"
+                                            title="Clear source type"
+                                        >
+                                            <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                                        </button>
+                                    )}
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showSourceTypeDropdown ? 'rotate-180' : ''} pointer-events-none`} />
                                 </div>
                                 {showSourceTypeDropdown && (
                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
@@ -2346,7 +2546,17 @@ const CreatePurchaseOrder: React.FC = () => {
                                     type="text"
                                     value={departmentSearchTerm || getDepartmentLabel(formData.department || '')}
                                     onChange={(e) => {
-                                        setDepartmentSearchTerm(e.target.value);
+                                        const value = e.target.value;
+                                        setDepartmentSearchTerm(value);
+
+                                        // If input is cleared, clear the department selection
+                                        if (value === '') {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                department: 'retail'
+                                            }));
+                                        }
+
                                         if (!showDepartmentDropdown) setShowDepartmentDropdown(true);
                                         setHighlightedDepartmentIndex(-1);
                                     }}
@@ -2362,8 +2572,27 @@ const CreatePurchaseOrder: React.FC = () => {
                                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                     data-field="department"
                                 />
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showDepartmentDropdown ? 'rotate-180' : ''}`} />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                    {formData.department && formData.department !== 'retail' && !departmentSearchTerm && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    department: 'retail'
+                                                }));
+                                                setDepartmentSearchTerm('');
+                                                setShowDepartmentDropdown(false);
+                                                setHighlightedDepartmentIndex(-1);
+                                                departmentSelectRef.current?.focus();
+                                            }}
+                                            className="p-1 hover:bg-gray-100 rounded-full transition-colors mr-1"
+                                            title="Clear department"
+                                        >
+                                            <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                                        </button>
+                                    )}
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showDepartmentDropdown ? 'rotate-180' : ''} pointer-events-none`} />
                                 </div>
                                 {showDepartmentDropdown && (
                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
@@ -2400,7 +2629,17 @@ const CreatePurchaseOrder: React.FC = () => {
                                     type="text"
                                     value={purchaseOrderTypeSearchTerm || formData.purchaseOrderType}
                                     onChange={(e) => {
-                                        setPurchaseOrderTypeSearchTerm(e.target.value);
+                                        const value = e.target.value;
+                                        setPurchaseOrderTypeSearchTerm(value);
+
+                                        // If input is cleared, clear the purchase order type selection
+                                        if (value === '') {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                purchaseOrderType: 'commercial'
+                                            }));
+                                        }
+
                                         if (!showPurchaseOrderTypeDropdown) setShowPurchaseOrderTypeDropdown(true);
                                         setHighlightedPurchaseOrderTypeIndex(-1);
                                     }}
@@ -2415,8 +2654,27 @@ const CreatePurchaseOrder: React.FC = () => {
                                     className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
                                     data-field="purchase-order-type"
                                 />
-                                <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPurchaseOrderTypeDropdown ? 'rotate-180' : ''}`} />
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                                    {formData.purchaseOrderType && formData.purchaseOrderType !== 'commercial' && !purchaseOrderTypeSearchTerm && (
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setFormData(prev => ({
+                                                    ...prev,
+                                                    purchaseOrderType: 'commercial'
+                                                }));
+                                                setPurchaseOrderTypeSearchTerm('');
+                                                setShowPurchaseOrderTypeDropdown(false);
+                                                setHighlightedPurchaseOrderTypeIndex(-1);
+                                                purchaseOrderTypeSelectRef.current?.focus();
+                                            }}
+                                            className="p-1 hover:bg-gray-100 rounded-full transition-colors mr-1"
+                                            title="Clear purchase order type"
+                                        >
+                                            <X className="w-4 h-4 text-gray-400 hover:text-gray-600" />
+                                        </button>
+                                    )}
+                                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showPurchaseOrderTypeDropdown ? 'rotate-180' : ''} pointer-events-none`} />
                                 </div>
                                 {showPurchaseOrderTypeDropdown && (
                                     <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
@@ -2463,16 +2721,18 @@ const CreatePurchaseOrder: React.FC = () => {
                             {/* Table Header */}
                             <div className="bg-gray-100 border-b border-gray-300 min-w-[1200px]">
                                 <div className="grid text-xs font-bold text-gray-800 uppercase tracking-wide"
-                                    style={{ gridTemplateColumns: '60px 150px 1fr 100px 90px 100px 80px 120px 90px 100px 40px' }}>
+                                    style={{ gridTemplateColumns: '60px 150px 1fr 100px 90px 100px 80px 120px 90px 100px 100px 100px 40px' }}>
                                     <div className="p-3 border-r border-gray-300 text-center bg-gray-200">S.No</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Part No</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Product Name</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Category</div>
-                                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSC/SAC</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">HSN/SAC</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">GST(%)</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">UOM</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">GNDP Price</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Quantity</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Discount %</div>
+                                    <div className="p-3 border-r border-gray-300 bg-gray-200">Discount ₹</div>
                                     <div className="p-3 border-r border-gray-300 bg-gray-200">Total</div>
                                     <div className="p-3 text-center bg-gray-200 font-medium"></div>
                                 </div>
@@ -2484,7 +2744,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                     <div key={index} className={`grid group hover:bg-blue-50 transition-colors ${item.isNewProduct ? 'bg-green-50 border-l-green-500' :
                                         index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
                                         }`}
-                                        style={{ gridTemplateColumns: '60px 150px 1fr 100px 90px 100px 80px 120px 90px 100px 40px' }}>
+                                        style={{ gridTemplateColumns: '60px 150px 1fr 100px 90px 100px 80px 120px 90px 100px 100px 100px 40px' }}>
 
                                         {/* S.No */}
                                         <div className="p-2 border-r border-gray-200 text-center text-sm font-medium text-gray-600 flex items-center justify-center">
@@ -2517,7 +2777,14 @@ const CreatePurchaseOrder: React.FC = () => {
                                                     type="text"
                                                     value={productSearchTerms[index] || getProductPartNo(item.product)}
                                                     onChange={(e) => {
-                                                        updateProductSearchTerm(index, e.target.value);
+                                                        const value = e.target.value;
+                                                        updateProductSearchTerm(index, value);
+
+                                                        // If input is cleared, clear the product selection
+                                                        if (value === '') {
+                                                            updateItem(index, 'product', '');
+                                                        }
+
                                                         setShowProductDropdowns({
                                                             ...showProductDropdowns,
                                                             [index]: true
@@ -2681,7 +2948,14 @@ const CreatePurchaseOrder: React.FC = () => {
                                                         type="text"
                                                         value={categorySearchTerms[index] || getCategoryLabel(item.category || 'spare_part')}
                                                         onChange={(e) => {
-                                                            updateCategorySearchTerm(index, e.target.value);
+                                                            const value = e.target.value;
+                                                            updateCategorySearchTerm(index, value);
+
+                                                            // If input is cleared, clear the category selection
+                                                            if (value === '') {
+                                                                updateItem(index, 'category', 'spare_part');
+                                                            }
+
                                                             setShowCategoryDropdowns({
                                                                 ...showCategoryDropdowns,
                                                                 [index]: true
@@ -2719,7 +2993,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                                     />
                                                     {showCategoryDropdowns[index] && (
                                                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                                                            
+
                                                             {getFilteredCategories(categorySearchTerms[index] || '').map((option, optionIndex) => (
                                                                 <button
                                                                     key={option.value}
@@ -2795,7 +3069,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                                 type="number"
                                                 min="0"
                                                 max="100"
-                                                step="0.01"
+                                                step="1"
                                                 value={item.taxRate || ''}
                                                 onChange={(e) => updateItem(index, 'taxRate', parseFloat(e.target.value) || 0)}
                                                 onKeyDown={(e) => handleCellKeyDown(e, index, 'taxRate')}
@@ -2819,7 +3093,14 @@ const CreatePurchaseOrder: React.FC = () => {
                                                         type="text"
                                                         value={uomSearchTerms[index] || getUomLabel(item.uom || 'nos')}
                                                         onChange={(e) => {
-                                                            updateUomSearchTerm(index, e.target.value);
+                                                            const value = e.target.value;
+                                                            updateUomSearchTerm(index, value);
+
+                                                            // If input is cleared, clear the UOM selection
+                                                            if (value === '') {
+                                                                updateItem(index, 'uom', 'nos');
+                                                            }
+
                                                             setShowUomDropdowns({
                                                                 ...showUomDropdowns,
                                                                 [index]: true
@@ -2857,7 +3138,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                                     />
                                                     {showUomDropdowns[index] && (
                                                         <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
-                                                            
+
                                                             {getFilteredUomOptions(uomSearchTerms[index] || '').map((option, optionIndex) => (
                                                                 <button
                                                                     key={option.value}
@@ -2901,7 +3182,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                             <input
                                                 type="number"
                                                 min="0"
-                                                step="0.01"
+                                                step="1"
                                                 value={item.gndp || ''}
                                                 onChange={(e) => updateItem(index, 'gndp', parseFloat(e.target.value) || 0)}
                                                 onKeyDown={(e) => handleCellKeyDown(e, index, 'gndp')}
@@ -2924,8 +3205,8 @@ const CreatePurchaseOrder: React.FC = () => {
                                                 type="number"
                                                 min="0"
                                                 step="1"
-                                                value={item.quantity}
-                                                onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 1)}
+                                                value={item.quantity || ''}
+                                                onChange={(e) => updateItem(index, 'quantity', parseFloat(e.target.value) || 0)}
                                                 onKeyDown={(e) => handleQuantityKeyDown(e, index)}
                                                 data-row={index}
                                                 data-field="quantity"
@@ -2933,7 +3214,49 @@ const CreatePurchaseOrder: React.FC = () => {
                                                     ? 'bg-green-50 focus:bg-green-100 focus:ring-green-500'
                                                     : 'focus:bg-blue-50'
                                                     }`}
-                                                placeholder="1.00"
+                                                placeholder="0"
+                                            />
+                                        </div>
+
+                                        {/* Discount Rate */}
+                                        <div className="p-1 border-r border-gray-200">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                step="1"
+                                                value={item.discountRate || ''}
+                                                onChange={(e) => updateItem(index, 'discountRate', parseFloat(e.target.value) || 0)}
+                                                onKeyDown={(e) => handleCellKeyDown(e, index, 'discountRate')}
+                                                data-row={index}
+                                                data-field="discountRate"
+                                                className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right ${item.isNewProduct
+                                                    ? 'bg-green-50 focus:bg-green-100 focus:ring-green-500 border border-green-300 rounded'
+                                                    : 'focus:bg-blue-50'
+                                                    }`}
+                                                placeholder="0"
+                                                title="Discount percentage (0-100%)"
+                                            />
+                                        </div>
+
+                                        {/* Discount Amount */}
+                                        <div className="p-1 border-r border-gray-200">
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                step="0.01"
+                                                value={item.discountAmount || ''}
+                                                onChange={(e) => updateItem(index, 'discountAmount', parseFloat(e.target.value) || 0)}
+                                                onKeyDown={(e) => handleCellKeyDown(e, index, 'discountAmount')}
+                                                data-row={index}
+                                                data-field="discountAmount"
+                                                className={`w-full p-2 border-0 bg-transparent text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-right ${item.isNewProduct
+                                                    ? 'bg-green-50 focus:bg-green-100 focus:ring-green-500 border border-green-300 rounded'
+                                                    : 'focus:bg-blue-50'
+                                                    }`}
+                                                placeholder="0.00"
+                                                disabled
+                                                title="Discount amount in ₹"
                                             />
                                         </div>
 
@@ -3032,7 +3355,14 @@ const CreatePurchaseOrder: React.FC = () => {
                                                     type="text"
                                                     value={productSearchTerms[index] || getProductPartNo(item.product)}
                                                     onChange={(e) => {
-                                                        updateProductSearchTerm(index, e.target.value);
+                                                        const value = e.target.value;
+                                                        updateProductSearchTerm(index, value);
+
+                                                        // If input is cleared, clear the product selection
+                                                        if (value === '') {
+                                                            updateItem(index, 'product', '');
+                                                        }
+
                                                         setShowProductDropdowns({
                                                             ...showProductDropdowns,
                                                             [index]: true
@@ -3081,7 +3411,7 @@ const CreatePurchaseOrder: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        {/* Quantity and Price Row */}
+                                        {/* Quantity, Price and Discount Row */}
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-700 mb-1">Quantity</label>
@@ -3105,6 +3435,37 @@ const CreatePurchaseOrder: React.FC = () => {
                                                     onChange={(e) => updateItem(index, 'gndp', parseFloat(e.target.value) || 0)}
                                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                                                     placeholder="0.00"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Discount Row */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Discount %</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    max="100"
+                                                    step="1"
+                                                    value={item.discountRate || ''}
+                                                    onChange={(e) => updateItem(index, 'discountRate', parseFloat(e.target.value) || 0)}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                    placeholder="0"
+                                                    title="Discount percentage (0-100%)"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-medium text-gray-700 mb-1">Discount ₹</label>
+                                                <input
+                                                    type="number"
+                                                    min="0"
+                                                    step="0.01"
+                                                    value={item.discountAmount || ''}
+                                                    onChange={(e) => updateItem(index, 'discountAmount', parseFloat(e.target.value) || 0)}
+                                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                                    placeholder="0.00"
+                                                    title="Discount amount in ₹"
                                                 />
                                             </div>
                                         </div>
@@ -3173,6 +3534,10 @@ const CreatePurchaseOrder: React.FC = () => {
                                 <div className="flex justify-between text-sm">
                                     <span className="text-gray-600">Total Tax:</span>
                                     <span className="font-medium">₹{calculateTotalTax().toFixed(2)}</span>
+                                </div>
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-600">Total Discount:</span>
+                                    <span className="font-medium text-green-600">-₹{calculateTotalDiscount().toFixed(2)}</span>
                                 </div>
                                 <div className="flex justify-between font-bold text-lg border-t pt-3">
                                     <span>Grand Total:</span>

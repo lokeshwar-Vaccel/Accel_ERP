@@ -502,8 +502,6 @@ export const updateInvoice = async (
     const { 
       status, 
       paymentStatus, 
-      paymentMethod, 
-      paymentDate, 
       paidAmount, 
       notes, 
       externalInvoiceNumber, 
@@ -544,8 +542,6 @@ export const updateInvoice = async (
     // Update basic fields
     if (status) invoice.status = status;
     if (paymentStatus) invoice.paymentStatus = paymentStatus;
-    if (paymentMethod) invoice.paymentMethod = paymentMethod;
-    if (paymentDate) invoice.paymentDate = new Date(paymentDate);
     if (typeof paidAmount === 'number') {
       // Validate paidAmount
       if (paidAmount < 0) {
@@ -1027,8 +1023,6 @@ export const createInvoiceFromQuotation = async (
       remainingAmount,
       status: 'draft',
       paymentStatus: quotation.paymentStatus || 'pending',
-      paymentMethod: quotation.paymentMethod,
-      paymentDate: quotation.paymentDate,
       notes: quotation.notes || '',
       terms: quotation.terms || '',
       invoiceType: 'sale' as const,

@@ -30,6 +30,16 @@ export interface IDGQuotation extends Document {
     plannedFollowUpDate: Date;
     numberOfFollowUps: number;
   };
+  // Sales Engineer assignment
+  salesEngineer?: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    email: string;
+    phone: string;
+    salesEmployeeCode: string;
+  };
   location?: string; // Reference to StockLocation
   customer: {
     _id?: string; // Customer ID for reference
@@ -146,8 +156,18 @@ const DGQuotationSchema = new Schema<IDGQuotation>({
     enquiryStatus: { type: String },
     enquiryStage: { type: String },
     assignedEmployeeName: { type: String },
-    plannedFollowUpDate: { type: Date },
+    plannedFollowUpDate: { type: Date, required: false ,default: null},
     numberOfFollowUps: { type: Number, default: 0 },
+  },
+  // Sales Engineer assignment
+  salesEngineer: {
+    _id: { type: String },
+    firstName: { type: String },
+    lastName: { type: String },
+    fullName: { type: String },
+    email: { type: String },
+    phone: { type: String },
+    salesEmployeeCode: { type: String },
   },
   location: { type: Schema.Types.ObjectId, ref: 'StockLocation' },
   customer: {
@@ -165,6 +185,7 @@ const DGQuotationSchema = new Schema<IDGQuotation>({
   billToAddress: {
     address: { type: String, trim: true },
     state: { type: String, trim: true },
+    gstNumber: { type: String, trim: true },
     district: { type: String, trim: true },
     pincode: { type: String, trim: true },
     addressId: { type: Number },
@@ -172,6 +193,7 @@ const DGQuotationSchema = new Schema<IDGQuotation>({
   shipToAddress: {
     address: { type: String, trim: true },
     state: { type: String, trim: true },
+    gstNumber: { type: String, trim: true },
     district: { type: String, trim: true },
     pincode: { type: String, trim: true },
     addressId: { type: Number },

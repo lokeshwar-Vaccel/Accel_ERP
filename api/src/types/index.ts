@@ -8,6 +8,7 @@ export enum UserRole {
   HR = 'hr',
   MANAGER = 'manager',
   FIELD_ENGINEER = 'field_engineer',
+  SALES_ENGINEER = 'sales_engineer',
   VIEWER = 'viewer'
 }
 
@@ -147,6 +148,7 @@ export interface IUser extends Document {
   status: UserStatus;
   phone?: string;
   address?: string;
+  salesEmployeeCode?: string; // Unique code for Sales Engineers
     moduleAccess: {
     module: string;
     access: boolean;

@@ -78,6 +78,13 @@ const userSchema = new Schema<any>({
     type: String,
     maxlength: [200, 'Address cannot be more than 200 characters']
   },
+  salesEmployeeCode: {
+    type: String,
+    unique: true,
+    sparse: true, // allow null values but ensure uniqueness when present
+    trim: true,
+    maxlength: [20, 'Sales Employee Code cannot be more than 20 characters']
+  },
   moduleAccess: {
     type: [moduleAccessSchema],
     default: []

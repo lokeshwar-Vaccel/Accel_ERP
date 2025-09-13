@@ -308,8 +308,6 @@ export const updateDGInvoice = async (
     const { 
       status, 
       paymentStatus, 
-      paymentMethod, 
-      paymentDate, 
       paidAmount, 
       notes, 
       externalInvoiceNumber, 
@@ -354,8 +352,6 @@ export const updateDGInvoice = async (
     // Update basic fields
     if (status) invoice.status = status;
     if (paymentStatus) invoice.paymentStatus = paymentStatus;
-    if (paymentMethod) invoice.paymentMethod = paymentMethod;
-    if (paymentDate) invoice.paymentDate = new Date(paymentDate);
     if (typeof paidAmount === 'number') {
       // Validate paidAmount
       if (paidAmount < 0) {
