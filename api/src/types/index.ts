@@ -457,7 +457,7 @@ export interface IDGDetails extends Document {
   dgModel: string;
   dgRatingKVA: number;
   salesDealerName?: string;
-  commissioningDate: Date;
+  commissioningDate?: Date;
   warrantyStatus: 'warranty' | 'non_warranty';
   cluster: string;
   locationAddressId?: number;

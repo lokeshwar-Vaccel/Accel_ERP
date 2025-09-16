@@ -55,7 +55,7 @@ const dgDetailsSchema = new Schema({
   },
   commissioningDate: {
     type: Date,
-    required: [true, 'Commissioning date is required']
+    required: false
   },
   warrantyStatus: {
     type: String,

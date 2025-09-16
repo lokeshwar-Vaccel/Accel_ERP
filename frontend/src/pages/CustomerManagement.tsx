@@ -123,7 +123,7 @@ interface Customer {
     dgModel: string;
     dgRatingKVA: number;
     salesDealerName?: string;
-    commissioningDate: string;
+    commissioningDate?: string;
     warrantyStatus: 'warranty' | 'non_warranty';
     cluster: string;
     warrantyStartDate?: string;
@@ -209,7 +209,7 @@ interface CustomerFormData {
     dgModel: string;
     dgRatingKVA: number;
     salesDealerName?: string;
-    commissioningDate: string;
+    commissioningDate?: string;
     warrantyStatus: 'warranty' | 'non_warranty';
     cluster: string;
     warrantyStartDate?: string;
@@ -683,7 +683,7 @@ const CustomerManagement: React.FC = () => {
             }
             
             // Auto-determine warranty status based on commissioning date (2-year rule)
-            if (value) {
+            if (value && value.trim() !== '') {
               const commissioningDate = new Date(value);
               const today = new Date();
               const twoYearsAgo = new Date(today.getFullYear() - 2, today.getMonth(), today.getDate());
@@ -694,6 +694,10 @@ const CustomerManagement: React.FC = () => {
               } else {
                 updatedDg.warrantyStatus = 'warranty';
               }
+            } else {
+              // If no commissioning date, set to current date and default to warranty
+              updatedDg.commissioningDate = new Date().toISOString().split('T')[0];
+              updatedDg.warrantyStatus = 'warranty';
             }
           }
           
@@ -764,8 +768,11 @@ const CustomerManagement: React.FC = () => {
   };
 
   // Helper function to determine warranty status based on commissioning date (2-year rule)
-  const determineWarrantyStatus = (commissioningDate: string): 'warranty' | 'non_warranty' => {
-    if (!commissioningDate) return 'warranty';
+  const determineWarrantyStatus = (commissioningDate?: string): 'warranty' | 'non_warranty' => {
+    if (!commissioningDate || commissioningDate.trim() === '') {
+      // If no commissioning date, use current date and return warranty
+      return 'warranty';
+    }
     
     const commissioning = new Date(commissioningDate);
     const today = new Date();
@@ -2512,7 +2519,7 @@ const CustomerManagement: React.FC = () => {
                                                 `  Alternator: ${dg.alternatorMake}\n` +
                                                 `  Engine: ${dg.engineSerialNumber}\n` +
                                                 `  Dealer: ${dg.salesDealerName}\n` +
-                                                `  Commissioning: ${dg.commissioningDate}\n` +
+                                                `  Commissioning: ${dg.commissioningDate ? new Date(dg.commissioningDate).toLocaleDateString() : 'N/A'}\n` +
                                                 `  Warranty: ${dg.warrantyStatus}\n` +
                                                 `  Cluster: ${dg.cluster}`
                                               ).join('\n\n')}`);
@@ -2692,7 +2699,7 @@ const CustomerManagement: React.FC = () => {
                                       <div><span className="font-medium">Alternator:</span> {dg.alternatorMake || 'N/A'}</div>
                                       <div><span className="font-medium">Engine:</span> {dg.engineSerialNumber || 'N/A'}</div>
                                       <div><span className="font-medium">Dealer:</span> {dg.salesDealerName || 'N/A'}</div>
-                                      <div><span className="font-medium">Commissioning:</span> {dg.commissioningDate || 'N/A'}</div>
+                                      <div><span className="font-medium">Commissioning:</span> {dg.commissioningDate ? new Date(dg.commissioningDate).toLocaleDateString() : 'N/A'}</div>
                                       <div><span className="font-medium">Warranty:</span> {dg.warrantyStatus || 'N/A'}</div>
                                       <div><span className="font-medium">Cluster:</span> {dg.cluster || 'N/A'}</div>
                                       <div><span className="font-medium">Warranty Start Date:</span> {dg.warrantyStartDate || 'N/A'}</div>
@@ -3259,7 +3266,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Commissioning Date */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Commissioning Date *
+                                    Commissioning Date
                                   </label>
                                   <input
                                     type="date"
@@ -3329,7 +3336,7 @@ const CustomerManagement: React.FC = () => {
                                       if (dgDetail.warrantyEndDate) {
                                         return dgDetail.warrantyEndDate;
                                       }
-                                      const startDate = dgDetail.warrantyStartDate || dgDetail.commissioningDate;
+                                      const startDate = dgDetail.warrantyStartDate || dgDetail.commissioningDate || '';
                                       if (startDate && dgDetail.dgRatingKVA > 0) {
                                         return calculateWarrantyEndDate(startDate, dgDetail.dgRatingKVA);
                                       }
@@ -3931,7 +3938,7 @@ const CustomerManagement: React.FC = () => {
                                 {/* Commissioning Date */}
                                 <div>
                                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Commissioning Date *
+                                    Commissioning Date
                                   </label>
                                   <input
                                     type="date"
@@ -4005,7 +4012,7 @@ const CustomerManagement: React.FC = () => {
                                       if (dgDetail.warrantyEndDate) {
                                         return dgDetail.warrantyEndDate;
                                       }
-                                      const startDate = dgDetail.warrantyStartDate || dgDetail.commissioningDate;
+                                      const startDate = dgDetail.warrantyStartDate || dgDetail.commissioningDate || '';
                                       if (startDate && dgDetail.dgRatingKVA > 0) {
                                         return calculateWarrantyEndDate(startDate, dgDetail.dgRatingKVA);
                                       }
@@ -4561,7 +4568,7 @@ const CustomerManagement: React.FC = () => {
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Commissioning Date</p>
-                            <p className="font-medium text-sm">{new Date(dgDetail.commissioningDate).toLocaleDateString()}</p>
+                            <p className="font-medium text-sm">{dgDetail.commissioningDate ? new Date(dgDetail.commissioningDate).toLocaleDateString() : 'N/A'}</p>
                           </div>
                           <div>
                             <p className="text-xs text-gray-500">Warranty Status</p>
