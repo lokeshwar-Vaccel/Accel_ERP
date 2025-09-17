@@ -1,7 +1,7 @@
 import mongoose, { Schema } from 'mongoose';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { IUser, UserRole, UserStatus } from '../types';
+import { IUser, UserRole, UserStatus, UserDepartment } from '../types';
 
 const moduleAccessSchema = new Schema<any>({
   module: {
@@ -69,6 +69,11 @@ const userSchema = new Schema<any>({
     type: String,
     enum: Object.values(UserStatus),
     default: UserStatus.ACTIVE
+  },
+  department: {
+    type: String,
+    enum: Object.values(UserDepartment),
+    required: false
   },
   phone: {
     type: String,

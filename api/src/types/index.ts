@@ -20,6 +20,17 @@ export enum UserStatus {
   DELETED = 'deleted'
 }
 
+// User Department
+export enum UserDepartment {
+  ACCOUNTS = 'accounts',
+  STORES = 'stores',
+  DG_SALES = 'dg_sales',
+  EV = 'ev',
+  TELECOM = 'telecom',
+  ADMIN = 'admin',
+  RETAIL_SERVICE = 'retail_service'
+}
+
 // Customer Types
 export enum CustomerType {
   RETAIL = 'retail',
@@ -146,6 +157,7 @@ export interface IUser extends Document {
   password: string;
   role: UserRole;
   status: UserStatus;
+  department?: UserDepartment;
   phone?: string;
   address?: string;
   salesEmployeeCode?: string; // Unique code for Sales Engineers
@@ -442,7 +454,7 @@ export interface IDGDetails extends Document {
   dgModel: string;
   dgRatingKVA: number;
   salesDealerName?: string;
-  commissioningDate: Date;
+  commissioningDate?: Date;
   warrantyStatus: 'warranty' | 'non_warranty';
   cluster: string;
   locationAddressId?: number;

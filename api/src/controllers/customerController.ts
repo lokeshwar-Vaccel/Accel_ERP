@@ -1140,7 +1140,8 @@ export const exportCustomers = async (
       const primaryEmail = getPrimaryAddressField(customer.addresses, 'email') || customer.email || '';
       const primaryPhone = getPrimaryAddressField(customer.addresses, 'phone') || customer.phone || '';
       
-      return {
+      // Customer data object (without Lead Source, Assigned To, bank details, and Site Address)
+      const customerData = {
         'S.No': index + 1,
         'Customer ID': customer.customerId || '',
         'Name': customer.name || '',
@@ -1154,11 +1155,27 @@ export const exportCustomers = async (
         'Customer Type': customer.customerType || '',
         'Type': customer.type || '',
         'Status': customer.status || '',
-        'Lead Source': customer.leadSource || '',
-        'Assigned To': assignedUser,
         'Notes': customer.notes || '',
-        'Site Address': customer.siteAddress || '',
         'Number of DG': customer.numberOfDG || 0,
+        'Created Date': formatDateForExcel(customer.createdAt),
+        'Last Updated': formatDateForExcel(customer.updatedAt)
+      };
+
+      // Supplier data object (includes bank details, but no Lead Source, Assigned To, or Site Address)
+      const supplierData = {
+        'S.No': index + 1,
+        'Name': customer.name || '',
+        'Alice (Alias)': customer.alice || '',
+        'Designation': customer.designation || '',
+        'Contact Person': primaryContactPerson,
+        'Email': primaryEmail,
+        'Phone': primaryPhone,
+        'PAN Number': customer.panNumber || '',
+        'Primary Address': primaryAddress,
+        'Customer Type': customer.customerType || '',
+        'Type': customer.type || '',
+        'Status': customer.status || '',
+        'Notes': customer.notes || '',
         'Bank Name': (customer as any).bankDetails?.bankName || '',
         'Account No': (customer as any).bankDetails?.accountNo || '',
         'IFSC': (customer as any).bankDetails?.ifsc || '',
@@ -1166,6 +1183,9 @@ export const exportCustomers = async (
         'Created Date': formatDateForExcel(customer.createdAt),
         'Last Updated': formatDateForExcel(customer.updatedAt)
       };
+
+      // Return appropriate data based on type
+      return type === 'supplier' ? supplierData : customerData;
     });
 
     // Create workbook and worksheet
@@ -1195,8 +1215,30 @@ export const exportCustomers = async (
       };
     }
 
-    // Auto-size columns
-    const columnWidths = [
+    // Auto-size columns - different for suppliers vs customers
+    const columnWidths = type === 'supplier' ? [
+      // Supplier columns (includes bank details, but no Lead Source, Assigned To, or Site Address)
+      { wch: 8 },   // S.No
+      { wch: 25 },  // Name
+      { wch: 20 },  // Alice
+      { wch: 20 },  // Designation
+      { wch: 20 },  // Contact Person
+      { wch: 25 },  // Email
+      { wch: 15 },  // Phone
+      { wch: 15 },  // PAN Number
+      { wch: 40 },  // Primary Address
+      { wch: 15 },  // Customer Type
+      { wch: 12 },  // Type
+      { wch: 12 },  // Status
+      { wch: 30 },  // Notes
+      { wch: 20 },  // Bank Name
+      { wch: 20 },  // Account No
+      { wch: 15 },  // IFSC
+      { wch: 20 },  // Branch
+      { wch: 15 },  // Created Date
+      { wch: 15 }   // Last Updated
+    ] : [
+      // Customer columns (without Lead Source, Assigned To, bank details, and Site Address)
       { wch: 8 },   // S.No
       { wch: 15 },  // Customer ID
       { wch: 25 },  // Name
@@ -1210,15 +1252,8 @@ export const exportCustomers = async (
       { wch: 15 },  // Customer Type
       { wch: 12 },  // Type
       { wch: 12 },  // Status
-      { wch: 20 },  // Lead Source
-      { wch: 25 },  // Assigned To
       { wch: 30 },  // Notes
-      { wch: 40 },  // Site Address
       { wch: 15 },  // Number of DG
-      { wch: 20 },  // Bank Name
-      { wch: 20 },  // Account No
-      { wch: 15 },  // IFSC
-      { wch: 20 },  // Branch
       { wch: 15 },  // Created Date
       { wch: 15 }   // Last Updated
     ];

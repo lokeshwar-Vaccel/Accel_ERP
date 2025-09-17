@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { setBreadcrumbs } from 'redux/auth/navigationSlice';
 import { apiClient } from '../utils/api';
-import { User, UserRole } from '../types';
+import { User, UserRole, UserDepartment } from '../types';
 import PageHeader from '../components/ui/PageHeader';
 import { useCurrentModulePermission } from 'layout/Sidebar';
 import { RootState } from '../store';
@@ -74,6 +74,7 @@ interface UserFormData {
   email: string;
   password?: string;
   role: string;
+  department?: string;
   phone?: string;
   moduleAccess: ModuleAccess[];
 }
@@ -108,6 +109,7 @@ export const UserManagement: React.FC = () => {
     email: '',
     password: '',
     role: "",
+    department: '',
     phone: '',
     moduleAccess: []
   });
@@ -168,7 +170,9 @@ export const UserManagement: React.FC = () => {
 
   // Custom dropdown states
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false);
+  const [isDepartmentDropdownOpen, setIsDepartmentDropdownOpen] = useState(false);
   const roleDropdownRef = useRef<HTMLDivElement>(null);
+  const departmentDropdownRef = useRef<HTMLDivElement>(null);
 
 
   const roleOptions = [
@@ -186,6 +190,16 @@ export const UserManagement: React.FC = () => {
     { value: 'all', label: 'All Status' },
     { value: 'active', label: 'Active' },
     { value: 'in-active', label: 'In Active' },
+  ];
+
+  const departmentOptions = [
+    { value: 'accounts', label: 'Accounts' },
+    { value: 'stores', label: 'Stores' },
+    { value: 'dg_sales', label: 'DG Sales' },
+    { value: 'ev', label: 'EV' },
+    { value: 'telecom', label: 'Telecom' },
+    { value: 'admin', label: 'Admin' },
+    { value: 'retail_service', label: 'Retail Service' },
   ];
 
   // Helper for status label (add this if not present)
@@ -242,7 +256,7 @@ export const UserManagement: React.FC = () => {
         name: user.fullName || `${user.firstName} ${user.lastName}`,
         email: user.email,
         role: user.role,
-        department: 'General', // Default since backend doesn't have department
+        department: user.department || '', // Use department from backend, empty string if not set
         status: user.status || 'active',
         lastLogin: user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : 'Never',
         phone: user.phone || '', // Ensure phone is included
@@ -280,15 +294,19 @@ export const UserManagement: React.FC = () => {
       if (roleDropdownRef.current && !roleDropdownRef.current.contains(event.target as Node)) {
         setIsRoleDropdownOpen(false);
       }
+      if (departmentDropdownRef.current && !departmentDropdownRef.current.contains(event.target as Node)) {
+        setIsDepartmentDropdownOpen(false);
+      }
     };
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setIsRoleDropdownOpen(false);
+        setIsDepartmentDropdownOpen(false);
       }
     };
 
-    if (isRoleDropdownOpen) {
+    if (isRoleDropdownOpen || isDepartmentDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('keydown', handleKeyDown);
     }
@@ -297,7 +315,7 @@ export const UserManagement: React.FC = () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleKeyDown);
     };
-  }, [isRoleDropdownOpen]);
+  }, [isRoleDropdownOpen, isDepartmentDropdownOpen]);
 
   // Modal handlers
   const openAddUserModal = () => {
@@ -309,6 +327,7 @@ export const UserManagement: React.FC = () => {
       email: '',
       password: '',
       role: '',
+      department: '',
       phone: '',
       moduleAccess: []
     });
@@ -331,6 +350,7 @@ export const UserManagement: React.FC = () => {
       email: user.email,
       password: '', // Not required for editing
       role: user.role as UserRole,
+      department: user.department || '',
       phone: user.phone || '',
       moduleAccess: Array.isArray(user.moduleAccess)
         ? user.moduleAccess.map((item) => ({
@@ -354,12 +374,14 @@ export const UserManagement: React.FC = () => {
     setShowUserModal(false);
     setSelectedUser(null);
     setIsRoleDropdownOpen(false);
+    setIsDepartmentDropdownOpen(false);
     setFormData({
       firstName: '',
       lastName: '',
       email: '',
       password: '',
       role: '',
+      department: '',
       phone: '',
       moduleAccess: []
     });
@@ -530,6 +552,22 @@ export const UserManagement: React.FC = () => {
     }
   };
 
+  const handleDepartmentSelect = (department: string) => {
+    setFormData(prev => ({
+      ...prev,
+      department
+    }));
+    setIsDepartmentDropdownOpen(false);
+
+    // Clear error for department field
+    if (formErrors.department) {
+      setFormErrors(prev => ({
+        ...prev,
+        department: ''
+      }));
+    }
+  };
+
   const handleRoleChange = (selectedRole: string) => {
     const allowedModules = roleModuleMapping[selectedRole] || [];
     const newModuleAccess: ModuleAccess[] = allowedModules.map((module: ModuleKey) => {
@@ -608,6 +646,19 @@ export const UserManagement: React.FC = () => {
     return colors[role.toLowerCase()] || 'bg-gray-100 text-gray-800';
   };
 
+  const getDepartmentBadge = (department: string) => {
+    const colors: { [key: string]: string } = {
+      'accounts': 'bg-emerald-100 text-emerald-800',
+      'stores': 'bg-amber-100 text-amber-800',
+      'dg_sales': 'bg-blue-100 text-blue-800',
+      'ev': 'bg-green-100 text-green-800',
+      'telecom': 'bg-violet-100 text-violet-800',
+      'admin': 'bg-red-100 text-red-800',
+      'retail_service': 'bg-pink-100 text-pink-800',
+    };
+    return colors[department.toLowerCase()] || 'bg-gray-100 text-gray-800';
+  };
+
   const formatRoleDisplay = (role: string) => {
     const roleMap: { [key: string]: string } = {
       'super_admin': 'Super Admin',
@@ -619,6 +670,19 @@ export const UserManagement: React.FC = () => {
       'viewer': 'Viewer',
     };
     return roleMap[role] || role;
+  };
+
+  const formatDepartmentDisplay = (department: string) => {
+    const departmentMap: { [key: string]: string } = {
+      'accounts': 'Accounts',
+      'stores': 'Stores',
+      'dg_sales': 'DG Sales',
+      'ev': 'EV',
+      'telecom': 'Telecom',
+      'admin': 'Admin',
+      'retail_service': 'Retail Service',
+    };
+    return departmentMap[department] || department;
   };
 
   const getAvailableModules = () => {
@@ -1022,8 +1086,18 @@ export const UserManagement: React.FC = () => {
                         )}
                       </td>
 
-                      <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-900">
-                        {user.department}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {user.department ? (
+                          <span
+                            className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getDepartmentBadge(
+                              user.department
+                            )}`}
+                          >
+                            {formatDepartmentDisplay(user.department)}
+                          </span>
+                        ) : (
+                          <span className="text-gray-400">-</span>
+                        )}
                       </td>
 
                       <td className="px-4 py-3 whitespace-nowrap">
@@ -1226,6 +1300,53 @@ export const UserManagement: React.FC = () => {
                     </div>
                     {formErrors.role && (
                       <p className="mt-1 text-xs text-red-600">{formErrors.role}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Department
+                    </label>
+                    <div className="relative" ref={departmentDropdownRef}>
+                      <button
+                        type="button"
+                        onClick={() => setIsDepartmentDropdownOpen(!isDepartmentDropdownOpen)}
+                        className={`w-full px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-left flex items-center justify-between ${formErrors.department ? 'border-red-500' : 'border-gray-300'
+                          } ${isDepartmentDropdownOpen ? 'ring-2 ring-blue-500 border-blue-500' : ''}`}
+                      >
+                        <span className={formData.department ? 'text-gray-900' : 'text-gray-500'}>
+                          {formData.department ?
+                            departmentOptions.find((dept) => dept.value === formData.department)?.label || 'Select a department'
+                            : 'Select a department'
+                          }
+                        </span>
+                        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isDepartmentDropdownOpen ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      {/* Dropdown Options */}
+                      {isDepartmentDropdownOpen && (
+                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {departmentOptions.map((dept) => (
+                            <button
+                              key={dept.value}
+                              type="button"
+                              onClick={() => {
+                                handleDepartmentSelect(dept.value);
+                              }}
+                              className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 flex items-center justify-between ${formData.department === dept.value ? 'bg-blue-50 text-blue-900' : 'text-gray-900'
+                                }`}
+                            >
+                              <span>{dept.label}</span>
+                              {formData.department === dept.value && (
+                                <span className="text-blue-600 text-xs">✓</span>
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {formErrors.department && (
+                      <p className="mt-1 text-xs text-red-600">{formErrors.department}</p>
                     )}
                   </div>
 

@@ -5,6 +5,7 @@ export interface User {
   email: string;
   role: UserRole;
   isActive: boolean;
+  department?: UserDepartment;
   moduleAccess: string[];
   phone?: string;
   salesEmployeeCode?: string; // Unique code for Sales Engineers
@@ -21,6 +22,16 @@ export enum UserRole {
   FIELD_ENGINEER = 'field_engineer',
   SALES_ENGINEER = 'sales_engineer',
   VIEWER = 'viewer'
+}
+
+export enum UserDepartment {
+  ACCOUNTS = 'accounts',
+  STORES = 'stores',
+  DG_SALES = 'dg_sales',
+  EV = 'ev',
+  TELECOM = 'telecom',
+  ADMIN = 'admin',
+  RETAIL_SERVICE = 'retail_service'
 }
 
 export interface Address {
