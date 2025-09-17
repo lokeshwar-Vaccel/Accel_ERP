@@ -178,6 +178,7 @@ interface TicketFormData {
   businessVertical: string;
   selectedAddress?: string; // New field for selected address
   complaintDescription?: string; // New field for complaint description
+  hourMeterReading?: string; // New HMR field
 
   // Legacy fields for backward compatibility
   customer: string;
@@ -1035,6 +1036,7 @@ const ServiceManagement: React.FC = () => {
       businessVertical: '',
       selectedAddress: '', // New field for selected address
       complaintDescription: '', // New field for complaint description
+      hourMeterReading: '',
 
       // Legacy fields for backward compatibility
       customer: '',
@@ -1071,8 +1073,9 @@ const ServiceManagement: React.FC = () => {
       typeOfVisit: ticket.typeOfVisit || '',
       typeOfService: (ticket.TypeofService || ticket.typeOfService || '') as TypeOfService || '',
       businessVertical: ticket.CustomerType || ticket.businessVertical || '',
-      selectedAddress: '', // Will be populated after fetching customer data
+      selectedAddress: (ticket as any).selectedAddress || '',
       complaintDescription: ticket.ComplaintDescription || ticket.complaintDescription || '', // New field for complaint description
+      hourMeterReading: (ticket as any).HourMeterReading || '',
 
       // Legacy fields for backward compatibility
       customer: customerId,
@@ -1104,7 +1107,7 @@ const ServiceManagement: React.FC = () => {
 
     setAddressDropdown({
       isOpen: false,
-      searchTerm: '', // Will be populated after fetching customer data
+      searchTerm: (ticket as any).selectedAddress || '',
       selectedIndex: 0,
       filteredOptions: customerAddresses
     });
@@ -1124,6 +1127,38 @@ const ServiceManagement: React.FC = () => {
     });
 
     setFormErrors({});
+    
+    // After engines and addresses are fetched and dropdowns initialized, try to auto-select address from engine linkage
+    // Use a slight delay to ensure state is updated from fetchCustomerData
+    setTimeout(() => {
+      // If ticket already has a selectedAddress saved, respect it and do not override
+      const existingAddress = (ticket as any).selectedAddress;
+      if (existingAddress && String(existingAddress).trim() !== '') {
+        return;
+      }
+      const engineSerial = ticket.EngineSerialNumber || ticket.engineSerialNumber || '';
+      if (!engineSerial) return;
+      const selectedEngine: any = customerEngines.find((e: any) => e.engineSerialNumber === engineSerial);
+      if (!selectedEngine) return;
+
+      // Try by locationAddressId first
+      const addressById = typeof selectedEngine.locationAddressId !== 'undefined'
+        ? customerAddresses.find((addr: any) => Number(addr.id) === Number(selectedEngine.locationAddressId))
+        : undefined;
+
+      let resolvedAddress = addressById?.fullAddress as string | undefined;
+      if (!resolvedAddress && selectedEngine.locationAddress) {
+        const exact = customerAddresses.find((addr: any) => (addr.fullAddress || '').trim() === (selectedEngine.locationAddress || '').trim());
+        const contains = exact || customerAddresses.find((addr: any) => (addr.fullAddress || '').toLowerCase().includes((selectedEngine.locationAddress || '').toLowerCase()));
+        resolvedAddress = contains?.fullAddress;
+      }
+
+      if (resolvedAddress) {
+        const finalAddress = resolvedAddress || '';
+        setTicketFormData(prev => ({ ...prev, selectedAddress: finalAddress }));
+        setAddressDropdown(prev => ({ ...prev, searchTerm: finalAddress, isOpen: false }));
+      }
+    }, 50);
     
     // Show appropriate edit modal based on ticket type
     if (ticket.uploadedViaExcel) {
@@ -1263,6 +1298,7 @@ const ServiceManagement: React.FC = () => {
         businessVertical: ticketFormData.businessVertical || undefined,
         selectedAddress: ticketFormData.selectedAddress || undefined,
         complaintDescription: ticketFormData.complaintDescription || undefined
+        ,hourMeterReading: ticketFormData.hourMeterReading || undefined
       };
 
 
@@ -1369,6 +1405,7 @@ const ServiceManagement: React.FC = () => {
         businessVertical: ticketFormData.businessVertical || undefined,
         selectedAddress: ticketFormData.selectedAddress || undefined,
         complaintDescription: ticketFormData.complaintDescription || undefined
+        ,hourMeterReading: ticketFormData.hourMeterReading || undefined
       };
 
       // Only include assignedTo if it's not empty
@@ -1466,6 +1503,7 @@ const ServiceManagement: React.FC = () => {
       businessVertical: '',
       selectedAddress: '', // New field for selected address
       complaintDescription: '', // New field for complaint description
+      hourMeterReading: '',
 
       // Legacy fields for backward compatibility
       customer: '',
@@ -2724,31 +2762,44 @@ const ServiceManagement: React.FC = () => {
     if (type === 'engine') {
       const selectedEngine = customerEngines.find(engine => engine.engineSerialNumber === value);
 
-      
       if (selectedEngine) {
         setTicketFormData(prev => {
           const newData = {
             ...prev,
             engineSerialNumber: selectedEngine.engineSerialNumber,
-            engineModel: selectedEngine.engineModel || '', // Auto-populate engine model
-            kva: selectedEngine.kva || '', // Auto-populate KVA rating
-            // Preserve the customer's businessVertical, don't override with engine's vertical
+            engineModel: selectedEngine.engineModel || '',
+            kva: selectedEngine.kva || '',
             businessVertical: prev.businessVertical || selectedEngine.businessVertical || ''
           };
-
           return newData;
         });
+
+        // Auto-select address based on engine's stored location data
+        const addressById = typeof selectedEngine.locationAddressId !== 'undefined'
+          ? customerAddresses.find((addr: any) => Number(addr.id) === Number(selectedEngine.locationAddressId))
+          : undefined;
+
+        let resolvedAddress = addressById?.fullAddress as string | undefined;
+        if (!resolvedAddress && selectedEngine.locationAddress) {
+          // Try exact match first, then contains
+          const exact = customerAddresses.find((addr: any) => (addr.fullAddress || '').trim() === (selectedEngine.locationAddress || '').trim());
+          const contains = exact || customerAddresses.find((addr: any) => (addr.fullAddress || '').toLowerCase().includes((selectedEngine.locationAddress || '').toLowerCase()));
+          resolvedAddress = contains?.fullAddress;
+        }
+
+        if (resolvedAddress) {
+          setTicketFormData(prev => ({ ...prev, selectedAddress: resolvedAddress }));
+          // Reflect in address dropdown UI
+          setAddressDropdown(prev => ({ ...prev, searchTerm: resolvedAddress || '', isOpen: false }));
+        }
       }
-      
-      // Clear error for this field when selected
+
       if (formErrors.engineSerialNumber) {
         setFormErrors(prev => ({ ...prev, engineSerialNumber: '' }));
       }
-      
-      // Close current dropdown
+
       setDropdownState(prev => ({ ...prev, isOpen: false, searchTerm: '' }));
-      
-      // Move to next dropdown after selection
+
       moveToNextDropdown(type);
       return;
     }
@@ -3640,6 +3691,21 @@ const ServiceManagement: React.FC = () => {
                     />
                   </div>
 
+                  {/* Hour Meter Reading (HMR) */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Hour Meter Reading (HMR)
+                    </label>
+                    <input
+                      type="number"
+                      value={ticketFormData.hourMeterReading || ''}
+                      onChange={(e) => setTicketFormData({ ...ticketFormData, hourMeterReading: e.target.value })}
+                      className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter HMR"
+                      min={0}
+                    />
+                  </div>
+
                   {/* Service Required Date */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -4319,10 +4385,78 @@ const ServiceManagement: React.FC = () => {
                       <p className="text-red-500 text-xs mt-1">{formErrors.typeOfService}</p>
                     )}
                   </div>
+
+                  {/* Customer Address (Right Section) */}
+                  <div className="relative dropdown-container" ref={addressDropdownRef} id="address-dropdown-container">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Customer Address
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={addressDropdown.searchTerm || ticketFormData.selectedAddress || ''}
+                        onChange={(e) => {
+                          setAddressDropdown(prev => ({ ...prev, searchTerm: e.target.value, isOpen: true }));
+                          handleDropdownSearch('address', e.target.value);
+                        }}
+                        onKeyDown={(e) => handleDropdownKeyDown('address', e, addressDropdown.filteredOptions, (value) => handleDropdownSelect('address', value))}
+                        onFocus={() => {
+                          handleDropdownFocus('address');
+                          setAddressDropdown(prev => ({ ...prev, isOpen: true }));
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => {
+                            setAddressDropdown(prev => ({ ...prev, isOpen: false }));
+                          }, 200);
+                        }}
+                        placeholder="Search address..."
+                        className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 ${addressDropdown.isOpen ? 'ring-2 ring-blue-500 border-blue-500' : 'border-gray-300'}`}
+                      />
+                      <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    </div>
+
+                    {addressDropdown.isOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                        {addressDropdown.filteredOptions.length > 0 ? (
+                          addressDropdown.filteredOptions.map((address, index) => (
+                            <button
+                              key={address.id}
+                              id={`address-item-${index}`}
+                              type="button"
+                              onClick={() => handleDropdownSelect('address', address.fullAddress)}
+                              className={`w-full px-3 py-2 text-left hover:bg-blue-50 transition-colors ${index === addressDropdown.selectedIndex ? 'bg-blue-100 text-blue-900' : 'text-gray-700'}`}
+                            >
+                              <div className="font-medium">{address.fullAddress}</div>
+                              <div className="text-xs text-gray-500">
+                                {address.isPrimary && 'Primary Address'}
+                              </div>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="px-3 py-2 text-gray-500 text-sm">
+                            {ticketFormData.customer ? 'No addresses found for this customer' : 'Select a customer first'}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Hour Meter Reading (HMR) */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Hour Meter Reading (HMR)
+                  </label>
+                  <input
+                    type="number"
+                    value={ticketFormData.hourMeterReading || ''}
+                    onChange={(e) => setTicketFormData({ ...ticketFormData, hourMeterReading: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Enter HMR"
+                    min={0}
+                  />
                 </div>
               </div>
-
-
 
               {/* Footer Buttons */}
               <div className="flex space-x-3 pt-6 border-t border-gray-200">

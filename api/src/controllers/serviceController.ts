@@ -447,6 +447,8 @@ export const createServiceTicket = async (
       typeOfVisit,
       businessVertical,
       complaintDescription,
+      hourMeterReading,
+      HourMeterReading,
       serviceRequestEngineer,
       assignedTo,
       scheduledDate,
@@ -574,6 +576,7 @@ export const createServiceTicket = async (
       TypeofService: typeOfService ? typeOfService.trim() : '',
       typeOfVisit: typeOfVisit || undefined,
       ComplaintDescription: complaintDescription !== undefined && complaintDescription !== null ? complaintDescription.trim() : undefined,
+      HourMeterReading: (hourMeterReading ?? HourMeterReading) !== undefined && (hourMeterReading ?? HourMeterReading) !== null && String(hourMeterReading ?? HourMeterReading) !== '' ? String(hourMeterReading ?? HourMeterReading).trim() : undefined,
       
       // Service engineer and scheduling
       ServiceEngineerName: serviceEngineerId,
@@ -684,6 +687,8 @@ export const updateServiceTicket = async (
       subNatureOfWork,
       businessVertical,
       complaintDescription,
+      hourMeterReading,
+      HourMeterReading,
       serviceRequestEngineer,
       assignedTo,
       scheduledDate,
@@ -737,6 +742,11 @@ export const updateServiceTicket = async (
     // Handle location and service details
     if (selectedAddress !== undefined) {
       updateData.SiteID = selectedAddress !== null ? selectedAddress.trim() : undefined;
+    }
+    // Hour meter reading for manual tickets
+    if (hourMeterReading !== undefined || HourMeterReading !== undefined) {
+      const hmr = (hourMeterReading ?? HourMeterReading);
+      updateData.HourMeterReading = hmr !== null && String(hmr) !== '' ? String(hmr).trim() : undefined;
     }
     if (typeOfService !== undefined) {
       updateData.TypeofService = typeOfService && typeOfService.trim() !== '' ? typeOfService.trim() : undefined;
@@ -1640,7 +1650,7 @@ export const getCustomerEngines = async (
 
     // Find DG details for the customer
     const dgDetails = await DGDetails.find({ customer: customerId })
-      .select('engineSerialNumber dgModel dgRatingKVA dgMake dgSerialNumbers alternatorMake alternatorSerialNumber commissioningDate warrantyStatus cluster')
+      .select('engineSerialNumber dgModel dgRatingKVA dgMake dgSerialNumbers alternatorMake alternatorSerialNumber commissioningDate warrantyStatus cluster locationAddressId locationAddress')
       .lean();
 
 
@@ -1656,7 +1666,10 @@ export const getCustomerEngines = async (
       alternatorSerialNumber: dg.alternatorSerialNumber,
       commissioningDate: dg.commissioningDate,
       warrantyStatus: dg.warrantyStatus,
-      cluster: dg.cluster
+      cluster: dg.cluster,
+      // Pass through stored address linkage (if present) so frontend can auto-select address
+      locationAddressId: (dg as any).locationAddressId,
+      locationAddress: (dg as any).locationAddress
     }));
 
 

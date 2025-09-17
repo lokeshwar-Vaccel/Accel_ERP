@@ -20,6 +20,9 @@ export interface CreateServiceTicketInput {
   siteLocation?: string;
   typeOfService?: string; // NEW: Type of service field
   convenienceCharges?: number | string; // NEW: Convenience charges field
+  // NEW: Hour Meter Reading (supports either casing from frontend)
+  hourMeterReading?: number | string;
+  HourMeterReading?: number | string;
   
   // Visit Details fields
   typeOfVisit?: TypeOfVisit;
@@ -65,6 +68,9 @@ export interface UpdateServiceTicketInput {
   siteLocation?: string;
   typeOfService?: string; // NEW: Type of service field
   convenienceCharges?: number | string; // NEW: Convenience charges field
+  // NEW: Hour Meter Reading (supports either casing from frontend)
+  hourMeterReading?: number | string;
+  HourMeterReading?: number | string;
   
   // Visit Details fields
   typeOfVisit?: TypeOfVisit;
@@ -268,6 +274,12 @@ const baseServiceTicketFields = {
   convenienceCharges: Joi.alternatives().try(Joi.number(), Joi.string()).allow('')
 }));
 
+// Add Hour Meter Reading (HMR)
+(Object.assign(baseServiceTicketFields, {
+  hourMeterReading: Joi.alternatives().try(Joi.number(), Joi.string()).allow(''),
+  HourMeterReading: Joi.alternatives().try(Joi.number(), Joi.string()).allow('')
+}));
+
 // Create service ticket schema
 export const createServiceTicketSchema = Joi.object<CreateServiceTicketInput>({
   // Standardized fields
@@ -281,6 +293,8 @@ export const createServiceTicketSchema = Joi.object<CreateServiceTicketInput>({
   customerName: baseServiceTicketFields.customerName.required(),
   serviceRequestEngineer: baseServiceTicketFields.serviceRequestEngineer.required(),
   complaintDescription: baseServiceTicketFields.complaintDescription.allow(''),
+  hourMeterReading: (baseServiceTicketFields as any).hourMeterReading,
+  HourMeterReading: (baseServiceTicketFields as any).HourMeterReading,
   businessVertical: baseServiceTicketFields.businessVertical,
   siteIdentifier: baseServiceTicketFields.siteIdentifier,
   stateName: baseServiceTicketFields.stateName,
@@ -329,6 +343,8 @@ export const updateServiceTicketSchema = Joi.object<UpdateServiceTicketInput>({
   // Also accept uppercase version for backward compatibility
   ServiceRequestStatus: baseServiceTicketFields.serviceRequestStatus,
   complaintDescription: baseServiceTicketFields.complaintDescription,
+  hourMeterReading: (baseServiceTicketFields as any).hourMeterReading,
+  HourMeterReading: (baseServiceTicketFields as any).HourMeterReading,
   businessVertical: baseServiceTicketFields.businessVertical,
   siteIdentifier: baseServiceTicketFields.siteIdentifier,
   stateName: baseServiceTicketFields.stateName,
