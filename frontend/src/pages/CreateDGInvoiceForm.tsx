@@ -23,7 +23,7 @@ import PageHeader from '../components/ui/PageHeader';
 import { Button } from '../components/ui/Botton';
 
 // Types
-interface ProformaItem {
+interface InvoiceItem {
   product: string;
   description: string;
   quantity: number;
@@ -98,8 +98,8 @@ interface Enquiry {
   email?: string;
 }
 
-interface ProformaFormData {
-  proformaNumber?: string;
+interface InvoiceFormData {
+  invoiceNumber?: string;
   customer: string;
   customerEmail: string;
   billingAddress?: CustomerAddress;
@@ -107,9 +107,9 @@ interface ProformaFormData {
   quotationNumber?: string;
   poNumber?: string;
   poFromCustomer?: string;
-  proformaDate: string;
-  validUntil: string;
-  status: 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired';
+  invoiceDate: string;
+  dueDate: string;
+  status: 'Draft' | 'Sent' | 'Paid' | 'Overdue' | 'Cancelled';
   paymentStatus: 'Pending' | 'Partial' | 'Paid' | 'Overdue';
   paymentTerms: string;
   notes?: string;
@@ -124,8 +124,12 @@ interface ProformaFormData {
   deliveryNoteDate?: string;
   dispatchedThrough?: string;
   termsOfDelivery?: string;
-  items: ProformaItem[];
-  proformaPdf?: File | string | null;
+  items: InvoiceItem[];
+  invoicePdf?: File | string | null;
+  irn?: string; // Invoice Reference Number
+  ackNumber?: string; // Acknowledgement Number
+  ackDate?: string; // Acknowledgement Date
+  qrCodeInvoice?: File | string | null; // QR Code image
   additionalCharges: {
     freight: number;
     insurance: number;
@@ -142,29 +146,32 @@ interface ProformaFormData {
     totalAmount: number;
   };
   dgEnquiry: string;
+  proformaReference?: string; // Reference to the DG Proforma used to create this invoice
   // Legacy fields for compatibility
   expectedDeliveryDate?: string;
   department?: string;
   priority?: string;
   poPdf?: File | string | null;
-  // GST fields at Proforma level
+  // GST fields at Invoice level
   subtotal: number;
   totalDiscount: number;
   taxRate: number;
   taxAmount: number;
   totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
 }
 
-interface CreateDGProformaFormProps {
+interface CreateDGInvoiceFormProps {
   // Props for modal-based editing
-  selectedProforma?: any;
+  selectedInvoice?: any;
   formMode?: 'create' | 'edit' | 'view';
   onSuccess?: () => void;
   onClose?: () => void;
 }
 
-const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({ 
-  selectedProforma, 
+const CreateDGInvoiceForm: React.FC<CreateDGInvoiceFormProps> = ({ 
+  selectedInvoice, 
   formMode, 
   onSuccess, 
   onClose 
@@ -173,17 +180,17 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
   const location = useLocation();
 
   // Get ID from location state, URL params, or props
-  const proformaId = selectedProforma?._id || location.state?.proformaId || location.pathname.split('/').pop();
+  const invoiceId = selectedInvoice?._id || location.state?.invoiceId || location.pathname.split('/').pop();
 
   // Check if we're in edit mode or view mode - prioritize props over URL detection
-  const isEditMode = formMode === 'edit' || (Boolean(proformaId) && location.pathname.includes('/edit/'));
-  const isViewMode = formMode === 'view' || (Boolean(proformaId) && location.pathname.includes('/proforma/') && !location.pathname.includes('/edit/') && !location.pathname.includes('/create'));
+  const isEditMode = formMode === 'edit' || (Boolean(invoiceId) && location.pathname.includes('/edit/'));
+  const isViewMode = formMode === 'view' || (Boolean(invoiceId) && location.pathname.includes('/invoice/') && !location.pathname.includes('/edit/') && !location.pathname.includes('/create'));
   const isCreateMode = formMode === 'create' || location.pathname.includes('/create') || (!isEditMode && !isViewMode);
 
 
   // State management
-  const [formData, setFormData] = useState<ProformaFormData>({
-    proformaNumber: '',
+  const [formData, setFormData] = useState<InvoiceFormData>({
+    invoiceNumber: '',
     customer: '',
     customerEmail: '',
     billingAddress: {
@@ -207,8 +214,8 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
     quotationNumber: '',
     poNumber: '',
     poFromCustomer: '',
-    proformaDate: new Date().toISOString().split('T')[0], // Current date
-    validUntil: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+    invoiceDate: new Date().toISOString().split('T')[0], // Current date
+    dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
     status: 'Draft',
     paymentStatus: 'Pending',
     paymentTerms: '',
@@ -244,7 +251,11 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
       isActive: true,
       hsnNumber: ''
     }],
-    proformaPdf: null,
+    invoicePdf: null,
+    irn: '',
+    ackNumber: '',
+    ackDate: '',
+    qrCodeInvoice: null,
     additionalCharges: {
       freight: 0,
       insurance: 0,
@@ -261,12 +272,15 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
       totalAmount: 0
     },
     dgEnquiry: '',
-    // GST fields at Proforma level
+    proformaReference: '',
+    // GST fields at Invoice level
     subtotal: 0,
     totalDiscount: 0,
     taxRate: 0,
     taxAmount: 0,
-    totalAmount: 0
+    totalAmount: 0,
+    paidAmount: 0,
+    remainingAmount: 0
   });
 
   const [errors, setErrors] = useState<string[]>([]);
@@ -279,7 +293,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
   const [shippingAddresses, setShippingAddresses] = useState<CustomerAddress[]>([]);
   const [poFromCustomers, setPoFromCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editingPO, setEditingPO] = useState<any>(null);
+  const [editingInvoice, setEditingInvoice] = useState<any>(null);
   const [dgProducts, setDgProducts] = useState<any[]>([]);
   const [showDgProductSelector, setShowDgProductSelector] = useState(false);
   const [dgProductSearchTerm, setDgProductSearchTerm] = useState('');
@@ -360,20 +374,28 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
     fetchAllData();
   }, []);
 
-  // Fetch Proforma data if in edit or view mode (only if not using props)
+  // Fetch Invoice data if in edit or view mode (only if not using props)
   useEffect(() => {
-    if ((isEditMode || isViewMode) && proformaId && !isCreateMode && !selectedProforma) {
-      fetchProformaData();
+    if ((isEditMode || isViewMode) && invoiceId && !isCreateMode && !selectedInvoice) {
+      fetchInvoiceData();
     }
-  }, [isEditMode, isViewMode, proformaId, isCreateMode, selectedProforma]);
+  }, [isEditMode, isViewMode, invoiceId, isCreateMode, selectedInvoice]);
 
   // Load data from props if provided (for modal-based editing)
   useEffect(() => {
-    if (selectedProforma && (isEditMode || isViewMode)) {
+    if (selectedInvoice && (isEditMode || isViewMode)) {
       setLoading(false); // Set loading to false since we have the data
-      loadProformaFromProps(selectedProforma);
+      loadInvoiceFromProps(selectedInvoice);
     }
-  }, [selectedProforma, isEditMode, isViewMode]);
+  }, [selectedInvoice, isEditMode, isViewMode]);
+
+  // Load proforma data if coming from proforma
+  useEffect(() => {
+    if (location.state?.fromProforma && location.state?.proformaData && !loading) {
+      setLoading(false); // Set loading to false since we have the data
+      loadProformaData(location.state.proformaData);
+    }
+  }, [location.state, loading, customers, enquiries, quotations]);
 
   // Click outside handler for dropdowns
   useEffect(() => {
@@ -554,21 +576,21 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
     }
   };
 
-  const fetchProformaData = async () => {
-    if (!proformaId) return;
+  const fetchInvoiceData = async () => {
+    if (!invoiceId) return;
 
     try {
       setLoading(true);
-      const response = await apiClient.dgSales.dgProformas.getById(proformaId);
+      const response = await apiClient.dgInvoices.getById(invoiceId);
 
       if (response.success && response.data) {
-        const po = response.data;
-        setEditingPO(po);
-        loadProformaData(po);
+        const invoice = response.data.invoice || response.data;
+        setEditingInvoice(invoice);
+        loadInvoiceData(invoice);
       }
     } catch (error) {
-      console.error('Error fetching DG PO data:', error);
-      toast.error('Failed to load DG PO from customer data');
+      console.error('Error fetching DG Invoice data:', error);
+      toast.error('Failed to load DG Invoice data');
       if (!onClose) { // Only navigate if not in modal mode
         navigate('/dg-sales');
       }
@@ -577,42 +599,42 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
     }
   };
 
-  const loadProformaFromProps = (proforma: any) => {
-    setEditingPO(proforma);
-    loadProformaData(proforma);
+  const loadInvoiceFromProps = (invoice: any) => {
+    setEditingInvoice(invoice);
+    loadInvoiceData(invoice);
   };
 
-  const loadProformaData = (proforma: any) => {
-        // Map Proforma data to form data
-        const mappedFormData: ProformaFormData = {
-          proformaNumber: proforma.proformaNumber || '',
-          customer: typeof proforma.customer === 'string' ? proforma.customer : (proforma.customer?._id || proforma.customer || ''),
-          customerEmail: proforma.customerEmail,
-          billingAddress: proforma.billingAddress,
-          shippingAddress: proforma.shippingAddress,
-          quotationNumber: typeof (proforma.dgQuotationNumber || proforma.quotationNumber) === 'string' 
-            ? (proforma.dgQuotationNumber || proforma.quotationNumber) 
-            : ((proforma.dgQuotationNumber || proforma.quotationNumber)?._id || ''),
-          poNumber: proforma.poNumber || '',
-          poFromCustomer: typeof proforma.poFromCustomer === 'string' ? proforma.poFromCustomer : (proforma.poFromCustomer?._id || ''),
-          proformaDate: proforma.proformaDate ? proforma.proformaDate.split('T')[0] : new Date().toISOString().split('T')[0],
-          validUntil: proforma.validUntil ? proforma.validUntil.split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          status: proforma.status || 'Draft',
-          paymentStatus: proforma.paymentStatus || 'Pending',
-          paymentTerms: proforma.paymentTerms || '',
-          notes: proforma.notes || '',
-          deliveryNotes: proforma.deliveryNotes || '',
-          referenceNumber: proforma.referenceNumber || '',
-          referenceDate: proforma.referenceDate ? proforma.referenceDate.split('T')[0] : '',
-          buyersOrderNumber: proforma.buyersOrderNumber || '',
-          buyersOrderDate: proforma.buyersOrderDate ? proforma.buyersOrderDate.split('T')[0] : '',
-          dispatchDocNo: proforma.dispatchDocNo || '',
-          dispatchDocDate: proforma.dispatchDocDate ? proforma.dispatchDocDate.split('T')[0] : '',
-          destination: proforma.destination || '',
-          deliveryNoteDate: proforma.deliveryNoteDate ? proforma.deliveryNoteDate.split('T')[0] : '',
-          dispatchedThrough: proforma.dispatchedThrough || '',
-          termsOfDelivery: proforma.termsOfDelivery || '',
-          items: proforma.items.map((item: any) => ({
+  const loadInvoiceData = (invoice: any) => {
+        // Map Invoice data to form data
+        const mappedFormData: InvoiceFormData = {
+          invoiceNumber: invoice.invoiceNumber || '',
+          customer: typeof invoice.customer === 'string' ? invoice.customer : (invoice.customer?._id || invoice.customer || ''),
+          customerEmail: invoice.customerEmail,
+          billingAddress: invoice.billingAddress,
+          shippingAddress: invoice.shippingAddress,
+          quotationNumber: typeof (invoice.dgQuotationNumber || invoice.quotationNumber) === 'string' 
+            ? (invoice.dgQuotationNumber || invoice.quotationNumber) 
+            : ((invoice.dgQuotationNumber || invoice.quotationNumber)?._id || ''),
+          poNumber: invoice.poNumber || '',
+          poFromCustomer: typeof invoice.poFromCustomer === 'string' ? invoice.poFromCustomer : (invoice.poFromCustomer?._id || ''),
+          invoiceDate: invoice.invoiceDate ? invoice.invoiceDate.split('T')[0] : new Date().toISOString().split('T')[0],
+          dueDate: invoice.dueDate ? invoice.dueDate.split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+          status: invoice.status || 'Draft',
+          paymentStatus: invoice.paymentStatus || 'Pending',
+          paymentTerms: invoice.paymentTerms || '',
+          notes: invoice.notes || '',
+          deliveryNotes: invoice.deliveryNotes || '',
+          referenceNumber: invoice.referenceNumber || '',
+          referenceDate: invoice.referenceDate ? invoice.referenceDate.split('T')[0] : '',
+          buyersOrderNumber: invoice.buyersOrderNumber || '',
+          buyersOrderDate: invoice.buyersOrderDate ? invoice.buyersOrderDate.split('T')[0] : '',
+          dispatchDocNo: invoice.dispatchDocNo || '',
+          dispatchDocDate: invoice.dispatchDocDate ? invoice.dispatchDocDate.split('T')[0] : '',
+          destination: invoice.destination || '',
+          deliveryNoteDate: invoice.deliveryNoteDate ? invoice.deliveryNoteDate.split('T')[0] : '',
+          dispatchedThrough: invoice.dispatchedThrough || '',
+          termsOfDelivery: invoice.termsOfDelivery || '',
+          items: invoice.items.map((item: any) => ({
             product: typeof item.product === 'string' ? item.product : (item.product?._id || item.product || ''),
             description: item.description || '',
             quantity: item.quantity,
@@ -632,14 +654,18 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
             gstRate: item.gstRate || 18,
             gstAmount: item.gstAmount || 0
           })),
-          proformaPdf: proforma.proformaPdf || null,
-          additionalCharges: proforma.additionalCharges || {
+          invoicePdf: invoice.invoicePdf || null,
+          irn: invoice.irn || '',
+          ackNumber: invoice.ackNumber || '',
+          ackDate: invoice.ackDate ? invoice.ackDate.split('T')[0] : '',
+          qrCodeInvoice: invoice.qrCodeInvoice || null,
+          additionalCharges: invoice.additionalCharges || {
             freight: 0,
             insurance: 0,
             packing: 0,
             other: 0
           },
-          transportCharges: proforma.transportCharges || {
+          transportCharges: invoice.transportCharges || {
             amount: 0,
             quantity: 0,
             unitPrice: 0,
@@ -648,39 +674,42 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
             gstAmount: 0,
             totalAmount: 0
           },
-          dgEnquiry: typeof proforma.dgEnquiry === 'string' ? proforma.dgEnquiry : (proforma.dgEnquiry?._id || ''),
-          // GST fields at Proforma level
-          subtotal: proforma.subtotal || 0,
-          totalDiscount: proforma.totalDiscount || 0,
-          taxRate: proforma.taxRate || 0,
-          taxAmount: proforma.taxAmount || 0,
-          totalAmount: proforma.totalAmount || 0
+          dgEnquiry: typeof invoice.dgEnquiry === 'string' ? invoice.dgEnquiry : (invoice.dgEnquiry?._id || ''),
+          proformaReference: typeof invoice.proformaReference === 'string' ? invoice.proformaReference : (invoice.proformaReference?._id || ''),
+          // GST fields at Invoice level
+          subtotal: invoice.subtotal || 0,
+          totalDiscount: invoice.totalDiscount || 0,
+          taxRate: invoice.taxRate || 0,
+          taxAmount: invoice.taxAmount || 0,
+          totalAmount: invoice.totalAmount || 0,
+          paidAmount: invoice.paidAmount || 0,
+          remainingAmount: invoice.remainingAmount || 0
         };
 
         setFormData(mappedFormData);
 
         // Set customer search term
-        if (typeof proforma.customer === 'object') {
-          setCustomerSearchTerm(proforma.customer.name);
+        if (typeof invoice.customer === 'object') {
+          setCustomerSearchTerm(invoice.customer.name);
         }
 
         // Set addresses for dropdown
-        if (typeof proforma.customer === 'object' && proforma.customer.addresses) {
-          setBillingAddresses(proforma.customer.addresses);
-          setShippingAddresses(proforma.customer.addresses);
+        if (typeof invoice.customer === 'object' && invoice.customer.addresses) {
+          setBillingAddresses(invoice.customer.addresses);
+          setShippingAddresses(invoice.customer.addresses);
         }
 
         // Set address search terms if we have addresses
-        if (proforma.billingAddress) {
-          setBillingAddressSearchTerm(`${proforma.billingAddress.address}, ${proforma.billingAddress.district}, ${proforma.billingAddress.state} - ${proforma.billingAddress.pincode}`);
+        if (invoice.billingAddress) {
+          setBillingAddressSearchTerm(`${invoice.billingAddress.address}, ${invoice.billingAddress.district}, ${invoice.billingAddress.state} - ${invoice.billingAddress.pincode}`);
         }
-        if (proforma.shippingAddress) {
-          setShippingAddressSearchTerm(`${proforma.shippingAddress.address}, ${proforma.shippingAddress.district}, ${proforma.shippingAddress.state} - ${proforma.shippingAddress.pincode}`);
+        if (invoice.shippingAddress) {
+          setShippingAddressSearchTerm(`${invoice.shippingAddress.address}, ${invoice.shippingAddress.district}, ${invoice.shippingAddress.state} - ${invoice.shippingAddress.pincode}`);
         }
 
         // Set quotation search term if we have quotationNumber
-    if (proforma.dgQuotationNumber || proforma.quotationNumber) {
-      const quotation = proforma.dgQuotationNumber || proforma.quotationNumber;
+    if (invoice.dgQuotationNumber || invoice.quotationNumber) {
+      const quotation = invoice.dgQuotationNumber || invoice.quotationNumber;
       if (typeof quotation === 'object') {
         setQuotationSearchTerm(quotation.quotationNumber);
       } else if (typeof quotation === 'string') {
@@ -691,6 +720,199 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
         }
       }
     }
+  };
+
+  const loadProformaData = (proformaData: any) => {
+    console.log("proformaData:",proformaData);
+    
+    // Helper function to format date for HTML date input
+    const formatDateForInput = (dateString: string) => {
+      if (!dateString) return '';
+      try {
+        const date = new Date(dateString);
+        return date.toISOString().split('T')[0];
+      } catch (error) {
+        console.error('Error formatting date:', dateString, error);
+        return '';
+      }
+    };
+    
+    // Map proforma data to form data
+    const mappedFormData: InvoiceFormData = {
+      invoiceNumber: '', // Will be auto-generated
+      customer: proformaData.customer || '',
+      customerEmail: proformaData.customerEmail || '',
+      billingAddress: proformaData.billingAddress || {
+        id: 0,
+        address: '',
+        state: '',
+        district: '',
+        pincode: '',
+        addressId: 0,
+        gstNumber: ''
+      },
+      shippingAddress: proformaData.shippingAddress || {
+        id: 0,
+        address: '',
+        state: '',
+        district: '',
+        pincode: '',
+        addressId: 0,
+        gstNumber: ''
+      },
+      quotationNumber: proformaData.quotationNumber || '',
+      poNumber: proformaData.poNumber || '',
+      poFromCustomer: proformaData.poFromCustomer || '',
+      invoiceDate: new Date().toISOString().split('T')[0], // Current date
+      dueDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30 days from now
+      status: 'Draft',
+      paymentStatus: 'Pending',
+      paymentTerms: proformaData.paymentTerms || '',
+      notes: proformaData.notes || '',
+      deliveryNotes: proformaData.deliveryNotes || '',
+      referenceNumber: proformaData.referenceNumber || '',
+      referenceDate: formatDateForInput(proformaData.referenceDate),
+      buyersOrderNumber: proformaData.buyersOrderNumber || '',
+      buyersOrderDate: formatDateForInput(proformaData.buyersOrderDate),
+      dispatchDocNo: proformaData.dispatchDocNo || '',
+      dispatchDocDate: formatDateForInput(proformaData.dispatchDocDate),
+      destination: proformaData.destination || '',
+      deliveryNoteDate: formatDateForInput(proformaData.deliveryNoteDate),
+      dispatchedThrough: proformaData.dispatchedThrough || '',
+      termsOfDelivery: proformaData.termsOfDelivery || '',
+      items: proformaData.items?.map((item: any) => ({
+        product: item.product || '',
+        description: item.description || '',
+        quantity: item.quantity || 1,
+        unitPrice: item.unitPrice || 0,
+        totalPrice: item.totalPrice || 0,
+        uom: item.uom || 'nos',
+        discount: item.discount || 0,
+        discountedAmount: item.discountedAmount || 0,
+        gstRate: item.gstRate || 18,
+        gstAmount: item.gstAmount || 0,
+        kva: item.kva || '',
+        phase: item.phase || '',
+        annexureRating: item.annexureRating || '',
+        dgModel: item.dgModel || '',
+        numberOfCylinders: item.numberOfCylinders || 0,
+        subject: item.subject || '',
+        isActive: item.isActive !== undefined ? item.isActive : true,
+        hsnNumber: item.hsnNumber || ''
+      })) || [{
+        product: '',
+        description: '',
+        quantity: 1,
+        unitPrice: 0,
+        totalPrice: 0,
+        uom: 'nos',
+        discount: 0,
+        discountedAmount: 0,
+        gstRate: 18,
+        gstAmount: 0,
+        kva: '',
+        phase: '',
+        annexureRating: '',
+        dgModel: '',
+        numberOfCylinders: 0,
+        subject: '',
+        isActive: true,
+        hsnNumber: ''
+      }],
+      invoicePdf: null,
+      irn: '',
+      ackNumber: '',
+      ackDate: '',
+      qrCodeInvoice: null,
+      additionalCharges: {
+        freight: 0,
+        insurance: 0,
+        packing: 0,
+        other: 0
+      },
+      transportCharges: proformaData.transportCharges || {
+        amount: 0,
+        quantity: 0,
+        unitPrice: 0,
+        hsnNumber: '',
+        gstRate: 18,
+        gstAmount: 0,
+        totalAmount: 0
+      },
+      dgEnquiry: proformaData.dgEnquiry || proformaData.dgEnquiry?._id || '',
+      proformaReference: location.state?.proformaId || '', // Store the proforma ID that was used to create this invoice
+      expectedDeliveryDate: formatDateForInput(proformaData.expectedDeliveryDate),
+      department: proformaData.department || '',
+      priority: proformaData.priority || '',
+      // GST fields at Invoice level
+      subtotal: proformaData.subtotal || 0,
+      totalDiscount: proformaData.totalDiscount || 0,
+      taxRate: 0, // Will be calculated from items
+      taxAmount: proformaData.taxAmount || 0,
+      totalAmount: proformaData.totalAmount || 0,
+      paidAmount: 0,
+      remainingAmount: proformaData.totalAmount || 0
+    };
+
+    setFormData(mappedFormData);
+
+    // Set customer search term
+    if (proformaData.customer) {
+      const customer = customers.find(c => c._id === proformaData.customer);
+      if (customer) {
+        setCustomerSearchTerm(customer.name);
+      }
+    }
+
+    // Set addresses for dropdown
+    if (proformaData.customer) {
+      const customer = customers.find(c => c._id === proformaData.customer);
+      if (customer && customer.addresses) {
+        setBillingAddresses(customer.addresses);
+        setShippingAddresses(customer.addresses);
+      }
+    }
+
+    // Set address search terms if we have addresses
+    if (proformaData.billingAddress) {
+      setBillingAddressSearchTerm(`${proformaData.billingAddress.address}, ${proformaData.billingAddress.district}, ${proformaData.billingAddress.state} - ${proformaData.billingAddress.pincode}`);
+    }
+    if (proformaData.shippingAddress) {
+      setShippingAddressSearchTerm(`${proformaData.shippingAddress.address}, ${proformaData.shippingAddress.district}, ${proformaData.shippingAddress.state} - ${proformaData.shippingAddress.pincode}`);
+    }
+
+    // Set quotation search term if we have quotationNumber
+    if (proformaData.quotationNumber) {
+      const quotation = quotations.find(q => q._id === proformaData.quotationNumber);
+      if (quotation) {
+        setQuotationSearchTerm(quotation.quotationNumber);
+      }
+    }
+
+    // Set enquiry search term if we have dgEnquiry
+    if (proformaData.dgEnquiry) {
+      console.log("Setting enquiry search term for:", proformaData.dgEnquiry);
+      console.log("Available enquiries:", enquiries.length);
+      const enquiry = enquiries.find(e => e._id === proformaData.dgEnquiry);
+      console.log("Found enquiry:", enquiry);
+      if (enquiry) {
+        setEnquirySearchTerm(enquiry.enquiryNo);
+        console.log("Set enquiry search term to:", enquiry.enquiryNo);
+      } else {
+        console.log("Enquiry not found in enquiries list");
+      }
+    }
+
+    // Debug date fields
+    console.log("Date fields from proforma:");
+    console.log("referenceDate:", proformaData.referenceDate, "->", formatDateForInput(proformaData.referenceDate));
+    console.log("buyersOrderDate:", proformaData.buyersOrderDate, "->", formatDateForInput(proformaData.buyersOrderDate));
+    console.log("dispatchDocDate:", proformaData.dispatchDocDate, "->", formatDateForInput(proformaData.dispatchDocDate));
+    console.log("deliveryNoteDate:", proformaData.deliveryNoteDate, "->", formatDateForInput(proformaData.deliveryNoteDate));
+    console.log("expectedDeliveryDate:", proformaData.expectedDeliveryDate, "->", formatDateForInput(proformaData.expectedDeliveryDate));
+
+    // Show success message
+    toast.success(`Invoice form auto-filled from proforma ${location.state?.proformaNumber || ''}`);
   };
 
   // Form handlers
@@ -951,7 +1173,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
   };
 
   // Calculate GST at PO level using item-level GST calculations
-  const calculateGST = (items: ProformaItem[], taxRate: number, transportCharges?: any) => {
+  const calculateGST = (items: InvoiceItem[], taxRate: number, transportCharges?: any) => {
     let subtotal = 0;
     let totalDiscount = 0;
     let totalTaxAmount = 0;
@@ -1000,7 +1222,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
     });
   };
 
-  const updateItem = (index: number, field: keyof ProformaItem, value: any) => {
+  const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
     setFormData(prev => {
       const updatedItems = prev.items.map((item, i) => {
         if (i === index) {
@@ -1203,11 +1425,11 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
     // if (!formData.customerEmail) {
     //   newErrors.push('Customer email is required');
     // }
-    if (!formData.proformaDate) {
-      newErrors.push('Proforma date is required');
+    if (!formData.invoiceDate) {
+      newErrors.push('Invoice date is required');
     }
-    if (!formData.validUntil) {
-      newErrors.push('Valid until date is required');
+    if (!formData.dueDate) {
+      newErrors.push('Due date is required');
     }
 
     // Check if we have at least one valid item
@@ -1237,7 +1459,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
 
   const user = useSelector((state: RootState) => state.auth.user);
 
-  const handleSubmitProforma = async () => {
+  const handleSubmitInvoice = async () => {
     if (!validateForm()) {
       toast.error('Please fix the errors before submitting');
       return;
@@ -1255,7 +1477,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
       console.log('Transport Charges in payload:', formData.transportCharges);
 
       if (cleanedItems.length === 0) {
-        toast.error('Please add at least one item to the DG Proforma');
+        toast.error('Please add at least one item to the DG Invoice');
         setSubmitting(false);
         return;
       }
@@ -1264,8 +1486,8 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
       const { subtotal, totalDiscount, taxAmount, totalAmount } = calculateGST(cleanedItems, formData.taxRate, formData.transportCharges);
 
       // Handle PDF file - use existing URL or upload new file
-      let fileUrl = formData.poPdf;
-      if (formData.poPdf && formData.poPdf instanceof File) {
+      let fileUrl = formData.invoicePdf;
+      if (formData.invoicePdf && formData.invoicePdf instanceof File) {
         // New file upload - upload the file and get URL
         // Check if user is authenticated
         const token = localStorage.getItem('authToken');
@@ -1276,8 +1498,8 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
         }
 
         try {
-          console.log('Uploading file:', formData.poPdf, 'Size:', formData.poPdf.size);
-          const uploadResponse = await apiClient.poFiles.upload(formData.poPdf);
+          console.log('Uploading file:', formData.invoicePdf, 'Size:', formData.invoicePdf.size);
+          const uploadResponse = await apiClient.poFiles.upload(formData.invoicePdf);
           if (uploadResponse.success) {
             fileUrl = uploadResponse.data.url;
             toast.success('File uploaded successfully!');
@@ -1295,10 +1517,51 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
           return;
         }
       }
-      // If formData.poPdf is a string, it's an existing URL and we use it directly
+      // If formData.invoicePdf is a string, it's an existing URL and we use it directly
 
-      const proformaData = {
-        proformaNumber: formData.proformaNumber || undefined, // Only include if provided
+      // Handle QR Code file - use existing URL or upload new file
+      let qrCodeUrl: string | undefined = undefined;
+      if (formData.qrCodeInvoice) {
+        if (typeof formData.qrCodeInvoice === 'string') {
+          // Existing URL
+          qrCodeUrl = formData.qrCodeInvoice;
+        } else if (formData.qrCodeInvoice instanceof File) {
+          // New file upload - upload the file and get URL
+          // Check if user is authenticated
+          const token = localStorage.getItem('authToken');
+          if (!token) {
+            toast.error('Please log in to upload files.');
+            setSubmitting(false);
+            return;
+          }
+
+          try {
+            console.log('Uploading QR Code file:', formData.qrCodeInvoice, 'Size:', formData.qrCodeInvoice.size);
+            const uploadResponse = await apiClient.poFiles.upload(formData.qrCodeInvoice);
+            if (uploadResponse.success) {
+              qrCodeUrl = uploadResponse.data.url;
+              toast.success('QR Code uploaded successfully!');
+            } else {
+              console.error('QR Code upload failed:', uploadResponse);
+              toast.error('QR Code upload failed. Please try again.');
+              setSubmitting(false);
+              return;
+            }
+          } catch (error: any) {
+            console.error('Error uploading QR Code file:', error);
+            if (error.message?.includes('Not authorized')) {
+              toast.error('Please log in again to upload files.');
+            } else {
+              toast.error('QR Code upload failed. Please try again.');
+            }
+            setSubmitting(false);
+            return;
+          }
+        }
+      }
+
+      const invoiceData = {
+        invoiceNumber: formData.invoiceNumber || undefined, // Only include if provided
         customer: formData.customer,
         customerEmail: formData.customerEmail || '',
         billingAddress: formData.billingAddress,
@@ -1312,8 +1575,8 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
         taxRate: formData.taxRate,
         taxAmount,
         totalAmount,
-        proformaDate: formData.proformaDate,
-        validUntil: formData.validUntil,
+        invoiceDate: formData.invoiceDate,
+        dueDate: formData.dueDate,
         status: formData.status,
         paymentStatus: formData.paymentStatus,
         paymentTerms: formData.paymentTerms || null,
@@ -1331,20 +1594,25 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
         deliveryNoteDate: formData.deliveryNoteDate || null,
         dispatchedThrough: formData.dispatchedThrough,
         termsOfDelivery: formData.termsOfDelivery,
-        proformaPdf: fileUrl, // Use uploaded file URL or existing URL
-        dgEnquiry: formData.dgEnquiry || editingPO?.dgEnquiry || '',
+        invoicePdf: fileUrl, // Use uploaded file URL or existing URL
+        irn: formData.irn || undefined,
+        ackNumber: formData.ackNumber || undefined,
+        ackDate: formData.ackDate || undefined,
+        qrCodeInvoice: qrCodeUrl, // Already ensured to be string or undefined
+        dgEnquiry: formData.dgEnquiry || editingInvoice?.dgEnquiry || '',
+        proformaReference: formData.proformaReference || undefined,
         createdBy: user?.id
       };
 
       let response;
-      if (isEditMode && editingPO) {
-        // Update existing DG PO from customer
-        response = await apiClient.dgSales.dgProformas.update(editingPO._id, proformaData);
-        toast.success('DG Proforma updated successfully!');
+      if (isEditMode && editingInvoice) {
+        // Update existing DG Invoice
+        response = await apiClient.dgInvoices.update(editingInvoice._id, invoiceData);
+        toast.success('DG Invoice updated successfully!');
       } else {
-        // Create new DG Proforma
-        response = await apiClient.dgSales.dgProformas.create(proformaData);
-        toast.success('DG Proforma created successfully!');
+        // Create new DG Invoice
+        response = await apiClient.dgInvoices.create(invoiceData);
+        toast.success('DG Invoice created successfully!');
       }
 
       // Handle success - either navigate or call callback
@@ -1354,8 +1622,8 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
         navigate('/dg-sales');
       }
     } catch (error: any) {
-      console.error('Error saving DG PO from customer:', error);
-      toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} DG PO from customer`);
+      console.error('Error saving DG Invoice:', error);
+      toast.error(error.message || `Failed to ${isEditMode ? 'update' : 'create'} DG Invoice`);
     } finally {
       setSubmitting(false);
     }
@@ -1380,16 +1648,18 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
     <div className="pl-2 pr-6 py-6 space-y-4">
       <PageHeader
         title={
-          isViewMode ? `View DG Proforma - ${editingPO?.proformaNumber || ''}` :
-          isEditMode ? `Edit DG Proforma - ${editingPO?.proformaNumber || ''}` :
-          isCreateMode ? "Create DG Proforma" :
-          "Create DG Proforma"
+          isViewMode ? `View DG Invoice - ${editingInvoice?.invoiceNumber || ''}` :
+          isEditMode ? `Edit DG Invoice - ${editingInvoice?.invoiceNumber || ''}` :
+          location.state?.fromProforma ? `Create DG Invoice from Proforma ${location.state?.proformaNumber || ''}` :
+          isCreateMode ? "Create DG Invoice" :
+          "Create DG Invoice"
         }
         subtitle={
-          isViewMode ? "View DG Proforma details" :
-          isEditMode ? "Edit existing DG Proforma" :
-          isCreateMode ? "Create a new DG Proforma" :
-          "Create a new DG Proforma"
+          isViewMode ? "View DG Invoice details" :
+          isEditMode ? "Edit existing DG Invoice" :
+          location.state?.fromProforma ? "Create invoice from proforma details" :
+          isCreateMode ? "Create a new DG Invoice" :
+          "Create a new DG Invoice"
         }
       >
         <div className="flex space-x-3">
@@ -1408,11 +1678,11 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
           </button>
           {isViewMode && (
             <button
-              onClick={() => navigate(`/dg-proforma/edit/${proformaId}`)}
+              onClick={() => navigate(`/dg-invoice/edit/${invoiceId}`)}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors"
             >
               <Edit className="w-4 h-4" />
-              <span>Edit Proforma</span>
+              <span>Edit Invoice</span>
             </button>
           )}
         </div>
@@ -1435,14 +1705,14 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
 
           {/* Basic Information */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Proforma Number */}
+            {/* Invoice Number */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Proforma Number
+                Invoice Number
               </label>
               <input
                 type="text"
-                value={formData.proformaNumber || ''}
+                value={formData.invoiceNumber || ''}
                 disabled
                 placeholder="Auto-generated"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed"
@@ -1518,36 +1788,36 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
               </select>
             </div>
 
-            {/* Proforma Date */}
+            {/* Invoice Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Proforma Date *
+                Invoice Date *
               </label>
               <input
                 type="date"
-                value={formData.proformaDate}
-                onChange={(e) => setFormData({ ...formData, proformaDate: e.target.value })}
+                value={formData.invoiceDate}
+                onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
 
-            {/* Valid Until */}
+            {/* Due Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Valid Until *
+                Due Date *
               </label>
               <input
                 type="date"
-                value={formData.validUntil}
-                onChange={(e) => setFormData({ ...formData, validUntil: e.target.value })}
+                value={formData.dueDate}
+                onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
 
-            {/* Proforma Status */}
+            {/* Invoice Status */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Proforma Status *
+                Invoice Status *
               </label>
               <select
                 value={formData.status}
@@ -1556,9 +1826,9 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
               >
                 <option value="Draft">Draft</option>
                 <option value="Sent">Sent</option>
-                <option value="Accepted">Accepted</option>
-                <option value="Rejected">Rejected</option>
-                <option value="Expired">Expired</option>
+                <option value="Paid">Paid</option>
+                <option value="Overdue">Overdue</option>
+                <option value="Cancelled">Cancelled</option>
               </select>
             </div>
 
@@ -1591,6 +1861,105 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
                 placeholder="e.g., Net 30, Net 15, Immediate, etc."
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
+            </div>
+
+            {/* IRN (Invoice Reference Number) */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                IRN (Invoice Reference Number)
+              </label>
+              <input
+                type="text"
+                value={formData.irn || ''}
+                onChange={(e) => setFormData({ ...formData, irn: e.target.value })}
+                placeholder="Enter IRN if available"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">GST Invoice Reference Number</p>
+            </div>
+
+            {/* ACK Number */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                ACK Number
+              </label>
+              <input
+                type="text"
+                value={formData.ackNumber || ''}
+                onChange={(e) => setFormData({ ...formData, ackNumber: e.target.value })}
+                placeholder="Enter ACK Number if available"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">Acknowledgement Number</p>
+            </div>
+
+            {/* ACK Date */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                ACK Date
+              </label>
+              <input
+                type="date"
+                value={formData.ackDate || ''}
+                onChange={(e) => setFormData({ ...formData, ackDate: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">Acknowledgement Date</p>
+            </div>
+
+            {/* QR Code Invoice Upload */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                QR Code Invoice Image
+              </label>
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    setFormData({ ...formData, qrCodeInvoice: file });
+                  }
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <p className="text-xs text-gray-500 mt-1">Upload QR Code image for invoice</p>
+              {formData.qrCodeInvoice && (
+                <div className="mt-3">
+                  <p className="text-sm text-green-600 mb-2">
+                    ✓ {typeof formData.qrCodeInvoice === 'string' ? 'Image uploaded' : formData.qrCodeInvoice.name}
+                  </p>
+                  <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                    <p className="text-sm font-medium text-gray-700 mb-2">QR Code Preview:</p>
+                    <div className="flex justify-center">
+                      <img
+                        src={typeof formData.qrCodeInvoice === 'string' 
+                          ? formData.qrCodeInvoice 
+                          : URL.createObjectURL(formData.qrCodeInvoice)
+                        }
+                        alt="QR Code Preview"
+                        className="max-w-32 max-h-32 border border-gray-300 rounded shadow-sm"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                        }}
+                      />
+                      <div className="hidden text-sm text-gray-500 flex items-center justify-center max-w-32 max-h-32 border border-gray-300 rounded bg-gray-100">
+                        Failed to load image
+                      </div>
+                    </div>
+                    <div className="mt-2 flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, qrCodeInvoice: null })}
+                        className="text-sm text-red-600 hover:text-red-800 underline"
+                      >
+                        Remove QR Code
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Customer */}
@@ -1749,7 +2118,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
                 <input
                   ref={enquiryInputRef}
                   type="text"
-                  value={enquirySearchTerm}
+                  value={formData.dgEnquiry ? enquiries.find(e => e._id === formData.dgEnquiry)?.enquiryNo || enquirySearchTerm : enquirySearchTerm}
                   onChange={(e) => {
                     setEnquirySearchTerm(e.target.value);
                     if (!showEnquiryDropdown) setShowEnquiryDropdown(true);
@@ -2109,7 +2478,7 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
                       setFormData(prev => ({
                         ...prev,
                         shippingAddress: { 
-                          id: 0, 
+                          id: 0,
                           address: '', 
                           state: '', 
                           district: '', 
@@ -2400,6 +2769,19 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
                   placeholder="Delivery terms..."
                 />
               </div>
+
+              {/* Proforma Reference */}
+              {formData.proformaReference && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Created from Proforma
+                  </label>
+                  <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-blue-50 text-blue-800 font-medium">
+                    Proforma Reference: {formData.proformaReference? location.state?.proformaNumber : ''}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">This invoice was created from a proforma</p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2842,12 +3224,12 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
                 Cancel
               </button>
               <button
-                onClick={handleSubmitProforma}
+                onClick={handleSubmitInvoice}
                 disabled={submitting}
                 className="bg-blue-600 text-white px-6 py-3 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:scale-105 transition-all duration-200"
               >
                 <Save className="w-5 h-5" />
-                <span className="font-medium">{submitting ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Proforma' : 'Create Proforma')}</span>
+                <span className="font-medium">{submitting ? (isEditMode ? 'Updating...' : 'Creating...') : (isEditMode ? 'Update Invoice' : 'Create Invoice')}</span>
               </button>
             </div>
           )}
@@ -2951,4 +3333,4 @@ const CreateDGProformaForm: React.FC<CreateDGProformaFormProps> = ({
   );
 };
 
-export default CreateDGProformaForm;
+export default CreateDGInvoiceForm;

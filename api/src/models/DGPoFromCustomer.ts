@@ -26,16 +26,25 @@ interface IDGPoFromCustomerItemSchema {
 interface IDGPoFromCustomerSchema extends Document {
   poNumber: string;
   customer: mongoose.Types.ObjectId;
-  customerEmail?: string;
-  customerAddress: {
+  billToAddress: {
     id: number;
     address: string;
     state: string;
     district: string;
     pincode: string;
-    gstNumber?: string;
-    isPrimary: boolean;
+    addressId: number;
+    gstNumber: string;
   };
+  shipToAddress: {
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    addressId: number;
+    gstNumber: string;
+  };
+  customerEmail?: string;
   dgQuotationNumber?: mongoose.Types.ObjectId;
   items: IDGPoFromCustomerItemSchema[];
   subtotal: number;
@@ -49,18 +58,17 @@ interface IDGPoFromCustomerSchema extends Document {
   actualDeliveryDate?: Date;
   department: 'retail' | 'corporate' | 'industrial_marine' | 'others';
   notes?: string;
+  transport: string;
+  unloading: string;
+  scopeOfWork: string;
   // Payment fields
   paidAmount: number;
   remainingAmount: number;
   paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
   paymentMethod?: string;
   paymentDate?: Date;
-  // Source tracking
-  sourceType?: 'manual' | 'dg_quotation' | 'dg_enquiry' | 'inventory';
-  sourceId?: string;
   // Priority and approval
   priority?: 'low' | 'medium' | 'high' | 'urgent';
-  approvedBy?: mongoose.Types.ObjectId;
   // User tracking
   createdBy: mongoose.Types.ObjectId;
   updatedBy?: mongoose.Types.ObjectId;
@@ -68,9 +76,6 @@ interface IDGPoFromCustomerSchema extends Document {
   poPdf?: string;
   // DG specific fields
   dgEnquiry?: mongoose.Types.ObjectId;
-  kva?: string;
-  phase?: string;
-  fuelType?: string;
   // Timestamps
   createdAt: Date;
   updatedAt: Date;
@@ -181,38 +186,56 @@ const DGPoFromCustomerSchema = new Schema<IDGPoFromCustomerSchema>({
     lowercase: true,
     default: ''
   },
-  customerAddress: {
+  billToAddress: {
     id: {
       type: Number,
       required: true
     },
     address: {
       type: String,
-      required: true,
-      trim: true
+      required: true
     },
     state: {
       type: String,
-      required: true,
-      trim: true
+      required: true
     },
     district: {
       type: String,
-      required: true,
-      trim: true
+      required: true
     },
     pincode: {
       type: String,
-      required: true,
-      trim: true
+      required: true
     },
     gstNumber: {
       type: String,
-      trim: true
+      required: true
+    }
+  },
+  shipToAddress: {
+    id: {
+      type: Number,
+      required: true
     },
-    isPrimary: {
-      type: Boolean,
-      default: false
+    address: {
+      type: String,
+      required: true
+    },
+    state: {
+      type: String,
+      required: true
+    },
+    district: {
+      type: String,
+      required: true
+    },
+    pincode: {
+      type: String,
+      required: true
+    },
+    gstNumber: {
+      type: String,
+      required: true
     }
   },
   dgQuotationNumber: {
@@ -277,6 +300,21 @@ const DGPoFromCustomerSchema = new Schema<IDGPoFromCustomerSchema>({
     type: String,
     trim: true
   },
+  transport: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  unloading: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  scopeOfWork: {
+    type: String,
+    required: true,
+    trim: true
+  },
   // Payment fields
   paidAmount: {
     type: Number,
@@ -290,7 +328,7 @@ const DGPoFromCustomerSchema = new Schema<IDGPoFromCustomerSchema>({
   },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'partial', 'paid', 'failed'],
+    enum: ['pending', 'partial', 'paid', 'gst_pending'],
     default: 'pending'
   },
   paymentMethod: {
@@ -300,25 +338,11 @@ const DGPoFromCustomerSchema = new Schema<IDGPoFromCustomerSchema>({
   paymentDate: {
     type: Date
   },
-  // Source tracking
-  sourceType: {
-    type: String,
-    enum: ['manual', 'dg_quotation', 'dg_enquiry', 'inventory'],
-    default: 'manual'
-  },
-  sourceId: {
-    type: String,
-    trim: true
-  },
   // Priority and approval
   priority: {
     type: String,
     enum: ['low', 'medium', 'high', 'urgent'],
     default: 'medium'
-  },
-  approvedBy: {
-    type: Schema.Types.ObjectId,
-    ref: 'User'
   },
   // User tracking
   createdBy: {
@@ -340,18 +364,6 @@ const DGPoFromCustomerSchema = new Schema<IDGPoFromCustomerSchema>({
   dgEnquiry: {
     type: Schema.Types.ObjectId,
     ref: 'DGEnquiry'
-  },
-  kva: {
-    type: String,
-    trim: true
-  },
-  phase: {
-    type: String,
-    trim: true
-  },
-  fuelType: {
-    type: String,
-    trim: true
   }
 }, {
   timestamps: true,

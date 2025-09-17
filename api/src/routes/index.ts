@@ -35,6 +35,7 @@ import dgQuotationsRoutes from './dgQuotations';
 import purchaseOrderPaymentRoutes from './purchaseOrderPayments';
 import quotationPaymentRoutes from './quotationPayments';
 import invoicePaymentRoutes from './invoicePayments';
+import dgInvoicePaymentRoutes from './dgInvoicePayments';
 import qrCodeRoutes from './qrCode';
 import poFilesRoutes from './poFiles';
 import poFromCustomersRoutes from './poFromCustomers';
@@ -72,9 +73,11 @@ router.get('/', (req, res) => {
       purchaseOrderPayments: '/purchase-order-payments',
       quotationPayments: '/quotation-payments',
       invoicePayments: '/invoice-payments',
+      dgInvoicePayments: '/dg-invoice-payments',
       poFromCustomers: '/po-from-customers',
       dgPoFromCustomers: '/dg-po-from-customers',
       dgProformas: '/dg-proformas',
+      dgInvoices: '/dg-invoices',
       deliveryChallans: '/delivery-challans',
     }
   });
@@ -117,6 +120,7 @@ router.use('/dg-quotations', dgQuotationsRoutes);
 router.use('/purchase-order-payments', purchaseOrderPaymentRoutes);
 router.use('/quotation-payments', quotationPaymentRoutes);
 router.use('/invoice-payments', invoicePaymentRoutes);
+router.use('/dg-invoice-payments', dgInvoicePaymentRoutes);
 router.use('/qr-code', qrCodeRoutes);
 router.use('/po-files', poFilesRoutes);
 router.use('/po-from-customers', poFromCustomersRoutes);

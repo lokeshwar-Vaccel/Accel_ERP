@@ -34,11 +34,11 @@ export interface IDGEnquiry extends Document {
   eoPoDate: Date;
   plannedFollowUpDate: Date;
   source: string;
+  sourceFrom: string;
+  numberOfFollowUps: number;
   referenceEmployeeName: string;
   referenceEmployeeMobileNumber: string;
-  sourceFrom: string;
   events: string;
-  numberOfFollowUps: number;
   segment: string;
   subSegment: string;
   dgOwnership: string;
@@ -114,11 +114,11 @@ const DGEnquirySchema = new Schema<IDGEnquiry>({
   eoPoDate: { type: Date },
   plannedFollowUpDate: { type: Date, required: false },
   source: { type: String, trim: true },
+  sourceFrom: { type: String, trim: true },
+  numberOfFollowUps: { type: Number, default: 0 },
   referenceEmployeeName: { type: String, trim: true },
   referenceEmployeeMobileNumber: { type: String, trim: true },
-  sourceFrom: { type: String, trim: true },
   events: { type: String, trim: true },
-  numberOfFollowUps: { type: Number },
   segment: { type: String, trim: true },
   subSegment: { type: String, trim: true },
   dgOwnership: { type: String, trim: true },

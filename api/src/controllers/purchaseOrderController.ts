@@ -192,7 +192,7 @@ export const createPurchaseOrder = async (
       
       // Use supplier details from customers collection
       supplier = supplierResolved._id;
-      supplierEmail = supplierResolved.email || req.body.supplierEmail;
+      supplierEmail = (supplierResolved.addresses && supplierResolved.addresses[0] ? supplierResolved.addresses[0].email : undefined) || req.body.supplierEmail;
     }
 
     // Calculate total amount from items (including discount and taxRate)
@@ -296,7 +296,7 @@ export const updatePurchaseOrder = async (
       
       // Use supplier details from customers collection
       supplier = supplierResolved._id;
-      supplierEmail = supplierResolved.email || req.body.supplierEmail;
+      supplierEmail = (supplierResolved.addresses && supplierResolved.addresses[0] ? supplierResolved.addresses[0].email : undefined) || req.body.supplierEmail;
     }
 
     // Recalculate total if items are updated

@@ -140,19 +140,32 @@ export const createDGProforma = async (
       shippingAddress,
       dgQuotationNumber,
       poNumber,
+      poFromCustomer,
       proformaDate,
       validUntil,
       status,
       paymentStatus,
       paymentTerms,
       notes,
+      deliveryNotes,
+      referenceNumber,
+      referenceDate,
+      buyersOrderNumber,
+      buyersOrderDate,
+      dispatchDocNo,
+      dispatchDocDate,
+      destination,
+      deliveryNoteDate,
+      dispatchedThrough,
+      termsOfDelivery,
       items,
       additionalCharges,
+      transportCharges,
       dgEnquiry
     } = req.body;
 
     // Validate required fields
-    if (!customer || !customerEmail || !proformaDate || !validUntil || !items || !Array.isArray(items)) {
+    if (!customer || !proformaDate || !validUntil || !items || !Array.isArray(items)) {
       return next(new AppError('Missing required fields', 400));
     }
 
@@ -163,9 +176,14 @@ export const createDGProforma = async (
     const processedItems = items.map((item: any) => {
       const itemSubtotal = item.quantity * item.unitPrice;
       const itemDiscount = (itemSubtotal * (item.discount || 0)) / 100;
-      const itemTotal = itemSubtotal - itemDiscount;
+      const itemNetPrice = itemSubtotal - itemDiscount;
+      
+      // Calculate GST using item-level gstRate and gstAmount
+      const itemGstRate = item.gstRate || 18;
+      const itemGstAmount = item.gstAmount || (itemNetPrice * itemGstRate) / 100;
+      const itemTotal = itemNetPrice + itemGstAmount;
 
-      subtotal += itemTotal;
+      subtotal += itemNetPrice;
       totalDiscount += itemDiscount;
 
       return {
@@ -174,9 +192,11 @@ export const createDGProforma = async (
         quantity: item.quantity,
         unitPrice: item.unitPrice,
         totalPrice: itemTotal,
-        uom: item.uom || 'PCS',
+        uom: item.uom || '',
         discount: item.discount || 0,
         discountedAmount: itemDiscount,
+        gstRate: itemGstRate,
+        gstAmount: itemGstAmount,
         kva: item.kva || '',
         phase: item.phase || '',
         annexureRating: item.annexureRating || '',
@@ -188,10 +208,28 @@ export const createDGProforma = async (
       };
     });
 
-    // Calculate tax
-    const taxRate = req.body.taxRate || 18;
-    const taxAmount = (subtotal * taxRate) / 100;
-    const totalAmount = subtotal + taxAmount + (additionalCharges?.freight || 0) + (additionalCharges?.insurance || 0) + (additionalCharges?.packing || 0) + (additionalCharges?.other || 0);
+    // Process transport charges
+    let transportChargesData = null;
+    if (transportCharges && transportCharges.unitPrice > 0) {
+      const transportSubtotal = transportCharges.quantity * transportCharges.unitPrice;
+      const transportGstAmount = (transportSubtotal * transportCharges.gstRate) / 100;
+      const transportTotalAmount = transportSubtotal + transportGstAmount;
+      
+      transportChargesData = {
+        amount: transportSubtotal,
+        quantity: transportCharges.quantity,
+        unitPrice: transportCharges.unitPrice,
+        hsnNumber: transportCharges.hsnNumber || '',
+        gstRate: transportCharges.gstRate || 18,
+        gstAmount: transportGstAmount,
+        totalAmount: transportTotalAmount
+      };
+    }
+
+    // Calculate total tax from item-level GST amounts
+    const totalTaxAmount = processedItems.reduce((sum: number, item: any) => sum + (item.gstAmount || 0), 0);
+    const transportTotal = transportChargesData ? transportChargesData.totalAmount : 0;
+    const totalAmount = subtotal + totalTaxAmount + (additionalCharges?.freight || 0) + (additionalCharges?.insurance || 0) + (additionalCharges?.packing || 0) + (additionalCharges?.other || 0) + transportTotal;
 
     const dgProforma = new DGProforma({
       customer,
@@ -201,12 +239,24 @@ export const createDGProforma = async (
       shippingAddress,
       dgQuotationNumber,
       poNumber,
+      poFromCustomer,
       proformaDate: new Date(proformaDate),
       validUntil: new Date(validUntil),
       status: status || 'Draft',
       paymentStatus: paymentStatus || 'Pending',
-      paymentTerms: paymentTerms || 'Net 30',
+      paymentTerms: paymentTerms || '',
       notes,
+      deliveryNotes,
+      referenceNumber,
+      referenceDate: referenceDate ? new Date(referenceDate) : undefined,
+      buyersOrderNumber,
+      buyersOrderDate: buyersOrderDate ? new Date(buyersOrderDate) : undefined,
+      dispatchDocNo,
+      dispatchDocDate: dispatchDocDate ? new Date(dispatchDocDate) : undefined,
+      destination,
+      deliveryNoteDate: deliveryNoteDate ? new Date(deliveryNoteDate) : undefined,
+      dispatchedThrough,
+      termsOfDelivery,
       items: processedItems,
       additionalCharges: additionalCharges || {
         freight: 0,
@@ -214,11 +264,12 @@ export const createDGProforma = async (
         packing: 0,
         other: 0
       },
+      transportCharges: transportChargesData,
       dgEnquiry: dgEnquiry || undefined,
       subtotal,
       totalDiscount,
-      taxRate,
-      taxAmount,
+      taxRate: req.body.taxRate || 0,
+      taxAmount: totalTaxAmount,
       totalAmount,
       createdBy: req.user?.id
     });
@@ -254,9 +305,14 @@ export const updateDGProforma = async (
       const processedItems = updateData.items.map((item: any) => {
         const itemSubtotal = item.quantity * item.unitPrice;
         const itemDiscount = (itemSubtotal * (item.discount || 0)) / 100;
-        const itemTotal = itemSubtotal - itemDiscount;
+        const itemNetPrice = itemSubtotal - itemDiscount;
+        
+        // Calculate GST using item-level gstRate and gstAmount
+        const itemGstRate = item.gstRate || 18;
+        const itemGstAmount = item.gstAmount || (itemNetPrice * itemGstRate) / 100;
+        const itemTotal = itemNetPrice + itemGstAmount;
 
-        subtotal += itemTotal;
+        subtotal += itemNetPrice;
         totalDiscount += itemDiscount;
 
         return {
@@ -268,6 +324,8 @@ export const updateDGProforma = async (
           uom: item.uom || 'PCS',
           discount: item.discount || 0,
           discountedAmount: itemDiscount,
+          gstRate: itemGstRate,
+          gstAmount: itemGstAmount,
           kva: item.kva || '',
           phase: item.phase || '',
           annexureRating: item.annexureRating || '',
@@ -279,15 +337,35 @@ export const updateDGProforma = async (
         };
       });
 
-      const taxRate = updateData.taxRate || 18;
-      const taxAmount = (subtotal * taxRate) / 100;
-      const totalAmount = subtotal + taxAmount + (updateData.additionalCharges?.freight || 0) + (updateData.additionalCharges?.insurance || 0) + (updateData.additionalCharges?.packing || 0) + (updateData.additionalCharges?.other || 0);
+      // Process transport charges
+      let transportChargesData = null;
+      if (updateData.transportCharges && updateData.transportCharges.unitPrice > 0) {
+        const transportSubtotal = updateData.transportCharges.quantity * updateData.transportCharges.unitPrice;
+        const transportGstAmount = (transportSubtotal * updateData.transportCharges.gstRate) / 100;
+        const transportTotalAmount = transportSubtotal + transportGstAmount;
+        
+        transportChargesData = {
+          amount: transportSubtotal,
+          quantity: updateData.transportCharges.quantity,
+          unitPrice: updateData.transportCharges.unitPrice,
+          hsnNumber: updateData.transportCharges.hsnNumber || '998399',
+          gstRate: updateData.transportCharges.gstRate || 18,
+          gstAmount: transportGstAmount,
+          totalAmount: transportTotalAmount
+        };
+      }
+
+      // Calculate total tax from item-level GST amounts
+      const totalTaxAmount = processedItems.reduce((sum: number, item: any) => sum + (item.gstAmount || 0), 0);
+      const transportTotal = transportChargesData ? transportChargesData.totalAmount : 0;
+      const totalAmount = subtotal + totalTaxAmount + (updateData.additionalCharges?.freight || 0) + (updateData.additionalCharges?.insurance || 0) + (updateData.additionalCharges?.packing || 0) + (updateData.additionalCharges?.other || 0) + transportTotal;
 
       updateData.items = processedItems;
       updateData.subtotal = subtotal;
       updateData.totalDiscount = totalDiscount;
-      updateData.taxAmount = taxAmount;
+      updateData.taxAmount = totalTaxAmount;
       updateData.totalAmount = totalAmount;
+      updateData.transportCharges = transportChargesData;
     }
 
     const dgProforma = await DGProforma.findByIdAndUpdate(
@@ -390,6 +468,17 @@ export const exportDGProformas = async (
             'Status': proforma.status,
             'Payment Status': proforma.paymentStatus,
             'Payment Terms': proforma.paymentTerms,
+            'Delivery Notes': proforma.deliveryNotes || '',
+            'Reference Number': proforma.referenceNumber || '',
+            'Reference Date': proforma.referenceDate?.toLocaleDateString() || '',
+            'Buyers Order Number': proforma.buyersOrderNumber || '',
+            'Buyers Order Date': proforma.buyersOrderDate?.toLocaleDateString() || '',
+            'Dispatch Doc No': proforma.dispatchDocNo || '',
+            'Dispatch Doc Date': proforma.dispatchDocDate?.toLocaleDateString() || '',
+            'Destination': proforma.destination || '',
+            'Delivery Note Date': proforma.deliveryNoteDate?.toLocaleDateString() || '',
+            'Dispatched Through': proforma.dispatchedThrough || '',
+            'Terms of Delivery': proforma.termsOfDelivery || '',
             'Product': item.product,
             'Description': item.description,
             'KVA': item.kva,
@@ -430,6 +519,17 @@ export const exportDGProformas = async (
           'Status': proforma.status,
           'Payment Status': proforma.paymentStatus,
           'Payment Terms': proforma.paymentTerms,
+          'Delivery Notes': proforma.deliveryNotes || '',
+          'Reference Number': proforma.referenceNumber || '',
+          'Reference Date': proforma.referenceDate?.toLocaleDateString() || '',
+          'Buyers Order Number': proforma.buyersOrderNumber || '',
+          'Buyers Order Date': proforma.buyersOrderDate?.toLocaleDateString() || '',
+          'Dispatch Doc No': proforma.dispatchDocNo || '',
+          'Dispatch Doc Date': proforma.dispatchDocDate?.toLocaleDateString() || '',
+          'Destination': proforma.destination || '',
+          'Delivery Note Date': proforma.deliveryNoteDate?.toLocaleDateString() || '',
+          'Dispatched Through': proforma.dispatchedThrough || '',
+          'Terms of Delivery': proforma.termsOfDelivery || '',
           'Product': '',
           'Description': '',
           'KVA': '',

@@ -10,6 +10,8 @@ export interface IDGProformaItemSchema {
   uom: string;
   discount: number;
   discountedAmount: number;
+  gstRate: number;
+  gstAmount: number;
   kva: string;
   phase: string;
   annexureRating: string;
@@ -38,6 +40,7 @@ export interface IDGProformaSchema extends Document {
     state: string;
     pincode: string;
     addressId: number;
+    gstNumber: string;
   };
   shippingAddress?: {
     address: string;
@@ -45,6 +48,7 @@ export interface IDGProformaSchema extends Document {
     state: string;
     pincode: string;
     addressId: number;
+    gstNumber: string;
   };
   proformaDate: Date;
   validUntil: Date;
@@ -57,14 +61,34 @@ export interface IDGProformaSchema extends Document {
   taxRate: number;
   taxAmount: number;
   totalAmount: number;
+  paymentTerms: string;
+  notes?: string;
+  deliveryNotes?: string;
+  referenceNumber?: string;
+  referenceDate?: Date;
+  buyersOrderNumber?: string;
+  buyersOrderDate?: Date;
+  dispatchDocNo?: string;
+  dispatchDocDate?: Date;
+  destination?: string;
+  deliveryNoteDate?: Date;
+  dispatchedThrough?: string;
+  termsOfDelivery?: string;
   additionalCharges?: {
     freight: number;
     insurance: number;
     packing: number;
     other: number;
   };
-  paymentTerms: string;
-  notes: string;
+  transportCharges?: {
+    amount: number;
+    quantity: number;
+    unitPrice: number;
+    hsnNumber: string;
+    gstRate: number;
+    gstAmount: number;
+    totalAmount: number;
+  };
   proformaPdf?: string;
   status: 'Draft' | 'Sent' | 'Accepted' | 'Rejected' | 'Expired';
   paymentStatus: 'Pending' | 'Partial' | 'Paid' | 'Overdue';
@@ -122,6 +146,19 @@ const DGProformaItemSchema = new Schema<IDGProformaItemSchema>({
     type: Number,
     required: [true, 'Discounted amount is required'],
     min: [0, 'Discounted amount cannot be negative'],
+    default: 0
+  },
+  gstRate: {
+    type: Number,
+    required: false,
+    min: [0, 'Product GST rate cannot be negative'],
+    max: [100, 'Product GST rate cannot exceed 100%'],
+    default: 18
+  },
+  gstAmount: {
+    type: Number,
+    required: false,
+    min: [0, 'Product GST amount cannot be negative'],
     default: 0
   },
   kva: {
@@ -182,7 +219,7 @@ const DGProformaSchema = new Schema<IDGProformaSchema>({
   },
   customerEmail: {
     type: String,
-    required: [true, 'Customer email is required'],
+    // required: [true, 'Customer email is required'],
     trim: true,
     lowercase: true
   },
@@ -236,6 +273,11 @@ const DGProformaSchema = new Schema<IDGProformaSchema>({
     addressId: {
       type: Number,
       required: false
+    },
+    gstNumber: {
+      type: String,
+      required: false,
+      trim: true
     }
   },
   shippingAddress: {
@@ -262,6 +304,11 @@ const DGProformaSchema = new Schema<IDGProformaSchema>({
     addressId: {
       type: Number,
       required: false
+    },
+    gstNumber: {
+      type: String,
+      required: false,
+      trim: true
     }
   },
   proformaDate: {
@@ -297,26 +344,26 @@ const DGProformaSchema = new Schema<IDGProformaSchema>({
   },
   totalDiscount: {
     type: Number,
-    required: [true, 'Total discount is required'],
+    // required: [true, 'Total discount is required'],
     min: [0, 'Total discount cannot be negative'],
     default: 0
   },
   taxRate: {
     type: Number,
-    required: [true, 'Tax rate is required'],
+    // required: [true, 'Tax rate is required'],
     min: [0, 'Tax rate cannot be negative'],
     max: [100, 'Tax rate cannot exceed 100%'],
     default: 18
   },
   taxAmount: {
     type: Number,
-    required: [true, 'Tax amount is required'],
+    // required: [true, 'Tax amount is required'],
     min: [0, 'Tax amount cannot be negative'],
     default: 0
   },
   totalAmount: {
     type: Number,
-    required: [true, 'Total amount is required'],
+    // required: [true, 'Total amount is required'],
     min: [0, 'Total amount cannot be negative'],
     default: 0
   },
@@ -346,13 +393,109 @@ const DGProformaSchema = new Schema<IDGProformaSchema>({
       default: 0
     }
   },
+  transportCharges: {
+    amount: {
+      type: Number,
+      required: false,
+      min: [0, 'Transport amount cannot be negative'],
+      default: 0
+    },
+    quantity: {
+      type: Number,
+      required: false,
+      min: [0, 'Transport quantity cannot be negative'],
+      default: 0
+    },
+    unitPrice: {
+      type: Number,
+      required: false,
+      min: [0, 'Transport unit price cannot be negative'],
+      default: 0
+    },
+    hsnNumber: {
+      type: String,
+      required: false,
+      trim: true,
+      default: '998399'
+    },
+    gstRate: {
+      type: Number,
+      required: false,
+      min: [0, 'Transport GST rate cannot be negative'],
+      max: [100, 'Transport GST rate cannot exceed 100%'],
+      default: 18
+    },
+    gstAmount: {
+      type: Number,
+      required: false,
+      min: [0, 'Transport GST amount cannot be negative'],
+      default: 0
+    },
+    totalAmount: {
+      type: Number,
+      required: false,
+      min: [0, 'Transport total amount cannot be negative'],
+      default: 0
+    }
+  },
   paymentTerms: {
     type: String,
-    required: [true, 'Payment terms are required'],
-    enum: ['Net 15', 'Net 30', 'Net 45', 'Immediate', 'Custom'],
-    default: 'Net 30'
+    // required: [true, 'Payment terms are required'],
+    // enum: ['Net 15', 'Net 30', 'Net 45', 'Immediate', 'Custom'],
+    default: ''
   },
   notes: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  deliveryNotes: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  referenceNumber: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  referenceDate: {
+    type: Date,
+    required: false
+  },
+  buyersOrderNumber: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  buyersOrderDate: {
+    type: Date,
+    required: false
+  },
+  dispatchDocNo: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  dispatchDocDate: {
+    type: Date,
+    required: false
+  },
+  destination: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  deliveryNoteDate: {
+    type: Date,
+    required: false
+  },
+  dispatchedThrough: {
+    type: String,
+    required: false,
+    trim: true
+  },
+  termsOfDelivery: {
     type: String,
     required: false,
     trim: true

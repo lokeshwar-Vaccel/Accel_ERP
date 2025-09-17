@@ -1,15 +1,24 @@
 import { Router } from 'express';
-import { protect, restrictTo, checkPermission } from '../middleware/auth';
+import { protect, restrictTo, checkModuleAccess, checkPermission } from '../middleware/auth';
+import { validate } from '../utils/validation';
+import { 
+  createOEMOrderSchema,
+  updateOEMOrderSchema,
+  oemOrderQuerySchema,
+  updateOEMOrderStatusSchema,
+  updateOEMOrderPaymentSchema
+} from '../schemas/oemOrderSchemas';
 import { UserRole } from '../types';
 import {
-  createOEMOrder,
   getOEMOrders,
   getOEMOrder,
+  createOEMOrder,
   updateOEMOrder,
+  deleteOEMOrder,
   updateOEMOrderStatus,
-  updateDeliveryStatus,
-  createOEMOrderFromPO,
-  deleteOEMOrder
+  updateOEMOrderPayment,
+  getOEMOrderStats,
+  generateOEMOrderNumber
 } from '../controllers/oemOrderController';
 
 const router = Router();
@@ -17,52 +26,27 @@ const router = Router();
 // All routes are protected
 router.use(protect);
 
-// @route   GET /api/v1/oem-orders
-router.get('/', getOEMOrders);
+// Check module access for DG sales
+router.use(checkModuleAccess('dg_sales'));
 
-// @route   POST /api/v1/oem-orders
-router.post('/', 
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
-  checkPermission('write'),
-  createOEMOrder
-);
+// OEM Order routes
+router.route('/')
+  .get(validate(oemOrderQuerySchema, 'query'), checkPermission('read'), getOEMOrders)
+  .post(validate(createOEMOrderSchema), checkPermission('write'), createOEMOrder);
 
-// @route   POST /api/v1/oem-orders/from-po/:poId
-router.post('/from-po/:poId',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
-  checkPermission('write'),
-  createOEMOrderFromPO
-);
+router.route('/stats')
+  .get(checkPermission('read'), getOEMOrderStats);
 
-// @route   GET /api/v1/oem-orders/:id
-router.get('/:id', getOEMOrder);
+router.route('/generate-number')
+  .get(checkPermission('read'), generateOEMOrderNumber);
 
-// @route   PUT /api/v1/oem-orders/:id
-router.put('/:id',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
-  checkPermission('write'),
-  updateOEMOrder
-);
+router.route('/:id')
+  .get(checkPermission('read'), getOEMOrder)
+  .put(validate(updateOEMOrderSchema), checkPermission('write'), updateOEMOrder)
+  .delete(restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN), checkPermission('delete'), deleteOEMOrder);
 
-// @route   PATCH /api/v1/oem-orders/:id/status
-router.patch('/:id/status',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
-  checkPermission('write'),
-  updateOEMOrderStatus
-);
+// OEM order actions
+router.put('/:id/status', validate(updateOEMOrderStatusSchema), checkPermission('write'), updateOEMOrderStatus);
+router.put('/:id/payment', validate(updateOEMOrderPaymentSchema), checkPermission('write'), updateOEMOrderPayment);
 
-// @route   PATCH /api/v1/oem-orders/:id/delivery-status
-router.patch('/:id/delivery-status',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.MANAGER),
-  checkPermission('write'),
-  updateDeliveryStatus
-);
-
-// @route   DELETE /api/v1/oem-orders/:id
-router.delete('/:id',
-  restrictTo(UserRole.SUPER_ADMIN, UserRole.ADMIN),
-  checkPermission('write'),
-  deleteOEMOrder
-);
-
-export default router; 
+export default router;

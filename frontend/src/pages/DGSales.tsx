@@ -53,6 +53,7 @@ import apiClient from '../utils/api';
 import { toast } from 'react-hot-toast';
 import { email } from 'zod/v4';
 import PageHeader from 'components/ui/PageHeader';
+import OEMOrderManagement from './OEMOrderManagement';
 
 export default function DGSales() {
   const navigate = useNavigate();
@@ -1238,68 +1239,36 @@ export default function DGSales() {
       case 6: // OEMs
         return <OEMManagement />;
 
-      case 8: // OEM Orders
+      case 7: // OEM Orders
         return (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-medium">OEM Orders</h3>
-                  <div className="flex space-x-3">
-                    <Input
-                      placeholder="Search OEM orders..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="w-64"
-                    />
-                    <Button variant="outline">
-                      <Filter className="h-4 w-4 mr-2" />
-                      Filter
-                    </Button>
-                    <Button onClick={() => setShowOEMOrderForm(true)}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      New OEM Order
-                    </Button>
-                  </div>
-                </div>
-              </div>
-
-              <Table
-                columns={[
-                  { key: 'orderNumber', title: 'Order Number', sortable: true },
-                  { key: 'oem', title: 'OEM' },
-                  { key: 'date', title: 'Order Date', sortable: true },
-                  { key: 'amount', title: 'Amount', sortable: true },
-                  { key: 'deliveryDate', title: 'Expected Delivery' },
-                  { key: 'status', title: 'Status' },
-                  { key: 'actions', title: 'Actions' }
-                ]}
-                data={oemOrders.map(order => ({
-                  orderNumber: order.orderNumber || '',
-                  oem: order.oem?.companyName || '',
-                  date: order.orderDate ? new Date(order.orderDate).toLocaleDateString() : '',
-                  amount: order.totalAmount ? `₹${order.totalAmount.toLocaleString()}` : '',
-                  deliveryDate: order.expectedDeliveryDate ? new Date(order.expectedDeliveryDate).toLocaleDateString() : '',
-                  status: <Badge variant="warning">{order.status || 'Pending'}</Badge>,
-                  actions: (
-                    <div className="flex space-x-2">
-                      <Button size="sm" variant="outline">View</Button>
-                      <Button size="sm" variant="outline">Track</Button>
-                      <Button size="sm">Update Status</Button>
-                    </div>
-                  )
-                }))}
-                loading={loading}
-                pagination={{
-                  page: currentPage,
-                  pages: totalPages,
-                  total: totalItems,
-                  limit: itemsPerPage
-                }}
-                onPageChange={setCurrentPage}
-              />
-            </div>
-          </div>
+          // <div className="space-y-6">
+          //   <div className="bg-white rounded-lg shadow">
+          //     <div className="p-6 border-b border-gray-200">
+          //       <div className="flex justify-between items-center">
+          //         <h3 className="text-lg font-medium">OEM Orders</h3>
+          //         <div className="flex space-x-3">
+          //           <Button onClick={() => navigate('/oem-order-management')}>
+          //             <Plus className="h-4 w-4 mr-2" />
+          //             Manage OEM Orders
+          //           </Button>
+          //         </div>
+          //       </div>
+          //     </div>
+          //     <div className="p-6">
+          //       <div className="text-center py-12">
+          //         <Package className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+          //         <h3 className="text-lg font-medium text-gray-900 mb-2">OEM Order Management</h3>
+          //         <p className="text-gray-600 mb-6">
+          //           Access the full OEM Order Management system to create, edit, and track OEM orders.
+          //         </p>
+          //         <Button onClick={() => navigate('/oem-order-management')}>
+          //           Go to OEM Order Management
+          //         </Button>
+          //       </div>
+          //     </div>
+          //   </div>
+          // </div>
+          <OEMOrderManagement />
         );
 
       case 10: // OEM Payments
@@ -1444,10 +1413,10 @@ export default function DGSales() {
       </div>
 
       {/* Dynamic Progress Tracker */}
-      <div className="mb-8">
+      {/* <div className="mb-8">
         <div className="bg-white rounded-lg shadow p-6">
           <h3 className="text-lg font-medium text-gray-900 mb-4">DG Sales Progress Tracker</h3>
-          <div className="space-y-4">
+          <div className="space-y-4"> */}
             {/* Main Process Steps */}
             {/* <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
                {workflowSteps.slice(0, 6).map((step, index) => {
@@ -1512,7 +1481,7 @@ export default function DGSales() {
              </div> */}
 
             {/* Overall Progress Bar */}
-            <div className="mt-6">
+            {/* <div className="mt-6">
               <div className="flex justify-between text-sm text-gray-600 mb-2">
                 <span>Overall Progress</span>
                 <span>{getOverallProgress()}% Complete</span>
@@ -1523,10 +1492,10 @@ export default function DGSales() {
                   style={{ width: `${getOverallProgress()}%` }}
                 ></div>
               </div>
-            </div>
+            </div> */}
 
             {/* Quick Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
+            {/* <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
               <div className="bg-blue-50 p-3 rounded-lg text-center">
                 <div className="text-2xl font-bold text-blue-600">{totalItems}</div>
                 <div className="text-xs text-blue-700">Total Enquiries</div>
@@ -1543,10 +1512,10 @@ export default function DGSales() {
                 <div className="text-2xl font-bold text-orange-600">-</div>
                 <div className="text-xs text-orange-700">Purchase Orders</div>
               </div>
-            </div>
-          </div>
+            </div> */}
+          {/* </div>
         </div>
-      </div>
+      </div> */}
 
       {/* Navigation Tabs */}
       <div className="mb-6">

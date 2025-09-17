@@ -208,6 +208,12 @@ export * from './dgQuotationSchemas';
 // DG Purchase Order validation schemas
 export * from './dgPurchaseOrderSchemas';
 
+// DG PO from Customer validation schemas
+export * from './dgPoFromCustomerSchemas';
+
+// OEM Order validation schemas
+export * from './oemOrderSchemas';
+
 
 
 // DG Enquiry import schema (stub)

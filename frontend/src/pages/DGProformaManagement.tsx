@@ -17,7 +17,8 @@ import {
   X,
   ChevronDown,
   MoreVertical,
-  ArrowLeft
+  ArrowLeft,
+  Printer
 } from 'lucide-react';
 import { apiClient } from '../utils/api';
 import toast from 'react-hot-toast';
@@ -25,6 +26,7 @@ import PageHeader from '../components/ui/PageHeader';
 import { Pagination } from '../components/ui/Pagination';
 import DGProformaViewModal from '../components/ui/DGProformaViewModal';
 import { Button } from 'components/ui/Botton';
+import { printProforma } from '../utils/printUtils';
 import * as XLSX from 'xlsx';
 
 // Utility functions
@@ -213,6 +215,11 @@ const DGProformaManagement: React.FC = () => {
   const handleViewProforma = (proforma: DGProforma) => {
     setSelectedProforma(proforma);
     setShowViewModal(true);
+  };
+
+  // Handle print proforma
+  const handlePrintProforma = (proforma: DGProforma) => {
+    printProforma(proforma);
   };
 
   // Handle edit proforma
@@ -550,6 +557,13 @@ const DGProformaManagement: React.FC = () => {
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
+                          onClick={() => handlePrintProforma(proforma)}
+                          className="text-green-600 hover:text-green-900 p-1"
+                          title="Print"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => handleEditProforma(proforma)}
                           className="text-indigo-600 hover:text-indigo-900 p-1"
                           title="Edit"
@@ -595,6 +609,7 @@ const DGProformaManagement: React.FC = () => {
           }}
         />
       )}
+
 
     </div>
   );

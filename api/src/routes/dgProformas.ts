@@ -8,6 +8,13 @@ import {
   exportDGProformas
 } from '../controllers/dgProformaController';
 import { protect, checkPermission } from '../middleware/auth';
+import { validateRequest } from '../middleware/validateRequest';
+import {
+  createDGProformaSchema,
+  updateDGProformaSchema,
+  getDGProformasQuerySchema,
+  exportDGProformasQuerySchema
+} from '../schemas/dgProformaSchemas';
 
 const router = express.Router();
 
@@ -17,12 +24,12 @@ router.use(protect);
 // @route   GET /api/v1/dg-proformas
 // @desc    Get all DG Proformas
 // @access  Private
-router.get('/', checkPermission('read'), getDGProformas);
+router.get('/', checkPermission('read'), validateRequest(getDGProformasQuerySchema, 'query'), getDGProformas);
 
 // @route   GET /api/v1/dg-proformas/export
 // @desc    Export DG Proformas to Excel
 // @access  Private
-router.get('/export', checkPermission('read'), exportDGProformas);
+router.get('/export', checkPermission('read'), validateRequest(exportDGProformasQuerySchema, 'query'), exportDGProformas);
 
 // @route   GET /api/v1/dg-proformas/:id
 // @desc    Get DG Proforma by ID
@@ -32,12 +39,12 @@ router.get('/:id', checkPermission('read'), getDGProformaById);
 // @route   POST /api/v1/dg-proformas
 // @desc    Create new DG Proforma
 // @access  Private
-router.post('/', checkPermission('write'), createDGProforma);
+router.post('/', checkPermission('write'), validateRequest(createDGProformaSchema), createDGProforma);
 
 // @route   PUT /api/v1/dg-proformas/:id
 // @desc    Update DG Proforma
 // @access  Private
-router.put('/:id', checkPermission('write'), updateDGProforma);
+router.put('/:id', checkPermission('write'), validateRequest(updateDGProformaSchema), updateDGProforma);
 
 // @route   DELETE /api/v1/dg-proformas/:id
 // @desc    Delete DG Proforma

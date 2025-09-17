@@ -537,6 +537,48 @@ class ApiClient {
       this.makeRequest<{ success: boolean; message: string }>(`/dg-invoices/${id}/send-reminder`, {
         method: 'POST',
       }),
+
+    export: (params?: any) => {
+      const queryString = params ? `?${new URLSearchParams(params)}` : '';
+      return this.makeRequest<{ success: boolean; data: any[]; message: string }>(`/dg-invoices/export${queryString}`);
+    },
+
+    updatePayment: (id: string, paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any; message: string }>(`/dg-invoices/${id}/payment`, {
+        method: 'PUT',
+        body: JSON.stringify(paymentData),
+      }),
+  };
+
+  // DG Invoice Payment APIs
+  dgInvoicePayments = {
+    create: (paymentData: any) =>
+      this.makeRequest<{ success: boolean; data: any; message: string }>('/dg-invoice-payments', {
+        method: 'POST',
+        body: JSON.stringify(paymentData),
+      }),
+
+    getByInvoice: (invoiceId: string, params?: any) =>
+      this.makeRequest<{ success: boolean; data: { payments: any[]; pagination: any } }>(`/dg-invoice-payments/invoice/${invoiceId}${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+    getById: (id: string) =>
+      this.makeRequest<{ success: boolean; data: any }>(`/dg-invoice-payments/${id}`),
+
+    update: (id: string, data: any) =>
+      this.makeRequest<{ success: boolean; data: any; message: string }>(`/dg-invoice-payments/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
+
+    delete: (id: string) =>
+      this.makeRequest<{ success: boolean; message: string }>(`/dg-invoice-payments/${id}`, {
+        method: 'DELETE',
+      }),
+
+    downloadReceipt: (id: string) =>
+      this.makeRequest<Blob>(`/dg-invoice-payments/${id}/pdf`, {
+        responseType: 'blob',
+      }),
   };
 
   // Payment Management APIs
@@ -1695,6 +1737,50 @@ class ApiClient {
           method: 'POST',
           body: JSON.stringify(receiveData),
         }),
+    },
+
+    // OEM Orders
+    oemOrders: {
+      getAll: (params?: any) =>
+        this.makeRequest<{ success: boolean; data: { orders: any[]; pagination: any } }>(`/oem-orders${params ? `?${new URLSearchParams(params)}` : ''}`),
+
+      getById: (id: string) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/oem-orders/${id}`),
+
+      create: (orderData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>('/oem-orders', {
+          method: 'POST',
+          body: JSON.stringify(orderData),
+        }),
+
+      update: (id: string, orderData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/oem-orders/${id}`, {
+          method: 'PUT',
+          body: JSON.stringify(orderData),
+        }),
+
+      updateStatus: (id: string, status: string) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/oem-orders/${id}/status`, {
+          method: 'PUT',
+          body: JSON.stringify({ status }),
+        }),
+
+      updatePayment: (id: string, paymentData: any) =>
+        this.makeRequest<{ success: boolean; data: any }>(`/oem-orders/${id}/payment`, {
+          method: 'PUT',
+          body: JSON.stringify(paymentData),
+        }),
+
+      delete: (id: string) =>
+        this.makeRequest<{ success: boolean; message: string }>(`/oem-orders/${id}`, {
+          method: 'DELETE',
+        }),
+
+      generateNumber: () =>
+        this.makeRequest<{ success: boolean; data: { orderNumber: string } }>('/oem-orders/generate-number'),
+
+      getStats: () =>
+        this.makeRequest<{ success: boolean; data: any }>('/oem-orders/stats'),
     },
 
     // Proforma Invoices

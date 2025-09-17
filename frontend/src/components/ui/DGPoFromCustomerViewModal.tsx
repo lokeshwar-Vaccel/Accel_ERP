@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Edit, Trash2, Download, Calendar, User, MapPin, Package, DollarSign, AlertCircle, CheckCircle, Clock, Building2, Mail, Phone, FileText } from 'lucide-react';
+import { X, Edit, Trash2, Download, Calendar, User, MapPin, Package, DollarSign, AlertCircle, CheckCircle, Clock, Building2, Mail, Phone, FileText, Search, Truck } from 'lucide-react';
 import { Button } from './Botton';
 import { Badge } from './Badge';
 import toast from 'react-hot-toast';
@@ -202,15 +202,117 @@ const DGPoFromCustomerViewModal: React.FC<DGPoFromCustomerViewModalProps> = ({
                       <span className="text-sm text-gray-900">{po.customer.phone}</span>
                     </div>
                   )}
-                  <div className="flex items-start space-x-2">
-                    <MapPin className="w-4 h-4 text-gray-400 mt-0.5" />
-                    <div className="text-sm text-gray-900">
-                      <p>{po.customerAddress?.address || 'N/A'}</p>
-                      <p>{po.customerAddress?.district || 'N/A'}, {po.customerAddress?.state || 'N/A'} - {po.customerAddress?.pincode || 'N/A'}</p>
-                      {po.customerAddress?.gstNumber && (
-                        <p className="text-gray-500">GST: {po.customerAddress.gstNumber}</p>
-                      )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Bill To Address</label>
+                      <div className="mt-1 p-3 bg-white rounded-md border border-gray-200">
+                        {po.billToAddress?.address ? (
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-900 font-medium">{po.billToAddress.address}</p>
+                            <p className="text-xs text-gray-600">
+                              {po.billToAddress.district}, {po.billToAddress.state} - {po.billToAddress.pincode}
+                            </p>
+                            {po.billToAddress.gstNumber && (
+                              <p className="text-xs text-gray-500">GST: {po.billToAddress.gstNumber}</p>
+                            )}
+                            <p className="text-xs text-gray-400">ID: {po.billToAddress.id}</p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No address available</p>
+                        )}
+                      </div>
                     </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-500">Ship To Address</label>
+                      <div className="mt-1 p-3 bg-white rounded-md border border-gray-200">
+                        {po.shipToAddress?.address ? (
+                          <div className="space-y-1">
+                            <p className="text-sm text-gray-900 font-medium">{po.shipToAddress.address}</p>
+                            <p className="text-xs text-gray-600">
+                              {po.shipToAddress.district}, {po.shipToAddress.state} - {po.shipToAddress.pincode}
+                            </p>
+                            {po.shipToAddress.gstNumber && (
+                              <p className="text-xs text-gray-500">GST: {po.shipToAddress.gstNumber}</p>
+                            )}
+                            <p className="text-xs text-gray-400">ID: {po.shipToAddress.id}</p>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-gray-500">No address available</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Enquiry Information */}
+              {po.dgEnquiry && (
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <Search className="w-5 h-5 mr-2" />
+                    Enquiry Information
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Enquiry Number</label>
+                        <p className="text-sm text-gray-900 font-medium">{po.dgEnquiry?.enquiryNo || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Enquiry Date</label>
+                        <p className="text-sm text-gray-900">
+                          {po.dgEnquiry?.enquiryDate ? new Date(po.dgEnquiry.enquiryDate).toLocaleDateString('en-GB') : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Customer Name</label>
+                        <p className="text-sm text-gray-900">{po.dgEnquiry?.customerName || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Status</label>
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                          po.dgEnquiry?.enquiryStatus === 'Open' ? 'bg-green-100 text-green-800' :
+                          po.dgEnquiry?.enquiryStatus === 'Closed' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {po.dgEnquiry?.enquiryStatus || 'N/A'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">KVA</label>
+                        <p className="text-sm text-gray-900">{po.dgEnquiry?.kva || 'N/A'}</p>
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium text-gray-500">Phase</label>
+                        <p className="text-sm text-gray-900">{po.dgEnquiry?.phase || 'N/A'}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Logistics Information */}
+              <div className="bg-yellow-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <Truck className="w-5 h-5 mr-2" />
+                  Logistics Information
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Transport</label>
+                    <p className="text-sm text-gray-900">{po.transport || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Unloading</label>
+                    <p className="text-sm text-gray-900">{po.unloading || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Scope of Work</label>
+                    <p className="text-sm text-gray-900">{po.scopeOfWork || 'N/A'}</p>
                   </div>
                 </div>
               </div>
@@ -269,6 +371,25 @@ const DGPoFromCustomerViewModal: React.FC<DGPoFromCustomerViewModalProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* Logistics Information */}
+              {/* <div className="bg-gray-50 rounded-lg p-4">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Logistics Information</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Transport</label>
+                    <p className="text-sm text-gray-900">{po.transport || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Unloading</label>
+                    <p className="text-sm text-gray-900">{po.unloading || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-500">Scope of Work</label>
+                    <p className="text-sm text-gray-900 whitespace-pre-wrap">{po.scopeOfWork || 'N/A'}</p>
+                  </div>
+                </div>
+              </div> */}
             </div>
 
             {/* Right Column - Items and PDF */}

@@ -100,24 +100,6 @@ const customerSchema = new Schema({
     trim: true,
     maxlength: [100, 'Customer alias cannot exceed 100 characters']
   },
-  contactPersonName: {
-    type: String,
-    trim: true,
-    maxlength: [100, 'Contact person name cannot exceed 100 characters']
-  },
-  email: {
-    type: String,
-    lowercase: true,
-    // match: [
-    //   /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-    //   'Please provide a valid email'
-    // ]
-  },
-  phone: {
-    type: String,
-    // required: [true, 'Phone number is required'],
-    // match: [/^\+?[1-9]\d{1,14}$/, 'Please provide a valid phone number']
-  },
   panNumber: {
     type: String,
     trim: true,

@@ -220,9 +220,6 @@ export interface DGRequirements {
 export interface ICustomer extends Document {
   name: string;
   alice?: string;
-  contactPersonName?: string;
-  email?: string;
-  phone: string;
   panNumber?: string;
   addresses: Address[];
   siteAddress?: string;

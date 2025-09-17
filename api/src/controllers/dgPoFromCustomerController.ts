@@ -79,7 +79,6 @@ export const getDGPoFromCustomers = async (
       .populate('customer', 'name email phone addresses')
       .populate('createdBy', 'firstName lastName email')
       .populate('updatedBy', 'firstName lastName email')
-      .populate('approvedBy', 'firstName lastName email')
       .populate({
         path: 'dgQuotationNumber',
         select: 'quotationNumber issueDate validUntil grandTotal status paymentStatus paidAmount remainingAmount items serviceCharges batteryBuyBack subject engineSerialNumber kva hourMeterReading serviceRequestDate qrCodeImage',
@@ -90,7 +89,7 @@ export const getDGPoFromCustomers = async (
           },
         ]
       })
-      .populate('dgEnquiry', 'enquiryNo enquiryDate customerName phoneNumber email kva phase enquiryStatus')
+      .populate('dgEnquiry', 'enquiryNo enquiryDate customerName phoneNumber email kva phase enquiryStatus referredBy panNumber designation')
       .sort(sortObj)
       .skip(skip)
       .limit(limitNum);
@@ -128,7 +127,6 @@ export const getDGPoFromCustomerById = async (
       .populate('customer', 'name email phone addresses')
       .populate('createdBy', 'firstName lastName email')
       .populate('updatedBy', 'firstName lastName email')
-      .populate('approvedBy', 'firstName lastName email')
       .populate({
         path: 'dgQuotationNumber',
         select: 'quotationNumber issueDate validUntil grandTotal status paymentStatus paidAmount remainingAmount items serviceCharges batteryBuyBack subject engineSerialNumber kva hourMeterReading serviceRequestDate qrCodeImage',
@@ -175,7 +173,8 @@ export const createDGPoFromCustomer = async (
       poNumber,
       customer,
       customerEmail,
-      customerAddress,
+      billToAddress,
+      shipToAddress,
       dgQuotationNumber,
       dgEnquiry,
       items,
@@ -183,14 +182,12 @@ export const createDGPoFromCustomer = async (
       department,
       notes,
       priority,
-      sourceType,
-      sourceId,
       poDate,
       status,
       poPdf,
-      kva,
-      phase,
-      fuelType,
+      transport,
+      unloading,
+      scopeOfWork,
       taxRate = 18
     } = req.body;
 
@@ -199,8 +196,8 @@ export const createDGPoFromCustomer = async (
     console.log('Create DG PO - File path from body:', pdfPath);
 
     // Validate required fields
-    if (!customer || !customerAddress || !items || !Array.isArray(items) || items.length === 0) {
-      next(new AppError('Customer, address, and items are required', 400));
+    if (!customer || !billToAddress || !shipToAddress || !items || !Array.isArray(items) || items.length === 0) {
+      next(new AppError('Customer, bill to address, ship to address, and items are required', 400));
       return;
     }
 
@@ -269,7 +266,8 @@ export const createDGPoFromCustomer = async (
       ...(poNumber && { poNumber }), // Include manual PO number if provided
       customer,
       customerEmail,
-      customerAddress,
+      billToAddress,
+      shipToAddress,
       ...(dgQuotationNumber && { dgQuotationNumber }), // Include DG quotation number if provided
       ...(dgEnquiry && { dgEnquiry }), // Include DG enquiry if provided
       items: processedItems,
@@ -284,13 +282,11 @@ export const createDGPoFromCustomer = async (
       department: department || 'retail',
       notes,
       priority: priority || 'medium',
-      sourceType: sourceType || 'manual',
-      sourceId,
       status: status || 'draft',
       poPdf: poPdf || undefined,
-      kva,
-      phase,
-      fuelType,
+      transport,
+      unloading,
+      scopeOfWork,
       createdBy: req.user?.id
     };
 
@@ -401,7 +397,6 @@ export const updateDGPoFromCustomer = async (
       .populate('customer', 'name email phone addresses')
       .populate('createdBy', 'firstName lastName email')
       .populate('updatedBy', 'firstName lastName email')
-      .populate('approvedBy', 'firstName lastName email')
       .populate({
         path: 'dgQuotationNumber',
         select: 'quotationNumber issueDate validUntil grandTotal status paymentStatus paidAmount remainingAmount items serviceCharges batteryBuyBack subject engineSerialNumber kva hourMeterReading serviceRequestDate qrCodeImage',
@@ -490,7 +485,6 @@ export const updateDGPoFromCustomerStatus = async (
       .populate('customer', 'name email phone addresses')
       .populate('createdBy', 'firstName lastName email')
       .populate('updatedBy', 'firstName lastName email')
-      .populate('approvedBy', 'firstName lastName email')
       .populate({
         path: 'dgQuotationNumber',
         select: 'quotationNumber issueDate validUntil grandTotal status paymentStatus paidAmount remainingAmount items serviceCharges batteryBuyBack subject engineSerialNumber kva hourMeterReading serviceRequestDate qrCodeImage',
@@ -590,7 +584,8 @@ export const exportDGPoFromCustomers = async (
             'Customer Name': po.customer?.name || '',
             'Customer Email': po.customer?.email || '',
             'Customer Phone': po.customer?.phone || '',
-            'Customer Address': po.customerAddress ? `${po.customerAddress.address}, ${po.customerAddress.district}, ${po.customerAddress.state} - ${po.customerAddress.pincode}` : '',
+            'Bill To Address ID': po.billToAddress?.id || '',
+            'Ship To Address ID': po.shipToAddress?.id || '',
             'Order Date': po.orderDate ? new Date(po.orderDate).toLocaleDateString('en-GB') : '',
             'Expected Delivery': po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate).toLocaleDateString('en-GB') : '',
             'Status': po.status || 'Draft',
@@ -626,6 +621,9 @@ export const exportDGPoFromCustomers = async (
             'Payment Status': po.paymentStatus || 'Pending',
             'Payment Method': po.paymentMethod || '',
             'Payment Date': po.paymentDate ? new Date(po.paymentDate).toLocaleDateString('en-GB') : '',
+            'Transport': po.transport || '',
+            'Unloading': po.unloading || '',
+            'Scope of Work': po.scopeOfWork || '',
             'Notes': po.notes || '',
             'DG Enquiry Number': po.dgEnquiry?.enquiryNo || '',
             'DG Enquiry Date': po.dgEnquiry?.enquiryDate ? new Date(po.dgEnquiry.enquiryDate).toLocaleDateString('en-GB') : '',
@@ -642,7 +640,8 @@ export const exportDGPoFromCustomers = async (
           'Customer Name': po.customer?.name || '',
           'Customer Email': po.customer?.email || '',
           'Customer Phone': po.customer?.phone || '',
-          'Customer Address': po.customerAddress ? `${po.customerAddress.address}, ${po.customerAddress.district}, ${po.customerAddress.state} - ${po.customerAddress.pincode}` : '',
+          'Bill To Address ID': po.billToAddress?.id || '',
+          'Ship To Address ID': po.shipToAddress?.id || '',
           'Order Date': po.orderDate ? new Date(po.orderDate).toLocaleDateString('en-GB') : '',
           'Expected Delivery': po.expectedDeliveryDate ? new Date(po.expectedDeliveryDate).toLocaleDateString('en-GB') : '',
           'Status': po.status || 'Draft',
@@ -678,6 +677,9 @@ export const exportDGPoFromCustomers = async (
           'Payment Status': po.paymentStatus || 'Pending',
           'Payment Method': po.paymentMethod || '',
           'Payment Date': po.paymentDate ? new Date(po.paymentDate).toLocaleDateString('en-GB') : '',
+          'Transport': po.transport || '',
+          'Unloading': po.unloading || '',
+          'Scope of Work': po.scopeOfWork || '',
           'Notes': po.notes || '',
           'DG Enquiry Number': po.dgEnquiry?.enquiryNo || '',
           'DG Enquiry Date': po.dgEnquiry?.enquiryDate ? new Date(po.dgEnquiry.enquiryDate).toLocaleDateString('en-GB') : '',

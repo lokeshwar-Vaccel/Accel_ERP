@@ -43,6 +43,18 @@ const buildAddresses = (row: any) => {
     // Get GST number value - support multiple column name variations
     let gstNumber = getColumnValue(row, ['GST DETAILS', 'GST', 'gst', 'gst number', 'gstNumber', 'GST Number', 'gst number', 'GSTIN', 'gstin', 'GST Registration', 'gst registration']);
     
+    // Get phone number value - support multiple column name variations
+    const phone = getColumnValue(row, ['Mobile No', 'Mobile Number', 'Phone', 'mobile no', 'mobile number', 'phone', 'Contact Number', 'contact number', 'Phone Number', 'phone number', 'Phone/Notes', 'phone/notes', 'Contact Info', 'contact info']);
+    
+    // Get contact person name - support multiple column name variations
+    const contactPersonName = getColumnValue(row, ['Contact person Name', 'Contact Person Name', 'contact person name', 'contact person', 'Contact Person', 'contact person']);
+    
+    // Get designation - support multiple column name variations
+    const designation = getColumnValue(row, ['Designation', 'designation', 'Designation/Role', 'designation/role']);
+    
+    // Get email - support multiple column name variations
+    const email = getColumnValue(row, ['Email', 'email', 'E-mail', 'Email Address', 'email address']);
+    
     // Handle pincode field that might contain notes instead of actual pincode
     let notes = '';
     if (pincode && pincode.length > 10) {
@@ -70,7 +82,12 @@ const buildAddresses = (row: any) => {
       district: getColumnValue(row, ['District', 'district', 'City', 'city', 'County', 'county']) || '',
       pincode: pincode || '',
       isPrimary: true,
-      gstNumber: gstNumber || ''
+      gstNumber: gstNumber || '',
+      phone: phone || '',
+      contactPersonName: contactPersonName || '',
+      designation: designation || '',
+      email: email || '',
+      registrationStatus: 'non_registered'
     };
     
     // If we extracted notes from pincode or GST fields, add them to the address
@@ -301,10 +318,6 @@ export const previewCustomerImport = async (
         const customerInput: any = {
           name: getColumnValue(row, ['Name', 'Customer Name', 'name', 'customer name']),
           alice: getColumnValue(row, ['Alice', 'alice', 'Alias', 'alias', 'Short Name', 'short name', 'Customer Alias', 'customer alias']) || '',
-          designation: getColumnValue(row, ['Designation', 'designation']) || '',
-          contactPersonName: getColumnValue(row, ['Contact person Name', 'Contact Person Name', 'contact person name', 'contact person']) || '',
-          email: getColumnValue(row, ['Email', 'email', 'E-mail']) || '',
-          phone: getColumnValue(row, ['Mobile No', 'Mobile Number', 'Phone', 'mobile no', 'mobile number', 'phone', 'Contact Number', 'contact number', 'Phone Number', 'phone number', 'Phone/Notes', 'phone/notes', 'Contact Info', 'contact info']) || '',
           addresses: buildAddresses(row),
           siteAddress: getColumnValue(row, ['Site address', 'Site Address', 'site address', 'Installation Address', 'installation address']) || '',
           numberOfDG: (() => {
@@ -323,22 +336,6 @@ export const previewCustomerImport = async (
           dgDetails: buildDGDetails(row)
         };
 
-        // Ensure phone is always a string (empty if missing)
-        if (!customerInput.phone) {
-          customerInput.phone = '';
-        }
-        
-        // Handle phone field that might contain notes instead of phone numbers
-        if (customerInput.phone && customerInput.phone.length > 20) {
-          // If phone field contains long text (like "Already uploaded by Accounts team"), 
-          // move it to notes and clear phone
-          if (!customerInput.notes) {
-            customerInput.notes = '';
-          }
-          customerInput.notes = (customerInput.notes + ' ' + customerInput.phone).trim();
-          customerInput.phone = '';
-        }
-        
         // GST number handling is done in buildAddresses function
 
         // Skip header row and rows where name is missing (essential field)
@@ -360,7 +357,7 @@ export const previewCustomerImport = async (
         if (existing) {
           preview.existingCustomers.push({
             name: existing.name,
-            phone: existing.phone,
+            phone: existing.addresses && existing.addresses[0] ? existing.addresses[0].phone : undefined,
             gstNumber: existing.addresses && existing.addresses[0] ? existing.addresses[0].gstNumber : undefined,
             alice: (existing as any).alice,
             siteAddress: (existing as any).siteAddress,
@@ -373,10 +370,10 @@ export const previewCustomerImport = async (
         preview.customersToCreate.push({
           name: customerInput.name,
           alice: customerInput.alice,
-          contactPersonName: customerInput.contactPersonName,
-          designation: customerInput.designation,
-          phone: customerInput.phone,
-          email: customerInput.email,
+          contactPersonName: customerInput.addresses && customerInput.addresses[0] ? customerInput.addresses[0].contactPersonName : undefined,
+          designation: customerInput.addresses && customerInput.addresses[0] ? customerInput.addresses[0].designation : undefined,
+          phone: customerInput.addresses && customerInput.addresses[0] ? customerInput.addresses[0].phone : undefined,
+          email: customerInput.addresses && customerInput.addresses[0] ? customerInput.addresses[0].email : undefined,
           siteAddress: customerInput.siteAddress,
           numberOfDG: customerInput.numberOfDG,
           gstNumber: customerInput.addresses && customerInput.addresses[0] ? customerInput.addresses[0].gstNumber : undefined,
@@ -453,11 +450,6 @@ export const importCustomers = async (
         const customerInput: any = {
           name: getColumnValue(row, ['Name', 'Customer Name', 'name', 'customer name']),
           alice: getColumnValue(row, ['Alice', 'alice', 'Alias', 'alias', 'Short Name', 'short name', 'Customer Alias', 'customer alias']) || '',
-          designation: getColumnValue(row, ['Designation', 'designation', 'Designation/Role', 'designation/role']) || '',
-          contactPersonName: getColumnValue(row, ['Contact person Name', 'Contact Person Name', 'contact person name', 'contact person', 'Contact Person', 'contact person']) || '',
-          // GST number is handled in addresses, not at customer level
-          email: getColumnValue(row, ['Email', 'email', 'E-mail', 'Email Address', 'email address']) || '', // Store as empty string if not provided
-          phone: getColumnValue(row, ['Mobile No', 'Mobile Number', 'Phone', 'mobile no', 'mobile number', 'phone', 'Contact Number', 'contact number', 'Phone Number', 'phone number', 'Phone/Notes', 'phone/notes', 'Contact Info', 'contact info']) || '',
           addresses: buildAddresses(row),
           siteAddress: getColumnValue(row, ['Site address', 'Site Address', 'site address', 'Installation Address', 'installation address', 'Site Location', 'site location']) || '',
           numberOfDG: (() => {
@@ -476,33 +468,7 @@ export const importCustomers = async (
           dgDetails: buildDGDetails(row)
         };
 
-        // Email is now stored as empty string, no need to delete
-
-        // Ensure phone is always a string (empty if missing)
-        if (!customerInput.phone) {
-          customerInput.phone = '';
-        }
-        
-        // Handle phone field that might contain notes instead of phone numbers
-        if (customerInput.phone && customerInput.phone.length > 20) {
-          // If phone field contains long text (like "Already uploaded by Accounts team"), 
-          // move it to notes and clear phone
-          if (!customerInput.notes) {
-            customerInput.notes = '';
-          }
-          customerInput.notes = (customerInput.notes + ' ' + customerInput.phone).trim();
-          customerInput.phone = '';
-        }
-        
-        // Handle GST field that might contain notes instead of actual GST number
-        if (customerInput.gstNumber && customerInput.gstNumber.length > 20) {
-          // If GST field contains long text, it's likely notes, so add to notes and clear GST
-          if (!customerInput.notes) {
-            customerInput.notes = '';
-          }
-          customerInput.notes = (customerInput.notes + ' ' + customerInput.gstNumber).trim();
-          customerInput.gstNumber = '';
-        }
+        // Email and phone are now handled in buildAddresses function
 
         // Skip header row and rows where name is missing (essential field)
         if (!customerInput.name || customerInput.name.toLowerCase() === 'name') {
@@ -543,7 +509,7 @@ export const importCustomers = async (
           results.successful++;
           results.createdCustomers.push({
             name: created.name,
-            phone: created.phone,
+            phone: created.addresses && created.addresses[0] ? created.addresses[0].phone : undefined,
             gstNumber: created.addresses && created.addresses[0] ? created.addresses[0].gstNumber : undefined,
             id: created._id,
             ...(customerId ? { customerId: created.customerId } : {})

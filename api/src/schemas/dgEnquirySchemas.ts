@@ -57,10 +57,17 @@ export const createDGEnquirySchema = Joi.object({
     'date.base': 'Enquiry date must be a valid date',
     'any.required': 'Enquiry date is required'
   }),
-  enquiryStatus: Joi.string().valid('Open', 'In Progress', 'Closed', 'Cancelled', 'Qualified').default('Open'),
-  enquiryType: Joi.string().valid('New', 'Follow Up', 'Renewal').default('New'),
-  enquiryStage: Joi.string().valid('Initial', 'Quotation', 'Negotiation', 'Order').default('Initial'),
-  source: Joi.string().valid('Website', 'Referral', 'Cold Call', 'Social Media', 'Other').default('Website'),
+  enquiryStatus: Joi.string().valid('open', 'closed', 'decline').default('open'),
+  enquiryType: Joi.string().valid('hot', 'warm', 'cold').default('hot'),
+  enquiryStage: Joi.string().valid('prospecting', 'closed_won', 'closed_dropped').default('prospecting'),
+  source: Joi.string().required().trim().messages({
+    'string.empty': 'Source is required',
+    'any.required': 'Source is required'
+  }),
+  eoPoDate: Joi.date().optional(),
+  plannedFollowUpDate: Joi.date().optional(),
+  sourceFrom: Joi.string().optional().trim().allow(''),
+  numberOfFollowUps: Joi.number().integer().min(0).default(0),
   
   // Customer Information
   customerType: Joi.string().valid('Retail', 'Corporate').default('Retail'),
@@ -100,23 +107,23 @@ export const createDGEnquirySchema = Joi.object({
     'number.positive': 'KVA must be positive',
     'any.required': 'KVA is required'
   }),
-  phase: Joi.string().valid('Single Phase', 'Three Phase').default('Three Phase'),
+  phase: Joi.string().valid('single_phase', 'three_phase').default('three_phase'),
   quantity: Joi.number().integer().positive().required().messages({
     'number.base': 'Quantity must be a number',
     'number.integer': 'Quantity must be a whole number',
     'number.positive': 'Quantity must be positive',
     'any.required': 'Quantity is required'
   }),
-  segment: Joi.string().valid('Manufacturing', 'IT/Office', 'Healthcare', 'Education', 'Retail', 'Other').optional().allow(''),
+  segment: Joi.string().valid('manufacturing', 'it/office', 'healthcare', 'education', 'retail', 'other').optional().allow(''),
   subSegment: Joi.string().optional().allow(''),
-  dgOwnership: Joi.string().valid('NOT_OWNED', 'OWNED', 'RENTED').default('NOT_OWNED'),
+  dgOwnership: Joi.string().valid('first_time_buyer', 'existing_powerol_dg_set_owner', 'existing_other_dg_set_owner').default('first_time_buyer'),
   financeRequired: Joi.boolean().default(false),
   financeCompany: Joi.string().optional().allow(''),
   
   // Employee Information
   assignedEmployeeCode: Joi.string().optional().allow(''),
   assignedEmployeeName: Joi.string().optional().allow(''),
-  employeeStatus: Joi.string().valid('Active', 'Inactive', 'On Leave').optional().allow(''),
+  employeeStatus: Joi.string().valid('active', 'inactive', 'on leave').default('active'),
   referenceEmployeeName: Joi.string().optional().allow(''),
   referenceEmployeeMobileNumber: Joi.string().optional().allow(''),
   referredBy: Joi.string().optional().allow(''),
@@ -136,10 +143,6 @@ export const createDGEnquirySchema = Joi.object({
   dealer: Joi.string().optional().allow(''),
   branch: Joi.string().optional().allow(''),
   location: Joi.string().optional().allow(''),
-  eoPoDate: Joi.date().optional(),
-  plannedFollowUpDate: Joi.date().optional().allow(null),
-  sourceFrom: Joi.string().optional().allow(''),
-  numberOfFollowUps: Joi.number().integer().min(0).default(0),
   lastFollowUpDate: Joi.date().optional(),
   enquiryClosureDate: Joi.date().optional(),
   customer: Joi.string().optional() // ObjectId reference
@@ -150,10 +153,14 @@ export const updateDGEnquirySchema = Joi.object({
   // Basic Information
   enquiryNo: Joi.string().optional().trim(),
   enquiryDate: Joi.date().optional(),
-  enquiryStatus: Joi.string().valid('Open', 'In Progress', 'Closed', 'Cancelled', 'Qualified').optional(),
-  enquiryType: Joi.string().valid('New', 'Follow Up', 'Renewal').optional(),
-  enquiryStage: Joi.string().valid('Initial', 'Quotation', 'Negotiation', 'Order').optional(),
-  source: Joi.string().valid('Website', 'Referral', 'Cold Call', 'Social Media', 'Other').optional(),
+  enquiryStatus: Joi.string().valid('open', 'closed', 'decline').optional(),
+  enquiryType: Joi.string().valid('hot', 'warm', 'cold').optional(),
+  enquiryStage: Joi.string().valid('prospecting', 'closed_won', 'closed_dropped').optional(),
+  source: Joi.string().optional().trim(),
+  eoPoDate: Joi.date().optional(),
+  plannedFollowUpDate: Joi.date().optional(),
+  sourceFrom: Joi.string().optional().trim().allow(''),
+  numberOfFollowUps: Joi.number().integer().min(0).optional(),
   
   // Customer Information
   customerType: Joi.string().valid('Retail', 'Corporate').optional(),
@@ -179,22 +186,22 @@ export const updateDGEnquirySchema = Joi.object({
     'number.integer': 'KVA must be a whole number',
     'number.positive': 'KVA must be positive'
   }),
-  phase: Joi.string().valid('Single Phase', 'Three Phase').optional(),
+  phase: Joi.string().valid('single_phase', 'three_phase').optional(),
   quantity: Joi.number().integer().positive().optional().messages({
     'number.base': 'Quantity must be a number',
     'number.integer': 'Quantity must be a whole number',
     'number.positive': 'Quantity must be positive'
   }),
-  segment: Joi.string().valid('Manufacturing', 'IT/Office', 'Healthcare', 'Education', 'Retail', 'Other').optional().allow(''),
+  segment: Joi.string().valid('manufacturing', 'it/office', 'healthcare', 'education', 'retail', 'other').optional().allow(''),
   subSegment: Joi.string().optional().allow(''),
-  dgOwnership: Joi.string().valid('NOT_OWNED', 'OWNED', 'RENTED').optional(),
+  dgOwnership: Joi.string().valid('first_time_buyer', 'existing_powerol_dg_set_owner', 'existing_other_dg_set_owner').optional(),
   financeRequired: Joi.boolean().optional(),
   financeCompany: Joi.string().optional().allow(''),
   
   // Employee Information
   assignedEmployeeCode: Joi.string().optional().allow(''),
   assignedEmployeeName: Joi.string().optional().allow(''),
-  employeeStatus: Joi.string().valid('Active', 'Inactive', 'On Leave').optional().allow(''),
+  employeeStatus: Joi.string().valid('active', 'inactive', 'on leave').default('active'),
   referenceEmployeeName: Joi.string().optional().allow(''),
   referenceEmployeeMobileNumber: Joi.string().optional().allow(''),
   referredBy: Joi.string().optional().allow(''),
@@ -214,10 +221,6 @@ export const updateDGEnquirySchema = Joi.object({
   dealer: Joi.string().optional().allow(''),
   branch: Joi.string().optional().allow(''),
   location: Joi.string().optional().allow(''),
-  eoPoDate: Joi.date().optional(),
-  plannedFollowUpDate: Joi.date().optional().allow(null),
-  sourceFrom: Joi.string().optional().allow(''),
-  numberOfFollowUps: Joi.number().integer().min(0).optional(),
   lastFollowUpDate: Joi.date().optional(),
   enquiryClosureDate: Joi.date().optional(),
   customer: Joi.string().optional() // ObjectId reference
@@ -228,7 +231,7 @@ export const getDGEnquiriesQuerySchema = Joi.object({
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(10),
   search: Joi.string().optional().allow(''),
-  status: Joi.string().valid('Open', 'In Progress', 'Closed', 'Cancelled').optional(),
+  status: Joi.string().valid('open', 'closed', 'decline').optional(),
   customerType: Joi.string().valid('Retail', 'Corporate').optional(),
   segment: Joi.string().optional()
 }); 

@@ -71,11 +71,21 @@ interface DGPoFromCustomer {
     phone?: string;
   };
   customerEmail: string;
-  customerAddress: {
+  billToAddress: {
+    id: number;
     address: string;
     state: string;
     district: string;
     pincode: string;
+    gstNumber: string;
+  };
+  shipToAddress: {
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    gstNumber: string;
   };
   dgQuotationNumber?: {
     _id: string;
@@ -83,6 +93,15 @@ interface DGPoFromCustomer {
     issueDate: string;
     grandTotal: number;
     status: string;
+  };
+  dgEnquiry?: {
+    _id: string;
+    enquiryNo: string;
+    enquiryDate: string;
+    referredBy: string;
+    panNumber: string;
+    designation: string;
+    contactPersonName: string;
   };
   items: Array<{
     product: {
@@ -95,21 +114,34 @@ interface DGPoFromCustomer {
     unitPrice: number;
     totalPrice: number;
     taxRate: number;
+    kva: string;
+    phase: string;
+    annexureRating: string;
+    dgModel: string;
+    numberOfCylinders: number;
+    subject: string;
+    isActive: boolean;
   }>;
+  subtotal: number;
+  totalDiscount: number;
+  taxRate: number;
+  taxAmount: number;
   totalAmount: number;
   paidAmount: number;
   remainingAmount: number;
   status: 'draft' | 'sent_to_customer' | 'customer_approved' | 'in_production' | 'ready_for_delivery' | 'delivered' | 'cancelled';
-  paymentStatus: 'pending' | 'partial' | 'paid' | 'failed';
+  paymentStatus: 'pending' | 'partial' | 'paid' | 'gst_pending';
+  paymentMethod?: string;
+  paymentDate?: string;
   orderDate: string;
   expectedDeliveryDate?: string;
   actualDeliveryDate?: string;
   department: 'retail' | 'corporate' | 'industrial_marine' | 'others';
   priority: 'low' | 'medium' | 'high' | 'urgent';
   notes?: string;
-  kva?: string;
-  phase?: string;
-  fuelType?: string;
+  transport: string;
+  unloading: string;
+  scopeOfWork: string;
   createdBy: {
     _id: string;
     firstName: string;
@@ -729,34 +761,82 @@ const DGPurchaseOrderManagement: React.FC = () => {
                     </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full divide-y divide-gray-200 border border-gray-300">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    PO Number
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Enquiry No
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Quotation Number
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Quote number
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Customer
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Referred by
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Order Date
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Customer name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Contact person name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Priority
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Mob number
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total Amount
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Designation
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Payment Status
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Mail id
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    PO Reference No
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    PO date
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    DG Rating
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Phase
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Basic price
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    GST
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Total Value
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    PAN No
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    GST No
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Payment terms
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Billing address
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Delivery address
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Transport
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Unloading
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Delivery time
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
+                    Scope of work
+                  </th>
+                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border border-gray-300">
                     Actions
                   </th>
                 </tr>
@@ -764,84 +844,110 @@ const DGPurchaseOrderManagement: React.FC = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {dgPoFromCustomers.map((po) => (
                   <tr key={po._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{po.poNumber}</div>
-                      <div className="text-sm text-gray-500">{po.department}</div>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs font-medium text-gray-900">{po.dgEnquiry?.enquiryNo || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {po.dgQuotationNumber?.quotationNumber ? (
-                  <div>
-                          <div className="text-sm font-medium text-gray-900">{po.dgQuotationNumber?.quotationNumber}</div>
-                          <div className="text-sm text-gray-500">
-                            {formatDate(po.dgQuotationNumber.issueDate)} • ₹{po.dgQuotationNumber.grandTotal?.toLocaleString()}
-                  </div>
-                  </div>
-                      ) : (
-                        <div className="text-sm text-gray-400 italic">No quotation</div>
-                      )}
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs font-medium text-gray-900">{po.dgQuotationNumber?.quotationNumber || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">{po.customer.name}</div>
-                      <div className="text-sm text-gray-500">{po.customer.email}</div>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.dgEnquiry?.referredBy || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{formatDate(po.orderDate)}</div>
-                      {po.expectedDeliveryDate && (
-                        <div className="text-sm text-gray-500">
-                          Expected: {formatDate(po.expectedDeliveryDate)}
-                  </div>
-                      )}
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs font-medium text-gray-900">{po.customer?.name || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge
-                        status={po.status}
-                        color={getStatusColor(po.status)}
-                      />
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.dgEnquiry?.contactPersonName || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge
-                        status={po.priority}
-                        color={getPriorityColor(po.priority)}
-                      />
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.customer?.phone || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {formatCurrency(po.totalAmount)}
-                  </div>
-                      <div className="text-sm text-gray-500">
-                        Paid: {formatCurrency(po.paidAmount)}
-                  </div>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.dgEnquiry?.designation || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge
-                        status={po.paymentStatus}
-                        color={getPaymentStatusColor(po.paymentStatus)}
-                      />
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.customer?.email || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <div className="flex space-x-2">
-                                  <button
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs font-medium text-gray-900">{po.poNumber}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{formatDate(po.orderDate)}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.items?.[0]?.kva || '-'}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.items?.[0]?.phase || '-'}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{formatCurrency(po.subtotal || 0)}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.taxRate || 0}%</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs font-medium text-gray-900">{formatCurrency(po.totalAmount)}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.dgEnquiry?.panNumber || '-'}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.billToAddress?.gstNumber || '-'}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.notes || '-'}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900 max-w-32 truncate" title={po.billToAddress?.address}>
+                        {po.billToAddress?.address || '-'}
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900 max-w-32 truncate" title={po.shipToAddress?.address}>
+                        {po.shipToAddress?.address || '-'}
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.transport || '-'}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">{po.unloading || '-'}</div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900">
+                        {po.expectedDeliveryDate ? formatDate(po.expectedDeliveryDate) : '-'}
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="text-xs text-gray-900 max-w-32 truncate" title={po.scopeOfWork}>
+                        {po.scopeOfWork || '-'}
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 text-center text-xs border border-gray-300">
+                      <div className="flex space-x-1 justify-center">
+                        <button
                           onClick={() => handleViewPO(po._id)}
                           className="text-blue-600 hover:text-blue-900"
                           title="View"
                         >
-                          <Eye className="w-4 h-4" />
-                                  </button>
-                <button
+                          <Eye className="w-3 h-3" />
+                        </button>
+                        <button
                           onClick={() => handleEditPO(po._id)}
                           className="text-indigo-600 hover:text-indigo-900"
                           title="Edit"
                         >
-                          <Edit className="w-4 h-4" />
-                </button>
-                <button
+                          <Edit className="w-3 h-3" />
+                        </button>
+                        <button
                           onClick={() => handleDeletePO(po._id)}
                           className="text-red-600 hover:text-red-900"
                           title="Delete"
                         >
-                          <Trash2 className="w-4 h-4" />
-                </button>
-                              </div>
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

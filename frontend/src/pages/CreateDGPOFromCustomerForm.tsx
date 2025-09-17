@@ -44,14 +44,24 @@ interface POFromCustomerItem {
   hsnNumber?: string;
 }
 
-interface CustomerAddress {
+interface BillToAddress {
   id: number;
   address: string;
   state: string;
   district: string;
   pincode: string;
-  gstNumber?: string;
-  isPrimary?: boolean;
+  addressId: number;
+  gstNumber: string;
+}
+
+interface ShipToAddress {
+  id: number;
+  address: string;
+  state: string;
+  district: string;
+  pincode: string;
+  addressId: number;
+  gstNumber: string;
 }
 
 interface Customer {
@@ -59,7 +69,7 @@ interface Customer {
   name: string;
   email?: string;
   phone?: string;
-  addresses?: CustomerAddress[];
+  addresses?: any[];
   type?: string;
 }
 
@@ -87,12 +97,44 @@ interface Quotation {
   status: string;
 }
 
+interface Enquiry {
+  _id: string;
+  enquiryNo: string;
+  customerName: string;
+  corporateName?: string;
+  phoneNumber: string;
+  email: string;
+  addresses?: Array<{
+    id: number;
+    address: string;
+    state: string;
+    district: string;
+    pincode: string;
+    isPrimary: boolean;
+    gstNumber?: string;
+    notes?: string;
+  }>;
+}
+
+interface Address {
+  id: number;
+  address: string;
+  state: string;
+  district: string;
+  pincode: string;
+  isPrimary: boolean;
+  gstNumber?: string;
+  notes?: string;
+}
+
 interface POFromCustomerFormData {
   poNumber?: string;
   customer: string;
   customerEmail: string;
-  customerAddress?: CustomerAddress;
+  billToAddress?: BillToAddress;
+  shipToAddress?: ShipToAddress;
   quotationNumber?: string;
+  dgEnquiry?: string;
   poDate: string;
   status: 'draft' | 'sent_to_customer' | 'customer_approved' | 'in_production' | 'ready_for_delivery' | 'delivered' | 'cancelled';
   expectedDeliveryDate: string;
@@ -101,6 +143,9 @@ interface POFromCustomerFormData {
   notes?: string;
   items: POFromCustomerItem[];
   poPdf?: File | string | null;
+  transport: string;
+  unloading: string;
+  scopeOfWork: string;
   // GST fields at PO level
   subtotal: number;
   totalDiscount: number;
@@ -139,12 +184,23 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
     poNumber: '',
     customer: '',
     customerEmail: '',
-    customerAddress: {
+    billToAddress: {
       id: 0,
       address: '',
       state: '',
       district: '',
-      pincode: ''
+      pincode: '',
+      addressId: 0,
+      gstNumber: ''
+    },
+    shipToAddress: {
+      id: 0,
+      address: '',
+      state: '',
+      district: '',
+      pincode: '',
+      addressId: 0,
+      gstNumber: ''
     },
     quotationNumber: '',
     poDate: new Date().toISOString().split('T')[0], // Current date
@@ -172,6 +228,9 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
       hsnNumber: ''
     }],
     poPdf: null,
+    transport: '',
+    unloading: '',
+    scopeOfWork: '',
     // GST fields at PO level
     subtotal: 0,
     totalDiscount: 0,
@@ -185,7 +244,9 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
-  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [enquiries, setEnquiries] = useState<Enquiry[]>([]);
+  const [billToAddresses, setBillToAddresses] = useState<Address[]>([]);
+  const [shipToAddresses, setShipToAddresses] = useState<Address[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingPO, setEditingPO] = useState<any>(null);
   const [dgProducts, setDgProducts] = useState<any[]>([]);
@@ -196,26 +257,34 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
 
   // Dropdown states
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
-  const [showAddressDropdown, setShowAddressDropdown] = useState(false);
+  const [showBillToAddressDropdown, setShowBillToAddressDropdown] = useState(false);
+  const [showShipToAddressDropdown, setShowShipToAddressDropdown] = useState(false);
   const [showQuotationDropdown, setShowQuotationDropdown] = useState(false);
+  const [showEnquiryDropdown, setShowEnquiryDropdown] = useState(false);
   const [showProductDropdowns, setShowProductDropdowns] = useState<Record<number, boolean>>({});
 
   // Search states
   const [customerSearchTerm, setCustomerSearchTerm] = useState('');
-  const [addressSearchTerm, setAddressSearchTerm] = useState('');
   const [quotationSearchTerm, setQuotationSearchTerm] = useState('');
+  const [enquirySearchTerm, setEnquirySearchTerm] = useState('');
+  const [billToAddressSearchTerm, setBillToAddressSearchTerm] = useState('');
+  const [shipToAddressSearchTerm, setShipToAddressSearchTerm] = useState('');
   const [productSearchTerms, setProductSearchTerms] = useState<Record<number, string>>({});
 
   // Keyboard navigation states
   const [highlightedCustomerIndex, setHighlightedCustomerIndex] = useState(-1);
-  const [highlightedAddressIndex, setHighlightedAddressIndex] = useState(-1);
   const [highlightedQuotationIndex, setHighlightedQuotationIndex] = useState(-1);
+  const [highlightedEnquiryIndex, setHighlightedEnquiryIndex] = useState(-1);
+  const [highlightedBillToAddressIndex, setHighlightedBillToAddressIndex] = useState(-1);
+  const [highlightedShipToAddressIndex, setHighlightedShipToAddressIndex] = useState(-1);
   const [highlightedProductIndex, setHighlightedProductIndex] = useState<Record<number, number>>({});
 
   // Refs for keyboard navigation
   const customerInputRef = useRef<HTMLInputElement>(null);
-  const addressInputRef = useRef<HTMLInputElement>(null);
   const quotationInputRef = useRef<HTMLInputElement>(null);
+  const enquiryInputRef = useRef<HTMLInputElement>(null);
+  const billToAddressInputRef = useRef<HTMLInputElement>(null);
+  const shipToAddressInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-focus on customer field when component mounts
   useEffect(() => {
@@ -233,8 +302,10 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
       const target = event.target as Element;
       if (!target.closest('.dropdown-container')) {
         setShowCustomerDropdown(false);
-        setShowAddressDropdown(false);
+        setShowBillToAddressDropdown(false);
+        setShowShipToAddressDropdown(false);
         setShowQuotationDropdown(false);
+        setShowEnquiryDropdown(false);
         setShowProductDropdowns({});
       }
     };
@@ -271,6 +342,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
         fetchCustomers(),
         fetchProducts(),
         fetchQuotations(),
+        fetchEnquiries(),
         fetchDGProducts()
       ]);
     } catch (error) {
@@ -368,6 +440,29 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
     }
   };
 
+  const fetchEnquiries = async () => {
+    try {
+      const response = await apiClient.dgSales.enquiries.getAll({
+        limit: 100,
+        page: 1
+      });
+
+      let enquiriesData: Enquiry[] = [];
+      if (response && response.data) {
+        if (Array.isArray(response.data)) {
+          enquiriesData = (response.data as any[]).filter((enquiry: any) => enquiry && enquiry._id) as Enquiry[];
+        } else if (response.success && response.data && Array.isArray(response.data)) {
+          enquiriesData = (response.data as any[]).filter((enquiry: any) => enquiry && enquiry._id) as Enquiry[];
+        }
+      }
+      setEnquiries(enquiriesData);
+    } catch (error) {
+      console.error('Error fetching DG enquiries:', error);
+      toast.error('Failed to load DG enquiries');
+      setEnquiries([]);
+    }
+  };
+
   const fetchDGProducts = async () => {
     try {
       const response = await apiClient.dgProducts.getAll({ limit: 100 });
@@ -417,10 +512,28 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
           poNumber: po.poNumber || '',
           customer: typeof po.customer === 'string' ? po.customer : (po.customer?._id || po.customer || ''),
           customerEmail: po.customerEmail,
-          customerAddress: po.customerAddress,
+          billToAddress: po.billToAddress || { 
+            id: 0, 
+            address: '', 
+            state: '', 
+            district: '', 
+            pincode: '', 
+            addressId: 0, 
+            gstNumber: '' 
+          },
+          shipToAddress: po.shipToAddress || { 
+            id: 0, 
+            address: '', 
+            state: '', 
+            district: '', 
+            pincode: '', 
+            addressId: 0, 
+            gstNumber: '' 
+          },
       quotationNumber: typeof (po.dgQuotationNumber || po.quotationNumber) === 'string' 
         ? (po.dgQuotationNumber || po.quotationNumber) 
         : ((po.dgQuotationNumber || po.quotationNumber)?._id || ''),
+          dgEnquiry: typeof po.dgEnquiry === 'string' ? po.dgEnquiry : (po.dgEnquiry?._id || ''),
           poDate: po.orderDate ? po.orderDate.split('T')[0] : new Date().toISOString().split('T')[0],
           status: po.status || 'draft',
           expectedDeliveryDate: po.expectedDeliveryDate ? po.expectedDeliveryDate.split('T')[0] : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
@@ -446,6 +559,9 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
             hsnNumber: item.hsnNumber || ''
           })),
           poPdf: po.poPdf || null,
+          transport: po.transport || '',
+          unloading: po.unloading || '',
+          scopeOfWork: po.scopeOfWork || '',
           // GST fields at PO level
           subtotal: po.subtotal || 0,
           totalDiscount: po.totalDiscount || 0,
@@ -463,12 +579,26 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
 
         // Set addresses for dropdown
         if (typeof po.customer === 'object' && po.customer.addresses) {
-          setAddresses(po.customer.addresses);
-        }
-
-        // Set address search term if we have customerAddress
-        if (po.customerAddress) {
-          setAddressSearchTerm(`${po.customerAddress.address}, ${po.customerAddress.district}, ${po.customerAddress.state} - ${po.customerAddress.pincode}`);
+          setBillToAddresses(po.customer.addresses.map((addr: any) => ({ 
+            id: addr.id,
+            address: addr.address || '',
+            state: addr.state || '',
+            district: addr.district || '',
+            pincode: addr.pincode || '',
+            isPrimary: addr.isPrimary || false,
+            gstNumber: addr.gstNumber || '',
+            notes: addr.notes || ''
+          })));
+          setShipToAddresses(po.customer.addresses.map((addr: any) => ({ 
+            id: addr.id,
+            address: addr.address || '',
+            state: addr.state || '',
+            district: addr.district || '',
+            pincode: addr.pincode || '',
+            isPrimary: addr.isPrimary || false,
+            gstNumber: addr.gstNumber || '',
+            notes: addr.notes || ''
+          })));
         }
 
         // Set quotation search term if we have quotationNumber
@@ -484,6 +614,19 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
         }
       }
     }
+
+    // Set enquiry search term if we have dgEnquiry
+    if (po.dgEnquiry) {
+      if (typeof po.dgEnquiry === 'object') {
+        setEnquirySearchTerm(po.dgEnquiry.enquiryNo);
+      } else if (typeof po.dgEnquiry === 'string') {
+        // If enquiry is a string ID, we need to find the enquiry object
+        const enquiryObj = enquiries.find(e => e._id === po.dgEnquiry);
+        if (enquiryObj) {
+          setEnquirySearchTerm(enquiryObj.enquiryNo);
+        }
+      }
+    }
   };
 
   // Form handlers
@@ -493,8 +636,26 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
       ...prev,
       customer: customerId,
       customerEmail: customer?.email || '',
-      customerAddress: undefined,
+      billToAddress: { 
+        id: 0, 
+        address: '', 
+        state: '', 
+        district: '', 
+        pincode: '', 
+        addressId: 0, 
+        gstNumber: '' 
+      },
+      shipToAddress: { 
+        id: 0, 
+        address: '', 
+        state: '', 
+        district: '', 
+        pincode: '', 
+        addressId: 0, 
+        gstNumber: '' 
+      },
       quotationNumber: '', // Clear quotation selection when customer changes
+      dgEnquiry: '', // Clear enquiry selection when customer changes
       items: [{
         product: '',
         description: '',
@@ -528,29 +689,207 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
     setShowQuotationDropdown(false);
     setHighlightedQuotationIndex(-1);
 
+    // Clear enquiry search term and close dropdown
+    setEnquirySearchTerm('');
+    setShowEnquiryDropdown(false);
+    setHighlightedEnquiryIndex(-1);
+
     // Load addresses for the selected customer
     if (customer && customer.addresses && customer.addresses.length > 0) {
-      setAddresses(customer.addresses);
+      setBillToAddresses(customer.addresses.map((addr: any) => ({ 
+        id: addr.id,
+        address: addr.address || '',
+        state: addr.state || '',
+        district: addr.district || '',
+        pincode: addr.pincode || '',
+        isPrimary: addr.isPrimary || false,
+        gstNumber: addr.gstNumber || '',
+        notes: addr.notes || ''
+      })));
+      setShipToAddresses(customer.addresses.map((addr: any) => ({ 
+        id: addr.id,
+        address: addr.address || '',
+        state: addr.state || '',
+        district: addr.district || '',
+        pincode: addr.pincode || '',
+        isPrimary: addr.isPrimary || false,
+        gstNumber: addr.gstNumber || '',
+        notes: addr.notes || ''
+      })));
     } else {
-      setAddresses([]);
+      setBillToAddresses([]);
+      setShipToAddresses([]);
     }
-
-    // Auto-focus on address field after customer selection
-    setTimeout(() => {
-      addressInputRef.current?.focus();
-      setShowAddressDropdown(true);
-    }, 50);
   };
 
-  const handleAddressSelect = (addressId: number) => {
-    const address = addresses.find(a => a.id === addressId);
+
+  const handleEnquirySelect = async (enquiryId: string) => {
+    const enquiry = enquiries.find(e => e._id === enquiryId);
     setFormData(prev => ({
       ...prev,
-      customerAddress: address
+      dgEnquiry: enquiryId
     }));
-    setShowAddressDropdown(false);
-    setAddressSearchTerm(address ? `${address.address}, ${address.district}, ${address.state} - ${address.pincode}` : ''); // Set the address as search term
-    setHighlightedAddressIndex(-1);
+    setShowEnquiryDropdown(false);
+    setEnquirySearchTerm(enquiry?.enquiryNo || ''); // Set the enquiry number as search term
+    setHighlightedEnquiryIndex(-1);
+
+    // Fetch full enquiry details to populate form
+    try {
+      const response = await apiClient.dgSales.enquiries.getById(enquiryId);
+      console.log('Enquiry response:', response); // Debug log
+      
+      if (response && response.success) {
+        const enquiryData = response.data;
+        console.log('Full enquiry data:', enquiryData); // Debug log
+        
+        // Update customer if enquiry has customer data
+        if (enquiryData.customer) {
+          const customerId = typeof enquiryData.customer === 'string' 
+            ? enquiryData.customer 
+            : enquiryData.customer._id;
+          
+          // Find customer in our customers list
+          const customer = customers.find(c => c._id === customerId);
+          if (customer) {
+            setFormData(prev => ({
+              ...prev,
+              customer: customerId,
+              customerEmail: enquiryData.email || customer.email || ''
+            }));
+            setCustomerSearchTerm(customer.name);
+            
+            // Load customer addresses
+            if (customer.addresses && customer.addresses.length > 0) {
+              setBillToAddresses(customer.addresses.map((addr: any) => ({ 
+                id: addr.id,
+                address: addr.address || '',
+                state: addr.state || '',
+                district: addr.district || '',
+                pincode: addr.pincode || '',
+                isPrimary: addr.isPrimary || false,
+                gstNumber: addr.gstNumber || '',
+                notes: addr.notes || ''
+              })));
+              setShipToAddresses(customer.addresses.map((addr: any) => ({ 
+                id: addr.id,
+                address: addr.address || '',
+                state: addr.state || '',
+                district: addr.district || '',
+                pincode: addr.pincode || '',
+                isPrimary: addr.isPrimary || false,
+                gstNumber: addr.gstNumber || '',
+                notes: addr.notes || ''
+              })));
+            }
+          }
+        }
+        
+        // Set addresses from enquiry data if available
+        if (enquiryData.addresses && enquiryData.addresses.length > 0) {
+          const enquiryAddresses = enquiryData.addresses.map((addr: any) => ({ 
+            id: addr.id,
+            address: addr.address || '',
+            state: addr.state || '',
+            district: addr.district || '',
+            pincode: addr.pincode || '',
+            isPrimary: addr.isPrimary || false,
+            gstNumber: addr.gstNumber || '',
+            notes: addr.notes || ''
+          }));
+          
+          setBillToAddresses(enquiryAddresses);
+          setShipToAddresses(enquiryAddresses);
+          
+          // Auto-select first address as both bill to and ship to if available
+          if (enquiryAddresses.length > 0) {
+            const firstAddress = enquiryAddresses[0];
+            setFormData(prev => ({
+              ...prev,
+              billToAddress: {
+                id: firstAddress.id,
+                address: firstAddress.address,
+                state: firstAddress.state,
+                district: firstAddress.district,
+                pincode: firstAddress.pincode,
+                addressId: firstAddress.id,
+                gstNumber: firstAddress.gstNumber || ''
+              },
+              shipToAddress: {
+                id: firstAddress.id,
+                address: firstAddress.address,
+                state: firstAddress.state,
+                district: firstAddress.district,
+                pincode: firstAddress.pincode,
+                addressId: firstAddress.id,
+                gstNumber: firstAddress.gstNumber || ''
+              }
+            }));
+            setBillToAddressSearchTerm(`${firstAddress.address}, ${firstAddress.district}, ${firstAddress.state} - ${firstAddress.pincode}`);
+            setShipToAddressSearchTerm(`${firstAddress.address}, ${firstAddress.district}, ${firstAddress.state} - ${firstAddress.pincode}`);
+          }
+        }
+        
+        // Populate other enquiry fields
+        setFormData(prev => ({
+          ...prev,
+          customerEmail: enquiryData.email || prev.customerEmail,
+          transport: enquiryData.transport || prev.transport,
+          unloading: enquiryData.unloading || prev.unloading,
+          scopeOfWork: enquiryData.scopeOfWork || prev.scopeOfWork,
+          notes: enquiryData.remarks || enquiryData.notes || prev.notes
+        }));
+        
+        toast.success('Enquiry data populated successfully!');
+      } else {
+        console.error('Failed to fetch enquiry details:', response);
+        toast.error('Failed to load enquiry details');
+      }
+    } catch (error) {
+      console.error('Error fetching enquiry details:', error);
+      toast.error('Failed to load enquiry details');
+    }
+  };
+
+  const handleBillToAddressSelect = (addressId: number) => {
+    const address = billToAddresses.find(addr => addr.id === addressId);
+    if (address) {
+    setFormData(prev => ({
+      ...prev,
+        billToAddress: {
+          id: address.id,
+          address: address.address,
+          state: address.state,
+          district: address.district,
+          pincode: address.pincode,
+          addressId: address.id,
+          gstNumber: address.gstNumber || ''
+        }
+      }));
+      setShowBillToAddressDropdown(false);
+      setBillToAddressSearchTerm(`${address.address}, ${address.district}, ${address.state} - ${address.pincode}`);
+    }
+    setHighlightedBillToAddressIndex(-1);
+  };
+
+  const handleShipToAddressSelect = (addressId: number) => {
+    const address = shipToAddresses.find(addr => addr.id === addressId);
+    if (address) {
+      setFormData(prev => ({
+        ...prev,
+        shipToAddress: {
+          id: address.id,
+          address: address.address,
+          state: address.state,
+          district: address.district,
+          pincode: address.pincode,
+          addressId: address.id,
+          gstNumber: address.gstNumber || ''
+        }
+      }));
+      setShowShipToAddressDropdown(false);
+      setShipToAddressSearchTerm(`${address.address}, ${address.district}, ${address.state} - ${address.pincode}`);
+    }
+    setHighlightedShipToAddressIndex(-1);
   };
 
   const handleQuotationSelect = async (quotationId: string) => {
@@ -834,6 +1173,16 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
     return quotation?.quotationNumber || '';
   };
 
+  const getEnquiryNumber = (enquiryId: string) => {
+    const enquiry = enquiries.find(e => e._id === enquiryId);
+    return enquiry?.enquiryNo || '';
+  };
+
+  const getAddressDisplay = (addressId: number, addresses: Address[]) => {
+    const address = addresses.find(addr => addr.id === addressId);
+    return address ? `${address.address}, ${address.district}, ${address.state} - ${address.pincode}` : '';
+  };
+
   const validateForm = (): boolean => {
     const newErrors: string[] = [];
 
@@ -843,9 +1192,15 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
     if (!formData.poNumber) {
       newErrors.push('PO number is required');
     }
+    if (!formData.dgEnquiry) {
+      newErrors.push('DG enquiry is required');
+    }
     // Customer email is now optional - removed validation
-    if (!formData.customerAddress?.address) {
-      newErrors.push('Customer address is required');
+    if (!formData.billToAddress?.id || formData.billToAddress.id === 0 || !formData.billToAddress.address) {
+      newErrors.push('Bill to address is required');
+    }
+    if (!formData.shipToAddress?.id || formData.shipToAddress.id === 0 || !formData.shipToAddress.address) {
+      newErrors.push('Ship to address is required');
     }
     if (!formData.expectedDeliveryDate) {
       newErrors.push('Expected delivery date is required');
@@ -940,8 +1295,10 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
         poNumber: formData.poNumber || undefined, // Only include if provided
         customer: formData.customer,
         customerEmail: formData.customerEmail,
-        customerAddress: formData.customerAddress,
+        billToAddress: formData.billToAddress,
+        shipToAddress: formData.shipToAddress,
         dgQuotationNumber: formData.quotationNumber || undefined, // Only include if provided
+        dgEnquiry: formData.dgEnquiry || undefined, // Only include if provided
         items: cleanedItems,
         subtotal,
         totalDiscount,
@@ -955,6 +1312,9 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
         department: formData.department,
         priority: formData.priority,
         notes: formData.notes,
+        transport: formData.transport,
+        unloading: formData.unloading,
+        scopeOfWork: formData.scopeOfWork,
         poPdf: fileUrl, // Use uploaded file URL or existing URL
         createdBy: user?.id
       };
@@ -1128,7 +1488,24 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
                         ...prev,
                         customer: '',
                         customerEmail: '',
-                        customerAddress: undefined,
+                        billToAddress: { 
+                          id: 0, 
+                          address: '', 
+                          state: '', 
+                          district: '', 
+                          pincode: '', 
+                          addressId: 0, 
+                          gstNumber: '' 
+                        },
+                        shipToAddress: { 
+                          id: 0, 
+                          address: '', 
+                          state: '', 
+                          district: '', 
+                          pincode: '', 
+                          addressId: 0, 
+                          gstNumber: '' 
+                        },
                         quotationNumber: '', // Clear quotation selection when customer is cleared
                         items: [{
                           product: '',
@@ -1154,7 +1531,8 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
                         taxAmount: 0,
                         totalAmount: 0
                       }));
-                      setAddresses([]);
+                      setBillToAddresses([]);
+                      setShipToAddresses([]);
                       
                       // Clear quotation search term and close dropdown
                       setQuotationSearchTerm('');
@@ -1179,7 +1557,24 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
                           ...prev,
                           customer: '',
                           customerEmail: '',
-                          customerAddress: undefined,
+                          billToAddress: { 
+                            id: 0, 
+                            address: '', 
+                            state: '', 
+                            district: '', 
+                            pincode: '', 
+                            addressId: 0, 
+                            gstNumber: '' 
+                          },
+                          shipToAddress: { 
+                            id: 0, 
+                            address: '', 
+                            state: '', 
+                            district: '', 
+                            pincode: '', 
+                            addressId: 0, 
+                            gstNumber: '' 
+                          },
                           quotationNumber: '', // Clear quotation selection when customer is cleared
                           items: [{
                             product: '',
@@ -1190,8 +1585,6 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
                             uom: 'nos',
                             discount: 0,
                             discountedAmount: 0,
-                            taxRate: 0,
-                            taxAmount: 0,
                             kva: '',
                             phase: '',
                             annexureRating: '',
@@ -1203,7 +1596,8 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
                           }]
                         }));
                         setCustomerSearchTerm('');
-                        setAddresses([]);
+                        setBillToAddresses([]);
+                        setShipToAddresses([]);
                         setShowCustomerDropdown(false);
                         
                         // Clear quotation search term and close dropdown
@@ -1250,26 +1644,34 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
               </div>
             </div>
 
-            {/* Customer Address */}
+            {/* Bill To Address */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Customer Address *
+                Bill To Address *
               </label>
               <div className="relative dropdown-container">
                 <input
-                  ref={addressInputRef}
+                  ref={billToAddressInputRef}
                   type="text"
-                  value={addressSearchTerm}
+                  value={billToAddressSearchTerm}
                   onChange={(e) => {
-                    setAddressSearchTerm(e.target.value);
-                    if (!showAddressDropdown) setShowAddressDropdown(true);
-                    setHighlightedAddressIndex(-1);
+                    setBillToAddressSearchTerm(e.target.value);
+                    if (!showBillToAddressDropdown) setShowBillToAddressDropdown(true);
+                    setHighlightedBillToAddressIndex(-1);
                     
                     // If user clears the input, clear the selected address
                     if (e.target.value === '') {
                       setFormData(prev => ({
                         ...prev,
-                        customerAddress: undefined
+                        billToAddress: { 
+                          id: 0, 
+                          address: '', 
+                          state: '', 
+                          district: '', 
+                          pincode: '', 
+                          addressId: 0, 
+                          gstNumber: '' 
+                        }
                       }));
                     }
                   }}
@@ -1278,25 +1680,32 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
                       toast.error('Please select a customer first');
                       return;
                     }
-                    setShowAddressDropdown(true);
-                    setHighlightedAddressIndex(-1);
+                    setShowBillToAddressDropdown(true);
+                    setHighlightedBillToAddressIndex(-1);
                   }}
-                  disabled={!formData.customer}
+                  disabled={!formData.customer || isViewMode}
                   placeholder={!formData.customer ? 'Select customer first' : 'Search address or press ↓ to open'}
-                  className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${!formData.customer ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300'
-                    }`}
+                  className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${!formData.customer || isViewMode ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300'}`}
                 />
                 <div className="absolute inset-y-0 right-0 flex items-center pr-3">
-                  {formData.customerAddress && (
+                  {formData.billToAddress?.id && (
                     <button
                       type="button"
                       onClick={() => {
                         setFormData(prev => ({
                           ...prev,
-                          customerAddress: undefined
+                          billToAddress: { 
+                            id: 0, 
+                            address: '', 
+                            state: '', 
+                            district: '', 
+                            pincode: '', 
+                            addressId: 0, 
+                            gstNumber: '' 
+                          }
                         }));
-                        setAddressSearchTerm('');
-                        setShowAddressDropdown(false);
+                        setBillToAddressSearchTerm('');
+                        setShowBillToAddressDropdown(false);
                       }}
                       className="mr-2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
                       title="Clear address selection"
@@ -1304,39 +1713,146 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
                       <X className="w-4 h-4" />
                     </button>
                   )}
-                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showAddressDropdown ? 'rotate-180' : ''} pointer-events-none`} />
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showBillToAddressDropdown ? 'rotate-180' : ''} pointer-events-none`} />
                 </div>
-                {showAddressDropdown && formData.customer && (
+                {showBillToAddressDropdown && formData.customer && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
-                    {addresses.length === 0 ? (
+                    {billToAddresses.length === 0 ? (
                       <div className="px-3 py-2 text-sm text-gray-500 text-center">
-                        No addresses found for this customer
+                        No addresses available for this customer
                       </div>
                     ) : (
-                      addresses
+                      billToAddresses
                         .filter(address =>
-                          addressSearchTerm === '' ||
-                          address.address.toLowerCase().includes(addressSearchTerm.toLowerCase()) ||
-                          address.district.toLowerCase().includes(addressSearchTerm.toLowerCase()) ||
-                          address.state.toLowerCase().includes(addressSearchTerm.toLowerCase())
+                          billToAddressSearchTerm === '' || 
+                          address.address.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                          address.district.toLowerCase().includes(billToAddressSearchTerm.toLowerCase()) ||
+                          address.state.toLowerCase().includes(billToAddressSearchTerm.toLowerCase())
                         )
                         .map((address, index) => (
                           <button
                             key={address.id}
-                            onClick={() => handleAddressSelect(address.id)}
-                            className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.customerAddress?.id === address.id ? 'bg-blue-100 text-blue-800' :
-                              highlightedAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                            onClick={() => handleBillToAddressSelect(address.id)}
+                            className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.billToAddress?.id === address.id ? 'bg-blue-100 text-blue-800' :
+                              highlightedBillToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
                                 'text-gray-700 hover:bg-gray-50'
                               }`}
                           >
-                            <div className="font-medium text-gray-900">{address.address}</div>
+                            <div className="font-medium text-gray-900">
+                              {address.address}
+                            </div>
                             <div className="text-xs text-gray-500">
                               {address.district}, {address.state} - {address.pincode}
-                              {address.isPrimary && (
-                                <span className="ml-2 bg-green-100 text-green-800 px-2 py-0.5 rounded text-xs">
-                                  Primary
-                                </span>
-                              )}
+                              {address.isPrimary && <span className="ml-2 text-blue-600 font-medium">(Primary)</span>}
+                            </div>
+                          </button>
+                        ))
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Ship To Address */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Ship To Address *
+              </label>
+              <div className="relative dropdown-container">
+                <input
+                  ref={shipToAddressInputRef}
+                  type="text"
+                  value={shipToAddressSearchTerm}
+                  onChange={(e) => {
+                    setShipToAddressSearchTerm(e.target.value);
+                    if (!showShipToAddressDropdown) setShowShipToAddressDropdown(true);
+                    setHighlightedShipToAddressIndex(-1);
+                    
+                    // If user clears the input, clear the selected address
+                    if (e.target.value === '') {
+                      setFormData(prev => ({
+                        ...prev,
+                        shipToAddress: { 
+                          id: 0, 
+                          address: '', 
+                          state: '', 
+                          district: '', 
+                          pincode: '', 
+                          addressId: 0, 
+                          gstNumber: '' 
+                        }
+                      }));
+                    }
+                  }}
+                  onFocus={() => {
+                    if (!formData.customer) {
+                      toast.error('Please select a customer first');
+                      return;
+                    }
+                    setShowShipToAddressDropdown(true);
+                    setHighlightedShipToAddressIndex(-1);
+                  }}
+                  disabled={!formData.customer || isViewMode}
+                  placeholder={!formData.customer ? 'Select customer first' : 'Search address or press ↓ to open'}
+                  className={`w-full px-3 py-2 pr-10 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${!formData.customer || isViewMode ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'border-gray-300'}`}
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  {formData.shipToAddress?.id && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          shipToAddress: { 
+                            id: 0, 
+                            address: '', 
+                            state: '', 
+                            district: '', 
+                            pincode: '', 
+                            addressId: 0, 
+                            gstNumber: '' 
+                          }
+                        }));
+                        setShipToAddressSearchTerm('');
+                        setShowShipToAddressDropdown(false);
+                      }}
+                      className="mr-2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                      title="Clear address selection"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showShipToAddressDropdown ? 'rotate-180' : ''} pointer-events-none`} />
+                </div>
+                {showShipToAddressDropdown && formData.customer && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                    {shipToAddresses.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                        No addresses available for this customer
+                      </div>
+                    ) : (
+                      shipToAddresses
+                        .filter(address =>
+                          shipToAddressSearchTerm === '' || 
+                          address.address.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                          address.district.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase()) ||
+                          address.state.toLowerCase().includes(shipToAddressSearchTerm.toLowerCase())
+                        )
+                        .map((address, index) => (
+                          <button
+                            key={address.id}
+                            onClick={() => handleShipToAddressSelect(address.id)}
+                            className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.shipToAddress?.id === address.id ? 'bg-blue-100 text-blue-800' :
+                              highlightedShipToAddressIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                                'text-gray-700 hover:bg-gray-50'
+                              }`}
+                          >
+                            <div className="font-medium text-gray-900">
+                              {address.address}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {address.district}, {address.state} - {address.pincode}
+                              {address.isPrimary && <span className="ml-2 text-blue-600 font-medium">(Primary)</span>}
                             </div>
                           </button>
                         ))
@@ -1502,6 +2018,84 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
               </div>
             </div>
 
+            {/* Enquiry Number */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Enquiry Number
+              </label>
+              <div className="relative dropdown-container">
+                <input
+                  ref={enquiryInputRef}
+                  type="text"
+                  value={enquirySearchTerm}
+                  onChange={(e) => {
+                    setEnquirySearchTerm(e.target.value);
+                    if (!showEnquiryDropdown) setShowEnquiryDropdown(true);
+                    setHighlightedEnquiryIndex(-1);
+                    
+                    // If user clears the input, clear the selected enquiry
+                    if (e.target.value === '') {
+                      setFormData(prev => ({
+                        ...prev,
+                        dgEnquiry: ''
+                      }));
+                    }
+                  }}
+                  onFocus={() => {
+                    setShowEnquiryDropdown(true);
+                    setHighlightedEnquiryIndex(-1);
+                  }}
+                  placeholder="Search enquiry number or press ↓ to open"
+                  className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+                />
+                <div className="absolute inset-y-0 right-0 flex items-center pr-3">
+                  {formData.dgEnquiry && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          dgEnquiry: ''
+                        }));
+                        setEnquirySearchTerm('');
+                        setShowEnquiryDropdown(false);
+                      }}
+                      className="mr-2 p-1 text-gray-400 hover:text-gray-600 transition-colors"
+                      title="Clear enquiry selection"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                  <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showEnquiryDropdown ? 'rotate-180' : ''} pointer-events-none`} />
+                </div>
+                {showEnquiryDropdown && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 py-0.5 max-h-60 overflow-y-auto">
+                    {enquiries
+                      .filter(enquiry =>
+                        enquirySearchTerm === '' || 
+                        enquiry.enquiryNo.toLowerCase().includes(enquirySearchTerm.toLowerCase()) ||
+                        enquiry.customerName.toLowerCase().includes(enquirySearchTerm.toLowerCase())
+                      )
+                      .map((enquiry, index) => (
+                        <button
+                          key={enquiry._id}
+                          onClick={() => handleEnquirySelect(enquiry._id)}
+                          className={`w-full px-3 py-2 text-left transition-colors text-sm ${formData.dgEnquiry === enquiry._id ? 'bg-blue-100 text-blue-800' :
+                            highlightedEnquiryIndex === index ? 'bg-blue-200 text-blue-900 border-l-4 border-l-blue-600' :
+                              'text-gray-700 hover:bg-gray-50'
+                            }`}
+                        >
+                          <div className="font-medium text-gray-900">{enquiry.enquiryNo}</div>
+                          <div className="text-xs text-gray-500">
+                            {enquiry.customerName} • {enquiry.corporateName || ''} • {enquiry.phoneNumber}
+                          </div>
+                        </button>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* Expected Delivery Date */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1548,6 +2142,51 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
                 <option value="high">High</option>
                 <option value="urgent">Urgent</option>
               </select>
+            </div>
+
+            {/* Transport */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Transport *
+              </label>
+              <input
+                type="text"
+                value={formData.transport}
+                onChange={(e) => setFormData({ ...formData, transport: e.target.value })}
+                placeholder="Enter transport details"
+                disabled={isViewMode}
+                className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isViewMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+              />
+            </div>
+
+            {/* Unloading */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Unloading *
+              </label>
+              <input
+                type="text"
+                value={formData.unloading}
+                onChange={(e) => setFormData({ ...formData, unloading: e.target.value })}
+                placeholder="Enter unloading details"
+                disabled={isViewMode}
+                className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${isViewMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+              />
+            </div>
+
+            {/* Scope of Work */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Scope of Work *
+              </label>
+              <textarea
+                value={formData.scopeOfWork}
+                onChange={(e) => setFormData({ ...formData, scopeOfWork: e.target.value })}
+                placeholder="Enter scope of work details"
+                disabled={isViewMode}
+                rows={3}
+                className={`w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none ${isViewMode ? 'bg-gray-100 cursor-not-allowed' : ''}`}
+              />
             </div>
           </div>
 
@@ -1763,7 +2402,7 @@ const CreateDGPOFromCustomerForm: React.FC<CreateDGPOFromCustomerFormProps> = ({
           {/* Notes */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Notes (Optional)
+              Payment Terms (Optional)
             </label>
             <textarea
               value={formData.notes || ''}

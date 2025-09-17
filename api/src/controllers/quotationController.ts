@@ -577,9 +577,9 @@ export const createDGSalesQuotation = async (
       customer: {
         _id: customer._id,
         name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        pan: '', // No panNumber or pan field in Customer, so use empty string
+        email: customer.addresses && customer.addresses[0] ? customer.addresses[0].email : '',
+        phone: customer.addresses && customer.addresses[0] ? customer.addresses[0].phone : '',
+        pan: customer.panNumber || '', // Use panNumber field from Customer
       },
       dgEnquiry: dgEnquiry ? dgEnquiry._id : undefined,
       createdBy: req.user?.id

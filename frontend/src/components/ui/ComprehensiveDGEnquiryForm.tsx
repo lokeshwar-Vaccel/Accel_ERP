@@ -73,6 +73,10 @@ interface EnquiryFormData {
   enquiryType: string;
   enquiryStage: string;
   source: string;
+  eoPoDate: string;
+  plannedFollowUpDate: string;
+  sourceFrom: string;
+  numberOfFollowUps: string;
   
   // Customer Information
   customerName: string;
@@ -114,6 +118,10 @@ interface EnquiryFormErrors {
   enquiryType?: string;
   enquiryStage?: string;
   source?: string;
+  eoPoDate?: string;
+  plannedFollowUpDate?: string;
+  sourceFrom?: string;
+  numberOfFollowUps?: string;
   customerName?: string;
   panNumber?: string;
   addresses?: string | Record<number, string>;
@@ -136,10 +144,14 @@ const initialFormData: EnquiryFormData = {
   // Basic Information
   enquiryNo: '',
   enquiryDate: new Date().toISOString().split('T')[0],
-  enquiryStatus: 'Open',
-  enquiryType: 'New',
-  enquiryStage: 'Initial',
-  source: 'Website',
+  enquiryStatus: 'open',
+  enquiryType: 'hot',
+  enquiryStage: 'prospecting',
+  source: '',
+  eoPoDate: '',
+  plannedFollowUpDate: '',
+  sourceFrom: '',
+  numberOfFollowUps: '0',
   
   // Customer Information
   customerName: '',
@@ -165,18 +177,18 @@ const initialFormData: EnquiryFormData = {
   
   // DG Requirements
   kva: '',
-  phase: 'Three Phase',
+  phase: 'three_phase',
   quantity: '1',
-  segment: 'Manufacturing',
+  segment: 'manufacturing',
   subSegment: '',
-  dgOwnership: 'NOT_OWNED',
+  dgOwnership: 'first_time_buyer',
   financeRequired: false,
   financeCompany: '',
   
   // Employee Information
   assignedEmployeeCode: '',
   assignedEmployeeName: '',
-  employeeStatus: 'Active',
+  employeeStatus: 'active',
   referenceEmployeeName: '',
   referenceEmployeeMobileNumber: '',
   referredBy: '',
@@ -248,15 +260,27 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
               registrationStatus: 'non_registered'
             }],
         // Ensure required fields have fallback values
-        enquiryStatus: initialData.enquiryStatus || 'Open',
-        enquiryType: initialData.enquiryType || 'New',
-        enquiryStage: initialData.enquiryStage || 'Initial',
-        source: initialData.source || 'Website',
-        customerType: initialData.customerType || 'Retail',
-        phase: initialData.phase || 'Three Phase',
-        dgOwnership: initialData.dgOwnership || 'NOT_OWNED',
-        segment: initialData.segment || 'Manufacturing',
-        employeeStatus: initialData.employeeStatus || 'Active',
+        enquiryStatus: (initialData.enquiryStatus || 'open').toLowerCase(),
+        enquiryType: (initialData.enquiryType || 'hot').toLowerCase(),
+        enquiryStage: (initialData.enquiryStage || 'prospecting').toLowerCase().replace(/-/g, '_'),
+        source: initialData.source || '',
+        eoPoDate: initialData.eoPoDate ? 
+          (typeof initialData.eoPoDate === 'string' ? 
+            initialData.eoPoDate.split('T')[0] : 
+            new Date(initialData.eoPoDate).toISOString().split('T')[0]
+          ) : '',
+        plannedFollowUpDate: initialData.plannedFollowUpDate ? 
+          (typeof initialData.plannedFollowUpDate === 'string' ? 
+            initialData.plannedFollowUpDate.split('T')[0] : 
+            new Date(initialData.plannedFollowUpDate).toISOString().split('T')[0]
+          ) : '',
+        sourceFrom: initialData.sourceFrom || '',
+        numberOfFollowUps: String(initialData.numberOfFollowUps || '0'),
+        customerType: initialData.customerType || 'retail',
+        phase: (initialData.phase || 'three_phase').toLowerCase().replace(/\s+/g, '_'),
+        dgOwnership: (initialData.dgOwnership || 'first_time_buyer').toLowerCase().replace(/\s+/g, '_'),
+        segment: (initialData.segment || 'manufacturing').toLowerCase(),
+        employeeStatus: (initialData.employeeStatus || 'active').toLowerCase(),
         // Ensure numeric fields are strings for form handling
         kva: String(initialData.kva || ''),
         quantity: String(initialData.quantity || '1'),
@@ -292,36 +316,36 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
     }
 
     // Validate required enum fields
-    if (!formData.enquiryStatus || !['Open', 'In Progress', 'Closed', 'Cancelled', 'Qualified'].includes(formData.enquiryStatus)) {
+    if (!formData.enquiryStatus || !['open', 'closed', 'decline'].includes(formData.enquiryStatus.toLowerCase())) {
       newErrors.enquiryStatus = 'Valid enquiry status is required';
     }
 
-    if (!formData.enquiryType || !['New', 'Follow Up', 'Renewal'].includes(formData.enquiryType)) {
+    if (!formData.enquiryType || !['hot', 'warm', 'cold'].includes(formData.enquiryType.toLowerCase())) {
       newErrors.enquiryType = 'Valid enquiry type is required';
     }
 
-    if (!formData.enquiryStage || !['Initial', 'Quotation', 'Negotiation', 'Order'].includes(formData.enquiryStage)) {
+    if (!formData.enquiryStage || !['prospecting', 'closed_won', 'closed_dropped'].includes(formData.enquiryStage.toLowerCase())) {
       newErrors.enquiryStage = 'Valid enquiry stage is required';
     }
 
-    if (!formData.source || !['Website', 'Referral', 'Cold Call', 'Social Media', 'Other'].includes(formData.source)) {
-      newErrors.source = 'Valid source is required';
+    if (!formData.source || !formData.source.trim()) {
+      newErrors.source = 'Source is required';
     }
 
 
-    if (!formData.phase || !['Single Phase', 'Three Phase'].includes(formData.phase)) {
+    if (!formData.phase || !['single_phase', 'three_phase'].includes(formData.phase.toLowerCase())) {
       newErrors.phase = 'Valid phase is required';
     }
 
-    if (!formData.dgOwnership || !['NOT_OWNED', 'OWNED', 'RENTED'].includes(formData.dgOwnership)) {
+    if (!formData.dgOwnership || !['first_time_buyer', 'existing_powerol_dg_set_owner', 'existing_other_dg_set_owner'].includes(formData.dgOwnership.toLowerCase())) {
       newErrors.dgOwnership = 'Valid DG ownership is required';
     }
 
-    if (!formData.segment || !['Manufacturing', 'IT/Office', 'Healthcare', 'Education', 'Retail', 'Other'].includes(formData.segment)) {
+    if (!formData.segment || !['manufacturing', 'it/office', 'healthcare', 'education', 'retail', 'other'].includes(formData.segment.toLowerCase())) {
       newErrors.segment = 'Valid segment is required';
     }
 
-    if (!formData.employeeStatus || !['Active', 'Inactive', 'On Leave'].includes(formData.employeeStatus)) {
+    if (!formData.employeeStatus || !['active', 'inactive', 'on leave'].includes(formData.employeeStatus.toLowerCase())) {
       newErrors.employeeStatus = 'Valid employee status is required';
     }
 
@@ -467,15 +491,19 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       const payload: any = {
         enquiryNo: formData.enquiryNo.trim(),
         enquiryDate: new Date(formData.enquiryDate),
-        enquiryStatus: formData.enquiryStatus || 'Open',
-        enquiryType: formData.enquiryType || 'New',
-        enquiryStage: formData.enquiryStage || 'Initial',
-        source: formData.source || 'Website',
+        enquiryStatus: formData.enquiryStatus || 'open',
+        enquiryType: formData.enquiryType || 'hot',
+        enquiryStage: formData.enquiryStage || 'prospecting',
+        source: formData.source.trim(),
+        eoPoDate: formData.eoPoDate ? new Date(formData.eoPoDate) : undefined,
+        plannedFollowUpDate: formData.plannedFollowUpDate ? new Date(formData.plannedFollowUpDate) : undefined,
+        sourceFrom: formData.sourceFrom.trim(),
+        numberOfFollowUps: parseInt(formData.numberOfFollowUps) || 0,
         customerName: formData.customerName.trim(),
         kva: parseInt(formData.kva) || 0,
         quantity: parseInt(formData.quantity) || 1,
-        phase: formData.phase || 'Three Phase',
-        dgOwnership: formData.dgOwnership || 'NOT_OWNED',
+        phase: formData.phase || 'three_phase',
+        dgOwnership: formData.dgOwnership || 'first_time_buyer',
         financeRequired: Boolean(formData.financeRequired),
         numberOfDG: 1,
         addresses: formData.addresses.map(addr => ({
@@ -484,7 +512,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
           state: addr.state.trim(),
           district: addr.district.trim(),
           isPrimary: addr.isPrimary,
-          registrationStatus: addr.registrationStatus,
+          registrationStatus: addr.registrationStatus.toLowerCase(),
           ...(addr.pincode?.trim() && { pincode: addr.pincode.trim() }),
           ...(addr.gstNumber?.trim() && { gstNumber: addr.gstNumber.trim() }),
           ...(addr.notes?.trim() && { notes: addr.notes.trim() }),
@@ -504,7 +532,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       if (formData.panNumber?.trim()) {
         payload.panNumber = formData.panNumber.trim();
       }
-      payload.segment = formData.segment || 'Manufacturing';
+      payload.segment = formData.segment || 'manufacturing';
       if (formData.subSegment?.trim()) {
         payload.subSegment = formData.subSegment.trim();
       }
@@ -517,7 +545,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       if (formData.assignedEmployeeName?.trim()) {
         payload.assignedEmployeeName = formData.assignedEmployeeName.trim();
       }
-      payload.employeeStatus = formData.employeeStatus || 'Active';
+      payload.employeeStatus = formData.employeeStatus || 'active';
       if (formData.referenceEmployeeName?.trim()) {
         payload.referenceEmployeeName = formData.referenceEmployeeName.trim();
       }
@@ -588,8 +616,8 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
     } catch (error: any) {
       console.error('Error saving enquiry:', error);
       
-      if (error.response?.data?.message) {
-        toast.error(error.response.data.message);
+      if (error.response) {
+        toast.error(error.response.message);
       } else {
         toast.error('An unexpected error occurred. Please try again.');
       }
@@ -649,7 +677,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
       ...prev,
       assignedEmployeeCode: salesEngineer.salesEmployeeCode,
       assignedEmployeeName: salesEngineer.fullName,
-      employeeStatus: salesEngineer.status === 'active' ? 'Active' : 'Inactive'
+      employeeStatus: salesEngineer.status === 'active' ? 'active' : 'inactive'
     }));
   };
 
@@ -848,11 +876,9 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                       value={formData.enquiryStatus}
                       onChange={(e) => handleInputChange('enquiryStatus', e.target.value)}
                       options={[
-                        { value: 'Open', label: 'Open' },
-                        { value: 'In Progress', label: 'In Progress' },
-                        { value: 'Closed', label: 'Closed' },
-                        { value: 'Cancelled', label: 'Cancelled' },
-                        { value: 'Qualified', label: 'Qualified' }
+                        { value: 'open', label: 'Open' },
+                        { value: 'closed', label: 'Closed' },
+                        { value: 'decline', label: 'Decline' }
                       ]}
                       error={errors.enquiryStatus}
                     />
@@ -866,9 +892,9 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                       value={formData.enquiryType}
                       onChange={(e) => handleInputChange('enquiryType', e.target.value)}
                       options={[
-                        { value: 'New', label: 'New' },
-                        { value: 'Follow Up', label: 'Follow Up' },
-                        { value: 'Renewal', label: 'Renewal' }
+                        { value: 'hot', label: 'Hot' },
+                        { value: 'warm', label: 'Warm' },
+                        { value: 'cold', label: 'Cold' }
                       ]}
                       error={errors.enquiryType}
                     />
@@ -882,10 +908,9 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                       value={formData.enquiryStage}
                       onChange={(e) => handleInputChange('enquiryStage', e.target.value)}
                       options={[
-                        { value: 'Initial', label: 'Initial' },
-                        { value: 'Quotation', label: 'Quotation' },
-                        { value: 'Negotiation', label: 'Negotiation' },
-                        { value: 'Order', label: 'Order' }
+                        { value: 'prospecting', label: 'Prospecting' },
+                        { value: 'closed_won', label: 'Closed-Won' },
+                        { value: 'closed_dropped', label: 'Closed-Dropped' }
                       ]}
                       error={errors.enquiryStage}
                     />
@@ -893,19 +918,63 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Source
+                      Source *
                     </label>
-                    <Select
+                    <Input
                       value={formData.source}
                       onChange={(e) => handleInputChange('source', e.target.value)}
-                      options={[
-                        { value: 'Website', label: 'Website' },
-                        { value: 'Referral', label: 'Referral' },
-                        { value: 'Cold Call', label: 'Cold Call' },
-                        { value: 'Social Media', label: 'Social Media' },
-                        { value: 'Other', label: 'Other' }
-                      ]}
+                      placeholder="Enter source"
                       error={errors.source}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      EO/PO Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={formData.eoPoDate}
+                      onChange={(e) => handleInputChange('eoPoDate', e.target.value)}
+                      error={errors.eoPoDate}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Planned Follow-up Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={formData.plannedFollowUpDate}
+                      onChange={(e) => handleInputChange('plannedFollowUpDate', e.target.value)}
+                      error={errors.plannedFollowUpDate}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Source From
+                    </label>
+                    <Input
+                      value={formData.sourceFrom}
+                      onChange={(e) => handleInputChange('sourceFrom', e.target.value)}
+                      placeholder="Enter source from"
+                      error={errors.sourceFrom}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Number of Follow-ups
+                    </label>
+                    <Input
+                      type="number"
+                      value={formData.numberOfFollowUps}
+                      onChange={(e) => handleInputChange('numberOfFollowUps', e.target.value)}
+                      placeholder="Enter number of follow-ups"
+                      min="0"
+                      error={errors.numberOfFollowUps}
                     />
                   </div>
                 </div>
@@ -1332,8 +1401,8 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                       value={formData.phase}
                       onChange={(e) => handleInputChange('phase', e.target.value)}
                       options={[
-                        { value: 'Single Phase', label: 'Single Phase' },
-                        { value: 'Three Phase', label: 'Three Phase' }
+                        { value: 'single_phase', label: 'Single Phase' },
+                        { value: 'three_phase', label: 'Three Phase' }
                       ]}
                       error={errors.phase}
                     />
@@ -1359,12 +1428,12 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                       value={formData.segment}
                       onChange={(e) => handleInputChange('segment', e.target.value)}
                       options={[
-                        { value: 'Manufacturing', label: 'Manufacturing' },
-                        { value: 'IT/Office', label: 'IT/Office' },
-                        { value: 'Healthcare', label: 'Healthcare' },
-                        { value: 'Education', label: 'Education' },
-                        { value: 'Retail', label: 'Retail' },
-                        { value: 'Other', label: 'Other' }
+                        { value: 'manufacturing', label: 'Manufacturing' },
+                        { value: 'it/office', label: 'IT/Office' },
+                        { value: 'healthcare', label: 'Healthcare' },
+                        { value: 'education', label: 'Education' },
+                        { value: 'retail', label: 'Retail' },
+                        { value: 'other', label: 'Other' }
                       ]}
                       error={errors.segment}
                     />
@@ -1389,9 +1458,9 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                       value={formData.dgOwnership}
                       onChange={(e) => handleInputChange('dgOwnership', e.target.value)}
                       options={[
-                        { value: 'NOT_OWNED', label: 'Not Owned' },
-                        { value: 'OWNED', label: 'Owned' },
-                        { value: 'RENTED', label: 'Rented' }
+                        { value: 'first_time_buyer', label: 'First Time Buyer' },
+                        { value: 'existing_powerol_dg_set_owner', label: 'Existing Powerol DG Set Owner' },
+                        { value: 'existing_other_dg_set_owner', label: 'Existing Other DG Set Owner' }
                       ]}
                       error={errors.dgOwnership}
                     />
@@ -1465,7 +1534,7 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                               ...prev,
                               assignedEmployeeCode: '',
                               assignedEmployeeName: '',
-                              employeeStatus: 'Active'
+                              employeeStatus: 'active'
                             }));
                           }}
                           className="text-blue-600 hover:text-blue-800"
@@ -1512,9 +1581,9 @@ export default function ComprehensiveDGEnquiryForm({ isOpen, onClose, onSuccess,
                       value={formData.employeeStatus}
                       onChange={(e) => handleInputChange('employeeStatus', e.target.value)}
                       options={[
-                        { value: 'Active', label: 'Active' },
-                        { value: 'Inactive', label: 'Inactive' },
-                        { value: 'On Leave', label: 'On Leave' }
+                        { value: 'active', label: 'Active' },
+                        { value: 'inactive', label: 'Inactive' },
+                        { value: 'on leave', label: 'On Leave' }
                       ]}
                       error={errors.employeeStatus}
                     />

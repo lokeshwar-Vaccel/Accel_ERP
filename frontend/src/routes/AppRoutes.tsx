@@ -32,6 +32,8 @@ import DeliveryChallanForm from "../components/DeliveryChallanForm";
 import CreatePOFromCustomerForm from "pages/CreatePOFromCustomerForm";
 import POFromCustomerManagement from "pages/POFromCustomerManagement";
 import CreateDGProformaForm from "pages/CreateDGProformaForm";
+import CreateDGInvoiceForm from "pages/CreateDGInvoiceForm";
+import OEMOrderManagement from "pages/OEMOrderManagement";
 
 const AppRoutes: React.FC = () => {
     return (
@@ -112,13 +114,16 @@ const AppRoutes: React.FC = () => {
             <Route path="/dg-quotation/edit/:id" element={<DGQuotationForm />} />
             
             {/* DG Invoice Management */}
-            <Route path="/dg-sales/invoice/create" element={<DGInvoiceForm />} />
-            <Route path="/dg-sales/invoice/edit/:id" element={<DGInvoiceForm />} />
+            <Route path="/dg-sales/invoice/create" element={<CreateDGInvoiceForm />} />
+            <Route path="/dg-sales/invoice/edit/:id" element={<CreateDGInvoiceForm />} />
 
             {/* DG Proforma Forms */}
             <Route path="/dg-proforma/create" element={<CreateDGProformaForm />} />
             <Route path="/dg-proforma/edit/:id" element={<CreateDGProformaForm />} />
             <Route path="/dg-proforma/:id" element={<CreateDGProformaForm />} />
+
+            {/* OEM Order Management */}
+            <Route path="/oem-order-management" element={<OEMOrderManagement />} />
 
             {/* 404 - Page not found */}
             <Route path="*" element={<NotFound />} />
